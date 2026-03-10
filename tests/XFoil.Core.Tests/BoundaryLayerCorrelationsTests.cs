@@ -24,11 +24,12 @@ public class BoundaryLayerCorrelationsTests
     public void KinematicShapeParameter_IncompressibleCase_ReturnsCorrectValue()
     {
         // H=2.5, Msq=0 -> Hk = (2.5 - 0) / (1.0) = 2.5
+        // HK_MSQ = (-0.29 - 0.113*HK) / (1.0 + 0.113*MSQ) = (-0.29 - 0.113*2.5) / 1.0 = -0.5725
         var (hk, hk_h, hk_msq) = BoundaryLayerCorrelations.KinematicShapeParameter(2.5, 0.0);
 
         Assert.Equal(2.5, hk, 10);
         Assert.Equal(1.0, hk_h, 10);
-        Assert.Equal(-0.29, hk_msq, 10);
+        Assert.Equal(-0.29 - 0.113 * 2.5, hk_msq, 10);
     }
 
     [Fact]
