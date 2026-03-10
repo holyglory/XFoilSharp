@@ -1,6 +1,6 @@
 # AirfoilParser
 
-- File: `src-cs/XFoil.Core/Services/AirfoilParser.cs`
+- File: `src/XFoil.Core/Services/AirfoilParser.cs`
 - Role: turns text or files into `AirfoilGeometry`.
 
 ## Public methods

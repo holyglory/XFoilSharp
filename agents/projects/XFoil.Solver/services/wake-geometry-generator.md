@@ -1,6 +1,6 @@
 # WakeGeometryGenerator
 
-- File: `src-cs/XFoil.Solver/Services/WakeGeometryGenerator.cs`
+- File: `src/XFoil.Solver/Services/WakeGeometryGenerator.cs`
 - Role: postprocess wake geometry from an inviscid result.
 
 ## Public methods

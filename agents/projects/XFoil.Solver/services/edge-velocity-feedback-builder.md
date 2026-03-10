@@ -1,6 +1,6 @@
 # EdgeVelocityFeedbackBuilder
 
-- File: `src-cs/XFoil.Solver/Services/EdgeVelocityFeedbackBuilder.cs`
+- File: `src/XFoil.Solver/Services/EdgeVelocityFeedbackBuilder.cs`
 - Role: update seed `Ue` using solved displacement trends.
 
 ## Public methods

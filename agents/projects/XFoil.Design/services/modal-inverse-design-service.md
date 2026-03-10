@@ -1,6 +1,6 @@
 # ModalInverseDesignService
 
-- File: `src-cs/XFoil.Design/Services/ModalInverseDesignService.cs`
+- File: `src/XFoil.Design/Services/ModalInverseDesignService.cs`
 - Role: managed modal/full-inverse surrogate.
 
 ## Public methods

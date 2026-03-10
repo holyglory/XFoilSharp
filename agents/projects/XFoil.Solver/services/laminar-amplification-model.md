@@ -1,6 +1,6 @@
 # LaminarAmplificationModel
 
-- File: `src-cs/XFoil.Solver/Services/LaminarAmplificationModel.cs`
+- File: `src/XFoil.Solver/Services/LaminarAmplificationModel.cs`
 - Role: managed transition/amplification surrogate.
 
 ## Public methods

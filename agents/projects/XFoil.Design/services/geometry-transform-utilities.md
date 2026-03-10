@@ -1,6 +1,6 @@
 # GeometryTransformUtilities
 
-- File: `src-cs/XFoil.Design/Services/GeometryTransformUtilities.cs`
+- File: `src/XFoil.Design/Services/GeometryTransformUtilities.cs`
 - Role: shared geometry helper layer for design workflows.
 
 ## Important methods

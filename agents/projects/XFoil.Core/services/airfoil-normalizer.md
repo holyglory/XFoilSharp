@@ -1,6 +1,6 @@
 # AirfoilNormalizer
 
-- File: `src-cs/XFoil.Core/Services/AirfoilNormalizer.cs`
+- File: `src/XFoil.Core/Services/AirfoilNormalizer.cs`
 - Role: translate/rotate/scale geometry into normalized chord coordinates.
 
 ## Public methods

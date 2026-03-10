@@ -1,6 +1,6 @@
 # AnalysisSettings
 
-- File: `src-cs/XFoil.Solver/Models/AnalysisSettings.cs`
+- File: `src/XFoil.Solver/Models/AnalysisSettings.cs`
 - Role: central runtime input bag for paneling, Mach, Reynolds, transition, and coupling controls.
 
 ## Constructor

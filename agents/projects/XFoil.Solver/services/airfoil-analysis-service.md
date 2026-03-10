@@ -1,6 +1,6 @@
 # AirfoilAnalysisService
 
-- File: `src-cs/XFoil.Solver/Services/AirfoilAnalysisService.cs`
+- File: `src/XFoil.Solver/Services/AirfoilAnalysisService.cs`
 - Role: high-level façade for all solver workflows.
 
 ## Public methods

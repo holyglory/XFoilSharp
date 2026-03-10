@@ -1,6 +1,6 @@
 # DisplacementSurfaceGeometryBuilder
 
-- File: `src-cs/XFoil.Solver/Services/DisplacementSurfaceGeometryBuilder.cs`
+- File: `src/XFoil.Solver/Services/DisplacementSurfaceGeometryBuilder.cs`
 - Role: build a displaced effective airfoil contour from viscous state.
 
 ## Public methods

@@ -1,6 +1,6 @@
 # CubicSpline
 
-- File: `src-cs/XFoil.Solver/Numerics/CubicSpline.cs`
+- File: `src/XFoil.Solver/Numerics/CubicSpline.cs`
 - Role: natural cubic spline interpolation utility for solver-side numeric work.
 
 ## Public methods

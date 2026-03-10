@@ -1,6 +1,6 @@
 # QSpecDesignService
 
-- File: `src-cs/XFoil.Design/Services/QSpecDesignService.cs`
+- File: `src/XFoil.Design/Services/QSpecDesignService.cs`
 - Role: main managed `QDES` surface.
 
 ## Public methods

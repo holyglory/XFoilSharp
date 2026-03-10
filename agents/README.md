@@ -31,7 +31,7 @@ This directory maps the managed C# implementation from system architecture down 
 
 ## Scope
 
-This map covers `src-cs/` as it exists today, with discrepancy notes against the original Fortran tree in `src/`.
+This map covers `src/` as it exists today, with discrepancy notes against the original Fortran source in `f_xfoil/`.
 
 ## Ground rules used in these docs
 

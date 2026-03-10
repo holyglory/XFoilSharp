@@ -1,6 +1,6 @@
 # ViscousIntervalSystemBuilder
 
-- File: `src-cs/XFoil.Solver/Services/ViscousIntervalSystemBuilder.cs`
+- File: `src/XFoil.Solver/Services/ViscousIntervalSystemBuilder.cs`
 - Role: build interval residual and derived-state views from viscous station state.
 
 ## Public methods

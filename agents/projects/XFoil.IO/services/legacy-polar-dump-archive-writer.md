@@ -1,6 +1,6 @@
 # LegacyPolarDumpArchiveWriter
 
-- File: `src-cs/XFoil.IO/Services/LegacyPolarDumpArchiveWriter.cs`
+- File: `src/XFoil.IO/Services/LegacyPolarDumpArchiveWriter.cs`
 - Role: export imported dump content into a managed archive layout.
 
 ## Public methods

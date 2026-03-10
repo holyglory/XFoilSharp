@@ -1,6 +1,6 @@
 # ContourEditService
 
-- File: `src-cs/XFoil.Design/Services/ContourEditService.cs`
+- File: `src/XFoil.Design/Services/ContourEditService.cs`
 - Role: point-level contour editing and corner refinement.
 
 ## Public methods

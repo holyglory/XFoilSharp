@@ -1,6 +1,6 @@
 # PanelMeshGenerator
 
-- File: `src-cs/XFoil.Solver/Services/PanelMeshGenerator.cs`
+- File: `src/XFoil.Solver/Services/PanelMeshGenerator.cs`
 - Role: generate a normalized, weighted panel mesh from geometry.
 
 ## Public methods

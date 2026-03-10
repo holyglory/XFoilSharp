@@ -1,6 +1,6 @@
 # PolarCsvExporter
 
-- File: `src-cs/XFoil.IO/Services/PolarCsvExporter.cs`
+- File: `src/XFoil.IO/Services/PolarCsvExporter.cs`
 - Role: deterministic CSV export for managed and imported polar data.
 
 ## Public methods

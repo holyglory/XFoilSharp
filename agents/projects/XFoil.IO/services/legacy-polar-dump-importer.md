@@ -1,6 +1,6 @@
 # LegacyPolarDumpImporter
 
-- File: `src-cs/XFoil.IO/Services/LegacyPolarDumpImporter.cs`
+- File: `src/XFoil.IO/Services/LegacyPolarDumpImporter.cs`
 - Role: import unformatted legacy polar dumps.
 
 ## Public methods

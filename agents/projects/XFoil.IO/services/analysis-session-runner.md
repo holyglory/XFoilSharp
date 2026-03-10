@@ -1,6 +1,6 @@
 # AnalysisSessionRunner
 
-- File: `src-cs/XFoil.IO/Services/AnalysisSessionRunner.cs`
+- File: `src/XFoil.IO/Services/AnalysisSessionRunner.cs`
 - Role: batch manifest executor.
 
 ## Public methods

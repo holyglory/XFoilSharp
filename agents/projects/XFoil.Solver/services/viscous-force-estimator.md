@@ -1,6 +1,6 @@
 # ViscousForceEstimator
 
-- File: `src-cs/XFoil.Solver/Services/ViscousForceEstimator.cs`
+- File: `src/XFoil.Solver/Services/ViscousForceEstimator.cs`
 - Role: estimate profile drag from solved viscous state.
 
 ## Public methods

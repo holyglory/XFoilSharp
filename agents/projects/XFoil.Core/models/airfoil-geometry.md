@@ -1,6 +1,6 @@
 # AirfoilGeometry
 
-- File: `src-cs/XFoil.Core/Models/AirfoilGeometry.cs`
+- File: `src/XFoil.Core/Models/AirfoilGeometry.cs`
 - Kind: canonical geometry container.
 
 ## Constructor

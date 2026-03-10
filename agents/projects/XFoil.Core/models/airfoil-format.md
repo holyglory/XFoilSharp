@@ -1,6 +1,6 @@
 # AirfoilFormat
 
-- File: `src-cs/XFoil.Core/Models/AirfoilFormat.cs`
+- File: `src/XFoil.Core/Models/AirfoilFormat.cs`
 - Kind: enum
 - Values: source/interpretation markers for parsed/generated geometry.
 

@@ -1,6 +1,6 @@
 # AirfoilMetrics
 
-- File: `src-cs/XFoil.Core/Models/AirfoilMetrics.cs`
+- File: `src/XFoil.Core/Models/AirfoilMetrics.cs`
 - Kind: geometry summary DTO.
 
 ## Constructor

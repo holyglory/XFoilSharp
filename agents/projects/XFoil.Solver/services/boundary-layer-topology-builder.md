@@ -1,6 +1,6 @@
 # BoundaryLayerTopologyBuilder
 
-- File: `src-cs/XFoil.Solver/Services/BoundaryLayerTopologyBuilder.cs`
+- File: `src/XFoil.Solver/Services/BoundaryLayerTopologyBuilder.cs`
 - Role: derive stagnation-centered upper/lower/wake branch topology from inviscid data.
 
 ## Public methods

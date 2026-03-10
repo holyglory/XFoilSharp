@@ -1,6 +1,6 @@
 # TrailingEdgeGapService
 
-- File: `src-cs/XFoil.Design/Services/TrailingEdgeGapService.cs`
+- File: `src/XFoil.Design/Services/TrailingEdgeGapService.cs`
 - Role: deterministic TE-gap edit.
 
 ## Public methods

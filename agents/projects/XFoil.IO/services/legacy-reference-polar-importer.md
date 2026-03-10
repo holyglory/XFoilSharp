@@ -1,6 +1,6 @@
 # LegacyReferencePolarImporter
 
-- File: `src-cs/XFoil.IO/Services/LegacyReferencePolarImporter.cs`
+- File: `src/XFoil.IO/Services/LegacyReferencePolarImporter.cs`
 - Role: import `POLREF`-style reference polar overlays.
 
 ## Public methods

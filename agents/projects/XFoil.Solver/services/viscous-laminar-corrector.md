@@ -1,6 +1,6 @@
 # ViscousLaminarCorrector
 
-- File: `src-cs/XFoil.Solver/Services/ViscousLaminarCorrector.cs`
+- File: `src/XFoil.Solver/Services/ViscousLaminarCorrector.cs`
 - Role: relaxed viscous correction sweep.
 
 ## Public methods

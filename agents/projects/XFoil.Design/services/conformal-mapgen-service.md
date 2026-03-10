@@ -1,6 +1,6 @@
 # ConformalMapgenService
 
-- File: `src-cs/XFoil.Design/Services/ConformalMapgenService.cs`
+- File: `src/XFoil.Design/Services/ConformalMapgenService.cs`
 - Role: direct managed conformal inverse path.
 
 ## Public methods

@@ -1,6 +1,6 @@
 # LeadingEdgeRadiusService
 
-- File: `src-cs/XFoil.Design/Services/LeadingEdgeRadiusService.cs`
+- File: `src/XFoil.Design/Services/LeadingEdgeRadiusService.cs`
 - Role: deterministic LE-radius scaling.
 
 ## Public methods

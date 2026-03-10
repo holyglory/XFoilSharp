@@ -1,6 +1,6 @@
 # DenseLinearSystemSolver
 
-- File: `src-cs/XFoil.Solver/Numerics/DenseLinearSystemSolver.cs`
+- File: `src/XFoil.Solver/Numerics/DenseLinearSystemSolver.cs`
 - Role: dense matrix solver used by current panel calculations.
 
 ## Public methods

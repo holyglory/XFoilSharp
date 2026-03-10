@@ -1,6 +1,6 @@
 # GeometryScalingService
 
-- File: `src-cs/XFoil.Design/Services/GeometryScalingService.cs`
+- File: `src/XFoil.Design/Services/GeometryScalingService.cs`
 - Role: scaling workflow with explicit origin semantics.
 
 ## Public methods

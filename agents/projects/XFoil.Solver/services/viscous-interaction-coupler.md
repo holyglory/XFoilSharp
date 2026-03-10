@@ -1,6 +1,6 @@
 # ViscousInteractionCoupler
 
-- File: `src-cs/XFoil.Solver/Services/ViscousInteractionCoupler.cs`
+- File: `src/XFoil.Solver/Services/ViscousInteractionCoupler.cs`
 - Role: iterate seed-feedback plus viscous solves.
 
 ## Public methods

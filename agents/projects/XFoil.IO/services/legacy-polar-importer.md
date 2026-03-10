@@ -1,6 +1,6 @@
 # LegacyPolarImporter
 
-- File: `src-cs/XFoil.IO/Services/LegacyPolarImporter.cs`
+- File: `src/XFoil.IO/Services/LegacyPolarImporter.cs`
 - Role: import text saved-polar files.
 
 ## Public methods

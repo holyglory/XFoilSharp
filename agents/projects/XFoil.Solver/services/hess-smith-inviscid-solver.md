@@ -1,6 +1,6 @@
 # HessSmithInviscidSolver
 
-- File: `src-cs/XFoil.Solver/Services/HessSmithInviscidSolver.cs`
+- File: `src/XFoil.Solver/Services/HessSmithInviscidSolver.cs`
 - Role: current managed inviscid core.
 
 ## Public methods

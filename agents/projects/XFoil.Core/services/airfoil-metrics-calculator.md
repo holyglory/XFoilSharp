@@ -1,6 +1,6 @@
 # AirfoilMetricsCalculator
 
-- File: `src-cs/XFoil.Core/Services/AirfoilMetricsCalculator.cs`
+- File: `src/XFoil.Core/Services/AirfoilMetricsCalculator.cs`
 - Role: compute geometric summary values.
 
 ## Public methods

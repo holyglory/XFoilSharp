@@ -1,6 +1,6 @@
 # NacaAirfoilGenerator
 
-- File: `src-cs/XFoil.Core/Services/NacaAirfoilGenerator.cs`
+- File: `src/XFoil.Core/Services/NacaAirfoilGenerator.cs`
 - Role: analytic NACA generator.
 
 ## Public methods

@@ -1,6 +1,6 @@
 # FlapDeflectionService
 
-- File: `src-cs/XFoil.Design/Services/FlapDeflectionService.cs`
+- File: `src/XFoil.Design/Services/FlapDeflectionService.cs`
 - Role: trailing-edge flap edit around a hinge point.
 
 ## Public methods

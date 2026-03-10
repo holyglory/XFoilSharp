@@ -21,10 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src-cs\XFoil.Core\XFoil.Core.csproj" />
-    <ProjectReference Include="..\..\src-cs\XFoil.Design\XFoil.Design.csproj" />
-    <ProjectReference Include="..\..\src-cs\XFoil.IO\XFoil.IO.csproj" />
-    <ProjectReference Include="..\..\src-cs\XFoil.Solver\XFoil.Solver.csproj" />
+    <ProjectReference Include="..\..\src\XFoil.Core\XFoil.Core.csproj" />
+    <ProjectReference Include="..\..\src\XFoil.Design\XFoil.Design.csproj" />
+    <ProjectReference Include="..\..\src\XFoil.IO\XFoil.IO.csproj" />
+    <ProjectReference Include="..\..\src\XFoil.Solver\XFoil.Solver.csproj" />
   </ItemGroup>
 
 </Project>

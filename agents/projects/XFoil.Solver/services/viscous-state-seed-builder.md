@@ -1,6 +1,6 @@
 # ViscousStateSeedBuilder
 
-- File: `src-cs/XFoil.Solver/Services/ViscousStateSeedBuilder.cs`
+- File: `src/XFoil.Solver/Services/ViscousStateSeedBuilder.cs`
 - Role: create branchwise seed arrays for viscous work.
 
 ## Public methods

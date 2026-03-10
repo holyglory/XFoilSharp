@@ -1,6 +1,6 @@
 # ViscousLaminarSolver
 
-- File: `src-cs/XFoil.Solver/Services/ViscousLaminarSolver.cs`
+- File: `src/XFoil.Solver/Services/ViscousLaminarSolver.cs`
 - Role: current local Newton-style viscous solve.
 
 ## Public methods

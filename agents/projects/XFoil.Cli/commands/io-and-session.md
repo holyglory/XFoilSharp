@@ -1,6 +1,6 @@
 # CLI IO And Session Commands
 
-- File: `src-cs/XFoil.Cli/Program.cs`
+- File: `src/XFoil.Cli/Program.cs`
 
 ## Commands
 

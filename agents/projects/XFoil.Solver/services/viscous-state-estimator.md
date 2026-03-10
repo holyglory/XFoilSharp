@@ -1,6 +1,6 @@
 # ViscousStateEstimator
 
-- File: `src-cs/XFoil.Solver/Services/ViscousStateEstimator.cs`
+- File: `src/XFoil.Solver/Services/ViscousStateEstimator.cs`
 - Role: convert a seed into first-pass viscous station/branch state.
 
 ## Public methods

@@ -1,6 +1,6 @@
 # BasicGeometryTransformService
 
-- File: `src-cs/XFoil.Design/Services/BasicGeometryTransformService.cs`
+- File: `src/XFoil.Design/Services/BasicGeometryTransformService.cs`
 - Role: non-interactive top-level geometry transforms.
 
 ## Public methods

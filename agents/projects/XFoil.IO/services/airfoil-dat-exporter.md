@@ -1,6 +1,6 @@
 # AirfoilDatExporter
 
-- File: `src-cs/XFoil.IO/Services/AirfoilDatExporter.cs`
+- File: `src/XFoil.IO/Services/AirfoilDatExporter.cs`
 - Role: deterministic `.dat` formatting/export.
 
 ## Public methods

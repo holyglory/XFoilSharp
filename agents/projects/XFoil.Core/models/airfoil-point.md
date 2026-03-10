@@ -1,6 +1,6 @@
 # AirfoilPoint
 
-- File: `src-cs/XFoil.Core/Models/AirfoilPoint.cs`
+- File: `src/XFoil.Core/Models/AirfoilPoint.cs`
 - Kind: immutable 2D point record.
 
 ## Shape

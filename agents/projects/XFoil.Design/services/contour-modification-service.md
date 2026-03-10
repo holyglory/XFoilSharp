@@ -1,6 +1,6 @@
 # ContourModificationService
 
-- File: `src-cs/XFoil.Design/Services/ContourModificationService.cs`
+- File: `src/XFoil.Design/Services/ContourModificationService.cs`
 - Role: graft a replacement contour segment from control points.
 
 ## Public methods
