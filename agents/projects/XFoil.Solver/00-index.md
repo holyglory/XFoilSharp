@@ -29,6 +29,8 @@
 - [services/viscous-laminar-solver.md](services/viscous-laminar-solver.md)
 - [services/edge-velocity-feedback-builder.md](services/edge-velocity-feedback-builder.md)
 - [services/viscous-interaction-coupler.md](services/viscous-interaction-coupler.md)
+- [services/panel-geometry-builder.md](services/panel-geometry-builder.md)
+- [services/streamfunction-influence-calculator.md](services/streamfunction-influence-calculator.md)
 - [services/displacement-surface-geometry-builder.md](services/displacement-surface-geometry-builder.md)
 - [services/viscous-force-estimator.md](services/viscous-force-estimator.md)
 

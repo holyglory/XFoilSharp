@@ -27,9 +27,12 @@ The managed codebase covers a large portion of deterministic XFoil workflows, bu
   - ParametricSpline (port of SPLINE/SPLIND/SEGSPL) with 3 BC modes, segmented fitting, evaluation, derivative evaluation, arc-length, inversion.
   - TridiagonalSolver (port of TRISOL).
   - ScaledPivotLuSolver (port of LUDCMP/BAKSUB) with Crout's method and scaled partial pivoting.
+  - PanelGeometryBuilder (ports of NCALC, APCALC, TECALC, COMSET, ATANC) for normal vectors, panel angles, TE gap analysis, compressibility parameters, and continuous atan2.
+  - StreamfunctionInfluenceCalculator (port of PSILIN) for linear-vorticity streamfunction influence computation with self-influence singularity handling and TE panel contribution.
 - Missing or weaker than legacy
-  - Solver is not yet a direct port of `PSILIN/GGCALC/CLCALC` (state models and numerics are ready; influence computation and assembly pending).
-  - No proof of kernel-level parity with original XFoil coefficients.
+  - GGCALC system assembly and solution (influence matrix factoring, basis solutions) pending.
+  - CLCALC lift/moment recovery with Karman-Tsien correction pending.
+  - No proof of kernel-level parity with original XFoil coefficients (awaiting end-to-end integration).
 
 ### Viscous solver and coupling
 
