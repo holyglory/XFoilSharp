@@ -22,7 +22,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **INV-01**: Port PSILIN (streamfunction influence coefficients) faithfully from xpanel.f
 - [x] **INV-02**: Port GGCALC (gamma/sigma solution) faithfully from xsolve.f
 - [x] **INV-03**: Port CLCALC (lift/moment coefficient recovery) faithfully from xfoil.f
-- [ ] **INV-04**: Inviscid CL, CM match original XFoil within 0.001% for any valid airfoil
+- [x] **INV-04**: Inviscid CL, CM match original XFoil within 0.001% for any valid airfoil
 
 ### Viscous Solver Parity
 
@@ -81,7 +81,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INV-01 | Phase 2 | Complete |
 | INV-02 | Phase 2 | Complete |
 | INV-03 | Phase 2 | Complete |
-| INV-04 | Phase 2 | Pending |
+| INV-04 | Phase 2 | Complete |
 | VISC-01 | Phase 3 | Pending |
 | VISC-02 | Phase 3 | Pending |
 | VISC-03 | Phase 3 | Pending |
