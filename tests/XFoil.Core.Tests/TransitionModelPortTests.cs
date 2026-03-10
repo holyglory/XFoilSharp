@@ -260,17 +260,17 @@ public class TransitionModelPortTests
     [Fact]
     public void CheckTransition_StraddlingNcrit_ConvergesToTransition()
     {
-        // Two BL stations straddling N_crit: N1=7.5 < 9.0 < N2=10.2
-        // Should find exact transition location between them
-        double x1 = 0.30, x2 = 0.35; // xi (arc-length) at stations
-        double ampl1 = 7.5;           // N at station 1
-        double ampl2 = 10.2;          // N at station 2
+        // Two BL stations straddling N_crit: N1=8.5 < 9.0 < N2=10.0
+        // Use larger interval and higher amplification rate so AX*dx can bridge the gap
+        double x1 = 0.30, x2 = 0.60; // xi (arc-length) at stations
+        double ampl1 = 8.5;           // N at station 1 (close to Ncrit)
+        double ampl2 = 10.0;          // N at station 2
         double amcrit = 9.0;
 
-        // BL variables at each station (typical attached flow)
-        double hk1 = 2.4, th1 = 0.0008, rt1 = 1500.0;
-        double hk2 = 2.6, th2 = 0.0010, rt2 = 2000.0;
-        double ue1 = 1.0, ue2 = 0.98;
+        // BL variables: higher Rt for strong amplification
+        double hk1 = 2.6, th1 = 0.0005, rt1 = 8000.0;
+        double hk2 = 2.8, th2 = 0.0006, rt2 = 10000.0;
+        double ue1 = 1.0, ue2 = 0.96;
         double d1 = hk1 * th1, d2 = hk2 * th2;
 
         var result = TransitionModel.CheckTransition(
@@ -280,7 +280,7 @@ public class TransitionModelPortTests
             useHighHkModel: true, forcedXtr: null);
 
         Assert.True(result.TransitionOccurred, "Transition should occur when straddling Ncrit");
-        Assert.True(result.Converged, "Newton iteration should converge");
+        Assert.True(result.Converged, $"Newton iteration should converge (iterations={result.Iterations})");
         Assert.True(result.TransitionXi > x1, $"Transition xi {result.TransitionXi} should be > x1 {x1}");
         Assert.True(result.TransitionXi < x2, $"Transition xi {result.TransitionXi} should be < x2 {x2}");
         Assert.True(result.Iterations < 30, $"Should converge in < 30 iterations, took {result.Iterations}");

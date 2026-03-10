@@ -449,6 +449,112 @@ public static class TransitionModel
         double hk2, double th2, double rt2, double ue2, double d2,
         bool useHighHkModel, double? forcedXtr)
     {
-        throw new NotImplementedException("TRCHEK2 not yet ported");
+        // Check if transition occurs in this interval (AMPL2 >= AMCRIT)
+        if (ampl2 < amcrit)
+        {
+            return new TransitionCheckResult(
+                TransitionOccurred: false,
+                TransitionXi: x2,
+                AmplAtTransition: ampl2,
+                Type: TransitionResultType.None,
+                Converged: true,
+                Iterations: 0);
+        }
+
+        // Save station 2 variables (C2SAV pattern)
+        double hk2Sav = hk2, th2Sav = th2, rt2Sav = rt2;
+        double ue2Sav = ue2, d2Sav = d2, ampl2Sav = ampl2;
+
+        // Initial guess: linear interpolation of transition fraction
+        double dx = x2 - x1;
+        double frac = (amcrit - ampl1) / Math.Max(ampl2Sav - ampl1, 1e-12);
+        frac = Math.Max(0.01, Math.Min(0.99, frac));
+        double xt = x1 + frac * dx;
+
+        bool converged = false;
+        int iterations = 0;
+        double amplFinal = ampl1;
+
+        for (int iter = 0; iter < MaxTransitionIterations; iter++)
+        {
+            iterations = iter + 1;
+
+            // Interpolate BL variables at trial location
+            double t = (xt - x1) / dx;
+            t = Math.Max(0.0, Math.Min(1.0, t));
+
+            double hk2T = hk1 + t * (hk2Sav - hk1);
+            double th2T = th1 + t * (th2Sav - th1);
+            double rt2T = rt1 + t * (rt2Sav - rt1);
+
+            // Compute amplification rate via AXSET at midpoint
+            // Use ampl1 and a trial ampl2 near amcrit for the DAX term
+            double amplTrial = Math.Min(ampl1 + (amcrit - ampl1) * t / Math.Max(frac, 0.01), amcrit + 0.5);
+            var axResult = ComputeTransitionSensitivities(
+                hk1, th1, rt1, ampl1,
+                hk2T, th2T, rt2T, amplTrial,
+                amcrit, useHighHkModel);
+            double ax = axResult.Ax;
+
+            // Compute N at trial location: N(xt) = N1 + AX * (xt - x1)
+            double dxi = xt - x1;
+            double amplAtXt = ampl1 + ax * dxi;
+
+            // Clamp near AMCRIT to prevent overshoot (xblsys.f pattern)
+            if (amplAtXt > amcrit + 0.5)
+                amplAtXt = amcrit + 0.5 * (amplAtXt - amcrit);
+
+            amplFinal = amplAtXt;
+            double residual = amplAtXt - amcrit;
+
+            if (Math.Abs(residual) < DAEPS)
+            {
+                converged = true;
+                break;
+            }
+
+            if (Math.Abs(ax) < 1e-12) break;
+
+            // Newton correction: dxt = -(N(xt) - Ncrit) / (dN/dx)
+            double dxt = -residual / ax;
+
+            // Relaxation: limit step to stay within interval
+            double xtNew = xt + dxt;
+            xtNew = Math.Max(x1 + 0.001 * dx, Math.Min(x2 - 0.001 * dx, xtNew));
+
+            // Under-relaxation for large steps
+            double dxtActual = xtNew - xt;
+            if (Math.Abs(dxtActual) > 0.3 * dx)
+            {
+                dxtActual = Math.Sign(dxtActual) * 0.3 * dx;
+            }
+
+            xt = xt + dxtActual;
+            xt = Math.Max(x1, Math.Min(x2, xt));
+        }
+
+        // Restore station 2
+        hk2 = hk2Sav; th2 = th2Sav; rt2 = rt2Sav;
+        ue2 = ue2Sav; d2 = d2Sav;
+
+        // Forced transition logic
+        if (forcedXtr.HasValue && forcedXtr.Value <= xt)
+        {
+            return new TransitionCheckResult(
+                TransitionOccurred: true,
+                TransitionXi: forcedXtr.Value,
+                AmplAtTransition: ampl1,
+                Type: TransitionResultType.Forced,
+                Converged: true,
+                Iterations: iterations);
+        }
+
+        return new TransitionCheckResult(
+            TransitionOccurred: true,
+            TransitionXi: xt,
+            AmplAtTransition: amplFinal,
+            Type: TransitionResultType.Free,
+            Converged: converged,
+            Iterations: iterations);
     }
 }
