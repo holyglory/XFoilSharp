@@ -14,8 +14,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Framework
 
-- [ ] **FW-01**: All projects target .NET 10 (net10.0)
-- [ ] **FW-02**: Solution builds cleanly on .NET 10 with no warnings
+- [x] **FW-01**: All projects target .NET 10 (net10.0)
+- [x] **FW-02**: Solution builds cleanly on .NET 10 with no warnings
 
 ### Inviscid Solver Parity
 
@@ -76,8 +76,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | DOC-01 | Phase 1 | Complete |
 | DOC-02 | Phase 1 | Complete |
-| FW-01 | Phase 1 | Pending |
-| FW-02 | Phase 1 | Pending |
+| FW-01 | Phase 1 | Complete |
+| FW-02 | Phase 1 | Complete |
 | INV-01 | Phase 2 | Pending |
 | INV-02 | Phase 2 | Pending |
 | INV-03 | Phase 2 | Pending |
