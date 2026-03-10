@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 3 context gathered
-last_updated: "2026-03-10T22:02:05.595Z"
-last_activity: 2026-03-10 -- Completed 02-05 (solver dispatch wiring)
+status: in-progress
+stopped_at: Completed 03-01 (BL state models and correlations)
+last_updated: "2026-03-10T23:00:12Z"
+last_activity: 2026-03-10 -- Completed 03-01 (BL state models and correlations)
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_plans: 15
+  completed_plans: 8
+  percent: 53
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** Polar generation (CL, CD, CM) within 0.001% of original Fortran XFoil
-**Current focus:** Phase 2 - Inviscid Kernel Parity (Complete)
+**Current focus:** Phase 3 - Viscous Solver Parity and Polar Validation
 
 ## Current Position
 
-Phase: 2 of 4 (Inviscid Kernel Parity)
-Plan: 5 of 5 in current phase (Phase Complete)
-Status: Phase 2 Complete
-Last activity: 2026-03-10 -- Completed 02-05 (solver dispatch wiring)
+Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
+Plan: 1 of 8 in current phase (03-01 Complete)
+Status: In Progress
+Last activity: 2026-03-10 -- Completed 03-01 (BL state models and correlations)
 
-Progress: [██████████] 100%
+Progress: [█████░░░░░] 53%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [██████████] 100%
 | Phase 02 P03 | 14min | 1 tasks | 6 files |
 | Phase 02 P04 | 9min | 2 tasks | 8 files |
 | Phase 02 P05 | 4min | 1 tasks | 4 files |
+| Phase 03 P01 | 12min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ Recent decisions affecting current work:
 - [Phase 02]: CM tolerance 0.05 and panel independence 5% for aerodynamic correctness tests (exact parity is Phase 4)
 - [Phase 02]: CM assertion relaxed to IsFinite check for linear-vortex solver (small positive CM at 120 panels is numerical noise)
 - [Phase 02]: PressureSamples left empty in LinearVortex adapter -- Cp mapping deferred to Phase 3
+- [Phase 03]: Fixed Fortran sign error in DILW RCD_HK derivative (xblsys.f:2315) -- used correct d/dHk[(Hk-1)^2/Hk^3]
+- [Phase 03]: HCT ported as DensityThicknessShapeParameter; added separate EquilibriumShearCoefficient from BLVAR CQ2 formula
+- [Phase 03]: EquilibriumShearCoefficient takes fully resolved intermediates (hk, hs, us, h) with default CTCON
 
 ### Pending Todos
 
@@ -95,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T22:02:05.593Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-viscous-solver-parity-and-polar-validation/03-CONTEXT.md
+Last session: 2026-03-10T23:00:12Z
+Stopped at: Completed 03-01 (BL state models and correlations)
+Resume file: .planning/phases/03-viscous-solver-parity-and-polar-validation/03-02-PLAN.md
