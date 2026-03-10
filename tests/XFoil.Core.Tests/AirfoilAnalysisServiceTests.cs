@@ -222,4 +222,61 @@ public sealed class AirfoilAnalysisServiceTests
         Assert.True(sweep.Points[1].SolvedAngleOfAttackDegrees >= sweep.Points[0].SolvedAngleOfAttackDegrees - 1e-9);
         Assert.True(sweep.Points[2].SolvedAngleOfAttackDegrees >= sweep.Points[1].SolvedAngleOfAttackDegrees - 1e-9);
     }
+
+    [Fact]
+    public void AnalyzeInviscid_WithLinearVortexSolverType_ProducesValidResult()
+    {
+        var generator = new NacaAirfoilGenerator();
+        var service = new AirfoilAnalysisService();
+        var geometry = generator.Generate4Digit("2412", 161);
+        var settings = new AnalysisSettings(
+            panelCount: 120,
+            inviscidSolverType: InviscidSolverType.LinearVortex);
+
+        var result = service.AnalyzeInviscid(geometry, 3.0, settings);
+
+        Assert.NotNull(result);
+        Assert.Equal(3.0, result.AngleOfAttackDegrees);
+        Assert.True(result.LiftCoefficient > 0, "CL should be positive for cambered airfoil at positive alpha.");
+        Assert.True(result.MomentCoefficientQuarterChord < 0, "CM should be negative for positive camber.");
+    }
+
+    [Fact]
+    public void AnalyzeInviscid_LinearVortexVsHessSmith_ProduceDifferentResults()
+    {
+        var generator = new NacaAirfoilGenerator();
+        var service = new AirfoilAnalysisService();
+        var geometry = generator.Generate4Digit("0012", 161);
+
+        var hessSmithSettings = new AnalysisSettings(
+            panelCount: 120,
+            inviscidSolverType: InviscidSolverType.HessSmith);
+        var linearVortexSettings = new AnalysisSettings(
+            panelCount: 120,
+            inviscidSolverType: InviscidSolverType.LinearVortex);
+
+        var hessSmithResult = service.AnalyzeInviscid(geometry, 5.0, hessSmithSettings);
+        var linearVortexResult = service.AnalyzeInviscid(geometry, 5.0, linearVortexSettings);
+
+        Assert.True(hessSmithResult.LiftCoefficient > 0, "Hess-Smith CL should be positive at alpha=5.");
+        Assert.True(linearVortexResult.LiftCoefficient > 0, "Linear-vortex CL should be positive at alpha=5.");
+        Assert.NotEqual(
+            Math.Round(hessSmithResult.LiftCoefficient, 3),
+            Math.Round(linearVortexResult.LiftCoefficient, 3));
+    }
+
+    [Fact]
+    public void AnalyzeInviscid_DefaultSettings_UsesHessSmith()
+    {
+        var generator = new NacaAirfoilGenerator();
+        var service = new AirfoilAnalysisService();
+        var geometry = generator.Generate4Digit("0012", 161);
+
+        var defaultResult = service.AnalyzeInviscid(geometry, 5.0);
+        var explicitHessSmithResult = service.AnalyzeInviscid(
+            geometry, 5.0,
+            new AnalysisSettings(inviscidSolverType: InviscidSolverType.HessSmith));
+
+        Assert.Equal(defaultResult.LiftCoefficient, explicitHessSmithResult.LiftCoefficient, 10);
+    }
 }
