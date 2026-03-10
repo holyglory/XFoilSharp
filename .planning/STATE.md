@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 3 of 8 in current phase (03-03 Complete)
+Plan: 4 of 8 in current phase (03-04 Complete)
 Status: In Progress
-Last activity: 2026-03-11 -- Completed 03-03 (BL system assembly)
+Last activity: 2026-03-11 -- Completed 03-04 (viscous/inviscid coupling infrastructure)
 
-Progress: [██████░░░░] 60%
+Progress: [██████░░░░] 63%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [██████░░░░] 60%
 | Phase 02 P05 | 4min | 1 tasks | 4 files |
 | Phase 03 P01 | 12min | 2 tasks | 12 files |
 | Phase 03 P03 | 15min | 2 tasks | 3 files |
+| Phase 03 P04 | 15min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Recent decisions affecting current work:
 - [Phase 03]: HCT ported as DensityThicknessShapeParameter; added separate EquilibriumShearCoefficient from BLVAR CQ2 formula
 - [Phase 03]: EquilibriumShearCoefficient takes fully resolved intermediates (hk, hs, us, h) with default CTCON
 - [Phase 03]: BL system assembler uses nested result classes for multi-value returns; simplified Jacobian chains in BLDIF
+- [Phase 03]: BlockTridiagonalSolver and BandMatrixSolver both use per-equation scalar Thomas algorithm for identical results
+- [Phase 03]: DIJ analytical path uses LU back-substitution through factored AIJ; numerical path validates within 1e-6
 
 ### Pending Todos
 
@@ -101,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10T23:20:00Z
-Stopped at: Completed 03-03 (BL system assembly)
-Resume file: .planning/phases/03-viscous-solver-parity-and-polar-validation/03-04-PLAN.md
+Last session: 2026-03-10T23:20:23Z
+Stopped at: Completed 03-04 (viscous/inviscid coupling infrastructure)
+Resume file: .planning/phases/03-viscous-solver-parity-and-polar-validation/03-05-PLAN.md

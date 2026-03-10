@@ -27,7 +27,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Viscous Solver Parity
 
 - [x] **VISC-01**: Port full Newton-coupled viscous/inviscid system from xbl.f + xblsys.f
-- [ ] **VISC-02**: Replace surrogate displacement coupling with true source/displacement in inviscid matrix
+- [x] **VISC-02**: Replace surrogate displacement coupling with true source/displacement in inviscid matrix
 - [ ] **VISC-03**: Port full e^n transition model replacing current laminar amplification surrogate
 - [ ] **VISC-04**: Port full drag decomposition (form, friction, pressure) from original
 - [ ] **VISC-05**: Viscous CL, CD, CM match original XFoil within 0.001%
@@ -83,7 +83,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INV-03 | Phase 2 | Complete |
 | INV-04 | Phase 2 | Complete |
 | VISC-01 | Phase 3 | Complete |
-| VISC-02 | Phase 3 | Pending |
+| VISC-02 | Phase 3 | Complete |
 | VISC-03 | Phase 3 | Pending |
 | VISC-04 | Phase 3 | Pending |
 | VISC-05 | Phase 3 | Pending |
