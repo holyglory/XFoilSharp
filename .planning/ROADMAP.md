@@ -13,7 +13,7 @@ XFoilSharp needs to close the gap between its current surrogate-based solvers an
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation Cleanup** - Fix stale docs and upgrade to .NET 10
-- [ ] **Phase 2: Inviscid Kernel Parity** - Faithful port of PSILIN, GGCALC, CLCALC from Fortran
+- [ ] **Phase 2: Inviscid Kernel Parity** - Clean C# implementation of XFoil's linear-vorticity inviscid solver alongside existing Hess-Smith
 - [ ] **Phase 3: Viscous Solver Parity and Polar Validation** - Replace surrogates with true viscous system, validate all sweep types
 - [ ] **Phase 4: Randomized Test Bench** - Automated random-case testing against reference XFoil binary
 
@@ -34,21 +34,21 @@ Plans:
 - [x] 01-02-PLAN.md -- Upgrade to .NET 10, centralize TFM, update test packages, verify clean build
 
 ### Phase 2: Inviscid Kernel Parity
-**Goal**: Inviscid solver produces CL and CM values within 0.001% of original XFoil for any valid airfoil
+**Goal**: Clean C# linear-vorticity inviscid solver produces aerodynamically correct CL and CM, selectable alongside existing Hess-Smith solver
 **Depends on**: Phase 1
 **Requirements**: INV-01, INV-02, INV-03, INV-04
 **Success Criteria** (what must be TRUE):
-  1. PSILIN (streamfunction influence coefficients) is ported from xpanel.f and produces identical intermediate values to Fortran
-  2. GGCALC (gamma/sigma solution) is ported from xsolve.f and produces identical intermediate values to Fortran
-  3. CLCALC (lift/moment recovery) is ported from xfoil.f and produces identical intermediate values to Fortran
-  4. Inviscid-only CL and CM for any test airfoil match original XFoil output within 0.001%
+  1. Streamfunction influence coefficients are implemented using the linear-vorticity formulation
+  2. System assembly builds and solves the influence matrix with two basis solutions
+  3. Pressure integration recovers CL and CM with Karman-Tsien correction and second-order moment correction
+  4. Inviscid CL and CM are aerodynamically correct for multiple test airfoils; exact parity refined in Phase 4
 **Plans**: 4 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Foundation numerics: state models, LUDCMP/BAKSUB, SPLINE/SPLIND/SEGSPL
-- [ ] 02-02-PLAN.md -- Geometry utilities (NCALC, APCALC, TECALC) and PSILIN influence coefficients
-- [ ] 02-03-PLAN.md -- PANGEN panel distribution generator port
-- [ ] 02-04-PLAN.md -- GGCALC/SPECAL/CLCALC solver assembly and end-to-end parity tests
+- [ ] 02-01-PLAN.md -- Foundation numerics: state models, parametric spline, scaled-pivot LU solver
+- [ ] 02-02-PLAN.md -- Geometry pipeline (normals, angles, TE gap) and streamfunction influence computation
+- [ ] 02-03-PLAN.md -- Cosine-clustering panel distribution generator
+- [ ] 02-04-PLAN.md -- Solver assembly, solver selection mechanism, and end-to-end aerodynamic tests
 
 ### Phase 3: Viscous Solver Parity and Polar Validation
 **Goal**: Full viscous solver produces CL, CD, CM within 0.001% of original XFoil across all polar sweep types
