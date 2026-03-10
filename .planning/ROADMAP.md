@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md -- Fix stale src-cs/ path references and verify ParityAndTodos.md accuracy
-- [ ] 01-02-PLAN.md -- Upgrade to .NET 10, centralize TFM, update test packages, verify clean build
+- [x] 01-02-PLAN.md -- Upgrade to .NET 10, centralize TFM, update test packages, verify clean build
 
 ### Phase 2: Inviscid Kernel Parity
 **Goal**: Inviscid solver produces CL and CM values within 0.001% of original XFoil for any valid airfoil
@@ -42,12 +42,13 @@ Plans:
   2. GGCALC (gamma/sigma solution) is ported from xsolve.f and produces identical intermediate values to Fortran
   3. CLCALC (lift/moment recovery) is ported from xfoil.f and produces identical intermediate values to Fortran
   4. Inviscid-only CL and CM for any test airfoil match original XFoil output within 0.001%
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md -- Foundation numerics: state models, LUDCMP/BAKSUB, SPLINE/SPLIND/SEGSPL
+- [ ] 02-02-PLAN.md -- Geometry utilities (NCALC, APCALC, TECALC) and PSILIN influence coefficients
+- [ ] 02-03-PLAN.md -- PANGEN panel distribution generator port
+- [ ] 02-04-PLAN.md -- GGCALC/SPECAL/CLCALC solver assembly and end-to-end parity tests
 
 ### Phase 3: Viscous Solver Parity and Polar Validation
 **Goal**: Full viscous solver produces CL, CD, CM within 0.001% of original XFoil across all polar sweep types
@@ -89,7 +90,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Cleanup | 1/2 | In Progress | - |
-| 2. Inviscid Kernel Parity | 0/? | Not started | - |
+| 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
+| 2. Inviscid Kernel Parity | 0/4 | Planned | - |
 | 3. Viscous Solver Parity and Polar Validation | 0/? | Not started | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |
