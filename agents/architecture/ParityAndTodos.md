@@ -22,8 +22,13 @@ The managed codebase covers a large portion of deterministic XFoil workflows, bu
   - Prepared-system reuse across alpha sweeps.
   - Wake marching and subsonic compressibility correction.
   - Target-`CL` and alpha sweep workflows.
+- In progress -- linear-vorticity port
+  - State models for node-based panel geometry (LinearVortexPanelState), solver workspace (InviscidSolverState), and results (LinearVortexInviscidResult) added.
+  - ParametricSpline (port of SPLINE/SPLIND/SEGSPL) with 3 BC modes, segmented fitting, evaluation, derivative evaluation, arc-length, inversion.
+  - TridiagonalSolver (port of TRISOL).
+  - ScaledPivotLuSolver (port of LUDCMP/BAKSUB) with Crout's method and scaled partial pivoting.
 - Missing or weaker than legacy
-  - Solver is not a direct port of `PSILIN/GGCALC/CLCALC`.
+  - Solver is not yet a direct port of `PSILIN/GGCALC/CLCALC` (state models and numerics are ready; influence computation and assembly pending).
   - No proof of kernel-level parity with original XFoil coefficients.
 
 ### Viscous solver and coupling
