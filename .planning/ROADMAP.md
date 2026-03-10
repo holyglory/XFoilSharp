@@ -45,7 +45,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Foundation numerics: state models, parametric spline, scaled-pivot LU solver
+- [x] 02-01-PLAN.md -- Foundation numerics: state models, parametric spline, scaled-pivot LU solver
 - [ ] 02-02-PLAN.md -- Geometry pipeline (normals, angles, TE gap) and streamfunction influence computation
 - [ ] 02-03-PLAN.md -- Cosine-clustering panel distribution generator
 - [ ] 02-04-PLAN.md -- Solver assembly, solver selection mechanism, and end-to-end aerodynamic tests
@@ -91,6 +91,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
-| 2. Inviscid Kernel Parity | 0/4 | Planned | - |
+| 2. Inviscid Kernel Parity | 1/4 | In Progress | - |
 | 3. Viscous Solver Parity and Polar Validation | 0/? | Not started | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |
