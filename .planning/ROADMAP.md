@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Fix stale src-cs/ path references and verify ParityAndTodos.md accuracy
+- [x] 01-01-PLAN.md -- Fix stale src-cs/ path references and verify ParityAndTodos.md accuracy
 - [ ] 01-02-PLAN.md -- Upgrade to .NET 10, centralize TFM, update test packages, verify clean build
 
 ### Phase 2: Inviscid Kernel Parity
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Cleanup | 0/2 | Not started | - |
+| 1. Foundation Cleanup | 1/2 | In Progress | - |
 | 2. Inviscid Kernel Parity | 0/? | Not started | - |
 | 3. Viscous Solver Parity and Polar Validation | 0/? | Not started | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |

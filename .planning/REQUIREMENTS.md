@@ -9,8 +9,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Documentation
 
-- [ ] **DOC-01**: All agents/ markdown files reference correct `src/` paths (not stale `src-cs/`)
-- [ ] **DOC-02**: Parity status in ParityAndTodos.md reflects current solver state after changes
+- [x] **DOC-01**: All agents/ markdown files reference correct `src/` paths (not stale `src-cs/`)
+- [x] **DOC-02**: Parity status in ParityAndTodos.md reflects current solver state after changes
 
 ### Framework
 
@@ -74,8 +74,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DOC-01 | Phase 1 | Pending |
-| DOC-02 | Phase 1 | Pending |
+| DOC-01 | Phase 1 | Complete |
+| DOC-02 | Phase 1 | Complete |
 | FW-01 | Phase 1 | Pending |
 | FW-02 | Phase 1 | Pending |
 | INV-01 | Phase 2 | Pending |
