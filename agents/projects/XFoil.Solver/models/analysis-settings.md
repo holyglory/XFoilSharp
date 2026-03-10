@@ -7,6 +7,11 @@
 
 - `AnalysisSettings(...)`
 
+## Properties
+
+- `PanelCount`, `FreestreamVelocity`, `MachNumber`, `ReynoldsNumber`, `Paneling`, `TransitionReynoldsTheta`, `CriticalAmplificationFactor`
+- `InviscidSolverType` -- selects between `HessSmith` (default, backward-compatible) and `LinearVortex` (XFoil parity solver). Added in Phase 02 Plan 04.
+
 ## Notes
 
 - This is the managed replacement for a large amount of original run-state configuration.

@@ -20,6 +20,7 @@
 - [services/panel-mesh-generator.md](services/panel-mesh-generator.md)
 - [services/cosine-clustering-panel-distributor.md](services/cosine-clustering-panel-distributor.md)
 - [services/hess-smith-inviscid-solver.md](services/hess-smith-inviscid-solver.md)
+- [services/linear-vortex-inviscid-solver.md](services/linear-vortex-inviscid-solver.md)
 - [services/wake-geometry-generator.md](services/wake-geometry-generator.md)
 - [services/boundary-layer-topology-builder.md](services/boundary-layer-topology-builder.md)
 - [services/viscous-state-seed-builder.md](services/viscous-state-seed-builder.md)

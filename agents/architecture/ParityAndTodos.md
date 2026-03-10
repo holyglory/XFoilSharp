@@ -30,10 +30,12 @@ The managed codebase covers a large portion of deterministic XFoil workflows, bu
   - CosineClusteringPanelDistributor (port of PANGEN) for curvature-adaptive cosine spacing with TE density control, producing node-based panel distributions matching XFoil's panel placement.
   - PanelGeometryBuilder (ports of NCALC, APCALC, TECALC, COMSET, ATANC) for normal vectors, panel angles, TE gap analysis, compressibility parameters, and continuous atan2.
   - StreamfunctionInfluenceCalculator (port of PSILIN) for linear-vorticity streamfunction influence computation with self-influence singularity handling and TE panel contribution.
+  - LinearVortexInviscidSolver (ports of GGCALC, SPECAL, SPECCL, CLCALC, CPCALC) complete. System assembly, LU factoring, basis solutions, alpha/CL specification, pressure integration with Karman-Tsien correction and DG*DX/12 CM correction. Sharp TE bisector condition implemented.
+  - InviscidSolverType enum enables selection between Hess-Smith and linear-vorticity solvers via AnalysisSettings.
+  - End-to-end aerodynamic correctness validated: CL within 5% of thin-airfoil theory, correct signs for cambered airfoils, CL linearity, panel independence.
 - Missing or weaker than legacy
-  - GGCALC system assembly and solution (influence matrix factoring, basis solutions) pending.
-  - CLCALC lift/moment recovery with Karman-Tsien correction pending.
-  - No proof of kernel-level parity with original XFoil coefficients (awaiting end-to-end integration).
+  - Exact Fortran bit-parity not yet verified (Phase 4 test bench).
+  - No Mach-CL Newton coupling iteration for compressible cases (M>0 will be addressed in Phase 3).
 
 ### Viscous solver and coupling
 
@@ -99,7 +101,7 @@ The managed codebase covers a large portion of deterministic XFoil workflows, bu
 
 ## Priority TODOs
 
-- TODO: Port a closer equivalent of the original inviscid kernel and coefficient recovery path from `xpanel.f`, `xsolve.f`, and related routines.
+- TODO: (MOSTLY DONE) Linear-vorticity inviscid kernel ported and aerodynamically validated. Remaining: exact Fortran bit-parity via Phase 4 test bench, compressible Mach-CL coupling iteration.
 - TODO: Replace surrogate viscous/displacement coupling with a true coupled outer-flow/BL system.
 - TODO: Replace the current transition surrogate with a closer e^n-style formulation.
 - TODO: Validate binary polar-dump import against real legacy dump artifacts, not only synthetic fixtures.
