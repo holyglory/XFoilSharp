@@ -46,9 +46,11 @@ public sealed class CosineClusteringPanelDistributorTests
 
         CosineClusteringPanelDistributor.Distribute(inputX, inputY, inputCount, panel, 160);
 
-        // Node 0 should be near upper-surface TE: x close to 1.0, y > 0
+        // Node 0 should be near upper-surface TE: x close to 1.0
         Assert.True(panel.X[0] > 0.95, $"Node 0 X should be near TE, got {panel.X[0]:F6}");
-        Assert.True(panel.Y[0] >= 0.0, $"Node 0 Y should be on upper surface (>=0), got {panel.Y[0]:F6}");
+        // For symmetric NACA 0012, TE is at Y=0. Verify upper-surface ordering by checking
+        // that the next node (node 1) has positive Y, confirming counterclockwise traversal.
+        Assert.True(panel.Y[1] > 0.0, $"Node 1 Y should be positive (upper surface), got {panel.Y[1]:F6}");
     }
 
     [Fact]
@@ -60,9 +62,11 @@ public sealed class CosineClusteringPanelDistributorTests
         CosineClusteringPanelDistributor.Distribute(inputX, inputY, inputCount, panel, 160);
 
         int last = panel.NodeCount - 1;
-        // Node N-1 should be near lower-surface TE: x close to 1.0, y < 0
+        // Node N-1 should be near lower-surface TE: x close to 1.0
         Assert.True(panel.X[last] > 0.95, $"Node N-1 X should be near TE, got {panel.X[last]:F6}");
-        Assert.True(panel.Y[last] <= 0.0, $"Node N-1 Y should be on lower surface (<=0), got {panel.Y[last]:F6}");
+        // For symmetric NACA 0012, TE is at Y=0. Verify lower-surface ordering by checking
+        // that the previous node (node N-2) has negative Y.
+        Assert.True(panel.Y[last - 1] < 0.0, $"Node N-2 Y should be negative (lower surface), got {panel.Y[last - 1]:F6}");
     }
 
     [Fact]
