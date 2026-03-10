@@ -49,7 +49,7 @@ Plans:
 - [x] 02-02-PLAN.md -- Geometry pipeline (normals, angles, TE gap) and streamfunction influence computation
 - [x] 02-03-PLAN.md -- Cosine-clustering panel distribution generator
 - [x] 02-04-PLAN.md -- Solver assembly, solver selection mechanism, and end-to-end aerodynamic tests
-- [ ] 02-05-PLAN.md -- Gap closure: wire solver dispatch in AirfoilAnalysisService for LinearVortex selection
+- [x] 02-05-PLAN.md -- Gap closure: wire solver dispatch in AirfoilAnalysisService for LinearVortex selection
 
 ### Phase 3: Viscous Solver Parity and Polar Validation
 **Goal**: Full viscous solver produces CL, CD, CM within 0.001% of original XFoil across all polar sweep types
@@ -92,6 +92,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
-| 2. Inviscid Kernel Parity | 4/5 | Gap closure | - |
+| 2. Inviscid Kernel Parity | 5/5 | Complete | 2026-03-10 |
 | 3. Viscous Solver Parity and Polar Validation | 0/? | Not started | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |
