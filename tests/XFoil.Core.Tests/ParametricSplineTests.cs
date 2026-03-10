@@ -228,7 +228,7 @@ public class ParametricSplineTests
     [Fact]
     public void ComputeArcLength_UnitCircleQuadrant_ReturnsPiOverTwo()
     {
-        const int n = 201;
+        const int n = 1001;
         var x = new double[n];
         var y = new double[n];
         var arcLength = new double[n];
