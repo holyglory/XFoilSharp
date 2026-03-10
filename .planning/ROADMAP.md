@@ -46,9 +46,9 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md -- Foundation numerics: state models, parametric spline, scaled-pivot LU solver
-- [ ] 02-02-PLAN.md -- Geometry pipeline (normals, angles, TE gap) and streamfunction influence computation
-- [ ] 02-03-PLAN.md -- Cosine-clustering panel distribution generator
-- [ ] 02-04-PLAN.md -- Solver assembly, solver selection mechanism, and end-to-end aerodynamic tests
+- [x] 02-02-PLAN.md -- Geometry pipeline (normals, angles, TE gap) and streamfunction influence computation
+- [x] 02-03-PLAN.md -- Cosine-clustering panel distribution generator
+- [x] 02-04-PLAN.md -- Solver assembly, solver selection mechanism, and end-to-end aerodynamic tests
 
 ### Phase 3: Viscous Solver Parity and Polar Validation
 **Goal**: Full viscous solver produces CL, CD, CM within 0.001% of original XFoil across all polar sweep types
@@ -91,6 +91,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
-| 2. Inviscid Kernel Parity | 3/4 | In Progress | - |
+| 2. Inviscid Kernel Parity | 4/4 | Complete | 2026-03-10 |
 | 3. Viscous Solver Parity and Polar Validation | 0/? | Not started | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |
