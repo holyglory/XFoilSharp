@@ -65,6 +65,12 @@ public sealed class AirfoilAnalysisService
         }
 
         settings ??= new AnalysisSettings();
+
+        if (settings.InviscidSolverType == InviscidSolverType.LinearVortex)
+        {
+            return AnalyzeInviscidLinearVortex(geometry, angleOfAttackDegrees, settings);
+        }
+
         var preparedSystem = PrepareInviscidSystem(geometry, settings);
         return inviscidSolver.Analyze(preparedSystem, angleOfAttackDegrees, settings.FreestreamVelocity, settings.MachNumber);
     }
@@ -655,6 +661,50 @@ public sealed class AirfoilAnalysisService
         }
 
         return bestResult;
+    }
+
+    private InviscidAnalysisResult AnalyzeInviscidLinearVortex(
+        AirfoilGeometry geometry,
+        double angleOfAttackDegrees,
+        AnalysisSettings settings)
+    {
+        // Extract raw coordinates from geometry for the linear-vortex solver
+        var points = geometry.Points;
+        var inputX = new double[points.Count];
+        var inputY = new double[points.Count];
+        for (var i = 0; i < points.Count; i++)
+        {
+            inputX[i] = points[i].X;
+            inputY[i] = points[i].Y;
+        }
+
+        // Run linear-vortex solver
+        var lvResult = LinearVortexInviscidSolver.AnalyzeInviscid(
+            inputX, inputY, points.Count,
+            angleOfAttackDegrees,
+            settings.PanelCount,
+            settings.MachNumber);
+
+        // Generate mesh for downstream consumers that read result.Mesh
+        var mesh = panelMeshGenerator.Generate(geometry, settings.PanelCount, settings.Paneling);
+
+        // Adapt LinearVortexInviscidResult to InviscidAnalysisResult
+        return new InviscidAnalysisResult(
+            mesh,
+            angleOfAttackDegrees,
+            settings.MachNumber,
+            circulation: 0.0, // Not computed by linear-vortex path
+            liftCoefficient: lvResult.LiftCoefficient,
+            dragCoefficient: lvResult.PressureDragCoefficient,
+            correctedPressureIntegratedLiftCoefficient: lvResult.LiftCoefficient,
+            correctedPressureIntegratedDragCoefficient: lvResult.PressureDragCoefficient,
+            pressureIntegratedLiftCoefficient: lvResult.LiftCoefficient,
+            pressureIntegratedDragCoefficient: lvResult.PressureDragCoefficient,
+            momentCoefficientQuarterChord: lvResult.MomentCoefficient,
+            sourceStrengths: Array.Empty<double>(), // Hess-Smith concept, not applicable
+            vortexStrength: 0.0, // Hess-Smith concept, not applicable
+            pressureSamples: Array.Empty<PressureCoefficientSample>(), // Cp mapping deferred to Phase 3
+            wake: new WakeGeometry(Array.Empty<WakePoint>()));
     }
 
     private PreparedInviscidSystem PrepareInviscidSystem(AirfoilGeometry geometry, AnalysisSettings settings)
