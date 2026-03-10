@@ -68,7 +68,10 @@ Polar generation (CL, CD, CM) must produce results within 0.001% of original For
 - Existing agents/ documentation tree tracks parity status and architecture decisions
 - Documentation paths reference old `src-cs/` directory structure, now moved to `src/`
 - Selig airfoil database at https://m-selig.ae.illinois.edu/ads/archives/coord_seligFmt.zip provides thousands of real-world profiles for testing
-- Current solver uses surrogate approaches for viscous coupling and transition — these must be replaced with faithful Fortran ports to achieve 0.001% parity
+- Current solver uses surrogate approaches for viscous coupling and transition — these need clean C# reimplementations of XFoil's algorithms (not line-by-line Fortran ports)
+- Existing Hess-Smith solver must be preserved as an option alongside new linear-vorticity solver
+- Documentation paths fixed in Phase 1 (src-cs/ → src/)
+- .NET 10 upgrade completed in Phase 1
 
 ## Constraints
 
@@ -89,8 +92,11 @@ Polar generation (CL, CD, CM) must produce results within 0.001% of original For
 | Target 0.001% parity | Exact match required — surrogates insufficient | — Pending |
 | Build reference XFoil from submodule | Reproducible, version-locked reference | — Pending |
 | Use Selig database for test profiles | Large real-world dataset covers edge cases | — Pending |
-| Upgrade to .NET 10 | User requirement for modern framework | — Pending |
+| Upgrade to .NET 10 | User requirement for modern framework | ✓ Good |
 | Keep headless/batch architecture | Consistent with existing design, no interactive shell | — Pending |
+| Keep Hess-Smith solver alongside new solver | User: existing implementation must remain as an option, not be replaced | — Pending |
+| Clean C# over Fortran transliteration | User: no line-by-line Fortran rewrite, keep code idiomatic and structured | — Pending |
+| Aerodynamic precision over XFoil parity | User: best results matter more than matching XFoil exactly; parity refined in Phase 4 | — Pending |
 
 ---
-*Last updated: 2026-03-10 after initialization*
+*Last updated: 2026-03-10 after Phase 1 completion and Phase 2 planning*
