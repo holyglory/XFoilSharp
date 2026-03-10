@@ -9,7 +9,8 @@ public sealed class AnalysisSettings
         double reynoldsNumber = 1_000_000d,
         PanelingOptions? paneling = null,
         double transitionReynoldsTheta = 320d,
-        double criticalAmplificationFactor = 9.0d)
+        double criticalAmplificationFactor = 9.0d,
+        InviscidSolverType inviscidSolverType = InviscidSolverType.HessSmith)
     {
         if (panelCount < 16)
         {
@@ -48,6 +49,7 @@ public sealed class AnalysisSettings
         Paneling = paneling ?? new PanelingOptions();
         TransitionReynoldsTheta = transitionReynoldsTheta;
         CriticalAmplificationFactor = criticalAmplificationFactor;
+        InviscidSolverType = inviscidSolverType;
     }
 
     public int PanelCount { get; }
@@ -63,4 +65,10 @@ public sealed class AnalysisSettings
     public double TransitionReynoldsTheta { get; }
 
     public double CriticalAmplificationFactor { get; }
+
+    /// <summary>
+    /// Selects which inviscid solver to use for the analysis.
+    /// Default is <see cref="Models.InviscidSolverType.HessSmith"/> to preserve backward compatibility.
+    /// </summary>
+    public InviscidSolverType InviscidSolverType { get; }
 }
