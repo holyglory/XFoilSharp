@@ -42,13 +42,14 @@ Plans:
   2. System assembly builds and solves the influence matrix with two basis solutions
   3. Pressure integration recovers CL and CM with Karman-Tsien correction and second-order moment correction
   4. Inviscid CL and CM are aerodynamically correct for multiple test airfoils; exact parity refined in Phase 4
-**Plans**: 4 plans
+**Plans**: 5 plans
 
 Plans:
 - [x] 02-01-PLAN.md -- Foundation numerics: state models, parametric spline, scaled-pivot LU solver
 - [x] 02-02-PLAN.md -- Geometry pipeline (normals, angles, TE gap) and streamfunction influence computation
 - [x] 02-03-PLAN.md -- Cosine-clustering panel distribution generator
 - [x] 02-04-PLAN.md -- Solver assembly, solver selection mechanism, and end-to-end aerodynamic tests
+- [ ] 02-05-PLAN.md -- Gap closure: wire solver dispatch in AirfoilAnalysisService for LinearVortex selection
 
 ### Phase 3: Viscous Solver Parity and Polar Validation
 **Goal**: Full viscous solver produces CL, CD, CM within 0.001% of original XFoil across all polar sweep types
@@ -91,6 +92,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
-| 2. Inviscid Kernel Parity | 4/4 | Complete | 2026-03-10 |
+| 2. Inviscid Kernel Parity | 4/5 | Gap closure | - |
 | 3. Viscous Solver Parity and Polar Validation | 0/? | Not started | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |
