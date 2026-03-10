@@ -27,6 +27,7 @@ The managed codebase covers a large portion of deterministic XFoil workflows, bu
   - ParametricSpline (port of SPLINE/SPLIND/SEGSPL) with 3 BC modes, segmented fitting, evaluation, derivative evaluation, arc-length, inversion.
   - TridiagonalSolver (port of TRISOL).
   - ScaledPivotLuSolver (port of LUDCMP/BAKSUB) with Crout's method and scaled partial pivoting.
+  - CosineClusteringPanelDistributor (port of PANGEN) for curvature-adaptive cosine spacing with TE density control, producing node-based panel distributions matching XFoil's panel placement.
   - PanelGeometryBuilder (ports of NCALC, APCALC, TECALC, COMSET, ATANC) for normal vectors, panel angles, TE gap analysis, compressibility parameters, and continuous atan2.
   - StreamfunctionInfluenceCalculator (port of PSILIN) for linear-vorticity streamfunction influence computation with self-influence singularity handling and TE panel contribution.
 - Missing or weaker than legacy
