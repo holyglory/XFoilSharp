@@ -1,0 +1,7 @@
+build
+pod-build
+src/**/bin/
+src/**/obj/
+tests/**/bin/
+tests/**/obj/
+runs/

@@ -1,0 +1,3825 @@
+using System.Globalization;
+using XFoil.Core.Models;
+using XFoil.Core.Services;
+using XFoil.Design.Models;
+using XFoil.Design.Services;
+using XFoil.IO.Services;
+using XFoil.Solver.Models;
+using XFoil.Solver.Services;
+
+var parser = new AirfoilParser();
+var normalizer = new AirfoilNormalizer();
+var metricsCalculator = new AirfoilMetricsCalculator();
+var nacaGenerator = new NacaAirfoilGenerator();
+var analysisService = new AirfoilAnalysisService();
+var polarExporter = new PolarCsvExporter();
+var sessionRunner = new AnalysisSessionRunner();
+var legacyPolarImporter = new LegacyPolarImporter();
+var legacyReferencePolarImporter = new LegacyReferencePolarImporter();
+var legacyPolarDumpImporter = new LegacyPolarDumpImporter();
+var legacyPolarDumpArchiveWriter = new LegacyPolarDumpArchiveWriter();
+var flapDeflectionService = new FlapDeflectionService();
+var trailingEdgeGapService = new TrailingEdgeGapService();
+var leadingEdgeRadiusService = new LeadingEdgeRadiusService();
+var geometryScalingService = new GeometryScalingService();
+var basicGeometryTransformService = new BasicGeometryTransformService();
+var contourEditService = new ContourEditService();
+var contourModificationService = new ContourModificationService();
+var qSpecDesignService = new QSpecDesignService();
+var modalInverseDesignService = new ModalInverseDesignService();
+var conformalMapgenService = new ConformalMapgenService();
+var airfoilDatExporter = new AirfoilDatExporter();
+
+if (args.Length == 0)
+{
+    PrintUsage();
+    return 0;
+}
+
+try
+{
+    switch (args[0].ToLowerInvariant())
+    {
+        case "summarize":
+            if (args.Length < 2)
+            {
+                throw new ArgumentException("The summarize command requires a file path.");
+            }
+
+            var parsed = parser.ParseFile(args[1]);
+            WriteSummary(parsed, normalizer, metricsCalculator);
+            return 0;
+
+        case "naca":
+            if (args.Length < 2)
+            {
+                throw new ArgumentException("The naca command requires a 4-digit designation.");
+            }
+
+            var generated = nacaGenerator.Generate4Digit(args[1]);
+            WriteSummary(generated, normalizer, metricsCalculator);
+            return 0;
+
+        case "inviscid-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The inviscid-file command requires a file path and angle of attack.");
+            }
+
+            var airfoilFromFile = parser.ParseFile(args[1]);
+            var fileAlpha = ParseDouble(args[2], "angle of attack");
+            var filePanels = args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120;
+            var fileMach = args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d;
+            WriteInviscidSummary(airfoilFromFile, fileAlpha, filePanels, fileMach, analysisService);
+            return 0;
+
+        case "inviscid-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The inviscid-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var airfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            var nacaAlpha = ParseDouble(args[2], "angle of attack");
+            var nacaPanels = args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120;
+            var nacaMach = args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d;
+            WriteInviscidSummary(airfoilFromNaca, nacaAlpha, nacaPanels, nacaMach, analysisService);
+            return 0;
+
+        case "polar-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The polar-file command requires a file path, alpha start, alpha end, and alpha step.");
+            }
+
+            var polarAirfoilFromFile = parser.ParseFile(args[1]);
+            WritePolarSummary(
+                polarAirfoilFromFile,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "polar-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The polar-naca command requires a 4-digit designation, alpha start, alpha end, and alpha step.");
+            }
+
+            var polarAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WritePolarSummary(
+                polarAirfoilFromNaca,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "export-polar-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-polar-file command requires a file path, output path, alpha start, alpha end, and alpha step.");
+            }
+
+            var exportPolarAirfoilFromFile = parser.ParseFile(args[1]);
+            ExportPolarCsv(
+                exportPolarAirfoilFromFile,
+                args[2],
+                ParseDouble(args[3], "alpha start"),
+                ParseDouble(args[4], "alpha end"),
+                ParseDouble(args[5], "alpha step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                analysisService,
+                polarExporter);
+            return 0;
+
+        case "export-polar-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-polar-naca command requires a 4-digit designation, output path, alpha start, alpha end, and alpha step.");
+            }
+
+            var exportPolarAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            ExportPolarCsv(
+                exportPolarAirfoilFromNaca,
+                args[2],
+                ParseDouble(args[3], "alpha start"),
+                ParseDouble(args[4], "alpha end"),
+                ParseDouble(args[5], "alpha step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                analysisService,
+                polarExporter);
+            return 0;
+
+        case "export-polar-cl-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-polar-cl-file command requires a file path, output path, CL start, CL end, and CL step.");
+            }
+
+            var exportPolarClAirfoilFromFile = parser.ParseFile(args[1]);
+            ExportLiftSweepCsv(
+                exportPolarClAirfoilFromFile,
+                args[2],
+                ParseDouble(args[3], "CL start"),
+                ParseDouble(args[4], "CL end"),
+                ParseDouble(args[5], "CL step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                analysisService,
+                polarExporter);
+            return 0;
+
+        case "export-polar-cl-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-polar-cl-naca command requires a 4-digit designation, output path, CL start, CL end, and CL step.");
+            }
+
+            var exportPolarClAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            ExportLiftSweepCsv(
+                exportPolarClAirfoilFromNaca,
+                args[2],
+                ParseDouble(args[3], "CL start"),
+                ParseDouble(args[4], "CL end"),
+                ParseDouble(args[5], "CL step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                analysisService,
+                polarExporter);
+            return 0;
+
+        case "import-legacy-polar":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The import-legacy-polar command requires an input path and output CSV path.");
+            }
+
+            ImportLegacyPolar(args[1], args[2], legacyPolarImporter, polarExporter);
+            return 0;
+
+        case "show-legacy-polar":
+            if (args.Length < 2)
+            {
+                throw new ArgumentException("The show-legacy-polar command requires an input path.");
+            }
+
+            WriteLegacyPolarSummary(args[1], legacyPolarImporter);
+            return 0;
+
+        case "import-legacy-reference-polar":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The import-legacy-reference-polar command requires an input path and output CSV path.");
+            }
+
+            ImportLegacyReferencePolar(args[1], args[2], legacyReferencePolarImporter, polarExporter);
+            return 0;
+
+        case "show-legacy-reference-polar":
+            if (args.Length < 2)
+            {
+                throw new ArgumentException("The show-legacy-reference-polar command requires an input path.");
+            }
+
+            WriteLegacyReferencePolarSummary(args[1], legacyReferencePolarImporter);
+            return 0;
+
+        case "import-legacy-polar-dump":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The import-legacy-polar-dump command requires an input path and output summary CSV path.");
+            }
+
+            ImportLegacyPolarDump(args[1], args[2], legacyPolarDumpImporter, legacyPolarDumpArchiveWriter);
+            return 0;
+
+        case "show-legacy-polar-dump":
+            if (args.Length < 2)
+            {
+                throw new ArgumentException("The show-legacy-polar-dump command requires an input path.");
+            }
+
+            WriteLegacyPolarDumpSummary(args[1], legacyPolarDumpImporter);
+            return 0;
+
+        case "design-flap-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The design-flap-file command requires an input path, output path, hinge X, hinge Y, and deflection angle.");
+            }
+
+            var flapAirfoilFromFile = parser.ParseFile(args[1]);
+            ExportFlapGeometry(
+                flapAirfoilFromFile,
+                args[2],
+                ParseDouble(args[3], "hinge X"),
+                ParseDouble(args[4], "hinge Y"),
+                ParseDouble(args[5], "deflection angle"),
+                flapDeflectionService,
+                airfoilDatExporter);
+            return 0;
+
+        case "design-flap-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The design-flap-naca command requires a 4-digit designation, output path, hinge X, hinge Y, and deflection angle.");
+            }
+
+            var flapAirfoilFromNaca = nacaGenerator.Generate4Digit(
+                args[1],
+                args.Length >= 7 ? ParseInteger(args[6], "point count") : 161);
+            ExportFlapGeometry(
+                flapAirfoilFromNaca,
+                args[2],
+                ParseDouble(args[3], "hinge X"),
+                ParseDouble(args[4], "hinge Y"),
+                ParseDouble(args[5], "deflection angle"),
+                flapDeflectionService,
+                airfoilDatExporter);
+            return 0;
+
+        case "set-te-gap-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The set-te-gap-file command requires an input path, output path, and target gap.");
+            }
+
+            var teGapAirfoilFromFile = parser.ParseFile(args[1]);
+            ExportTrailingEdgeGapGeometry(
+                teGapAirfoilFromFile,
+                args[2],
+                ParseDouble(args[3], "target gap"),
+                args.Length >= 5 ? ParseDouble(args[4], "blend distance chord fraction") : 1d,
+                trailingEdgeGapService,
+                airfoilDatExporter);
+            return 0;
+
+        case "set-te-gap-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The set-te-gap-naca command requires a 4-digit designation, output path, and target gap.");
+            }
+
+            var teGapAirfoilFromNaca = nacaGenerator.Generate4Digit(
+                args[1],
+                args.Length >= 6 ? ParseInteger(args[5], "point count") : 161);
+            ExportTrailingEdgeGapGeometry(
+                teGapAirfoilFromNaca,
+                args[2],
+                ParseDouble(args[3], "target gap"),
+                args.Length >= 5 ? ParseDouble(args[4], "blend distance chord fraction") : 1d,
+                trailingEdgeGapService,
+                airfoilDatExporter);
+            return 0;
+
+        case "addp-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The addp-file command requires an input path, output path, insert index, x, and y.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.AddPoint(
+                    parser.ParseFile(args[1]),
+                    ParseInteger(args[3], "insert index"),
+                    new AirfoilPoint(
+                        ParseDouble(args[4], "x"),
+                        ParseDouble(args[5], "y"))),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "addp-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The addp-naca command requires a 4-digit designation, output path, insert index, x, and y.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.AddPoint(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 7 ? ParseInteger(args[6], "point count") : 161),
+                    ParseInteger(args[3], "insert index"),
+                    new AirfoilPoint(
+                        ParseDouble(args[4], "x"),
+                        ParseDouble(args[5], "y"))),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "movp-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The movp-file command requires an input path, output path, point index, x, and y.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.MovePoint(
+                    parser.ParseFile(args[1]),
+                    ParseInteger(args[3], "point index"),
+                    new AirfoilPoint(
+                        ParseDouble(args[4], "x"),
+                        ParseDouble(args[5], "y"))),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "movp-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The movp-naca command requires a 4-digit designation, output path, point index, x, and y.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.MovePoint(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 7 ? ParseInteger(args[6], "point count") : 161),
+                    ParseInteger(args[3], "point index"),
+                    new AirfoilPoint(
+                        ParseDouble(args[4], "x"),
+                        ParseDouble(args[5], "y"))),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "delp-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The delp-file command requires an input path, output path, and point index.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.DeletePoint(
+                    parser.ParseFile(args[1]),
+                    ParseInteger(args[3], "point index")),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "delp-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The delp-naca command requires a 4-digit designation, output path, and point index.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.DeletePoint(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 5 ? ParseInteger(args[4], "point count") : 161),
+                    ParseInteger(args[3], "point index")),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "corn-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The corn-file command requires an input path, output path, and point index.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.DoublePoint(
+                    parser.ParseFile(args[1]),
+                    ParseInteger(args[3], "point index")),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "corn-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The corn-naca command requires a 4-digit designation, output path, and point index.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.DoublePoint(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 5 ? ParseInteger(args[4], "point count") : 161),
+                    ParseInteger(args[3], "point index")),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "cadd-file":
+            if (args.Length < 4 || args.Length == 6 || args.Length > 7)
+            {
+                throw new ArgumentException("The cadd-file command requires an input path, output path, a corner angle threshold, an optional parameter mode, and an optional x-range.");
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.RefineCorners(
+                    parser.ParseFile(args[1]),
+                    ParseDouble(args[3], "corner angle threshold"),
+                    args.Length >= 5 ? ParseCornerRefinementMode(args[4]) : CornerRefinementParameterMode.ArcLength,
+                    args.Length >= 7 ? ParseDouble(args[5], "minimum x") : null,
+                    args.Length >= 7 ? ParseDouble(args[6], "maximum x") : null),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "cadd-naca":
+            if (args.Length < 4 || args.Length > 8)
+            {
+                throw new ArgumentException("The cadd-naca command requires a 4-digit designation, output path, a corner angle threshold, an optional parameter mode, an optional x-range, and an optional point count.");
+            }
+
+            var caddNacaMode = CornerRefinementParameterMode.ArcLength;
+            var caddNacaPointCount = 161;
+            double? caddNacaMinimumX = null;
+            double? caddNacaMaximumX = null;
+            if (args.Length >= 5)
+            {
+                if (TryParseCornerRefinementMode(args[4], out var parsedMode))
+                {
+                    caddNacaMode = parsedMode;
+                    if (args.Length == 6)
+                    {
+                        caddNacaPointCount = ParseInteger(args[5], "point count");
+                    }
+                    else if (args.Length >= 7)
+                    {
+                        caddNacaMinimumX = ParseDouble(args[5], "minimum x");
+                        caddNacaMaximumX = ParseDouble(args[6], "maximum x");
+                        if (args.Length == 8)
+                        {
+                            caddNacaPointCount = ParseInteger(args[7], "point count");
+                        }
+                    }
+                }
+                else
+                {
+                    if (args.Length != 5)
+                    {
+                        throw new ArgumentException("The cadd-naca command only allows pointCount without a parameter mode when no x-range is specified.");
+                    }
+
+                    caddNacaPointCount = ParseInteger(args[4], "point count");
+                }
+            }
+
+            ExportContourEditGeometry(
+                contourEditService.RefineCorners(
+                    nacaGenerator.Generate4Digit(args[1], caddNacaPointCount),
+                    ParseDouble(args[3], "corner angle threshold"),
+                    caddNacaMode,
+                    caddNacaMinimumX,
+                    caddNacaMaximumX),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "modi-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The modi-file command requires an input path, output path, and control-points path.");
+            }
+
+            ExportContourModificationGeometry(
+                contourModificationService.ModifyContour(
+                    parser.ParseFile(args[1]),
+                    ParseControlPointsFile(args[3]),
+                    args.Length >= 5 ? ParseBooleanFlag(args[4], "match endpoint slope") : true),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "modi-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The modi-naca command requires a 4-digit designation, output path, and control-points path.");
+            }
+
+            var modiNacaMatchSlope = args.Length >= 5 ? ParseBooleanFlag(args[4], "match endpoint slope") : true;
+            var modiNacaPointCount = args.Length >= 6 ? ParseInteger(args[5], "point count") : 161;
+            ExportContourModificationGeometry(
+                contourModificationService.ModifyContour(
+                    nacaGenerator.Generate4Digit(args[1], modiNacaPointCount),
+                    ParseControlPointsFile(args[3]),
+                    modiNacaMatchSlope),
+                args[2],
+                airfoilDatExporter);
+            return 0;
+
+        case "qdes-profile-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The qdes-profile-file command requires an input path, output CSV path, and angle of attack.");
+            }
+
+            ExportQSpecProfile(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                args.Length >= 5 ? ParseInteger(args[4], "panel count") : 120,
+                args.Length >= 6 ? ParseDouble(args[5], "Mach number") : 0d,
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-profile-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The qdes-profile-naca command requires a 4-digit designation, output CSV path, and angle of attack.");
+            }
+
+            ExportQSpecProfile(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 7 ? ParseInteger(args[6], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                args.Length >= 5 ? ParseInteger(args[4], "panel count") : 120,
+                args.Length >= 6 ? ParseDouble(args[5], "Mach number") : 0d,
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-symm-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The qdes-symm-file command requires an input path, output CSV path, and angle of attack.");
+            }
+
+            ExportSymmetricQSpecProfile(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                args.Length >= 5 ? ParseInteger(args[4], "panel count") : 120,
+                args.Length >= 6 ? ParseDouble(args[5], "Mach number") : 0d,
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-symm-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The qdes-symm-naca command requires a 4-digit designation, output CSV path, and angle of attack.");
+            }
+
+            ExportSymmetricQSpecProfile(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 7 ? ParseInteger(args[6], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                args.Length >= 5 ? ParseInteger(args[4], "panel count") : 120,
+                args.Length >= 6 ? ParseDouble(args[5], "Mach number") : 0d,
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-aq-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The qdes-aq-file command requires an input path, output CSV path, panel count, Mach number, and at least one alpha.");
+            }
+
+            ExportQSpecProfileSetForAngles(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseInteger(args[3], "panel count"),
+                ParseDouble(args[4], "Mach number"),
+                ParseRemainingDoubles(args, 5, "alpha"),
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-aq-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The qdes-aq-naca command requires a 4-digit designation, output CSV path, panel count, Mach number, and at least one alpha.");
+            }
+
+            ExportQSpecProfileSetForAngles(
+                nacaGenerator.Generate4Digit(args[1]),
+                args[2],
+                ParseInteger(args[3], "panel count"),
+                ParseDouble(args[4], "Mach number"),
+                ParseRemainingDoubles(args, 5, "alpha"),
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-cq-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The qdes-cq-file command requires an input path, output CSV path, panel count, Mach number, and at least one CL target.");
+            }
+
+            ExportQSpecProfileSetForLiftCoefficients(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseInteger(args[3], "panel count"),
+                ParseDouble(args[4], "Mach number"),
+                ParseRemainingDoubles(args, 5, "target CL"),
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-cq-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The qdes-cq-naca command requires a 4-digit designation, output CSV path, panel count, Mach number, and at least one CL target.");
+            }
+
+            ExportQSpecProfileSetForLiftCoefficients(
+                nacaGenerator.Generate4Digit(args[1]),
+                args[2],
+                ParseInteger(args[3], "panel count"),
+                ParseDouble(args[4], "Mach number"),
+                ParseRemainingDoubles(args, 5, "target CL"),
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-modi-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The qdes-modi-file command requires an input path, output CSV path, angle of attack, and control-points path.");
+            }
+
+            ExportModifiedQSpecProfile(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-modi-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The qdes-modi-naca command requires a 4-digit designation, output CSV path, angle of attack, and control-points path.");
+            }
+
+            ExportModifiedQSpecProfile(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 9 ? ParseInteger(args[8], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-smoo-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The qdes-smoo-file command requires an input path, output CSV path, angle of attack, plot x1, and plot x2.");
+            }
+
+            ExportSmoothedQSpecProfile(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseDouble(args[4], "plot x1"),
+                ParseDouble(args[5], "plot x2"),
+                args.Length >= 7 ? ParseBooleanFlag(args[6], "match endpoint slope") : true,
+                args.Length >= 8 ? ParseDouble(args[7], "smoothing length factor") : 0.002d,
+                args.Length >= 9 ? ParseInteger(args[8], "panel count") : 120,
+                args.Length >= 10 ? ParseDouble(args[9], "Mach number") : 0d,
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-smoo-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The qdes-smoo-naca command requires a 4-digit designation, output CSV path, angle of attack, plot x1, and plot x2.");
+            }
+
+            ExportSmoothedQSpecProfile(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 11 ? ParseInteger(args[10], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseDouble(args[4], "plot x1"),
+                ParseDouble(args[5], "plot x2"),
+                args.Length >= 7 ? ParseBooleanFlag(args[6], "match endpoint slope") : true,
+                args.Length >= 8 ? ParseDouble(args[7], "smoothing length factor") : 0.002d,
+                args.Length >= 9 ? ParseInteger(args[8], "panel count") : 120,
+                args.Length >= 10 ? ParseDouble(args[9], "Mach number") : 0d,
+                analysisService,
+                qSpecDesignService);
+            return 0;
+
+        case "qdes-exec-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The qdes-exec-file command requires an input path, output DAT path, angle of attack, and control-points path.");
+            }
+
+            ExportExecutedQSpecGeometry(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseDouble(args[8], "max displacement fraction") : 0.02d,
+                analysisService,
+                qSpecDesignService,
+                airfoilDatExporter);
+            return 0;
+
+        case "qdes-exec-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The qdes-exec-naca command requires a 4-digit designation, output DAT path, angle of attack, and control-points path.");
+            }
+
+            ExportExecutedQSpecGeometry(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 10 ? ParseInteger(args[9], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseDouble(args[8], "max displacement fraction") : 0.02d,
+                analysisService,
+                qSpecDesignService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mdes-spec-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The mdes-spec-file command requires an input path, output CSV path, and angle of attack.");
+            }
+
+            ExportModalSpectrum(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                args.Length >= 5 ? ParseInteger(args[4], "panel count") : 120,
+                args.Length >= 6 ? ParseDouble(args[5], "Mach number") : 0d,
+                args.Length >= 7 ? ParseInteger(args[6], "mode count") : 12,
+                args.Length >= 8 ? ParseDouble(args[7], "filter strength") : 0.15d,
+                analysisService,
+                qSpecDesignService,
+                modalInverseDesignService);
+            return 0;
+
+        case "mdes-spec-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The mdes-spec-naca command requires a 4-digit designation, output CSV path, and angle of attack.");
+            }
+
+            ExportModalSpectrum(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 9 ? ParseInteger(args[8], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                args.Length >= 5 ? ParseInteger(args[4], "panel count") : 120,
+                args.Length >= 6 ? ParseDouble(args[5], "Mach number") : 0d,
+                args.Length >= 7 ? ParseInteger(args[6], "mode count") : 12,
+                args.Length >= 8 ? ParseDouble(args[7], "filter strength") : 0.15d,
+                analysisService,
+                qSpecDesignService,
+                modalInverseDesignService);
+            return 0;
+
+        case "mdes-exec-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The mdes-exec-file command requires an input path, output DAT path, angle of attack, and control-points path.");
+            }
+
+            ExportModalExecutedGeometry(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseInteger(args[8], "mode count") : 12,
+                args.Length >= 10 ? ParseDouble(args[9], "filter strength") : 0.15d,
+                args.Length >= 11 ? ParseDouble(args[10], "max displacement fraction") : 0.02d,
+                analysisService,
+                qSpecDesignService,
+                modalInverseDesignService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mdes-exec-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The mdes-exec-naca command requires a 4-digit designation, output DAT path, angle of attack, and control-points path.");
+            }
+
+            ExportModalExecutedGeometry(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 12 ? ParseInteger(args[11], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseInteger(args[8], "mode count") : 12,
+                args.Length >= 10 ? ParseDouble(args[9], "filter strength") : 0.15d,
+                args.Length >= 11 ? ParseDouble(args[10], "max displacement fraction") : 0.02d,
+                analysisService,
+                qSpecDesignService,
+                modalInverseDesignService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mdes-pert-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The mdes-pert-file command requires an input path, output DAT path, angle of attack, mode index, and coefficient delta.");
+            }
+
+            ExportPerturbedModalGeometry(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseInteger(args[4], "mode index"),
+                ParseDouble(args[5], "coefficient delta"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseInteger(args[8], "mode count") : 12,
+                args.Length >= 10 ? ParseDouble(args[9], "filter strength") : 0.15d,
+                args.Length >= 11 ? ParseDouble(args[10], "max displacement fraction") : 0.02d,
+                analysisService,
+                qSpecDesignService,
+                modalInverseDesignService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mdes-pert-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The mdes-pert-naca command requires a 4-digit designation, output DAT path, angle of attack, mode index, and coefficient delta.");
+            }
+
+            ExportPerturbedModalGeometry(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 12 ? ParseInteger(args[11], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseInteger(args[4], "mode index"),
+                ParseDouble(args[5], "coefficient delta"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseInteger(args[8], "mode count") : 12,
+                args.Length >= 10 ? ParseDouble(args[9], "filter strength") : 0.15d,
+                args.Length >= 11 ? ParseDouble(args[10], "max displacement fraction") : 0.02d,
+                analysisService,
+                qSpecDesignService,
+                modalInverseDesignService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mapgen-exec-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The mapgen-exec-file command requires an input path, output DAT path, angle of attack, and control-points path.");
+            }
+
+            ExportConformalMapgenGeometry(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseInteger(args[8], "circle point count") : 129,
+                args.Length >= 10 ? ParseInteger(args[9], "max Newton iterations") : 10,
+                args.Length >= 12
+                    ? new AirfoilPoint(ParseDouble(args[10], "target TE gap dx"), ParseDouble(args[11], "target TE gap dy"))
+                    : (AirfoilPoint?)null,
+                null,
+                0d,
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mapgen-exec-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The mapgen-exec-naca command requires a 4-digit designation, output DAT path, angle of attack, and control-points path.");
+            }
+
+            var mapgenExecNacaPointCount =
+                args.Length == 11 ? ParseInteger(args[10], "point count")
+                : args.Length >= 13 ? ParseInteger(args[12], "point count")
+                : 161;
+            AirfoilPoint? mapgenExecNacaTargetGap =
+                args.Length == 12 || args.Length >= 13
+                    ? new AirfoilPoint(ParseDouble(args[10], "target TE gap dx"), ParseDouble(args[11], "target TE gap dy"))
+                    : (AirfoilPoint?)null;
+
+            ExportConformalMapgenGeometry(
+                nacaGenerator.Generate4Digit(args[1], mapgenExecNacaPointCount),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseInteger(args[8], "circle point count") : 129,
+                args.Length >= 10 ? ParseInteger(args[9], "max Newton iterations") : 10,
+                mapgenExecNacaTargetGap,
+                null,
+                0d,
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mapgen-spec-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The mapgen-spec-file command requires an input path, output CSV path, angle of attack, and control-points path.");
+            }
+
+            ExportConformalMapgenSpectrum(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseInteger(args[8], "circle point count") : 129,
+                args.Length >= 10 ? ParseInteger(args[9], "max Newton iterations") : 10,
+                args.Length >= 12
+                    ? new AirfoilPoint(ParseDouble(args[10], "target TE gap dx"), ParseDouble(args[11], "target TE gap dy"))
+                    : (AirfoilPoint?)null,
+                null,
+                0d,
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService);
+            return 0;
+
+        case "mapgen-spec-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The mapgen-spec-naca command requires a 4-digit designation, output CSV path, angle of attack, and control-points path.");
+            }
+
+            var mapgenSpecNacaPointCount =
+                args.Length == 11 ? ParseInteger(args[10], "point count")
+                : args.Length >= 13 ? ParseInteger(args[12], "point count")
+                : 161;
+            AirfoilPoint? mapgenSpecNacaTargetGap =
+                args.Length == 12 || args.Length >= 13
+                    ? new AirfoilPoint(ParseDouble(args[10], "target TE gap dx"), ParseDouble(args[11], "target TE gap dy"))
+                    : (AirfoilPoint?)null;
+
+            ExportConformalMapgenSpectrum(
+                nacaGenerator.Generate4Digit(args[1], mapgenSpecNacaPointCount),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 6 ? ParseBooleanFlag(args[5], "match endpoint slope") : true,
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseInteger(args[8], "circle point count") : 129,
+                args.Length >= 10 ? ParseInteger(args[9], "max Newton iterations") : 10,
+                mapgenSpecNacaTargetGap,
+                null,
+                0d,
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService);
+            return 0;
+
+        case "mapgen-filt-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The mapgen-filt-file command requires an input path, output DAT path, angle of attack, control-points path, and filter exponent.");
+            }
+
+            ExportConformalMapgenGeometry(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 7 ? ParseBooleanFlag(args[6], "match endpoint slope") : true,
+                args.Length >= 8 ? ParseInteger(args[7], "panel count") : 120,
+                args.Length >= 9 ? ParseDouble(args[8], "Mach number") : 0d,
+                args.Length >= 10 ? ParseInteger(args[9], "circle point count") : 129,
+                args.Length >= 11 ? ParseInteger(args[10], "max Newton iterations") : 10,
+                null,
+                null,
+                ParseDouble(args[5], "filter exponent"),
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mapgen-filt-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The mapgen-filt-naca command requires a 4-digit designation, output DAT path, angle of attack, control-points path, and filter exponent.");
+            }
+
+            ExportConformalMapgenGeometry(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 12 ? ParseInteger(args[11], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 7 ? ParseBooleanFlag(args[6], "match endpoint slope") : true,
+                args.Length >= 8 ? ParseInteger(args[7], "panel count") : 120,
+                args.Length >= 9 ? ParseDouble(args[8], "Mach number") : 0d,
+                args.Length >= 10 ? ParseInteger(args[9], "circle point count") : 129,
+                args.Length >= 11 ? ParseInteger(args[10], "max Newton iterations") : 10,
+                null,
+                null,
+                ParseDouble(args[5], "filter exponent"),
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mapgen-filt-spec-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The mapgen-filt-spec-file command requires an input path, output CSV path, angle of attack, control-points path, and filter exponent.");
+            }
+
+            ExportConformalMapgenSpectrum(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 7 ? ParseBooleanFlag(args[6], "match endpoint slope") : true,
+                args.Length >= 8 ? ParseInteger(args[7], "panel count") : 120,
+                args.Length >= 9 ? ParseDouble(args[8], "Mach number") : 0d,
+                args.Length >= 10 ? ParseInteger(args[9], "circle point count") : 129,
+                args.Length >= 11 ? ParseInteger(args[10], "max Newton iterations") : 10,
+                null,
+                null,
+                ParseDouble(args[5], "filter exponent"),
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService);
+            return 0;
+
+        case "mapgen-filt-spec-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The mapgen-filt-spec-naca command requires a 4-digit designation, output CSV path, angle of attack, control-points path, and filter exponent.");
+            }
+
+            ExportConformalMapgenSpectrum(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 12 ? ParseInteger(args[11], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 7 ? ParseBooleanFlag(args[6], "match endpoint slope") : true,
+                args.Length >= 8 ? ParseInteger(args[7], "panel count") : 120,
+                args.Length >= 9 ? ParseDouble(args[8], "Mach number") : 0d,
+                args.Length >= 10 ? ParseInteger(args[9], "circle point count") : 129,
+                args.Length >= 11 ? ParseInteger(args[10], "max Newton iterations") : 10,
+                null,
+                null,
+                ParseDouble(args[5], "filter exponent"),
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService);
+            return 0;
+
+        case "mapgen-tang-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The mapgen-tang-file command requires an input path, output DAT path, angle of attack, control-points path, and target TE angle in degrees.");
+            }
+
+            ExportConformalMapgenGeometry(
+                parser.ParseFile(args[1]),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 7 ? ParseBooleanFlag(args[6], "match endpoint slope") : true,
+                args.Length >= 8 ? ParseInteger(args[7], "panel count") : 120,
+                args.Length >= 9 ? ParseDouble(args[8], "Mach number") : 0d,
+                args.Length >= 10 ? ParseInteger(args[9], "circle point count") : 129,
+                args.Length >= 11 ? ParseInteger(args[10], "max Newton iterations") : 10,
+                null,
+                ParseDouble(args[5], "target TE angle"),
+                0d,
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService,
+                airfoilDatExporter);
+            return 0;
+
+        case "mapgen-tang-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The mapgen-tang-naca command requires a 4-digit designation, output DAT path, angle of attack, control-points path, and target TE angle in degrees.");
+            }
+
+            ExportConformalMapgenGeometry(
+                nacaGenerator.Generate4Digit(args[1], args.Length >= 12 ? ParseInteger(args[11], "point count") : 161),
+                args[2],
+                ParseDouble(args[3], "angle of attack"),
+                ParseControlPointsFile(args[4]),
+                args.Length >= 7 ? ParseBooleanFlag(args[6], "match endpoint slope") : true,
+                args.Length >= 8 ? ParseInteger(args[7], "panel count") : 120,
+                args.Length >= 9 ? ParseDouble(args[8], "Mach number") : 0d,
+                args.Length >= 10 ? ParseInteger(args[9], "circle point count") : 129,
+                args.Length >= 11 ? ParseInteger(args[10], "max Newton iterations") : 10,
+                null,
+                ParseDouble(args[5], "target TE angle"),
+                0d,
+                analysisService,
+                qSpecDesignService,
+                conformalMapgenService,
+                airfoilDatExporter);
+            return 0;
+
+        case "adeg-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The adeg-file command requires an input path, output path, and angle in degrees.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.RotateDegrees(parser.ParseFile(args[1]), ParseDouble(args[3], "angle in degrees")),
+                args[2],
+                "RotateDegrees",
+                airfoilDatExporter);
+            return 0;
+
+        case "adeg-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The adeg-naca command requires a 4-digit designation, output path, and angle in degrees.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.RotateDegrees(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 5 ? ParseInteger(args[4], "point count") : 161),
+                    ParseDouble(args[3], "angle in degrees")),
+                args[2],
+                "RotateDegrees",
+                airfoilDatExporter);
+            return 0;
+
+        case "arad-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The arad-file command requires an input path, output path, and angle in radians.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.RotateRadians(parser.ParseFile(args[1]), ParseDouble(args[3], "angle in radians")),
+                args[2],
+                "RotateRadians",
+                airfoilDatExporter);
+            return 0;
+
+        case "arad-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The arad-naca command requires a 4-digit designation, output path, and angle in radians.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.RotateRadians(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 5 ? ParseInteger(args[4], "point count") : 161),
+                    ParseDouble(args[3], "angle in radians")),
+                args[2],
+                "RotateRadians",
+                airfoilDatExporter);
+            return 0;
+
+        case "tran-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The tran-file command requires an input path, output path, delta x, and delta y.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.Translate(
+                    parser.ParseFile(args[1]),
+                    ParseDouble(args[3], "delta x"),
+                    ParseDouble(args[4], "delta y")),
+                args[2],
+                "Translate",
+                airfoilDatExporter);
+            return 0;
+
+        case "tran-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The tran-naca command requires a 4-digit designation, output path, delta x, and delta y.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.Translate(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 6 ? ParseInteger(args[5], "point count") : 161),
+                    ParseDouble(args[3], "delta x"),
+                    ParseDouble(args[4], "delta y")),
+                args[2],
+                "Translate",
+                airfoilDatExporter);
+            return 0;
+
+        case "scal-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The scal-file command requires an input path, output path, and scale factor.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.ScaleAboutOrigin(
+                    parser.ParseFile(args[1]),
+                    ParseDouble(args[3], "x scale factor"),
+                    args.Length >= 5 ? ParseDouble(args[4], "y scale factor") : ParseDouble(args[3], "x scale factor")),
+                args[2],
+                "ScaleAboutOrigin",
+                airfoilDatExporter);
+            return 0;
+
+        case "scal-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The scal-naca command requires a 4-digit designation, output path, and scale factor.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.ScaleAboutOrigin(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 6 ? ParseInteger(args[5], "point count") : 161),
+                    ParseDouble(args[3], "x scale factor"),
+                    args.Length >= 5 ? ParseDouble(args[4], "y scale factor") : ParseDouble(args[3], "x scale factor")),
+                args[2],
+                "ScaleAboutOrigin",
+                airfoilDatExporter);
+            return 0;
+
+        case "lins-file":
+            if (args.Length < 7)
+            {
+                throw new ArgumentException("The lins-file command requires an input path, output path, x/c1, y-scale1, x/c2, and y-scale2.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.ScaleYLinearly(
+                    parser.ParseFile(args[1]),
+                    ParseDouble(args[3], "x/c 1"),
+                    ParseDouble(args[4], "y scale 1"),
+                    ParseDouble(args[5], "x/c 2"),
+                    ParseDouble(args[6], "y scale 2")),
+                args[2],
+                "LinearYScale",
+                airfoilDatExporter);
+            return 0;
+
+        case "lins-naca":
+            if (args.Length < 7)
+            {
+                throw new ArgumentException("The lins-naca command requires a 4-digit designation, output path, x/c1, y-scale1, x/c2, and y-scale2.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.ScaleYLinearly(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 8 ? ParseInteger(args[7], "point count") : 161),
+                    ParseDouble(args[3], "x/c 1"),
+                    ParseDouble(args[4], "y scale 1"),
+                    ParseDouble(args[5], "x/c 2"),
+                    ParseDouble(args[6], "y scale 2")),
+                args[2],
+                "LinearYScale",
+                airfoilDatExporter);
+            return 0;
+
+        case "dero-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The dero-file command requires an input path and output path.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.Derotate(parser.ParseFile(args[1])),
+                args[2],
+                "Derotate",
+                airfoilDatExporter);
+            return 0;
+
+        case "dero-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The dero-naca command requires a 4-digit designation and output path.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.Derotate(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 4 ? ParseInteger(args[3], "point count") : 161)),
+                args[2],
+                "Derotate",
+                airfoilDatExporter);
+            return 0;
+
+        case "unit-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The unit-file command requires an input path and output path.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.NormalizeUnitChord(parser.ParseFile(args[1])),
+                args[2],
+                "NormalizeUnitChord",
+                airfoilDatExporter);
+            return 0;
+
+        case "unit-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The unit-naca command requires a 4-digit designation and output path.");
+            }
+
+            ExportGeometry(
+                basicGeometryTransformService.NormalizeUnitChord(
+                    nacaGenerator.Generate4Digit(args[1], args.Length >= 4 ? ParseInteger(args[3], "point count") : 161)),
+                args[2],
+                "NormalizeUnitChord",
+                airfoilDatExporter);
+            return 0;
+
+        case "set-le-radius-file":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The set-le-radius-file command requires an input path, output path, and LE radius scale factor.");
+            }
+
+            var leRadiusAirfoilFromFile = parser.ParseFile(args[1]);
+            ExportLeadingEdgeRadiusGeometry(
+                leRadiusAirfoilFromFile,
+                args[2],
+                ParseDouble(args[3], "LE radius scale factor"),
+                args.Length >= 5 ? ParseDouble(args[4], "blend distance chord fraction") : 1d,
+                leadingEdgeRadiusService,
+                airfoilDatExporter);
+            return 0;
+
+        case "set-le-radius-naca":
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The set-le-radius-naca command requires a 4-digit designation, output path, and LE radius scale factor.");
+            }
+
+            var leRadiusAirfoilFromNaca = nacaGenerator.Generate4Digit(
+                args[1],
+                args.Length >= 6 ? ParseInteger(args[5], "point count") : 161);
+            ExportLeadingEdgeRadiusGeometry(
+                leRadiusAirfoilFromNaca,
+                args[2],
+                ParseDouble(args[3], "LE radius scale factor"),
+                args.Length >= 5 ? ParseDouble(args[4], "blend distance chord fraction") : 1d,
+                leadingEdgeRadiusService,
+                airfoilDatExporter);
+            return 0;
+
+        case "scale-geometry-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The scale-geometry-file command requires an input path, output path, scale factor, and origin kind.");
+            }
+
+            var scaledAirfoilFromFile = parser.ParseFile(args[1]);
+            ExportScaledGeometry(
+                scaledAirfoilFromFile,
+                args[2],
+                ParseDouble(args[3], "scale factor"),
+                ParseScaleOrigin(args[4]),
+                args.Length >= 7
+                    ? new AirfoilPoint(ParseDouble(args[5], "origin X"), ParseDouble(args[6], "origin Y"))
+                    : null,
+                geometryScalingService,
+                airfoilDatExporter);
+            return 0;
+
+        case "scale-geometry-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The scale-geometry-naca command requires a 4-digit designation, output path, scale factor, and origin kind.");
+            }
+
+            var scaledAirfoilFromNaca = nacaGenerator.Generate4Digit(
+                args[1],
+                args.Length >= 8 ? ParseInteger(args[7], "point count") : 161);
+            ExportScaledGeometry(
+                scaledAirfoilFromNaca,
+                args[2],
+                ParseDouble(args[3], "scale factor"),
+                ParseScaleOrigin(args[4]),
+                args.Length >= 7
+                    ? new AirfoilPoint(ParseDouble(args[5], "origin X"), ParseDouble(args[6], "origin Y"))
+                    : null,
+                geometryScalingService,
+                airfoilDatExporter);
+            return 0;
+
+        case "viscous-polar-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-file command requires a file path, alpha start, alpha end, and alpha step.");
+            }
+
+            var viscousPolarAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousPolarSummary(
+                viscousPolarAirfoilFromFile,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseInteger(args[8], "coupling iterations") : 2,
+                args.Length >= 10 ? ParseInteger(args[9], "viscous iterations") : 8,
+                args.Length >= 11 ? ParseDouble(args[10], "residual tolerance") : 0.3d,
+                args.Length >= 12 ? ParseDouble(args[11], "displacement relaxation") : 0.5d,
+                args.Length >= 13 ? ParseDouble(args[12], "transition Reynolds-theta") : 320d,
+                args.Length >= 14 ? ParseDouble(args[13], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-polar-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-naca command requires a 4-digit designation, alpha start, alpha end, and alpha step.");
+            }
+
+            var viscousPolarAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousPolarSummary(
+                viscousPolarAirfoilFromNaca,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseInteger(args[8], "coupling iterations") : 2,
+                args.Length >= 10 ? ParseInteger(args[9], "viscous iterations") : 8,
+                args.Length >= 11 ? ParseDouble(args[10], "residual tolerance") : 0.3d,
+                args.Length >= 12 ? ParseDouble(args[11], "displacement relaxation") : 0.5d,
+                args.Length >= 13 ? ParseDouble(args[12], "transition Reynolds-theta") : 320d,
+                args.Length >= 14 ? ParseDouble(args[13], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "export-viscous-polar-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-viscous-polar-file command requires a file path, output path, alpha start, alpha end, and alpha step.");
+            }
+
+            var exportViscousPolarAirfoilFromFile = parser.ParseFile(args[1]);
+            ExportViscousPolarCsv(
+                exportViscousPolarAirfoilFromFile,
+                args[2],
+                ParseDouble(args[3], "alpha start"),
+                ParseDouble(args[4], "alpha end"),
+                ParseDouble(args[5], "alpha step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseDouble(args[8], "Reynolds number") : 1_000_000d,
+                args.Length >= 10 ? ParseInteger(args[9], "coupling iterations") : 2,
+                args.Length >= 11 ? ParseInteger(args[10], "viscous iterations") : 8,
+                args.Length >= 12 ? ParseDouble(args[11], "residual tolerance") : 0.3d,
+                args.Length >= 13 ? ParseDouble(args[12], "displacement relaxation") : 0.5d,
+                args.Length >= 14 ? ParseDouble(args[13], "transition Reynolds-theta") : 320d,
+                args.Length >= 15 ? ParseDouble(args[14], "critical amplification factor") : 9d,
+                analysisService,
+                polarExporter);
+            return 0;
+
+        case "export-viscous-polar-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-viscous-polar-naca command requires a 4-digit designation, output path, alpha start, alpha end, and alpha step.");
+            }
+
+            var exportViscousPolarAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            ExportViscousPolarCsv(
+                exportViscousPolarAirfoilFromNaca,
+                args[2],
+                ParseDouble(args[3], "alpha start"),
+                ParseDouble(args[4], "alpha end"),
+                ParseDouble(args[5], "alpha step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseDouble(args[8], "Reynolds number") : 1_000_000d,
+                args.Length >= 10 ? ParseInteger(args[9], "coupling iterations") : 2,
+                args.Length >= 11 ? ParseInteger(args[10], "viscous iterations") : 8,
+                args.Length >= 12 ? ParseDouble(args[11], "residual tolerance") : 0.3d,
+                args.Length >= 13 ? ParseDouble(args[12], "displacement relaxation") : 0.5d,
+                args.Length >= 14 ? ParseDouble(args[13], "transition Reynolds-theta") : 320d,
+                args.Length >= 15 ? ParseDouble(args[14], "critical amplification factor") : 9d,
+                analysisService,
+                polarExporter);
+            return 0;
+
+        case "export-viscous-polar-cl-file":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-viscous-polar-cl-file command requires a file path, output path, CL start, CL end, and CL step.");
+            }
+
+            var exportViscousPolarClAirfoilFromFile = parser.ParseFile(args[1]);
+            ExportViscousLiftSweepCsv(
+                exportViscousPolarClAirfoilFromFile,
+                args[2],
+                ParseDouble(args[3], "CL start"),
+                ParseDouble(args[4], "CL end"),
+                ParseDouble(args[5], "CL step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseDouble(args[8], "Reynolds number") : 1_000_000d,
+                args.Length >= 10 ? ParseInteger(args[9], "coupling iterations") : 2,
+                args.Length >= 11 ? ParseInteger(args[10], "viscous iterations") : 8,
+                args.Length >= 12 ? ParseDouble(args[11], "residual tolerance") : 0.3d,
+                args.Length >= 13 ? ParseDouble(args[12], "displacement relaxation") : 0.5d,
+                args.Length >= 14 ? ParseDouble(args[13], "transition Reynolds-theta") : 320d,
+                args.Length >= 15 ? ParseDouble(args[14], "critical amplification factor") : 9d,
+                analysisService,
+                polarExporter);
+            return 0;
+
+        case "export-viscous-polar-cl-naca":
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-viscous-polar-cl-naca command requires a 4-digit designation, output path, CL start, CL end, and CL step.");
+            }
+
+            var exportViscousPolarClAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            ExportViscousLiftSweepCsv(
+                exportViscousPolarClAirfoilFromNaca,
+                args[2],
+                ParseDouble(args[3], "CL start"),
+                ParseDouble(args[4], "CL end"),
+                ParseDouble(args[5], "CL step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 120,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseDouble(args[8], "Reynolds number") : 1_000_000d,
+                args.Length >= 10 ? ParseInteger(args[9], "coupling iterations") : 2,
+                args.Length >= 11 ? ParseInteger(args[10], "viscous iterations") : 8,
+                args.Length >= 12 ? ParseDouble(args[11], "residual tolerance") : 0.3d,
+                args.Length >= 13 ? ParseDouble(args[12], "displacement relaxation") : 0.5d,
+                args.Length >= 14 ? ParseDouble(args[13], "transition Reynolds-theta") : 320d,
+                args.Length >= 15 ? ParseDouble(args[14], "critical amplification factor") : 9d,
+                analysisService,
+                polarExporter);
+            return 0;
+
+        case "solve-cl-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The solve-cl-file command requires a file path and target lift coefficient.");
+            }
+
+            var clAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteTargetLiftSummary(
+                clAirfoilFromFile,
+                ParseDouble(args[2], "target lift coefficient"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "viscous-solve-cl-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-solve-cl-file command requires a file path and target lift coefficient.");
+            }
+
+            var viscousClAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousTargetLiftSummary(
+                viscousClAirfoilFromFile,
+                ParseDouble(args[2], "target lift coefficient"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "coupling iterations") : 2,
+                args.Length >= 8 ? ParseInteger(args[7], "viscous iterations") : 8,
+                args.Length >= 9 ? ParseDouble(args[8], "residual tolerance") : 0.3d,
+                args.Length >= 10 ? ParseDouble(args[9], "displacement relaxation") : 0.5d,
+                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
+                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-solve-cl-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-solve-cl-naca command requires a 4-digit designation and target lift coefficient.");
+            }
+
+            var viscousClAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousTargetLiftSummary(
+                viscousClAirfoilFromNaca,
+                ParseDouble(args[2], "target lift coefficient"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "coupling iterations") : 2,
+                args.Length >= 8 ? ParseInteger(args[7], "viscous iterations") : 8,
+                args.Length >= 9 ? ParseDouble(args[8], "residual tolerance") : 0.3d,
+                args.Length >= 10 ? ParseDouble(args[9], "displacement relaxation") : 0.5d,
+                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
+                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "solve-cl-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The solve-cl-naca command requires a 4-digit designation and target lift coefficient.");
+            }
+
+            var clAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteTargetLiftSummary(
+                clAirfoilFromNaca,
+                ParseDouble(args[2], "target lift coefficient"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "polar-cl-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The polar-cl-file command requires a file path, CL start, CL end, and CL step.");
+            }
+
+            var polarClAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteLiftSweepSummary(
+                polarClAirfoilFromFile,
+                ParseDouble(args[2], "CL start"),
+                ParseDouble(args[3], "CL end"),
+                ParseDouble(args[4], "CL step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "viscous-polar-cl-file":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-cl-file command requires a file path, CL start, CL end, and CL step.");
+            }
+
+            var viscousPolarClAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousLiftSweepSummary(
+                viscousPolarClAirfoilFromFile,
+                ParseDouble(args[2], "CL start"),
+                ParseDouble(args[3], "CL end"),
+                ParseDouble(args[4], "CL step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseInteger(args[8], "coupling iterations") : 2,
+                args.Length >= 10 ? ParseInteger(args[9], "viscous iterations") : 8,
+                args.Length >= 11 ? ParseDouble(args[10], "residual tolerance") : 0.3d,
+                args.Length >= 12 ? ParseDouble(args[11], "displacement relaxation") : 0.5d,
+                args.Length >= 13 ? ParseDouble(args[12], "transition Reynolds-theta") : 320d,
+                args.Length >= 14 ? ParseDouble(args[13], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-polar-cl-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-cl-naca command requires a 4-digit designation, CL start, CL end, and CL step.");
+            }
+
+            var viscousPolarClAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousLiftSweepSummary(
+                viscousPolarClAirfoilFromNaca,
+                ParseDouble(args[2], "CL start"),
+                ParseDouble(args[3], "CL end"),
+                ParseDouble(args[4], "CL step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseInteger(args[8], "coupling iterations") : 2,
+                args.Length >= 10 ? ParseInteger(args[9], "viscous iterations") : 8,
+                args.Length >= 11 ? ParseDouble(args[10], "residual tolerance") : 0.3d,
+                args.Length >= 12 ? ParseDouble(args[11], "displacement relaxation") : 0.5d,
+                args.Length >= 13 ? ParseDouble(args[12], "transition Reynolds-theta") : 320d,
+                args.Length >= 14 ? ParseDouble(args[13], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "polar-cl-naca":
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The polar-cl-naca command requires a 4-digit designation, CL start, CL end, and CL step.");
+            }
+
+            var polarClAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteLiftSweepSummary(
+                polarClAirfoilFromNaca,
+                ParseDouble(args[2], "CL start"),
+                ParseDouble(args[3], "CL end"),
+                ParseDouble(args[4], "CL step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "topology-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The topology-file command requires a file path and angle of attack.");
+            }
+
+            var topologyAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteBoundaryLayerTopologySummary(
+                topologyAirfoilFromFile,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "topology-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The topology-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var topologyAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteBoundaryLayerTopologySummary(
+                topologyAirfoilFromNaca,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "viscous-seed-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-seed-file command requires a file path and angle of attack.");
+            }
+
+            var viscousSeedAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousSeedSummary(
+                viscousSeedAirfoilFromFile,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "viscous-seed-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-seed-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var viscousSeedAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousSeedSummary(
+                viscousSeedAirfoilFromNaca,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                analysisService);
+            return 0;
+
+        case "viscous-init-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-init-file command requires a file path and angle of attack.");
+            }
+
+            var viscousInitAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousInitialStateSummary(
+                viscousInitAirfoilFromFile,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
+                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-init-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-init-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var viscousInitAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousInitialStateSummary(
+                viscousInitAirfoilFromNaca,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
+                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-interval-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-interval-file command requires a file path and angle of attack.");
+            }
+
+            var viscousIntervalAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousIntervalSummary(
+                viscousIntervalAirfoilFromFile,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
+                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-interval-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-interval-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var viscousIntervalAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousIntervalSummary(
+                viscousIntervalAirfoilFromNaca,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
+                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-correct-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-correct-file command requires a file path and angle of attack.");
+            }
+
+            var viscousCorrectAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousCorrectionSummary(
+                viscousCorrectAirfoilFromFile,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "iteration count") : 3,
+                args.Length >= 8 ? ParseDouble(args[7], "transition Reynolds-theta") : 320d,
+                args.Length >= 9 ? ParseDouble(args[8], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-correct-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-correct-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var viscousCorrectAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousCorrectionSummary(
+                viscousCorrectAirfoilFromNaca,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "iteration count") : 3,
+                args.Length >= 8 ? ParseDouble(args[7], "transition Reynolds-theta") : 320d,
+                args.Length >= 9 ? ParseDouble(args[8], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-solve-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-solve-file command requires a file path and angle of attack.");
+            }
+
+            var viscousSolveAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousSolveSummary(
+                viscousSolveAirfoilFromFile,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "max iterations") : 10,
+                args.Length >= 8 ? ParseDouble(args[7], "residual tolerance") : 0.2d,
+                args.Length >= 9 ? ParseDouble(args[8], "transition Reynolds-theta") : 320d,
+                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-solve-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-solve-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var viscousSolveAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousSolveSummary(
+                viscousSolveAirfoilFromNaca,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "max iterations") : 10,
+                args.Length >= 8 ? ParseDouble(args[7], "residual tolerance") : 0.2d,
+                args.Length >= 9 ? ParseDouble(args[8], "transition Reynolds-theta") : 320d,
+                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-interact-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-interact-file command requires a file path and angle of attack.");
+            }
+
+            var viscousInteractAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteViscousInteractionSummary(
+                viscousInteractAirfoilFromFile,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "interaction iterations") : 3,
+                args.Length >= 8 ? ParseDouble(args[7], "coupling factor") : 0.12d,
+                args.Length >= 9 ? ParseInteger(args[8], "viscous iterations") : 8,
+                args.Length >= 10 ? ParseDouble(args[9], "residual tolerance") : 0.3d,
+                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
+                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-interact-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-interact-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var viscousInteractAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteViscousInteractionSummary(
+                viscousInteractAirfoilFromNaca,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "interaction iterations") : 3,
+                args.Length >= 8 ? ParseDouble(args[7], "coupling factor") : 0.12d,
+                args.Length >= 9 ? ParseInteger(args[8], "viscous iterations") : 8,
+                args.Length >= 10 ? ParseDouble(args[9], "residual tolerance") : 0.3d,
+                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
+                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-coupled-file":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-coupled-file command requires a file path and angle of attack.");
+            }
+
+            var viscousCoupledAirfoilFromFile = parser.ParseFile(args[1]);
+            WriteDisplacementCoupledSummary(
+                viscousCoupledAirfoilFromFile,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "coupling iterations") : 2,
+                args.Length >= 8 ? ParseInteger(args[7], "viscous iterations") : 8,
+                args.Length >= 9 ? ParseDouble(args[8], "residual tolerance") : 0.3d,
+                args.Length >= 10 ? ParseDouble(args[9], "displacement relaxation") : 0.5d,
+                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
+                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "viscous-coupled-naca":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-coupled-naca command requires a 4-digit designation and angle of attack.");
+            }
+
+            var viscousCoupledAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            WriteDisplacementCoupledSummary(
+                viscousCoupledAirfoilFromNaca,
+                ParseDouble(args[2], "angle of attack"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseInteger(args[6], "coupling iterations") : 2,
+                args.Length >= 8 ? ParseInteger(args[7], "viscous iterations") : 8,
+                args.Length >= 9 ? ParseDouble(args[8], "residual tolerance") : 0.3d,
+                args.Length >= 10 ? ParseDouble(args[9], "displacement relaxation") : 0.5d,
+                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
+                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
+                analysisService);
+            return 0;
+
+        case "run-session":
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The run-session command requires a manifest path and output directory.");
+            }
+
+            RunSession(args[1], args[2], sessionRunner);
+            return 0;
+
+        default:
+            PrintUsage();
+            return 1;
+    }
+}
+catch (Exception exception)
+{
+    Console.Error.WriteLine(exception.Message);
+    return 1;
+}
+
+static void WriteSummary(
+    AirfoilGeometry geometry,
+    AirfoilNormalizer normalizer,
+    AirfoilMetricsCalculator metricsCalculator)
+{
+    var normalized = normalizer.Normalize(geometry);
+    var metrics = metricsCalculator.Calculate(normalized);
+
+    Console.WriteLine($"Name: {normalized.Name}");
+    Console.WriteLine($"Format: {normalized.Format}");
+    Console.WriteLine($"Points: {normalized.Points.Count}");
+    Console.WriteLine($"Chord: {metrics.Chord.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"ArcLength: {metrics.TotalArcLength.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"MaxThickness: {metrics.MaxThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"MaxCamber: {metrics.MaxCamber.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void PrintUsage()
+{
+    Console.WriteLine("XFoil.Cli");
+    Console.WriteLine("  summarize <path>   Parse and summarize an airfoil file.");
+    Console.WriteLine("  naca <####>        Generate and summarize a NACA 4-digit airfoil.");
+    Console.WriteLine("  inviscid-file <path> <alphaDeg> [panels] [mach]");
+    Console.WriteLine("  inviscid-naca <####> <alphaDeg> [panels] [mach]");
+    Console.WriteLine("  polar-file <path> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach]");
+    Console.WriteLine("  polar-naca <####> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach]");
+    Console.WriteLine("  export-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach]");
+    Console.WriteLine("  export-polar-naca <####> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach]");
+    Console.WriteLine("  export-polar-cl-file <path> <outputCsvPath> <clStart> <clEnd> <clStep> [panels] [mach]");
+    Console.WriteLine("  export-polar-cl-naca <####> <outputCsvPath> <clStart> <clEnd> <clStep> [panels] [mach]");
+    Console.WriteLine("  import-legacy-polar <inputPolarPath> <outputCsvPath>");
+    Console.WriteLine("  show-legacy-polar <inputPolarPath>");
+    Console.WriteLine("  import-legacy-reference-polar <inputRefPath> <outputCsvPath>");
+    Console.WriteLine("  show-legacy-reference-polar <inputRefPath>");
+    Console.WriteLine("  import-legacy-polar-dump <inputDumpPath> <outputSummaryCsvPath>");
+    Console.WriteLine("  show-legacy-polar-dump <inputDumpPath>");
+    Console.WriteLine("  design-flap-file <inputPath> <outputDatPath> <hingeX> <hingeY> <deflectionDeg>");
+    Console.WriteLine("  design-flap-naca <####> <outputDatPath> <hingeX> <hingeY> <deflectionDeg> [pointCount]");
+    Console.WriteLine("  set-te-gap-file <inputPath> <outputDatPath> <targetGap> [blendDistanceChordFraction]");
+    Console.WriteLine("  set-te-gap-naca <####> <outputDatPath> <targetGap> [blendDistanceChordFraction] [pointCount]");
+    Console.WriteLine("  addp-file <inputPath> <outputDatPath> <insertIndex> <x> <y>");
+    Console.WriteLine("  addp-naca <####> <outputDatPath> <insertIndex> <x> <y> [pointCount]");
+    Console.WriteLine("  movp-file <inputPath> <outputDatPath> <pointIndex> <x> <y>");
+    Console.WriteLine("  movp-naca <####> <outputDatPath> <pointIndex> <x> <y> [pointCount]");
+    Console.WriteLine("  delp-file <inputPath> <outputDatPath> <pointIndex>");
+    Console.WriteLine("  delp-naca <####> <outputDatPath> <pointIndex> [pointCount]");
+    Console.WriteLine("  corn-file <inputPath> <outputDatPath> <pointIndex>");
+    Console.WriteLine("  corn-naca <####> <outputDatPath> <pointIndex> [pointCount]");
+    Console.WriteLine("  cadd-file <inputPath> <outputDatPath> <angleDeg> [uniform|arclength] [xMin xMax]");
+    Console.WriteLine("  cadd-naca <####> <outputDatPath> <angleDeg> [uniform|arclength] [pointCount | xMin xMax [pointCount]]");
+    Console.WriteLine("  modi-file <inputPath> <outputDatPath> <controlPointsPath> [matchSlope]");
+    Console.WriteLine("  modi-naca <####> <outputDatPath> <controlPointsPath> [matchSlope] [pointCount]");
+    Console.WriteLine("  qdes-profile-file <inputPath> <outputCsvPath> <alphaDeg> [panels] [mach]");
+    Console.WriteLine("  qdes-profile-naca <####> <outputCsvPath> <alphaDeg> [panels] [mach] [pointCount]");
+    Console.WriteLine("  qdes-symm-file <inputPath> <outputCsvPath> <alphaDeg> [panels] [mach]");
+    Console.WriteLine("  qdes-symm-naca <####> <outputCsvPath> <alphaDeg> [panels] [mach] [pointCount]");
+    Console.WriteLine("  qdes-aq-file <inputPath> <outputCsvPath> <panels> <mach> <alpha1> [alpha2 ...]");
+    Console.WriteLine("  qdes-aq-naca <####> <outputCsvPath> <panels> <mach> <alpha1> [alpha2 ...]");
+    Console.WriteLine("  qdes-cq-file <inputPath> <outputCsvPath> <panels> <mach> <cl1> [cl2 ...]");
+    Console.WriteLine("  qdes-cq-naca <####> <outputCsvPath> <panels> <mach> <cl1> [cl2 ...]");
+    Console.WriteLine("  qdes-modi-file <inputPath> <outputCsvPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach]");
+    Console.WriteLine("  qdes-modi-naca <####> <outputCsvPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [pointCount]");
+    Console.WriteLine("  qdes-smoo-file <inputPath> <outputCsvPath> <alphaDeg> <plotX1> <plotX2> [matchSlope] [smoothFactor] [panels] [mach]");
+    Console.WriteLine("  qdes-smoo-naca <####> <outputCsvPath> <alphaDeg> <plotX1> <plotX2> [matchSlope] [smoothFactor] [panels] [mach] [pointCount]");
+    Console.WriteLine("  qdes-exec-file <inputPath> <outputDatPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [maxDispFrac]");
+    Console.WriteLine("  qdes-exec-naca <####> <outputDatPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [maxDispFrac] [pointCount]");
+    Console.WriteLine("  mdes-spec-file <inputPath> <outputCsvPath> <alphaDeg> [panels] [mach] [modeCount] [filterStrength]");
+    Console.WriteLine("  mdes-spec-naca <####> <outputCsvPath> <alphaDeg> [panels] [mach] [modeCount] [filterStrength] [pointCount]");
+    Console.WriteLine("  mdes-exec-file <inputPath> <outputDatPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [modeCount] [filterStrength] [maxDispFrac]");
+    Console.WriteLine("  mdes-exec-naca <####> <outputDatPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [modeCount] [filterStrength] [maxDispFrac] [pointCount]");
+    Console.WriteLine("  mdes-pert-file <inputPath> <outputDatPath> <alphaDeg> <modeIndex> <coeffDelta> [panels] [mach] [modeCount] [filterStrength] [maxDispFrac]");
+    Console.WriteLine("  mdes-pert-naca <####> <outputDatPath> <alphaDeg> <modeIndex> <coeffDelta> [panels] [mach] [modeCount] [filterStrength] [maxDispFrac] [pointCount]");
+    Console.WriteLine("  mapgen-exec-file <inputPath> <outputDatPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [circlePoints] [maxNewton] [targetGapDx targetGapDy]");
+    Console.WriteLine("  mapgen-exec-naca <####> <outputDatPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [circlePoints] [maxNewton] [pointCount | targetGapDx targetGapDy | targetGapDx targetGapDy pointCount]");
+    Console.WriteLine("  mapgen-spec-file <inputPath> <outputCsvPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [circlePoints] [maxNewton] [targetGapDx targetGapDy]");
+    Console.WriteLine("  mapgen-spec-naca <####> <outputCsvPath> <alphaDeg> <controlPointsPath> [matchSlope] [panels] [mach] [circlePoints] [maxNewton] [pointCount | targetGapDx targetGapDy | targetGapDx targetGapDy pointCount]");
+    Console.WriteLine("  mapgen-filt-file <inputPath> <outputDatPath> <alphaDeg> <controlPointsPath> <filterExponent> [matchSlope] [panels] [mach] [circlePoints] [maxNewton]");
+    Console.WriteLine("  mapgen-filt-naca <####> <outputDatPath> <alphaDeg> <controlPointsPath> <filterExponent> [matchSlope] [panels] [mach] [circlePoints] [maxNewton] [pointCount]");
+    Console.WriteLine("  mapgen-filt-spec-file <inputPath> <outputCsvPath> <alphaDeg> <controlPointsPath> <filterExponent> [matchSlope] [panels] [mach] [circlePoints] [maxNewton]");
+    Console.WriteLine("  mapgen-filt-spec-naca <####> <outputCsvPath> <alphaDeg> <controlPointsPath> <filterExponent> [matchSlope] [panels] [mach] [circlePoints] [maxNewton] [pointCount]");
+    Console.WriteLine("  mapgen-tang-file <inputPath> <outputDatPath> <alphaDeg> <controlPointsPath> <targetTeAngleDeg> [matchSlope] [panels] [mach] [circlePoints] [maxNewton]");
+    Console.WriteLine("  mapgen-tang-naca <####> <outputDatPath> <alphaDeg> <controlPointsPath> <targetTeAngleDeg> [matchSlope] [panels] [mach] [circlePoints] [maxNewton] [pointCount]");
+    Console.WriteLine("  adeg-file <inputPath> <outputDatPath> <angleDeg>");
+    Console.WriteLine("  adeg-naca <####> <outputDatPath> <angleDeg> [pointCount]");
+    Console.WriteLine("  arad-file <inputPath> <outputDatPath> <angleRad>");
+    Console.WriteLine("  arad-naca <####> <outputDatPath> <angleRad> [pointCount]");
+    Console.WriteLine("  tran-file <inputPath> <outputDatPath> <deltaX> <deltaY>");
+    Console.WriteLine("  tran-naca <####> <outputDatPath> <deltaX> <deltaY> [pointCount]");
+    Console.WriteLine("  scal-file <inputPath> <outputDatPath> <xScale> [yScale]");
+    Console.WriteLine("  scal-naca <####> <outputDatPath> <xScale> [yScale] [pointCount]");
+    Console.WriteLine("  lins-file <inputPath> <outputDatPath> <xoc1> <yScale1> <xoc2> <yScale2>");
+    Console.WriteLine("  lins-naca <####> <outputDatPath> <xoc1> <yScale1> <xoc2> <yScale2> [pointCount]");
+    Console.WriteLine("  dero-file <inputPath> <outputDatPath>");
+    Console.WriteLine("  dero-naca <####> <outputDatPath> [pointCount]");
+    Console.WriteLine("  unit-file <inputPath> <outputDatPath>");
+    Console.WriteLine("  unit-naca <####> <outputDatPath> [pointCount]");
+    Console.WriteLine("  set-le-radius-file <inputPath> <outputDatPath> <radiusScaleFactor> [blendDistanceChordFraction]");
+    Console.WriteLine("  set-le-radius-naca <####> <outputDatPath> <radiusScaleFactor> [blendDistanceChordFraction] [pointCount]");
+    Console.WriteLine("  scale-geometry-file <inputPath> <outputDatPath> <scaleFactor> <LE|TE|POINT> [originX originY]");
+    Console.WriteLine("  scale-geometry-naca <####> <outputDatPath> <scaleFactor> <LE|TE|POINT> [originX originY] [pointCount]");
+    Console.WriteLine("  viscous-polar-file <path> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-polar-naca <####> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  export-viscous-polar-naca <####> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  export-viscous-polar-cl-file <path> <outputCsvPath> <clStart> <clEnd> <clStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  export-viscous-polar-cl-naca <####> <outputCsvPath> <clStart> <clEnd> <clStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  solve-cl-file <path> <targetCL> [panels] [mach]");
+    Console.WriteLine("  solve-cl-naca <####> <targetCL> [panels] [mach]");
+    Console.WriteLine("  viscous-solve-cl-file <path> <targetCL> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-solve-cl-naca <####> <targetCL> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  polar-cl-file <path> <clStart> <clEnd> <clStep> [panels] [mach]");
+    Console.WriteLine("  polar-cl-naca <####> <clStart> <clEnd> <clStep> [panels] [mach]");
+    Console.WriteLine("  viscous-polar-cl-file <path> <clStart> <clEnd> <clStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-polar-cl-naca <####> <clStart> <clEnd> <clStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  topology-file <path> <alphaDeg> [panels] [mach]");
+    Console.WriteLine("  topology-naca <####> <alphaDeg> [panels] [mach]");
+    Console.WriteLine("  viscous-seed-file <path> <alphaDeg> [panels] [mach]");
+    Console.WriteLine("  viscous-seed-naca <####> <alphaDeg> [panels] [mach]");
+    Console.WriteLine("  viscous-init-file <path> <alphaDeg> [panels] [mach] [reynolds] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-init-naca <####> <alphaDeg> [panels] [mach] [reynolds] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-interval-file <path> <alphaDeg> [panels] [mach] [reynolds] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-interval-naca <####> <alphaDeg> [panels] [mach] [reynolds] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-correct-file <path> <alphaDeg> [panels] [mach] [reynolds] [iterations] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-correct-naca <####> <alphaDeg> [panels] [mach] [reynolds] [iterations] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-solve-file <path> <alphaDeg> [panels] [mach] [reynolds] [maxIterations] [residualTolerance] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-solve-naca <####> <alphaDeg> [panels] [mach] [reynolds] [maxIterations] [residualTolerance] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-interact-file <path> <alphaDeg> [panels] [mach] [reynolds] [interactionIterations] [couplingFactor] [viscousIterations] [residualTolerance] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-interact-naca <####> <alphaDeg> [panels] [mach] [reynolds] [interactionIterations] [couplingFactor] [viscousIterations] [residualTolerance] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-coupled-file <path> <alphaDeg> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-coupled-naca <####> <alphaDeg> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  run-session <manifestPath> <outputDirectory>");
+}
+
+static void WriteInviscidSummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"Panels: {analysis.Mesh.Panels.Count}");
+    Console.WriteLine($"AlphaDeg: {analysis.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {analysis.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CL: {analysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CD: {analysis.DragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CL_pressure_corr: {analysis.CorrectedPressureIntegratedLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CD_pressure_corr: {analysis.CorrectedPressureIntegratedDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CL_pressure: {analysis.PressureIntegratedLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CD_pressure: {analysis.PressureIntegratedDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CMc/4: {analysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Gamma: {analysis.Circulation.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakePoints: {analysis.Wake.Points.Count}");
+    Console.WriteLine($"WakeLength: {analysis.Wake.Points[^1].DistanceFromTrailingEdge.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WritePolarSummary(
+    AirfoilGeometry geometry,
+    double alphaStartDegrees,
+    double alphaEndDegrees,
+    double alphaStepDegrees,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService)
+{
+    var sweep = analysisService.SweepInviscidAlpha(
+        geometry,
+        alphaStartDegrees,
+        alphaEndDegrees,
+        alphaStepDegrees,
+        new AnalysisSettings(panelCount, machNumber: machNumber));
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"Panels: {sweep.Settings.PanelCount}");
+    Console.WriteLine($"Mach: {sweep.Settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("AlphaDeg\tCL\tCD\tCLcorr\tCDcorr\tCMc/4\tGamma");
+
+    foreach (var point in sweep.Points)
+    {
+        Console.WriteLine(
+            $"{point.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"{point.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.DragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.CorrectedPressureIntegratedLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.CorrectedPressureIntegratedDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.Circulation.ToString("F6", CultureInfo.InvariantCulture)}");
+    }
+}
+
+static void WriteViscousPolarSummary(
+    AirfoilGeometry geometry,
+    double alphaStartDegrees,
+    double alphaEndDegrees,
+    double alphaStepDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int couplingIterations,
+    int viscousIterations,
+    double residualTolerance,
+    double displacementRelaxation,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
+    var sweep = analysisService.SweepDisplacementCoupledAlpha(
+        geometry,
+        alphaStartDegrees,
+        alphaEndDegrees,
+        alphaStepDegrees,
+        settings,
+        couplingIterations,
+        viscousIterations,
+        residualTolerance,
+        displacementRelaxation);
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"Panels: {sweep.Settings.PanelCount}");
+    Console.WriteLine($"Mach: {sweep.Settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {sweep.Settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("AlphaDeg\tCL\tCDvisc\tCMc/4\tSurfRes\tTransRes\tWakeRes\tOuterConv\tInnerConv\tRelax\tSeedUe");
+
+    foreach (var point in sweep.Points)
+    {
+        Console.WriteLine(
+            $"{point.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"{point.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.EstimatedProfileDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OuterConverged}\t" +
+            $"{point.InnerInteractionConverged}\t" +
+            $"{point.FinalDisplacementRelaxation.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.FinalSeedEdgeVelocityChange.ToString("F6", CultureInfo.InvariantCulture)}");
+    }
+}
+
+static void ExportPolarCsv(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double alphaStartDegrees,
+    double alphaEndDegrees,
+    double alphaStepDegrees,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService,
+    PolarCsvExporter polarExporter)
+{
+    var sweep = analysisService.SweepInviscidAlpha(
+        geometry,
+        alphaStartDegrees,
+        alphaEndDegrees,
+        alphaStepDegrees,
+        new AnalysisSettings(panelCount, machNumber: machNumber));
+
+    polarExporter.Export(outputPath, sweep);
+    WriteExportSummary("InviscidAlphaSweep", outputPath, sweep.Points.Count);
+}
+
+static void ExportViscousPolarCsv(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double alphaStartDegrees,
+    double alphaEndDegrees,
+    double alphaStepDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int couplingIterations,
+    int viscousIterations,
+    double residualTolerance,
+    double displacementRelaxation,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService,
+    PolarCsvExporter polarExporter)
+{
+    var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
+    var sweep = analysisService.SweepDisplacementCoupledAlpha(
+        geometry,
+        alphaStartDegrees,
+        alphaEndDegrees,
+        alphaStepDegrees,
+        settings,
+        couplingIterations,
+        viscousIterations,
+        residualTolerance,
+        displacementRelaxation);
+
+    polarExporter.Export(outputPath, sweep);
+    WriteExportSummary("ViscousAlphaSweep", outputPath, sweep.Points.Count);
+}
+
+static void ExportLiftSweepCsv(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double liftStart,
+    double liftEnd,
+    double liftStep,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService,
+    PolarCsvExporter polarExporter)
+{
+    var sweep = analysisService.SweepInviscidLiftCoefficient(
+        geometry,
+        liftStart,
+        liftEnd,
+        liftStep,
+        new AnalysisSettings(panelCount, machNumber: machNumber));
+
+    polarExporter.Export(outputPath, sweep);
+    WriteExportSummary("InviscidLiftSweep", outputPath, sweep.Points.Count);
+}
+
+static void ImportLegacyPolar(
+    string inputPath,
+    string outputPath,
+    LegacyPolarImporter legacyPolarImporter,
+    PolarCsvExporter polarExporter)
+{
+    var polar = legacyPolarImporter.Import(inputPath);
+    polarExporter.Export(outputPath, polar);
+    WriteExportSummary("LegacySavedPolarImport", outputPath, polar.Records.Count);
+}
+
+static void WriteLegacyPolarSummary(string inputPath, LegacyPolarImporter legacyPolarImporter)
+{
+    var polar = legacyPolarImporter.Import(inputPath);
+    Console.WriteLine($"SourcePath: {Path.GetFullPath(inputPath)}");
+    Console.WriteLine($"SourceCode: {polar.SourceCode}");
+    Console.WriteLine($"Version: {polar.Version?.ToString("F2", CultureInfo.InvariantCulture) ?? "n/a"}");
+    Console.WriteLine($"Name: {polar.AirfoilName}");
+    Console.WriteLine($"Elements: {polar.ElementCount}");
+    Console.WriteLine($"ReynoldsVariation: {polar.ReynoldsVariationType}");
+    Console.WriteLine($"MachVariation: {polar.MachVariationType}");
+    Console.WriteLine($"ReferenceMach: {polar.ReferenceMachNumber?.ToString("F6", CultureInfo.InvariantCulture) ?? "n/a"}");
+    Console.WriteLine($"ReferenceRe: {polar.ReferenceReynoldsNumber?.ToString("F0", CultureInfo.InvariantCulture) ?? "n/a"}");
+    Console.WriteLine($"CriticalN: {polar.CriticalAmplificationFactor?.ToString("F6", CultureInfo.InvariantCulture) ?? "n/a"}");
+    Console.WriteLine($"Columns: {string.Join(", ", polar.Columns.Select(column => column.Key))}");
+    Console.WriteLine($"PointCount: {polar.Records.Count}");
+    if (polar.Records.Count > 0)
+    {
+        var firstRecord = polar.Records[0];
+        var preview = string.Join(
+            ", ",
+            polar.Columns.Take(Math.Min(4, polar.Columns.Count))
+                .Select(column => $"{column.Key}={firstRecord.Values[column.Key].ToString("F6", CultureInfo.InvariantCulture)}"));
+        Console.WriteLine($"FirstPoint: {preview}");
+    }
+}
+
+static void ImportLegacyReferencePolar(
+    string inputPath,
+    string outputPath,
+    LegacyReferencePolarImporter legacyReferencePolarImporter,
+    PolarCsvExporter polarExporter)
+{
+    var polar = legacyReferencePolarImporter.Import(inputPath);
+    polarExporter.Export(outputPath, polar);
+    WriteExportSummary("LegacyReferencePolarImport", outputPath, polar.Blocks.Sum(block => block.Points.Count));
+}
+
+static void WriteLegacyReferencePolarSummary(string inputPath, LegacyReferencePolarImporter legacyReferencePolarImporter)
+{
+    var polar = legacyReferencePolarImporter.Import(inputPath);
+    Console.WriteLine($"SourcePath: {Path.GetFullPath(inputPath)}");
+    Console.WriteLine($"Label: {polar.Label}");
+    foreach (var block in polar.Blocks)
+    {
+        Console.WriteLine($"{block.Kind}Points: {block.Points.Count}");
+    }
+}
+
+static void ImportLegacyPolarDump(
+    string inputPath,
+    string outputPath,
+    LegacyPolarDumpImporter legacyPolarDumpImporter,
+    LegacyPolarDumpArchiveWriter legacyPolarDumpArchiveWriter)
+{
+    var dump = legacyPolarDumpImporter.Import(inputPath);
+    var export = legacyPolarDumpArchiveWriter.Export(outputPath, dump);
+    Console.WriteLine("ExportKind: LegacyPolarDumpImport");
+    Console.WriteLine($"SummaryPath: {export.SummaryPath}");
+    Console.WriteLine($"GeometryPath: {export.GeometryPath}");
+    Console.WriteLine($"SideFileCount: {export.SidePaths.Count}");
+    Console.WriteLine($"PointCount: {dump.OperatingPoints.Count}");
+}
+
+static void WriteLegacyPolarDumpSummary(string inputPath, LegacyPolarDumpImporter legacyPolarDumpImporter)
+{
+    var dump = legacyPolarDumpImporter.Import(inputPath);
+    Console.WriteLine($"SourcePath: {Path.GetFullPath(inputPath)}");
+    Console.WriteLine($"SourceCode: {dump.SourceCode}");
+    Console.WriteLine($"Version: {dump.Version.ToString("F2", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Name: {dump.AirfoilName}");
+    Console.WriteLine($"IsIsesPolar: {dump.IsIsesPolar}");
+    Console.WriteLine($"IsMachSweep: {dump.IsMachSweep}");
+    Console.WriteLine($"ReferenceMach: {dump.ReferenceMachNumber.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"ReferenceRe: {dump.ReferenceReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {dump.CriticalAmplificationFactor.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"GeometryPoints: {dump.Geometry.Count}");
+    Console.WriteLine($"PointCount: {dump.OperatingPoints.Count}");
+    if (dump.OperatingPoints.Count > 0)
+    {
+        var first = dump.OperatingPoints[0];
+        Console.WriteLine(
+            $"FirstPoint: Alpha={first.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}, " +
+            $"CL={first.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}, " +
+            $"Mach={first.MachNumber.ToString("F6", CultureInfo.InvariantCulture)}, " +
+            $"UpperSamples={first.Sides[0].Samples.Count}, LowerSamples={first.Sides[1].Samples.Count}");
+    }
+}
+
+static void ExportViscousLiftSweepCsv(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double liftStart,
+    double liftEnd,
+    double liftStep,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int couplingIterations,
+    int viscousIterations,
+    double residualTolerance,
+    double displacementRelaxation,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService,
+    PolarCsvExporter polarExporter)
+{
+    var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
+    var sweep = analysisService.SweepDisplacementCoupledLiftCoefficient(
+        geometry,
+        liftStart,
+        liftEnd,
+        liftStep,
+        settings,
+        couplingIterations,
+        viscousIterations,
+        residualTolerance,
+        displacementRelaxation);
+
+    polarExporter.Export(outputPath, sweep);
+    WriteExportSummary("ViscousLiftSweep", outputPath, sweep.Points.Count);
+}
+
+static void WriteTargetLiftSummary(
+    AirfoilGeometry geometry,
+    double targetLiftCoefficient,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService)
+{
+    var analysis = analysisService.AnalyzeInviscidForLiftCoefficient(
+        geometry,
+        targetLiftCoefficient,
+        new AnalysisSettings(panelCount, machNumber: machNumber));
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"TargetCL: {targetLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"SolvedAlphaDeg: {analysis.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {analysis.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CL: {analysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CD: {analysis.DragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CMc/4: {analysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteViscousTargetLiftSummary(
+    AirfoilGeometry geometry,
+    double targetLiftCoefficient,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int couplingIterations,
+    int viscousIterations,
+    double residualTolerance,
+    double displacementRelaxation,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
+    var result = analysisService.AnalyzeDisplacementCoupledForLiftCoefficient(
+        geometry,
+        targetLiftCoefficient,
+        settings,
+        couplingIterations,
+        viscousIterations,
+        residualTolerance,
+        displacementRelaxation);
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"TargetCL: {targetLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"SolvedAlphaDeg: {result.SolvedAngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CL: {result.OperatingPoint.FinalAnalysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CDvisc: {result.OperatingPoint.EstimatedProfileDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CMc/4: {result.OperatingPoint.FinalAnalysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"OuterConverged: {result.OperatingPoint.Converged}");
+    Console.WriteLine($"InnerInteractionConverged: {result.OperatingPoint.InnerInteractionConverged}");
+    Console.WriteLine($"FinalSurfaceResidual: {result.OperatingPoint.FinalSolveResult.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalTransitionResidual: {result.OperatingPoint.FinalSolveResult.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalWakeResidual: {result.OperatingPoint.FinalSolveResult.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteLiftSweepSummary(
+    AirfoilGeometry geometry,
+    double liftStart,
+    double liftEnd,
+    double liftStep,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService)
+{
+    var sweep = analysisService.SweepInviscidLiftCoefficient(
+        geometry,
+        liftStart,
+        liftEnd,
+        liftStep,
+        new AnalysisSettings(panelCount, machNumber: machNumber));
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"Panels: {sweep.Settings.PanelCount}");
+    Console.WriteLine($"Mach: {sweep.Settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("TargetCL\tSolvedAlphaDeg\tCL\tCD\tCMc/4");
+
+    foreach (var point in sweep.Points)
+    {
+        Console.WriteLine(
+            $"{point.TargetLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.DragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
+    }
+}
+
+static void WriteViscousLiftSweepSummary(
+    AirfoilGeometry geometry,
+    double liftStart,
+    double liftEnd,
+    double liftStep,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int couplingIterations,
+    int viscousIterations,
+    double residualTolerance,
+    double displacementRelaxation,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
+    var sweep = analysisService.SweepDisplacementCoupledLiftCoefficient(
+        geometry,
+        liftStart,
+        liftEnd,
+        liftStep,
+        settings,
+        couplingIterations,
+        viscousIterations,
+        residualTolerance,
+        displacementRelaxation);
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"Panels: {sweep.Settings.PanelCount}");
+    Console.WriteLine($"Mach: {sweep.Settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {sweep.Settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("TargetCL\tSolvedAlphaDeg\tCL\tCDvisc\tCMc/4\tSurfRes\tTransRes\tWakeRes\tOuterConv\tInnerConv");
+
+    foreach (var point in sweep.Points)
+    {
+        Console.WriteLine(
+            $"{point.TargetLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.SolvedAngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.FinalAnalysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.EstimatedProfileDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.FinalAnalysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.FinalSolveResult.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.FinalSolveResult.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.FinalSolveResult.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{point.OperatingPoint.Converged}\t" +
+            $"{point.OperatingPoint.InnerInteractionConverged}");
+    }
+}
+
+static void WriteBoundaryLayerTopologySummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService)
+{
+    var topology = analysisService.AnalyzeBoundaryLayerTopology(
+        geometry,
+        angleOfAttackDegrees,
+        new AnalysisSettings(panelCount, machNumber: machNumber));
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"StagnationX: {topology.StagnationPoint.X.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"StagnationY: {topology.StagnationPoint.Y.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"StagnationS: {topology.StagnationArcLength.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperStations: {topology.UpperSurfaceStations.Count}");
+    Console.WriteLine($"LowerStations: {topology.LowerSurfaceStations.Count}");
+    Console.WriteLine($"WakeStations: {topology.WakeStations.Count}");
+    Console.WriteLine($"UpperTeDistance: {topology.UpperSurfaceStations[^1].DistanceFromStagnation.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTeDistance: {topology.LowerSurfaceStations[^1].DistanceFromStagnation.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteViscousSeedSummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService)
+{
+    var seed = analysisService.AnalyzeViscousStateSeed(
+        geometry,
+        angleOfAttackDegrees,
+        new AnalysisSettings(panelCount, machNumber: machNumber));
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperStations: {seed.UpperSurface.Stations.Count}");
+    Console.WriteLine($"LowerStations: {seed.LowerSurface.Stations.Count}");
+    Console.WriteLine($"WakeStations: {seed.Wake.Stations.Count}");
+    Console.WriteLine($"TrailingEdgeGap: {seed.TrailingEdgeGap.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TrailingEdgeNormalGap: {seed.TrailingEdgeNormalGap.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TrailingEdgeStreamwiseGap: {seed.TrailingEdgeStreamwiseGap.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTeXi: {seed.UpperSurface.Stations[^1].Xi.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTeXi: {seed.LowerSurface.Stations[^1].Xi.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeInitialUe: {seed.Wake.Stations[0].EdgeVelocity.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeSecondUe: {seed.Wake.Stations[Math.Min(1, seed.Wake.Stations.Count - 1)].EdgeVelocity.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeSecondGap: {seed.Wake.Stations[Math.Min(1, seed.Wake.Stations.Count - 1)].WakeGap.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteViscousInitialStateSummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var state = analysisService.AnalyzeViscousInitialState(
+        geometry,
+        angleOfAttackDegrees,
+        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor));
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTeTheta: {state.UpperSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTeDstar: {state.UpperSurface.Stations[^1].DisplacementThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTeTheta: {state.LowerSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTeDstar: {state.LowerSurface.Stations[^1].DisplacementThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTransitionXi: {FindTransitionXi(state.UpperSurface).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTransitionN: {FindTransitionAmplification(state.UpperSurface).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTransitionXi: {FindTransitionXi(state.LowerSurface).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTransitionN: {FindTransitionAmplification(state.LowerSurface).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperMaxN: {state.UpperSurface.Stations.Max(station => station.AmplificationFactor).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerMaxN: {state.LowerSurface.Stations.Max(station => station.AmplificationFactor).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeTheta0: {state.Wake.Stations[0].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeDstar0: {state.Wake.Stations[0].DisplacementThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeThetaEnd: {state.Wake.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeReThetaEnd: {state.Wake.Stations[^1].ReynoldsTheta.ToString("F2", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteViscousIntervalSummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var system = analysisService.AnalyzeViscousIntervalSystem(
+        geometry,
+        angleOfAttackDegrees,
+        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor));
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperIntervals: {system.UpperSurfaceIntervals.Count}");
+    Console.WriteLine($"LowerIntervals: {system.LowerSurfaceIntervals.Count}");
+    Console.WriteLine($"WakeIntervals: {system.WakeIntervals.Count}");
+    Console.WriteLine($"UpperTurbulentIntervals: {system.UpperSurfaceIntervals.Count(interval => interval.Kind == ViscousIntervalKind.Turbulent)}");
+    Console.WriteLine($"LowerTurbulentIntervals: {system.LowerSurfaceIntervals.Count(interval => interval.Kind == ViscousIntervalKind.Turbulent)}");
+    Console.WriteLine($"UpperUpwind0: {system.UpperSurfaceIntervals[0].UpwindWeight.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperAmplificationGrowth0: {system.UpperSurfaceIntervals[0].AmplificationGrowthRate.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperAmplificationResidual0: {system.UpperSurfaceIntervals[0].AmplificationResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperMomentumResidual0: {system.UpperSurfaceIntervals[0].MomentumResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerShapeResidual0: {system.LowerSurfaceIntervals[0].ShapeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerAmplificationGrowth0: {system.LowerSurfaceIntervals[0].AmplificationGrowthRate.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerAmplificationResidual0: {system.LowerSurfaceIntervals[0].AmplificationResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeUpwind0: {system.WakeIntervals[0].UpwindWeight.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeMomentumResidual0: {system.WakeIntervals[0].MomentumResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteViscousCorrectionSummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int iterations,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var correction = analysisService.AnalyzeViscousLaminarCorrection(
+        geometry,
+        angleOfAttackDegrees,
+        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor),
+        iterations);
+
+    var initialResidual =
+        correction.InitialSystem.UpperSurfaceIntervals.Average(interval => Math.Abs(interval.MomentumResidual))
+        + correction.InitialSystem.LowerSurfaceIntervals.Average(interval => Math.Abs(interval.MomentumResidual));
+    var correctedResidual =
+        correction.CorrectedSystem.UpperSurfaceIntervals.Average(interval => Math.Abs(interval.MomentumResidual))
+        + correction.CorrectedSystem.LowerSurfaceIntervals.Average(interval => Math.Abs(interval.MomentumResidual));
+    var initialTransitionResidual = ComputeTransitionResidual(correction.InitialSystem);
+    var correctedTransitionResidual = ComputeTransitionResidual(correction.CorrectedSystem);
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Iterations: {correction.Iterations}");
+    Console.WriteLine($"InitialSurfaceResidual: {initialResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CorrectedSurfaceResidual: {correctedResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InitialTransitionResidual: {initialTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CorrectedTransitionResidual: {correctedTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTeTheta: {correction.CorrectedSystem.State.UpperSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTeTheta: {correction.CorrectedSystem.State.LowerSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteViscousSolveSummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int maxIterations,
+    double residualTolerance,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var result = analysisService.AnalyzeViscousLaminarSolve(
+        geometry,
+        angleOfAttackDegrees,
+        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor),
+        maxIterations,
+        residualTolerance);
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"MaxIterations: {maxIterations}");
+    Console.WriteLine($"ResidualTolerance: {residualTolerance.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Iterations: {result.Iterations}");
+    Console.WriteLine($"Converged: {result.Converged}");
+    Console.WriteLine($"InitialSurfaceResidual: {result.InitialSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalSurfaceResidual: {result.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InitialTransitionResidual: {result.InitialTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalTransitionResidual: {result.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InitialWakeResidual: {result.InitialWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalWakeResidual: {result.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTeTheta: {result.SolvedSystem.State.UpperSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTeTheta: {result.SolvedSystem.State.LowerSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTransitionXi: {FindTransitionXi(result.SolvedSystem.State.UpperSurface).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"UpperTransitionN: {FindTransitionAmplification(result.SolvedSystem.State.UpperSurface).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTransitionXi: {FindTransitionXi(result.SolvedSystem.State.LowerSurface).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"LowerTransitionN: {FindTransitionAmplification(result.SolvedSystem.State.LowerSurface).ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"WakeThetaEnd: {result.SolvedSystem.State.Wake.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteViscousInteractionSummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int interactionIterations,
+    double couplingFactor,
+    int viscousIterations,
+    double residualTolerance,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var result = analysisService.AnalyzeViscousInteraction(
+        geometry,
+        angleOfAttackDegrees,
+        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor),
+        interactionIterations,
+        couplingFactor,
+        viscousIterations,
+        residualTolerance);
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InteractionIterations: {result.InteractionIterations}");
+    Console.WriteLine($"InteractionConverged: {result.Converged}");
+    Console.WriteLine($"CouplingFactor: {couplingFactor.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"AverageUeChange: {result.AverageRelativeEdgeVelocityChange.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalIterationUeChange: {result.FinalIterationRelativeEdgeVelocityChange.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Converged: {result.SolveResult.Converged}");
+    Console.WriteLine($"InitialSurfaceResidual: {result.SolveResult.InitialSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalSurfaceResidual: {result.SolveResult.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InitialTransitionResidual: {result.SolveResult.InitialTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalTransitionResidual: {result.SolveResult.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InitialWakeResidual: {result.SolveResult.InitialWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalWakeResidual: {result.SolveResult.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteDisplacementCoupledSummary(
+    AirfoilGeometry geometry,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    int couplingIterations,
+    int viscousIterations,
+    double residualTolerance,
+    double displacementRelaxation,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor,
+    AirfoilAnalysisService analysisService)
+{
+    var result = analysisService.AnalyzeDisplacementCoupledViscous(
+        geometry,
+        angleOfAttackDegrees,
+        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor),
+        couplingIterations,
+        viscousIterations,
+        residualTolerance,
+        displacementRelaxation);
+
+    Console.WriteLine($"Name: {geometry.Name}");
+    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CouplingIterations: {result.Iterations}");
+    Console.WriteLine($"CoupledConverged: {result.Converged}");
+    Console.WriteLine($"InnerInteractionIterations: {result.InnerInteractionIterations}");
+    Console.WriteLine($"InnerInteractionConverged: {result.InnerInteractionConverged}");
+    Console.WriteLine($"FinalSeedUeChange: {result.FinalSeedEdgeVelocityChange.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalDisplacementRelaxation: {result.FinalDisplacementRelaxation.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"MaxSurfaceDisplacement: {result.MaxSurfaceDisplacement.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InitialCL: {result.InitialAnalysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalCL: {result.FinalAnalysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalCDvisc: {result.EstimatedProfileDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalLiftDelta: {result.FinalLiftDelta.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InitialCMc/4: {result.InitialAnalysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalCMc/4: {result.FinalAnalysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalMomentDelta: {result.FinalMomentDelta.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalSurfaceResidual: {result.FinalSolveResult.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalTransitionResidual: {result.FinalSolveResult.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalWakeResidual: {result.FinalSolveResult.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+}
+
+static double FindTransitionXi(ViscousBranchState branch)
+{
+    foreach (var station in branch.Stations)
+    {
+        if (station.Regime == ViscousFlowRegime.Turbulent)
+        {
+            return station.Xi;
+        }
+    }
+
+    return -1d;
+}
+
+static double FindTransitionAmplification(ViscousBranchState branch)
+{
+    foreach (var station in branch.Stations)
+    {
+        if (station.Regime == ViscousFlowRegime.Turbulent)
+        {
+            return station.AmplificationFactor;
+        }
+    }
+
+    return -1d;
+}
+
+static AnalysisSettings CreateViscousSettings(
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor)
+{
+    return new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        transitionReynoldsTheta: transitionReynoldsTheta,
+        criticalAmplificationFactor: criticalAmplificationFactor);
+}
+
+static void WriteExportSummary(string kind, string outputPath, int pointCount)
+{
+    Console.WriteLine($"ExportKind: {kind}");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"PointCount: {pointCount}");
+}
+
+static void ExportFlapGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double hingeX,
+    double hingeY,
+    double deflectionDegrees,
+    FlapDeflectionService flapDeflectionService,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    var result = flapDeflectionService.DeflectTrailingEdge(
+        geometry,
+        new AirfoilPoint(hingeX, hingeY),
+        deflectionDegrees);
+
+    airfoilDatExporter.Export(outputPath, result.Geometry);
+
+    Console.WriteLine("ExportKind: FlapGeometry");
+    Console.WriteLine($"InputName: {geometry.Name}");
+    Console.WriteLine($"OutputName: {result.Geometry.Name}");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"HingeX: {result.HingePoint.X.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"HingeY: {result.HingePoint.Y.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"DeflectionDeg: {result.DeflectionDegrees.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"AffectedPointCount: {result.AffectedPointCount}");
+    Console.WriteLine($"InsertedPointCount: {result.InsertedPointCount}");
+    Console.WriteLine($"RemovedPointCount: {result.RemovedPointCount}");
+    Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
+}
+
+static void ExportTrailingEdgeGapGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double targetGap,
+    double blendDistanceChordFraction,
+    TrailingEdgeGapService trailingEdgeGapService,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    var result = trailingEdgeGapService.SetTrailingEdgeGap(
+        geometry,
+        targetGap,
+        blendDistanceChordFraction);
+
+    airfoilDatExporter.Export(outputPath, result.Geometry);
+
+    Console.WriteLine("ExportKind: TrailingEdgeGapGeometry");
+    Console.WriteLine($"InputName: {geometry.Name}");
+    Console.WriteLine($"OutputName: {result.Geometry.Name}");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"OriginalGap: {result.OriginalGap.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TargetGap: {result.TargetGap.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalGap: {result.FinalGap.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"BlendDistanceChordFraction: {result.BlendDistanceChordFraction.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
+}
+
+static void ExportLeadingEdgeRadiusGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double radiusScaleFactor,
+    double blendDistanceChordFraction,
+    LeadingEdgeRadiusService leadingEdgeRadiusService,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    var result = leadingEdgeRadiusService.ScaleLeadingEdgeRadius(
+        geometry,
+        radiusScaleFactor,
+        blendDistanceChordFraction);
+
+    airfoilDatExporter.Export(outputPath, result.Geometry);
+
+    Console.WriteLine("ExportKind: LeadingEdgeRadiusGeometry");
+    Console.WriteLine($"InputName: {geometry.Name}");
+    Console.WriteLine($"OutputName: {result.Geometry.Name}");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"OriginalLeadingEdgeRadius: {result.OriginalRadius.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"RadiusScaleFactor: {result.RadiusScaleFactor.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalLeadingEdgeRadius: {result.FinalRadius.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"BlendDistanceChordFraction: {result.BlendDistanceChordFraction.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
+}
+
+static void ExportScaledGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double scaleFactor,
+    GeometryScaleOrigin originKind,
+    AirfoilPoint? originPoint,
+    GeometryScalingService geometryScalingService,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    var result = geometryScalingService.Scale(
+        geometry,
+        scaleFactor,
+        originKind,
+        originPoint);
+
+    airfoilDatExporter.Export(outputPath, result.Geometry);
+
+    Console.WriteLine("ExportKind: GeometryScale");
+    Console.WriteLine($"InputName: {geometry.Name}");
+    Console.WriteLine($"OutputName: {result.Geometry.Name}");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"OriginKind: {result.OriginKind}");
+    Console.WriteLine($"OriginX: {result.OriginPoint.X.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"OriginY: {result.OriginPoint.Y.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"ScaleFactor: {result.ScaleFactor.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
+}
+
+static void ExportGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    string kind,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    airfoilDatExporter.Export(outputPath, geometry);
+    Console.WriteLine($"ExportKind: {kind}");
+    Console.WriteLine($"OutputName: {geometry.Name}");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"PointCount: {geometry.Points.Count}");
+}
+
+static void ExportContourEditGeometry(
+    ContourEditResult result,
+    string outputPath,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    airfoilDatExporter.Export(outputPath, result.Geometry);
+    Console.WriteLine("ExportKind: ContourEdit");
+    Console.WriteLine($"Operation: {result.Operation}");
+    Console.WriteLine($"OutputName: {result.Geometry.Name}");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"PrimaryIndex: {result.PrimaryIndex}");
+    Console.WriteLine($"InsertedPointCount: {result.InsertedPointCount}");
+    Console.WriteLine($"RemovedPointCount: {result.RemovedPointCount}");
+    Console.WriteLine($"RefinedCornerCount: {result.RefinedCornerCount}");
+    Console.WriteLine($"MaxCornerAngleDeg: {result.MaxCornerAngleDegrees.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"MaxCornerAngleIndex: {result.MaxCornerAngleIndex}");
+    Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
+}
+
+static void ExportContourModificationGeometry(
+    ContourModificationResult result,
+    string outputPath,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    airfoilDatExporter.Export(outputPath, result.Geometry);
+    Console.WriteLine("ExportKind: ContourModification");
+    Console.WriteLine($"OutputName: {result.Geometry.Name}");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"ModifiedStartIndex: {result.ModifiedStartIndex}");
+    Console.WriteLine($"ModifiedEndIndex: {result.ModifiedEndIndex}");
+    Console.WriteLine($"ControlPointCount: {result.ControlPointCount}");
+    Console.WriteLine($"MatchedEndpointSlope: {result.MatchedEndpointSlope}");
+    Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
+}
+
+static void ExportQSpecProfile(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var profile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    WriteQSpecCsv(outputPath, profile);
+
+    Console.WriteLine("ExportKind: QSpecProfile");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"Name: {profile.Name}");
+    Console.WriteLine($"AlphaDeg: {profile.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {profile.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {profile.Points.Count}");
+}
+
+static void ExportSymmetricQSpecProfile(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var profile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var symmetricProfile = qSpecDesignService.ForceSymmetry(profile);
+    WriteQSpecCsv(outputPath, symmetricProfile);
+
+    Console.WriteLine("ExportKind: QSpecSymmetry");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"Name: {symmetricProfile.Name}");
+    Console.WriteLine($"AlphaDeg: {symmetricProfile.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {symmetricProfile.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {symmetricProfile.Points.Count}");
+}
+
+static void ExportQSpecProfileSetForAngles(
+    AirfoilGeometry geometry,
+    string outputPath,
+    int panelCount,
+    double machNumber,
+    IReadOnlyList<double> anglesOfAttackDegrees,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService)
+{
+    var profiles = anglesOfAttackDegrees
+        .Select(angle =>
+        {
+            var analysis = analysisService.AnalyzeInviscid(geometry, angle, new AnalysisSettings(panelCount, machNumber: machNumber));
+            return qSpecDesignService.CreateFromInviscidAnalysis(
+                $"{geometry.Name} aq {analysis.AngleOfAttackDegrees.ToString("0.###", CultureInfo.InvariantCulture)}",
+                analysis);
+        })
+        .ToArray();
+
+    WriteQSpecSetCsv(outputPath, profiles);
+
+    Console.WriteLine("ExportKind: QSpecAlphaSet");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"ProfileCount: {profiles.Length}");
+    Console.WriteLine($"AnglesDeg: {string.Join(", ", profiles.Select(profile => profile.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)))}");
+}
+
+static void ExportQSpecProfileSetForLiftCoefficients(
+    AirfoilGeometry geometry,
+    string outputPath,
+    int panelCount,
+    double machNumber,
+    IReadOnlyList<double> targetLiftCoefficients,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService)
+{
+    var settings = new AnalysisSettings(panelCount, machNumber: machNumber);
+    var profiles = new List<QSpecProfile>(targetLiftCoefficients.Count);
+    var alphaGuess = 0d;
+    foreach (var targetLiftCoefficient in targetLiftCoefficients)
+    {
+        var analysis = analysisService.AnalyzeInviscidForLiftCoefficient(geometry, targetLiftCoefficient, settings, alphaGuess);
+        alphaGuess = analysis.AngleOfAttackDegrees;
+        profiles.Add(qSpecDesignService.CreateFromInviscidAnalysis(
+            $"{geometry.Name} cq {targetLiftCoefficient.ToString("0.###", CultureInfo.InvariantCulture)}",
+            analysis));
+    }
+
+    WriteQSpecSetCsv(outputPath, profiles);
+
+    Console.WriteLine("ExportKind: QSpecLiftSet");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"ProfileCount: {profiles.Count}");
+    Console.WriteLine($"TargetCL: {string.Join(", ", targetLiftCoefficients.Select(target => target.ToString("F4", CultureInfo.InvariantCulture)))}");
+}
+
+static void ExportModifiedQSpecProfile(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    IReadOnlyList<AirfoilPoint> controlPoints,
+    bool matchEndpointSlope,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var profile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var result = qSpecDesignService.Modify(profile, controlPoints, matchEndpointSlope);
+    WriteQSpecCsv(outputPath, result.Profile);
+
+    Console.WriteLine("ExportKind: QSpecModify");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"Name: {result.Profile.Name}");
+    Console.WriteLine($"ModifiedStartIndex: {result.ModifiedStartIndex}");
+    Console.WriteLine($"ModifiedEndIndex: {result.ModifiedEndIndex}");
+    Console.WriteLine($"MatchedEndpointSlope: {result.MatchedEndpointSlope}");
+    Console.WriteLine($"PointCount: {result.Profile.Points.Count}");
+}
+
+static void ExportSmoothedQSpecProfile(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    double startPlotCoordinate,
+    double endPlotCoordinate,
+    bool matchEndpointSlope,
+    double smoothingLengthFactor,
+    int panelCount,
+    double machNumber,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var profile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var result = qSpecDesignService.Smooth(profile, startPlotCoordinate, endPlotCoordinate, matchEndpointSlope, smoothingLengthFactor);
+    WriteQSpecCsv(outputPath, result.Profile);
+
+    Console.WriteLine("ExportKind: QSpecSmooth");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"Name: {result.Profile.Name}");
+    Console.WriteLine($"ModifiedStartIndex: {result.ModifiedStartIndex}");
+    Console.WriteLine($"ModifiedEndIndex: {result.ModifiedEndIndex}");
+    Console.WriteLine($"MatchedEndpointSlope: {result.MatchedEndpointSlope}");
+    Console.WriteLine($"SmoothingLength: {result.SmoothingLength.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {result.Profile.Points.Count}");
+}
+
+static void ExportExecutedQSpecGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    IReadOnlyList<AirfoilPoint> controlPoints,
+    bool matchEndpointSlope,
+    int panelCount,
+    double machNumber,
+    double maxDisplacementFraction,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var baselineProfile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var modifiedProfile = qSpecDesignService.Modify(baselineProfile, controlPoints, matchEndpointSlope);
+    var execution = qSpecDesignService.ExecuteInverse(geometry, baselineProfile, modifiedProfile.Profile, maxDisplacementFraction);
+    airfoilDatExporter.Export(outputPath, execution.Geometry);
+
+    Console.WriteLine("ExportKind: QSpecExecute");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"OutputName: {execution.Geometry.Name}");
+    Console.WriteLine($"MatchedEndpointSlope: {modifiedProfile.MatchedEndpointSlope}");
+    Console.WriteLine($"MaxSpeedRatioDelta: {execution.MaxSpeedRatioDelta.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"MaxNormalDisplacement: {execution.MaxNormalDisplacement.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"RmsNormalDisplacement: {execution.RmsNormalDisplacement.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {execution.Geometry.Points.Count}");
+}
+
+static void ExportModalSpectrum(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    int panelCount,
+    double machNumber,
+    int modeCount,
+    double filterStrength,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService,
+    ModalInverseDesignService modalInverseDesignService)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var profile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var spectrum = modalInverseDesignService.CreateSpectrum($"{geometry.Name} mdes", profile, modeCount, filterStrength);
+    WriteModalSpectrumCsv(outputPath, spectrum);
+
+    Console.WriteLine("ExportKind: MdesSpectrum");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"Name: {spectrum.Name}");
+    Console.WriteLine($"ModeCount: {spectrum.Coefficients.Count}");
+}
+
+static void ExportModalExecutedGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    IReadOnlyList<AirfoilPoint> controlPoints,
+    bool matchEndpointSlope,
+    int panelCount,
+    double machNumber,
+    int modeCount,
+    double filterStrength,
+    double maxDisplacementFraction,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService,
+    ModalInverseDesignService modalInverseDesignService,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var baselineProfile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var modifiedProfile = qSpecDesignService.Modify(baselineProfile, controlPoints, matchEndpointSlope);
+    var execution = modalInverseDesignService.Execute(
+        geometry,
+        baselineProfile,
+        modifiedProfile.Profile,
+        modeCount,
+        filterStrength,
+        maxDisplacementFraction);
+    airfoilDatExporter.Export(outputPath, execution.Geometry);
+
+    Console.WriteLine("ExportKind: MdesExecute");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"OutputName: {execution.Geometry.Name}");
+    Console.WriteLine($"ModeCount: {execution.Spectrum.Coefficients.Count}");
+    Console.WriteLine($"MaxNormalDisplacement: {execution.MaxNormalDisplacement.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"RmsNormalDisplacement: {execution.RmsNormalDisplacement.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {execution.Geometry.Points.Count}");
+}
+
+static void ExportPerturbedModalGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    int modeIndex,
+    double coefficientDelta,
+    int panelCount,
+    double machNumber,
+    int modeCount,
+    double filterStrength,
+    double maxDisplacementFraction,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService,
+    ModalInverseDesignService modalInverseDesignService,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var baselineProfile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var execution = modalInverseDesignService.PerturbMode(
+        geometry,
+        baselineProfile,
+        modeIndex,
+        coefficientDelta,
+        modeCount,
+        filterStrength,
+        maxDisplacementFraction);
+    airfoilDatExporter.Export(outputPath, execution.Geometry);
+
+    Console.WriteLine("ExportKind: MdesPerturb");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"OutputName: {execution.Geometry.Name}");
+    Console.WriteLine($"ModeIndex: {modeIndex}");
+    Console.WriteLine($"CoefficientDelta: {coefficientDelta.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"MaxNormalDisplacement: {execution.MaxNormalDisplacement.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {execution.Geometry.Points.Count}");
+}
+
+static void ExportConformalMapgenGeometry(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    IReadOnlyList<AirfoilPoint> controlPoints,
+    bool matchEndpointSlope,
+    int panelCount,
+    double machNumber,
+    int circlePointCount,
+    int maxNewtonIterations,
+    AirfoilPoint? targetTrailingEdgeGap,
+    double? targetTrailingEdgeAngleDegrees,
+    double filterExponent,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService,
+    ConformalMapgenService conformalMapgenService,
+    AirfoilDatExporter airfoilDatExporter)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var baselineProfile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var modifiedProfile = qSpecDesignService.Modify(baselineProfile, controlPoints, matchEndpointSlope);
+    var result = conformalMapgenService.Execute(
+        geometry,
+        baselineProfile,
+        modifiedProfile.Profile,
+        circlePointCount,
+        maxNewtonIterations,
+        5e-5d,
+        targetTrailingEdgeGap,
+        targetTrailingEdgeAngleDegrees,
+        filterExponent);
+    airfoilDatExporter.Export(outputPath, result.Geometry);
+
+    Console.WriteLine("ExportKind: MapgenExecute");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"OutputName: {result.Geometry.Name}");
+    Console.WriteLine($"CirclePointCount: {result.CirclePointCount}");
+    Console.WriteLine($"IterationCount: {result.IterationCount}");
+    Console.WriteLine($"Converged: {result.Converged}");
+    Console.WriteLine($"MaxCoefficientCorrection: {result.MaxCoefficientCorrection.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"InitialTrailingEdgeResidual: {result.InitialTrailingEdgeResidual.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalTrailingEdgeResidual: {result.FinalTrailingEdgeResidual.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TargetTrailingEdgeGapX: {result.TargetTrailingEdgeGap.X.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TargetTrailingEdgeGapY: {result.TargetTrailingEdgeGap.Y.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"AchievedTrailingEdgeGapX: {result.AchievedTrailingEdgeGap.X.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"AchievedTrailingEdgeGapY: {result.AchievedTrailingEdgeGap.Y.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TargetTrailingEdgeAngleDeg: {result.TargetTrailingEdgeAngleDegrees.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"AchievedTrailingEdgeAngleDeg: {result.AchievedTrailingEdgeAngleDegrees.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
+}
+
+static void ExportConformalMapgenSpectrum(
+    AirfoilGeometry geometry,
+    string outputPath,
+    double angleOfAttackDegrees,
+    IReadOnlyList<AirfoilPoint> controlPoints,
+    bool matchEndpointSlope,
+    int panelCount,
+    double machNumber,
+    int circlePointCount,
+    int maxNewtonIterations,
+    AirfoilPoint? targetTrailingEdgeGap,
+    double? targetTrailingEdgeAngleDegrees,
+    double filterExponent,
+    AirfoilAnalysisService analysisService,
+    QSpecDesignService qSpecDesignService,
+    ConformalMapgenService conformalMapgenService)
+{
+    var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
+    var baselineProfile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
+    var modifiedProfile = qSpecDesignService.Modify(baselineProfile, controlPoints, matchEndpointSlope);
+    var result = conformalMapgenService.Execute(
+        geometry,
+        baselineProfile,
+        modifiedProfile.Profile,
+        circlePointCount,
+        maxNewtonIterations,
+        5e-5d,
+        targetTrailingEdgeGap,
+        targetTrailingEdgeAngleDegrees,
+        filterExponent);
+    WriteConformalCoefficientCsv(outputPath, result.Coefficients);
+
+    Console.WriteLine("ExportKind: MapgenSpectrum");
+    Console.WriteLine($"OutputPath: {Path.GetFullPath(outputPath)}");
+    Console.WriteLine($"CirclePointCount: {result.CirclePointCount}");
+    Console.WriteLine($"CoefficientCount: {result.Coefficients.Count}");
+    Console.WriteLine($"Converged: {result.Converged}");
+    Console.WriteLine($"InitialTrailingEdgeResidual: {result.InitialTrailingEdgeResidual.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"FinalTrailingEdgeResidual: {result.FinalTrailingEdgeResidual.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TargetTrailingEdgeGapX: {result.TargetTrailingEdgeGap.X.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TargetTrailingEdgeGapY: {result.TargetTrailingEdgeGap.Y.ToString("F8", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TargetTrailingEdgeAngleDeg: {result.TargetTrailingEdgeAngleDegrees.ToString("F8", CultureInfo.InvariantCulture)}");
+}
+
+static void WriteQSpecCsv(string outputPath, QSpecProfile profile)
+{
+    var lines = new List<string>(profile.Points.Count + 1)
+    {
+        "index,s,plot_x,x,y,q_over_qinf,cp,cp_corr",
+    };
+
+    foreach (var point in profile.Points)
+    {
+        lines.Add(string.Join(
+            ",",
+            point.Index.ToString(CultureInfo.InvariantCulture),
+            point.SurfaceCoordinate.ToString("F8", CultureInfo.InvariantCulture),
+            point.PlotCoordinate.ToString("F8", CultureInfo.InvariantCulture),
+            point.Location.X.ToString("F8", CultureInfo.InvariantCulture),
+            point.Location.Y.ToString("F8", CultureInfo.InvariantCulture),
+            point.SpeedRatio.ToString("F8", CultureInfo.InvariantCulture),
+            point.PressureCoefficient.ToString("F8", CultureInfo.InvariantCulture),
+            point.CorrectedPressureCoefficient.ToString("F8", CultureInfo.InvariantCulture)));
+    }
+
+    File.WriteAllLines(outputPath, lines);
+}
+
+static void WriteConformalCoefficientCsv(string outputPath, IReadOnlyList<ConformalMappingCoefficient> coefficients)
+{
+    var lines = new List<string>(coefficients.Count + 1)
+    {
+        "mode,real,imag",
+    };
+
+    foreach (var coefficient in coefficients)
+    {
+        lines.Add(string.Join(
+            ",",
+            coefficient.ModeIndex.ToString(CultureInfo.InvariantCulture),
+            coefficient.RealPart.ToString("F10", CultureInfo.InvariantCulture),
+            coefficient.ImaginaryPart.ToString("F10", CultureInfo.InvariantCulture)));
+    }
+
+    File.WriteAllLines(outputPath, lines);
+}
+
+static void WriteModalSpectrumCsv(string outputPath, ModalSpectrum spectrum)
+{
+    var lines = new List<string>(spectrum.Coefficients.Count + 1)
+    {
+        "mode,coefficient,filtered_coefficient",
+    };
+
+    foreach (var coefficient in spectrum.Coefficients)
+    {
+        lines.Add(string.Join(
+            ",",
+            coefficient.ModeIndex.ToString(CultureInfo.InvariantCulture),
+            coefficient.Coefficient.ToString("F8", CultureInfo.InvariantCulture),
+            coefficient.FilteredCoefficient.ToString("F8", CultureInfo.InvariantCulture)));
+    }
+
+    File.WriteAllLines(outputPath, lines);
+}
+
+static void WriteQSpecSetCsv(string outputPath, IReadOnlyList<QSpecProfile> profiles)
+{
+    var estimatedRowCount = profiles.Sum(profile => profile.Points.Count) + 1;
+    var lines = new List<string>(estimatedRowCount)
+    {
+        "profile_name,index,s,plot_x,x,y,q_over_qinf,cp,cp_corr,alpha_deg,mach",
+    };
+
+    foreach (var profile in profiles)
+    {
+        foreach (var point in profile.Points)
+        {
+            lines.Add(string.Join(
+                ",",
+                EscapeCsv(profile.Name),
+                point.Index.ToString(CultureInfo.InvariantCulture),
+                point.SurfaceCoordinate.ToString("F8", CultureInfo.InvariantCulture),
+                point.PlotCoordinate.ToString("F8", CultureInfo.InvariantCulture),
+                point.Location.X.ToString("F8", CultureInfo.InvariantCulture),
+                point.Location.Y.ToString("F8", CultureInfo.InvariantCulture),
+                point.SpeedRatio.ToString("F8", CultureInfo.InvariantCulture),
+                point.PressureCoefficient.ToString("F8", CultureInfo.InvariantCulture),
+                point.CorrectedPressureCoefficient.ToString("F8", CultureInfo.InvariantCulture),
+                profile.AngleOfAttackDegrees.ToString("F8", CultureInfo.InvariantCulture),
+                profile.MachNumber.ToString("F8", CultureInfo.InvariantCulture)));
+        }
+    }
+
+    File.WriteAllLines(outputPath, lines);
+}
+
+static void RunSession(string manifestPath, string outputDirectory, AnalysisSessionRunner sessionRunner)
+{
+    var result = sessionRunner.Run(manifestPath, outputDirectory);
+    Console.WriteLine($"SessionName: {result.SessionName}");
+    Console.WriteLine($"Geometry: {result.GeometryName}");
+    Console.WriteLine($"OutputDirectory: {result.OutputDirectory}");
+    Console.WriteLine($"SummaryPath: {result.SummaryPath}");
+    Console.WriteLine("Artifacts:");
+    foreach (var artifact in result.Artifacts)
+    {
+        Console.WriteLine($"{artifact.Name}\t{artifact.Kind}\t{artifact.PointCount}\t{artifact.OutputPath}");
+    }
+}
+
+static double ComputeTransitionResidual(ViscousIntervalSystem system)
+{
+    var laminarIntervals = system.UpperSurfaceIntervals
+        .Concat(system.LowerSurfaceIntervals)
+        .Where(interval => interval.Kind == ViscousIntervalKind.Laminar)
+        .ToArray();
+    if (laminarIntervals.Length == 0)
+    {
+        return 0d;
+    }
+
+    return laminarIntervals.Average(interval => Math.Abs(interval.AmplificationResidual));
+}
+
+static double ParseDouble(string raw, string label)
+{
+    if (!double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
+    {
+        throw new ArgumentException($"Could not parse {label} '{raw}'.");
+    }
+
+    return value;
+}
+
+static IReadOnlyList<double> ParseRemainingDoubles(string[] args, int startIndex, string label)
+{
+    if (startIndex >= args.Length)
+    {
+        throw new ArgumentException($"At least one {label} value is required.");
+    }
+
+    var values = new double[args.Length - startIndex];
+    for (var index = startIndex; index < args.Length; index++)
+    {
+        values[index - startIndex] = ParseDouble(args[index], label);
+    }
+
+    return values;
+}
+
+static int ParseInteger(string raw, string label)
+{
+    if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+    {
+        throw new ArgumentException($"Could not parse {label} '{raw}'.");
+    }
+
+    return value;
+}
+
+static IReadOnlyList<AirfoilPoint> ParseControlPointsFile(string path)
+{
+    var lines = File.ReadAllLines(path);
+    var points = new List<AirfoilPoint>();
+    foreach (var rawLine in lines)
+    {
+        var line = rawLine.Trim();
+        if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
+        {
+            continue;
+        }
+
+        var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            throw new ArgumentException($"Control-point line '{line}' does not contain an x y pair.");
+        }
+
+        points.Add(new AirfoilPoint(
+            ParseDouble(parts[0], "control point x"),
+            ParseDouble(parts[1], "control point y")));
+    }
+
+    return points;
+}
+
+static bool ParseBooleanFlag(string raw, string label)
+{
+    return raw.ToUpperInvariant() switch
+    {
+        "1" or "TRUE" or "T" or "YES" or "Y" or "ON" => true,
+        "0" or "FALSE" or "F" or "NO" or "N" or "OFF" => false,
+        _ => throw new ArgumentException($"Could not parse {label} '{raw}'. Use true/false."),
+    };
+}
+
+static CornerRefinementParameterMode ParseCornerRefinementMode(string raw)
+{
+    return raw.ToUpperInvariant() switch
+    {
+        "1" or "U" or "UNIFORM" => CornerRefinementParameterMode.Uniform,
+        "2" or "S" or "ARCLENGTH" or "ARC" => CornerRefinementParameterMode.ArcLength,
+        _ => throw new ArgumentException($"Could not parse corner refinement mode '{raw}'. Use UNIFORM or ARCLENGTH."),
+    };
+}
+
+static bool TryParseCornerRefinementMode(string raw, out CornerRefinementParameterMode mode)
+{
+    switch (raw.ToUpperInvariant())
+    {
+        case "1":
+        case "U":
+        case "UNIFORM":
+            mode = CornerRefinementParameterMode.Uniform;
+            return true;
+        case "2":
+        case "S":
+        case "ARCLENGTH":
+        case "ARC":
+            mode = CornerRefinementParameterMode.ArcLength;
+            return true;
+        default:
+            mode = default;
+            return false;
+    }
+}
+
+static GeometryScaleOrigin ParseScaleOrigin(string raw)
+{
+    return raw.ToUpperInvariant() switch
+    {
+        "L" or "LE" => GeometryScaleOrigin.LeadingEdge,
+        "T" or "TE" => GeometryScaleOrigin.TrailingEdge,
+        "P" or "POINT" => GeometryScaleOrigin.Point,
+        _ => throw new ArgumentException($"Could not parse scale origin '{raw}'. Use LE, TE, or POINT."),
+    };
+}
+
+static string EscapeCsv(string value)
+{
+    if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+    {
+        return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+    }
+
+    return value;
+}

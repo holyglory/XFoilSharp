@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="../tests/XFoil.Core.Tests/XFoil.Core.Tests.csproj" />
+  <Project Path="XFoil.Cli/XFoil.Cli.csproj" />
+  <Project Path="XFoil.Core/XFoil.Core.csproj" />
+  <Project Path="XFoil.Design/XFoil.Design.csproj" />
+  <Project Path="XFoil.IO/XFoil.IO.csproj" />
+  <Project Path="XFoil.Solver/XFoil.Solver.csproj" />
+</Solution>
