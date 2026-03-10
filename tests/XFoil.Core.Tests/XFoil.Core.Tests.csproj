@@ -18,8 +18,7 @@
 
   <!-- Exclude RED-phase test files that reference not-yet-implemented classes -->
   <ItemGroup>
-    <Compile Remove="PanelGeometryBuilderTests.cs" />
-    <Compile Remove="StreamfunctionInfluenceCalculatorTests.cs" />
+    <Compile Remove="CosineClusteringPanelDistributorTests.cs" />
   </ItemGroup>
 
   <ItemGroup>
