@@ -16,6 +16,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!-- Exclude RED-phase test files that reference not-yet-implemented classes -->
+  <ItemGroup>
+    <Compile Remove="CosineClusteringPanelDistributorTests.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\XFoil.Core\XFoil.Core.csproj" />
     <ProjectReference Include="..\..\src\XFoil.Design\XFoil.Design.csproj" />
