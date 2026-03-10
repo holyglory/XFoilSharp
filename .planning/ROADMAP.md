@@ -27,11 +27,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. All markdown files under agents/ reference `src/` paths -- no `src-cs/` references remain anywhere
   2. ParityAndTodos.md accurately reflects the current solver state (which routines are surrogate vs ported)
   3. `dotnet build` succeeds targeting net10.0 with zero warnings across all projects in the solution
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Fix stale src-cs/ path references and verify ParityAndTodos.md accuracy
+- [ ] 01-02-PLAN.md -- Upgrade to .NET 10, centralize TFM, update test packages, verify clean build
 
 ### Phase 2: Inviscid Kernel Parity
 **Goal**: Inviscid solver produces CL and CM values within 0.001% of original XFoil for any valid airfoil
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Cleanup | 0/? | Not started | - |
+| 1. Foundation Cleanup | 0/2 | Not started | - |
 | 2. Inviscid Kernel Parity | 0/? | Not started | - |
 | 3. Viscous Solver Parity and Polar Validation | 0/? | Not started | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |
