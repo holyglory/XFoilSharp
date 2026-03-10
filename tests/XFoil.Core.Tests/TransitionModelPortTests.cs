@@ -244,12 +244,6 @@ public class TransitionModelPortTests
         // Test that the onset ramp smoothly transitions from 0 to full amplification
         double hk = 2.5, th = 0.001;
 
-        // Get critical Rt for this Hk
-        // At Hk=2.5, HMI = 1/(2.5-1) = 0.667
-        // AA = 2.492 * 0.667^0.43 ~ 2.08
-        // BB = tanh(14*0.667 - 9.24) = tanh(0.098) ~ 0.098
-        // GRCRIT ~ 2.08 + 0.7*(0.098+1) ~ 2.85
-        // Rcrit ~ 10^2.85 ~ 708
         // Below Rcrit-DGR: AX=0
         var (axBelow, _, _, _) = TransitionModel.ComputeAmplificationRate(hk, th, 400.0);
         Assert.Equal(0.0, axBelow);
@@ -257,5 +251,142 @@ public class TransitionModelPortTests
         // Well above Rcrit: AX > 0
         var (axAbove, _, _, _) = TransitionModel.ComputeAmplificationRate(hk, th, 2000.0);
         Assert.True(axAbove > 0.0);
+    }
+
+    // ================================================================
+    // TRCHEK2 (CheckTransition) tests
+    // ================================================================
+
+    [Fact]
+    public void CheckTransition_StraddlingNcrit_ConvergesToTransition()
+    {
+        // Two BL stations straddling N_crit: N1=7.5 < 9.0 < N2=10.2
+        // Should find exact transition location between them
+        double x1 = 0.30, x2 = 0.35; // xi (arc-length) at stations
+        double ampl1 = 7.5;           // N at station 1
+        double ampl2 = 10.2;          // N at station 2
+        double amcrit = 9.0;
+
+        // BL variables at each station (typical attached flow)
+        double hk1 = 2.4, th1 = 0.0008, rt1 = 1500.0;
+        double hk2 = 2.6, th2 = 0.0010, rt2 = 2000.0;
+        double ue1 = 1.0, ue2 = 0.98;
+        double d1 = hk1 * th1, d2 = hk2 * th2;
+
+        var result = TransitionModel.CheckTransition(
+            x1, x2, ampl1, ampl2, amcrit,
+            hk1, th1, rt1, ue1, d1,
+            hk2, th2, rt2, ue2, d2,
+            useHighHkModel: true, forcedXtr: null);
+
+        Assert.True(result.TransitionOccurred, "Transition should occur when straddling Ncrit");
+        Assert.True(result.Converged, "Newton iteration should converge");
+        Assert.True(result.TransitionXi > x1, $"Transition xi {result.TransitionXi} should be > x1 {x1}");
+        Assert.True(result.TransitionXi < x2, $"Transition xi {result.TransitionXi} should be < x2 {x2}");
+        Assert.True(result.Iterations < 30, $"Should converge in < 30 iterations, took {result.Iterations}");
+        Assert.Equal(TransitionModel.TransitionResultType.Free, result.Type);
+    }
+
+    [Fact]
+    public void CheckTransition_NoStraddling_ReturnsNoTransition()
+    {
+        // Both stations below N_crit: N1=3.0 < N2=5.0 < 9.0
+        double x1 = 0.10, x2 = 0.15;
+        double ampl1 = 3.0, ampl2 = 5.0;
+        double amcrit = 9.0;
+
+        double hk1 = 2.3, th1 = 0.0006, rt1 = 800.0;
+        double hk2 = 2.4, th2 = 0.0007, rt2 = 900.0;
+        double ue1 = 1.05, ue2 = 1.03;
+        double d1 = hk1 * th1, d2 = hk2 * th2;
+
+        var result = TransitionModel.CheckTransition(
+            x1, x2, ampl1, ampl2, amcrit,
+            hk1, th1, rt1, ue1, d1,
+            hk2, th2, rt2, ue2, d2,
+            useHighHkModel: true, forcedXtr: null);
+
+        Assert.False(result.TransitionOccurred, "No transition when both below Ncrit");
+    }
+
+    [Fact]
+    public void CheckTransition_ForcedUpstreamOfNatural_ReturnsForcedLocation()
+    {
+        // Forced transition at x/c=0.25, natural transition at ~0.33
+        double x1 = 0.30, x2 = 0.35;
+        double ampl1 = 7.5, ampl2 = 10.2;
+        double amcrit = 9.0;
+
+        double hk1 = 2.4, th1 = 0.0008, rt1 = 1500.0;
+        double hk2 = 2.6, th2 = 0.0010, rt2 = 2000.0;
+        double ue1 = 1.0, ue2 = 0.98;
+        double d1 = hk1 * th1, d2 = hk2 * th2;
+
+        // Force at x1 - upstream of natural
+        double forcedXtr = x1;
+
+        var result = TransitionModel.CheckTransition(
+            x1, x2, ampl1, ampl2, amcrit,
+            hk1, th1, rt1, ue1, d1,
+            hk2, th2, rt2, ue2, d2,
+            useHighHkModel: true, forcedXtr: forcedXtr);
+
+        Assert.True(result.TransitionOccurred, "Transition should occur (forced)");
+        Assert.Equal(TransitionModel.TransitionResultType.Forced, result.Type);
+        Assert.Equal(forcedXtr, result.TransitionXi);
+    }
+
+    [Fact]
+    public void CheckTransition_ForcedDownstreamOfNatural_ReturnsNaturalLocation()
+    {
+        // Forced transition at x/c=0.50, but natural transition at ~0.33
+        double x1 = 0.30, x2 = 0.35;
+        double ampl1 = 7.5, ampl2 = 10.2;
+        double amcrit = 9.0;
+
+        double hk1 = 2.4, th1 = 0.0008, rt1 = 1500.0;
+        double hk2 = 2.6, th2 = 0.0010, rt2 = 2000.0;
+        double ue1 = 1.0, ue2 = 0.98;
+        double d1 = hk1 * th1, d2 = hk2 * th2;
+
+        // Force at far downstream
+        double forcedXtr = 0.50;
+
+        var result = TransitionModel.CheckTransition(
+            x1, x2, ampl1, ampl2, amcrit,
+            hk1, th1, rt1, ue1, d1,
+            hk2, th2, rt2, ue2, d2,
+            useHighHkModel: true, forcedXtr: forcedXtr);
+
+        Assert.True(result.TransitionOccurred, "Transition should occur (natural, upstream of forced)");
+        Assert.Equal(TransitionModel.TransitionResultType.Free, result.Type);
+        Assert.True(result.TransitionXi < forcedXtr,
+            $"Natural transition {result.TransitionXi} should be upstream of forced {forcedXtr}");
+    }
+
+    [Fact]
+    public void CheckTransition_AmplClamping_PreventsOvershoot()
+    {
+        // N2 far above Ncrit -- check that clamping prevents divergence
+        double x1 = 0.30, x2 = 0.35;
+        double ampl1 = 8.9;
+        double ampl2 = 15.0; // Far above Ncrit
+        double amcrit = 9.0;
+
+        double hk1 = 2.4, th1 = 0.0008, rt1 = 1500.0;
+        double hk2 = 2.6, th2 = 0.0010, rt2 = 2000.0;
+        double ue1 = 1.0, ue2 = 0.98;
+        double d1 = hk1 * th1, d2 = hk2 * th2;
+
+        var result = TransitionModel.CheckTransition(
+            x1, x2, ampl1, ampl2, amcrit,
+            hk1, th1, rt1, ue1, d1,
+            hk2, th2, rt2, ue2, d2,
+            useHighHkModel: true, forcedXtr: null);
+
+        Assert.True(result.TransitionOccurred, "Should find transition");
+        Assert.True(result.TransitionXi >= x1 && result.TransitionXi <= x2,
+            $"Transition xi {result.TransitionXi} should be within [{x1}, {x2}]");
+        Assert.False(double.IsNaN(result.AmplAtTransition));
     }
 }

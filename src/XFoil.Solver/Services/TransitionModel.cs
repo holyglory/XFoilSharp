@@ -415,4 +415,40 @@ public static class TransitionModel
             ax_hk1_final, ax_t1_final, ax_rt1_final, ax_a1_final,
             ax_hk2_final, ax_t2_final, ax_rt2_final, ax_a2_final);
     }
+
+    // =====================================================================
+    // TRCHEK2: Transition location Newton iteration
+    // Source: xblsys.f:1501-1840
+    // =====================================================================
+
+    /// <summary>
+    /// Newton iteration to find exact transition location within a BL interval
+    /// that straddles N_crit. Port of TRCHEK2 from xblsys.f.
+    /// </summary>
+    /// <param name="x1">Arc-length coordinate at station 1.</param>
+    /// <param name="x2">Arc-length coordinate at station 2.</param>
+    /// <param name="ampl1">Amplification factor N at station 1.</param>
+    /// <param name="ampl2">Amplification factor N at station 2.</param>
+    /// <param name="amcrit">Critical amplification factor N_crit.</param>
+    /// <param name="hk1">Kinematic shape parameter at station 1.</param>
+    /// <param name="th1">Momentum thickness at station 1.</param>
+    /// <param name="rt1">Re_theta at station 1.</param>
+    /// <param name="ue1">Edge velocity at station 1.</param>
+    /// <param name="d1">Displacement thickness at station 1.</param>
+    /// <param name="hk2">Kinematic shape parameter at station 2.</param>
+    /// <param name="th2">Momentum thickness at station 2.</param>
+    /// <param name="rt2">Re_theta at station 2.</param>
+    /// <param name="ue2">Edge velocity at station 2.</param>
+    /// <param name="d2">Displacement thickness at station 2.</param>
+    /// <param name="useHighHkModel">Use DAMPL2 instead of DAMPL (IDAMPV flag).</param>
+    /// <param name="forcedXtr">Forced transition location (null for free).</param>
+    /// <returns>TransitionCheckResult with location, type, and convergence info.</returns>
+    public static TransitionCheckResult CheckTransition(
+        double x1, double x2, double ampl1, double ampl2, double amcrit,
+        double hk1, double th1, double rt1, double ue1, double d1,
+        double hk2, double th2, double rt2, double ue2, double d2,
+        bool useHighHkModel, double? forcedXtr)
+    {
+        throw new NotImplementedException("TRCHEK2 not yet ported");
+    }
 }
