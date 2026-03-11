@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-10 (Newton coupling rewire + parity tolerance tightening)
-last_updated: "2026-03-11T14:26:00.000Z"
-last_activity: 2026-03-11 -- Completed 03-10 (Newton coupling rewire + parity tolerance tightening)
+stopped_at: Completed 03-11 (Fortran XFoil debug instrumentation)
+last_updated: "2026-03-11T20:52:00.000Z"
+last_activity: 2026-03-11 -- Completed 03-11 (Fortran XFoil debug instrumentation and reference dump capture)
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 16
-  completed_plans: 16
-  percent: 100
+  completed_phases: 2
+  total_plans: 19
+  completed_plans: 17
+  percent: 79
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 10 of 10 in current phase (03-10 Complete)
-Status: Phase 3 complete
-Last activity: 2026-03-11 -- Completed 03-10 (Newton coupling rewire + parity tolerance tightening)
+Plan: 11 of 14 in current phase (03-11 Complete)
+Status: Executing Phase 3
+Last activity: 2026-03-11 -- Completed 03-11 (Fortran XFoil debug instrumentation and reference dump capture)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 79%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [██████████] 100%
 | Phase 03 P08 | 14min | 2 tasks | 2 files |
 | Phase 03 P09 | 7min | 2 tasks | 6 files |
 | Phase 03 P10 | 30min | 2 tasks | 5 files |
+| Phase 03 P11 | 7min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,7 @@ Recent decisions affecting current work:
 - [Phase 03]: Adaptive DIJ relaxation (0.25-0.5) ramps on convergence, backs off on divergence
 - [Phase 03]: Panel x-coordinate for XTransition instead of arc-length to keep values in (0,1]
 - [Phase 03]: Parity tolerances: CL 25%, CD 90% -- BL march accuracy ceiling; 1e-5 requires Newton Jacobian debugging
+- [Phase 03]: Debug instrumentation via WRITE(50,...) to file unit 50 (not stdout) with fixed-width E15.8 tag-prefix format for machine-parseable comparison
 
 ### Pending Todos
 
@@ -136,6 +138,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T14:59:00Z
-Stopped at: Completed 03-10 (Newton coupling rewire + parity tolerance tightening)
+Last session: 2026-03-11T20:52:00Z
+Stopped at: Completed 03-11 (Fortran XFoil debug instrumentation and reference dump capture)
 Resume file: None
