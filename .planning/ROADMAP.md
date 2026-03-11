@@ -60,17 +60,19 @@ Plans:
   2. Full e^n transition model replaces the laminar amplification surrogate
   3. Drag decomposition (form, friction, pressure) matches original XFoil values
   4. Alpha sweep (Type 1), CL sweep (Type 2), and Re sweep (Type 3) polars all match original XFoil within 0.001%
-**Plans**: 8 plans
+**Plans**: 10 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- State models, AnalysisSettings extension, and BL correlation functions (xblsys.f)
-- [ ] 03-02-PLAN.md -- Full e^N transition model (DAMPL, DAMPL2, AXSET, TRCHEK2)
-- [ ] 03-03-PLAN.md -- BL equation system assembly (BLSYS, BLDIF, TRDIF, BLMID, TESYS, BLPRV, BLVAR)
-- [ ] 03-04-PLAN.md -- Coupling infrastructure: DIJ matrix (QDCALC), block-tridiagonal solver (BLSOLV), stagnation point tracker, edge velocity utilities
-- [ ] 03-05-PLAN.md -- Newton iteration core: SETBL, UPDATE, VISCAL outer loop
-- [ ] 03-06-PLAN.md -- Drag decomposition (CDCALC) and ViscousSolverEngine drag wiring
-- [ ] 03-07-PLAN.md -- Polar sweep runner (Type 1/2/3) and AirfoilAnalysisService integration
-- [ ] 03-08-PLAN.md -- Parity validation tests (single-point and polar sweep against XFoil reference)
+- [x] 03-01-PLAN.md -- State models, AnalysisSettings extension, and BL correlation functions (xblsys.f)
+- [x] 03-02-PLAN.md -- Full e^N transition model (DAMPL, DAMPL2, AXSET, TRCHEK2)
+- [x] 03-03-PLAN.md -- BL equation system assembly (BLSYS, BLDIF, TRDIF, BLMID, TESYS, BLPRV, BLVAR)
+- [x] 03-04-PLAN.md -- Coupling infrastructure: DIJ matrix (QDCALC), block-tridiagonal solver (BLSOLV), stagnation point tracker, edge velocity utilities
+- [x] 03-05-PLAN.md -- Newton iteration core: SETBL, UPDATE, VISCAL outer loop
+- [x] 03-06-PLAN.md -- Drag decomposition (CDCALC) and ViscousSolverEngine drag wiring
+- [x] 03-07-PLAN.md -- Polar sweep runner (Type 1/2/3) and AirfoilAnalysisService integration
+- [x] 03-08-PLAN.md -- Parity validation tests (single-point and polar sweep against XFoil reference)
+- [ ] 03-09-PLAN.md -- Gap closure: fix Newton system indexing (IV-based), DIJ coupling, wire TransitionModel
+- [ ] 03-10-PLAN.md -- Gap closure: rewire ViscousSolverEngine to Newton loop, tighten parity tolerances to 0.001%
 
 ### Phase 4: Randomized Test Bench
 **Goal**: Automated test bench continuously validates parity using random real-world airfoils against a reference XFoil binary
@@ -98,5 +100,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
 | 2. Inviscid Kernel Parity | 5/5 | Complete | 2026-03-10 |
-| 3. Viscous Solver Parity and Polar Validation | 7/8 | In Progress|  |
+| 3. Viscous Solver Parity and Polar Validation | 8/10 | In Progress (gap closure) |  |
 | 4. Randomized Test Bench | 0/? | Not started | - |
