@@ -7,6 +7,7 @@ namespace XFoil.Solver.Services;
 /// Builds the global Newton system for the viscous BL solver by marching through
 /// all BL stations on both surfaces and the wake.
 /// Port of SETBL from xbl.f.
+/// All array indexing uses global system line IV (0..NSYS-1).
 /// </summary>
 public static class ViscousNewtonAssembler
 {
@@ -27,6 +28,7 @@ public static class ViscousNewtonAssembler
     /// side 1 (IBL=2..IBLTE[0]), side 2 (IBL=2..IBLTE[1]),
     /// wake (IBL=IBLTE[1]+1..NBL[1]).
     /// Port of SETBL from xbl.f.
+    /// All array writes use global system line IV from the ISYS mapping.
     /// </summary>
     /// <param name="blState">Current BL variable state.</param>
     /// <param name="newtonSystem">Newton system workspace to fill.</param>
@@ -45,6 +47,8 @@ public static class ViscousNewtonAssembler
     /// <param name="reybl_re">Sensitivity of REYBL to Re.</param>
     /// <param name="reybl_ms">Sensitivity of REYBL to Mach squared.</param>
     /// <param name="hvrat">Sutherland constant ratio.</param>
+    /// <param name="isp">Stagnation point panel index (for GetPanelIndex mapping).</param>
+    /// <param name="nPanel">Total panel node count (for GetPanelIndex mapping).</param>
     /// <returns>RMS of all residuals (RMSBL before solving).</returns>
     public static double BuildNewtonSystem(
         BoundaryLayerSystemState blState,
@@ -57,7 +61,9 @@ public static class ViscousNewtonAssembler
         double hstinv, double hstinv_ms,
         double rstbl, double rstbl_ms,
         double reybl, double reybl_re, double reybl_ms,
-        double hvrat)
+        double hvrat,
+        int isp = -1,
+        int nPanel = -1)
     {
         int nsys = newtonSystem.NSYS;
         var va = newtonSystem.VA;
@@ -88,6 +94,7 @@ public static class ViscousNewtonAssembler
             // Previous station variables -- zeroed at start of each side (similarity)
             double x1 = 0, u1 = 0, t1 = 0, d1 = 0, s1 = 0, dw1 = 0;
             double ampl1 = 0;
+            double hk1 = 2.1, rt1 = 200.0; // Previous station Hk and Rt for transition check
 
             for (int ibl = 1; ibl < blState.NBL[side]; ibl++)
             {
@@ -138,6 +145,29 @@ public static class ViscousNewtonAssembler
                     msq2 = u2sq / (gm1bl * (1.0 - 0.5 * u2sq));
                 }
 
+                // Compute Hk and Rt for current station (for transition check)
+                double h2v = (thi > 1e-30) ? dsi / thi : 2.1;
+                var (hk2, _, _) = BoundaryLayerCorrelations.KinematicShapeParameter(h2v, msq2);
+                hk2 = Math.Max(hk2, 1.05);
+                double rt2 = Math.Max(Math.Abs(uei) * thi * reybl, 200.0);
+
+                // Transition check: call TransitionModel.CheckTransition during BL march
+                if (!wake && !turb && !tran && ibl > 1 && x1 > 0 && xsi > x1)
+                {
+                    var trResult = TransitionModel.CheckTransition(
+                        x1, xsi, ampl1, ami, ncrit,
+                        hk1, t1 > 0 ? t1 : thi, rt1, u1 > 0 ? u1 : uei, d1 > 0 ? d1 : dsi,
+                        hk2, thi, rt2, uei, dsi,
+                        settings.UseModernTransitionCorrections, null);
+
+                    if (trResult.TransitionOccurred)
+                    {
+                        blState.ITRAN[side] = ibl;
+                        tran = true;
+                        turb = true;
+                    }
+                }
+
                 // Assemble local BL system
                 BoundaryLayerSystemAssembler.BlsysResult localResult;
 
@@ -168,8 +198,7 @@ public static class ViscousNewtonAssembler
                         VS2 = teResult.VS2
                     };
 
-                    // Set VZ coupling block for TE junction
-                    // VZ couples the upper surface TE to the wake
+                    // Set VZ coupling block for TE junction -- use iv for VB indexing
                     double cte_cte1 = (tte > 1e-30) ? blState.THET[blState.IBLTE[0], 0] / tte : 0.5;
                     double cte_cte2 = (tte > 1e-30) ? blState.THET[blState.IBLTE[1], 1] / tte : 0.5;
                     double cte_tte1 = (tte > 1e-30) ? (blState.CTAU[blState.IBLTE[0], 0] - ctteWeight) / tte : 0;
@@ -179,8 +208,8 @@ public static class ViscousNewtonAssembler
                     {
                         vz[k, 0] = localResult.VS1[k, 0] * cte_cte1;
                         vz[k, 1] = localResult.VS1[k, 0] * cte_tte1 + localResult.VS1[k, 1];
-                        vb[k, 0, ibl] = localResult.VS1[k, 0] * cte_cte2;
-                        vb[k, 1, ibl] = localResult.VS1[k, 0] * cte_tte2 + localResult.VS1[k, 1];
+                        vb[k, 0, iv] = localResult.VS1[k, 0] * cte_cte2;
+                        vb[k, 1, iv] = localResult.VS1[k, 0] * cte_tte2 + localResult.VS1[k, 1];
                     }
                 }
                 else
@@ -202,28 +231,27 @@ public static class ViscousNewtonAssembler
                         hvrat, reybl, reybl_re, reybl_ms);
                 }
 
-                // Store into Newton system
+                // Store into Newton system -- use iv (global system line) for all array writes
                 if (!(wake && ibl == blState.IBLTE[side] + 1))
                 {
                     for (int k = 0; k < 3; k++)
                     {
-                        va[k, 0, ibl] = localResult.VS2[k, 0]; // Ctau/ampl at station 2
-                        va[k, 1, ibl] = localResult.VS2[k, 1]; // Theta at station 2
-                        vb[k, 0, ibl] = localResult.VS1[k, 0]; // Ctau/ampl at station 1
-                        vb[k, 1, ibl] = localResult.VS1[k, 1]; // Theta at station 1
+                        va[k, 0, iv] = localResult.VS2[k, 0]; // Ctau/ampl at station 2
+                        va[k, 1, iv] = localResult.VS2[k, 1]; // Theta at station 2
+                        vb[k, 0, iv] = localResult.VS1[k, 0]; // Ctau/ampl at station 1
+                        vb[k, 1, iv] = localResult.VS1[k, 1]; // Theta at station 1
                     }
                 }
 
-                // Residuals go into VDEL
+                // Residuals go into VDEL -- indexed by iv
                 for (int k = 0; k < 3; k++)
                 {
-                    vdel[k, 0, ibl] = localResult.Residual[k];
-                    vdel[k, 1, ibl] = 0.0;
+                    vdel[k, 0, iv] = localResult.Residual[k];
+                    vdel[k, 1, iv] = 0.0;
                 }
 
                 // Add DIJ coupling into VM (mass influence column)
-                // VM[k, jv, iv] = VS1[k,3]*D1_M[jv] + VS1[k,4]*U1_M[jv]
-                //               + VS2[k,3]*D2_M[jv] + VS2[k,4]*U2_M[jv]
+                // VM[k, jv, iv] = VS2[k,2]*D2_M[jv] + VS2[k,3]*UE_M[jv]*u2_uei
                 double d2_u2 = (Math.Abs(uei) > 1e-30) ? -dsi / uei : 0.0;
                 double d2_m2 = (Math.Abs(uei) > 1e-30) ? 1.0 / uei : 0.0;
 
@@ -233,29 +261,30 @@ public static class ViscousNewtonAssembler
                     int jbl = isys[jv, 0];
                     int jside = isys[jv, 1];
 
-                    // Panel index mapping: for the coupling, we need the
-                    // relationship between BL mass defect change at station j
-                    // and edge velocity change at station i via DIJ.
-                    // U2_M(jv) = -VTI(IBL,IS)*VTI(JBL,JS)*DIJ(I,J)
-                    // Simplified: use DIJ directly from BL station indices
-                    int iRow = GetDijIndex(ibl, side, blState);
-                    int jCol = GetDijIndex(jbl, jside, blState);
+                    // Panel index mapping for DIJ lookup
+                    int iPan = GetPanelIndex(ibl, side, isp, nPanel, blState);
+                    int jPan = GetPanelIndex(jbl, jside, isp, nPanel, blState);
 
-                    if (iRow >= 0 && jCol >= 0 && iRow < dij.GetLength(0) && jCol < dij.GetLength(1))
+                    if (iPan >= 0 && jPan >= 0 && iPan < dij.GetLength(0) && jPan < dij.GetLength(1))
                     {
                         double vtiI = GetVTI(ibl, side, blState);
                         double vtiJ = GetVTI(jbl, jside, blState);
-                        double ue_m = -vtiI * vtiJ * dij[iRow, jCol];
-                        double d2_m = d2_u2 * ue_m;
-                        if (jv == iv) d2_m += d2_m2;
+
+                        // DIJ gives dUe_incompressible/dSigma. Must chain through
+                        // u2_uei to get compressible velocity sensitivity.
+                        double ue_mj = -vtiI * vtiJ * dij[iPan, jPan];
+
+                        // d(delta*)/d(mass) at station jv via Ue change
+                        double d2_mj = d2_u2 * ue_mj * u2_uei;
+                        if (jv == iv) d2_mj += d2_m2;
 
                         for (int k = 0; k < 3; k++)
                         {
                             // Mass coupling: d/dMass(j) contribution to equations at station i
                             if (jv < newtonSystem.MaxWake)
                             {
-                                vm[k, jv, ibl] = localResult.VS2[k, 2] * d2_m
-                                               + localResult.VS2[k, 3] * ue_m;
+                                vm[k, jv, iv] = localResult.VS2[k, 2] * d2_mj
+                                              + localResult.VS2[k, 3] * ue_mj * u2_uei;
                             }
                         }
                     }
@@ -276,6 +305,8 @@ public static class ViscousNewtonAssembler
                 s1 = cti;
                 dw1 = dswaki;
                 ampl1 = (ibl < blState.ITRAN[side]) ? blState.CTAU[ibl, side] : 0.0;
+                hk1 = hk2;
+                rt1 = rt2;
             }
         }
 
@@ -287,28 +318,46 @@ public static class ViscousNewtonAssembler
     }
 
     /// <summary>
-    /// Gets the DIJ matrix index for a given BL station and side.
-    /// Maps BL station to panel index for DIJ lookup.
+    /// Gets the panel node index for a given BL station and side.
+    /// For side 0 (upper): IPAN[ibl] = ISP - ibl (going backward from stag point)
+    /// For side 1 (lower): IPAN[ibl] = ISP + ibl (going forward from stag point)
+    /// For wake: IPAN[ibl] = N + (ibl - IBLTE[1]) (after last airfoil node)
+    /// Falls back to simplified linear offset if isp/nPanel not provided.
     /// </summary>
-    private static int GetDijIndex(int ibl, int side, BoundaryLayerSystemState blState)
+    private static int GetPanelIndex(int ibl, int side, int isp, int nPanel,
+        BoundaryLayerSystemState blState)
     {
-        // Side 0 (upper): panel indices go ISP backward to 0
-        // Side 1 (lower): panel indices go ISP forward to N-1
-        // Wake: indices continue after the airfoil panels
-        // This is a simplified mapping -- the actual mapping depends on IPAN
-        // For this port, use a linear offset scheme matching IBLSYS ordering
-        if (side == 0)
-            return ibl;
+        // If isp/nPanel not provided, use simplified linear offset (backward compatibility)
+        if (isp < 0 || nPanel < 0)
+        {
+            if (side == 0)
+                return ibl;
+            else
+                return blState.IBLTE[0] + ibl;
+        }
+
+        bool wake = (ibl > blState.IBLTE[side]);
+        if (wake)
+        {
+            // Wake panel indices: after all airfoil panels
+            return nPanel + (ibl - blState.IBLTE[1]);
+        }
+        else if (side == 0)
+        {
+            // Upper surface: ISP backward to node 0
+            return isp - ibl;
+        }
         else
         {
-            return blState.IBLTE[0] + ibl;
+            // Lower surface: ISP forward to node N-1
+            return isp + ibl;
         }
     }
 
     /// <summary>
     /// Gets the VTI sign factor for a BL station.
-    /// VTI = +1 on side 1 (upper, speed positive going from stag to TE)
-    /// VTI = -1 on side 2 (lower, speed is in opposite direction)
+    /// VTI = +1 on side 0 (upper, speed positive going from stag to TE)
+    /// VTI = -1 on side 1 (lower, speed is in opposite direction)
     /// VTI = +1 for wake.
     /// </summary>
     private static double GetVTI(int ibl, int side, BoundaryLayerSystemState blState)

@@ -7,6 +7,7 @@ namespace XFoil.Solver.Services;
 /// Applies the Newton step to BL variables with careful relaxation and variable limiting.
 /// Port of UPDATE from xbl.f.
 /// Supports both XFoil-compatible RLXBL relaxation and trust-region (Levenberg-Marquardt) modes.
+/// All VDEL reads use global system line IV indexing.
 /// </summary>
 public static class ViscousNewtonUpdater
 {
@@ -25,6 +26,9 @@ public static class ViscousNewtonUpdater
     /// <param name="trustRadius">Trust-region radius (used only in TrustRegion mode).</param>
     /// <param name="previousRmsbl">Previous iteration RMS (for trust-region accept/reject).</param>
     /// <param name="currentRmsbl">Current iteration RMS before update.</param>
+    /// <param name="dij">DIJ influence matrix for computing Ue update from mass coupling (optional).</param>
+    /// <param name="isp">Stagnation point panel index (optional, for GetPanelIndex).</param>
+    /// <param name="nPanel">Total panel node count (optional, for GetPanelIndex).</param>
     /// <returns>Tuple of (relaxation factor applied, updated RMS, new trust radius, step accepted).</returns>
     public static (double Rlx, double Rmsbl, double TrustRadius, bool Accepted) ApplyNewtonUpdate(
         BoundaryLayerSystemState blState,
@@ -34,34 +38,44 @@ public static class ViscousNewtonUpdater
         double[] wakeGap,
         double trustRadius,
         double previousRmsbl,
-        double currentRmsbl)
+        double currentRmsbl,
+        double[,]? dij = null,
+        int isp = -1,
+        int nPanel = -1)
     {
         if (mode == ViscousSolverMode.XFoilRelaxation)
         {
-            double rlx = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap);
+            double rlx = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, dij, isp, nPanel);
             double rmsbl = ComputeUpdateRms(blState, newtonSystem);
             return (rlx, rmsbl, trustRadius, true);
         }
         else
         {
             return ApplyTrustRegionUpdate(blState, newtonSystem, hstinv, wakeGap,
-                trustRadius, previousRmsbl, currentRmsbl);
+                trustRadius, previousRmsbl, currentRmsbl, dij, isp, nPanel);
         }
     }
 
     /// <summary>
     /// XFoil-compatible RLXBL relaxation from UPDATE in xbl.f.
     /// Uses DHI=1.5, DLO=-0.5 thresholds.
+    /// Reads VDEL by global system line IV.
     /// </summary>
     private static double ApplyXFoilRelaxation(
         BoundaryLayerSystemState blState,
         ViscousNewtonSystem newtonSystem,
         double hstinv,
-        double[] wakeGap)
+        double[] wakeGap,
+        double[,]? dij,
+        int isp,
+        int nPanel)
     {
         var vdel = newtonSystem.VDEL;
         var isys = newtonSystem.ISYS;
         int nsys = newtonSystem.NSYS;
+
+        // Compute Ue changes from mass coupling via DIJ
+        double[]? duedgArr = ComputeUeUpdates(newtonSystem, blState, dij, isp, nPanel);
 
         double rlx = 1.0;
         double dhi = 1.5;
@@ -73,9 +87,12 @@ public static class ViscousNewtonUpdater
             int ibl = isys[jv, 0];
             int side = isys[jv, 1];
 
-            double dctau = vdel[0, 0, ibl];
-            double dthet = vdel[1, 0, ibl];
-            double dmass = vdel[2, 0, ibl];
+            // Read deltas from VDEL indexed by iv (global system line)
+            double dctau = vdel[0, 0, jv];
+            double dthet = vdel[1, 0, jv];
+            double dmass = vdel[2, 0, jv];
+
+            double duedg = duedgArr != null ? duedgArr[jv] : 0.0;
 
             // Normalized changes
             double dn1;
@@ -88,7 +105,6 @@ public static class ViscousNewtonUpdater
             double dn2 = (Math.Abs(blState.THET[ibl, side]) > 1e-30)
                 ? dthet / blState.THET[ibl, side] : 0.0;
 
-            double duedg = 0.0; // Simplified: Ue change comes from mass coupling
             double ddstr = (Math.Abs(blState.UEDG[ibl, side]) > 1e-30)
                 ? (dmass - blState.DSTR[ibl, side] * duedg) / blState.UEDG[ibl, side] : 0.0;
 
@@ -119,7 +135,7 @@ public static class ViscousNewtonUpdater
         rlx = Math.Max(0.01, Math.Min(1.0, rlx));
 
         // Second pass: apply the relaxed update
-        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap);
+        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, duedgArr);
 
         return rlx;
     }
@@ -134,7 +150,10 @@ public static class ViscousNewtonUpdater
         double[] wakeGap,
         double trustRadius,
         double previousRmsbl,
-        double currentRmsbl)
+        double currentRmsbl,
+        double[,]? dij,
+        int isp,
+        int nPanel)
     {
         // Compute step norm
         double stepNorm = ComputeStepNorm(blState, newtonSystem);
@@ -152,8 +171,11 @@ public static class ViscousNewtonUpdater
         var savedUedg = (double[,])blState.UEDG.Clone();
         var savedMass = (double[,])blState.MASS.Clone();
 
+        // Compute Ue updates from mass coupling
+        double[]? duedgArr = ComputeUeUpdates(newtonSystem, blState, dij, isp, nPanel);
+
         // Apply step
-        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap);
+        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, duedgArr);
 
         // Compute new residual
         double newRmsbl = ComputeUpdateRms(blState, newtonSystem);
@@ -192,14 +214,67 @@ public static class ViscousNewtonUpdater
     }
 
     /// <summary>
+    /// Computes Ue updates from mass defect coupling via DIJ.
+    /// After the tridiagonal solve, VDEL contains deltas for (Ctau/ampl, theta, mass).
+    /// The Ue change at each station comes from the mass defect change at all stations:
+    /// dUe[iv] = sum_jv( -VTI[iv]*VTI[jv]*DIJ[iPan_iv, iPan_jv] * dMass[jv] )
+    /// </summary>
+    private static double[]? ComputeUeUpdates(
+        ViscousNewtonSystem newtonSystem,
+        BoundaryLayerSystemState blState,
+        double[,]? dij,
+        int isp,
+        int nPanel)
+    {
+        int nsys = newtonSystem.NSYS;
+        var vdel = newtonSystem.VDEL;
+        var isys = newtonSystem.ISYS;
+
+        if (dij == null || nsys <= 0)
+            return null;
+
+        double[] duedg = new double[nsys];
+
+        for (int iv = 0; iv < nsys; iv++)
+        {
+            int ibl = isys[iv, 0];
+            int iside = isys[iv, 1];
+            int iPan = GetPanelIndex(ibl, iside, isp, nPanel, blState);
+            double vtiI = GetVTI(ibl, iside, blState);
+
+            double ueSum = 0.0;
+            for (int jv = 0; jv < nsys; jv++)
+            {
+                int jbl = isys[jv, 0];
+                int jside = isys[jv, 1];
+                int jPan = GetPanelIndex(jbl, jside, isp, nPanel, blState);
+                double vtiJ = GetVTI(jbl, jside, blState);
+
+                double dMass = vdel[2, 0, jv]; // mass defect delta at station jv
+
+                if (iPan >= 0 && jPan >= 0 && iPan < dij.GetLength(0) && jPan < dij.GetLength(1))
+                {
+                    ueSum += -vtiI * vtiJ * dij[iPan, jPan] * dMass;
+                }
+            }
+
+            duedg[iv] = ueSum;
+        }
+
+        return duedg;
+    }
+
+    /// <summary>
     /// Applies the relaxed Newton step to all BL variables with variable limiting.
+    /// Uses global system line IV for all VDEL reads.
     /// </summary>
     private static void ApplyRelaxedStep(
         BoundaryLayerSystemState blState,
         ViscousNewtonSystem newtonSystem,
         double rlx,
         double hstinv,
-        double[] wakeGap)
+        double[] wakeGap,
+        double[]? duedgArr)
     {
         var vdel = newtonSystem.VDEL;
         var isys = newtonSystem.ISYS;
@@ -210,16 +285,18 @@ public static class ViscousNewtonUpdater
             int ibl = isys[jv, 0];
             int side = isys[jv, 1];
 
-            double dctau = vdel[0, 0, ibl];
-            double dthet = vdel[1, 0, ibl];
-            double dmass = vdel[2, 0, ibl];
+            // Read deltas from VDEL indexed by iv (global system line)
+            double dctau = vdel[0, 0, jv];
+            double dthet = vdel[1, 0, jv];
+            double dmass = vdel[2, 0, jv];
+
+            double duedg = duedgArr != null ? duedgArr[jv] : 0.0;
 
             // Apply relaxed changes
             blState.CTAU[ibl, side] += rlx * dctau;
             blState.THET[ibl, side] += rlx * dthet;
 
-            // Update DSTR from mass defect change
-            double duedg = 0.0;
+            // Update DSTR from mass defect change, accounting for Ue change
             double ddstr = (Math.Abs(blState.UEDG[ibl, side]) > 1e-30)
                 ? (dmass - blState.DSTR[ibl, side] * duedg) / blState.UEDG[ibl, side] : 0.0;
             blState.DSTR[ibl, side] += rlx * ddstr;
@@ -291,6 +368,7 @@ public static class ViscousNewtonUpdater
 
     /// <summary>
     /// Computes the norm of the Newton step for trust-region scaling.
+    /// Uses global system line IV for VDEL reads.
     /// </summary>
     private static double ComputeStepNorm(
         BoundaryLayerSystemState blState,
@@ -306,19 +384,19 @@ public static class ViscousNewtonUpdater
             int ibl = isys[jv, 0];
             int side = isys[jv, 1];
 
-            // Normalized step components
+            // Normalized step components -- read VDEL by iv
             double dn1;
             if (ibl < blState.ITRAN[side])
-                dn1 = vdel[0, 0, ibl] / 10.0;
+                dn1 = vdel[0, 0, jv] / 10.0;
             else
                 dn1 = (Math.Abs(blState.CTAU[ibl, side]) > 1e-30)
-                    ? vdel[0, 0, ibl] / blState.CTAU[ibl, side] : 0.0;
+                    ? vdel[0, 0, jv] / blState.CTAU[ibl, side] : 0.0;
 
             double dn2 = (Math.Abs(blState.THET[ibl, side]) > 1e-30)
-                ? vdel[1, 0, ibl] / blState.THET[ibl, side] : 0.0;
+                ? vdel[1, 0, jv] / blState.THET[ibl, side] : 0.0;
 
             double dn3 = (Math.Abs(blState.DSTR[ibl, side]) > 1e-30)
-                ? vdel[2, 0, ibl] / blState.DSTR[ibl, side] : 0.0;
+                ? vdel[2, 0, jv] / blState.DSTR[ibl, side] : 0.0;
 
             norm += dn1 * dn1 + dn2 * dn2 + dn3 * dn3;
         }
@@ -327,27 +405,60 @@ public static class ViscousNewtonUpdater
     }
 
     /// <summary>
-    /// Computes the RMS of normalized BL changes after update.
+    /// Computes the RMS of residuals using global system line IV indexing.
     /// </summary>
     private static double ComputeUpdateRms(
         BoundaryLayerSystemState blState,
         ViscousNewtonSystem newtonSystem)
     {
         var vdel = newtonSystem.VDEL;
-        var isys = newtonSystem.ISYS;
         int nsys = newtonSystem.NSYS;
 
         double rmsbl = 0.0;
         for (int jv = 0; jv < nsys; jv++)
         {
-            int ibl = isys[jv, 0];
-
             for (int k = 0; k < 3; k++)
             {
-                rmsbl += vdel[k, 0, ibl] * vdel[k, 0, ibl];
+                rmsbl += vdel[k, 0, jv] * vdel[k, 0, jv];
             }
         }
 
         return (nsys > 0) ? Math.Sqrt(rmsbl / (3.0 * nsys)) : 0.0;
+    }
+
+    /// <summary>
+    /// Gets the panel node index for a given BL station and side.
+    /// Mirrors ViscousNewtonAssembler.GetPanelIndex.
+    /// </summary>
+    private static int GetPanelIndex(int ibl, int side, int isp, int nPanel,
+        BoundaryLayerSystemState blState)
+    {
+        if (isp < 0 || nPanel < 0)
+        {
+            if (side == 0)
+                return ibl;
+            else
+                return blState.IBLTE[0] + ibl;
+        }
+
+        bool wake = (ibl > blState.IBLTE[side]);
+        if (wake)
+            return nPanel + (ibl - blState.IBLTE[1]);
+        else if (side == 0)
+            return isp - ibl;
+        else
+            return isp + ibl;
+    }
+
+    /// <summary>
+    /// Gets the VTI sign factor for a BL station.
+    /// </summary>
+    private static double GetVTI(int ibl, int side, BoundaryLayerSystemState blState)
+    {
+        if (ibl > blState.IBLTE[side])
+            return 1.0; // wake
+        if (side == 0)
+            return 1.0; // upper surface
+        return -1.0; // lower surface
     }
 }
