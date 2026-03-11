@@ -312,8 +312,8 @@ public static class ViscousSolverEngine
             UpperProfiles = ExtractProfiles(blState, 0, blState.IBLTE[0]),
             LowerProfiles = ExtractProfiles(blState, 1, blState.IBLTE[1]),
             WakeProfiles = ExtractWakeProfiles(blState),
-            UpperTransition = ExtractTransitionInfo(blState, 0),
-            LowerTransition = ExtractTransitionInfo(blState, 1)
+            UpperTransition = ExtractTransitionInfo(blState, 0, panel, isp, n),
+            LowerTransition = ExtractTransitionInfo(blState, 1, panel, isp, n)
         };
     }
 
@@ -1103,10 +1103,23 @@ public static class ViscousSolverEngine
         return profiles;
     }
 
-    private static TransitionInfo ExtractTransitionInfo(BoundaryLayerSystemState blState, int side)
+    private static TransitionInfo ExtractTransitionInfo(
+        BoundaryLayerSystemState blState, int side,
+        LinearVortexPanelState panel, int isp, int n)
     {
         int itran = blState.ITRAN[side];
-        double xtr = (itran >= 0 && itran < blState.MaxStations) ? blState.XSSI[itran, side] : 0.0;
+        // Convert from BL station to x/c coordinate using the panel geometry.
+        // XSSI is arc-length from stagnation, which can exceed 1.0 for unit chord.
+        // Use the panel x-coordinate at the transition station for x/c.
+        double xtr = 0.0;
+        if (itran >= 0 && itran < blState.MaxStations)
+        {
+            int iPan = GetPanelIndex(itran, side, isp, n, blState);
+            if (iPan >= 0 && iPan < n && panel != null)
+                xtr = panel.X[iPan];
+            else
+                xtr = blState.XSSI[itran, side]; // fallback to arc-length
+        }
         return new TransitionInfo
         {
             XTransition = xtr, StationIndex = itran,
