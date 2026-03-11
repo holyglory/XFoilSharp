@@ -63,4 +63,10 @@ public sealed class ViscousAnalysisResult
     /// Total number of Newton iterations performed.
     /// </summary>
     public int Iterations { get; init; }
+
+    /// <summary>
+    /// Angle of attack in degrees at which this result was computed.
+    /// Set by polar sweep runners to track the operating point.
+    /// </summary>
+    public double AngleOfAttackDegrees { get; init; }
 }
