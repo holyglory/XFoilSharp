@@ -18,9 +18,16 @@ namespace XFoil.Core.Tests;
 ///    are from actual Fortran XFoil 6.97 binary polar accumulation (PACC) output.
 ///    Settings: 160 panels, NCrit=9.0, Mach=0, free transition.
 ///
-/// The solver uses a hybrid Newton coupling loop with BL march + DIJ coupling
-/// as the primary convergence driver. Full 1e-5 parity requires converged Newton
-/// Jacobians (Phase 4 scope). Current tolerances reflect BL march accuracy.
+/// The solver uses a hybrid BL march + DIJ coupling approach with conditional Newton
+/// corrections. The Newton system Jacobians are simplified and cannot drive pure Newton
+/// convergence. BL march + DIJ coupling is the primary convergence driver.
+///
+/// Accuracy ceiling (hybrid BL-march solver, same as ViscousParityTests):
+///   CL: ~7-16% relative error
+///   CD: ~73-86% relative error (Squire-Young drag, CDP=0)
+///   CM: ~0.06-0.10 absolute error
+///
+/// Full 0.001% (1e-5) parity requires correct Newton Jacobians (Phase 4 scope).
 ///
 /// Source: Fortran XFoil 6.97 binary built from f_xfoil/ via cmake/make.
 /// Polar files generated with ASEQ (alpha sweep), CL (CL sweep), and per-Re VISC+CL.
@@ -74,11 +81,15 @@ public class PolarParityTests
     private static readonly double[] ReSweep_CD_Ref = { 0.00916, 0.00795, 0.00692, 0.00651 };
     private static readonly double[] ReSweep_CM_Ref = { -0.0051, 0.0045, 0.0040, 0.0019 };
 
-    // Tolerances (current solver achievable with hybrid Newton/BL march coupling)
-    // Full 1e-5 parity requires converged Newton Jacobians (Phase 4 scope).
-    private const double CL_RelativeTolerance = 0.50;    // 50% - BL march CL; some alpha points have larger error
-    private const double CD_RelativeTolerance = 0.90;    // 90% - Squire-Young drag sensitive to BL march convergence
-    private const double CM_AbsoluteTolerance = 0.15;    // Absolute since CM can be near zero
+    // Tightened to current solver accuracy ceiling (hybrid BL-march + DIJ coupling).
+    // Polar sweeps exercise more conditions than single-point tests; wider margin needed
+    // because high-alpha and CL-prescribed points can have larger errors.
+    //
+    // Target: 0.001% (1e-5) -- requires Phase 4 Newton Jacobian corrections.
+    // Current gap: ~3-4 orders of magnitude on CL, ~4-5 on CD.
+    private const double CL_RelativeTolerance = 0.48;    // 48% - tightened from 50%; worst case 45.5% at alpha=-2 in alpha sweep
+    private const double CD_RelativeTolerance = 0.90;    // 90% - worst case 88.2% at alpha=6 in alpha sweep; cannot tighten further
+    private const double CM_AbsoluteTolerance = 0.11;    // Tightened from 0.15; aligned with ViscousParityTests
 
     // ================================================================
     // Type 1: Alpha sweep -- NACA 0012, Re=1e6
@@ -96,7 +107,7 @@ public class PolarParityTests
     {
         var results = RunAlphaSweep();
 
-        // CL should be strictly increasing for alpha = -2 to 10 (pre-stall range)
+        // CL should be strictly increasing for alpha = -2 to 10 deg (pre-stall range)
         for (int i = 1; i < results.Count; i++)
         {
             Assert.True(results[i].LiftCoefficient > results[i - 1].LiftCoefficient,
@@ -146,8 +157,8 @@ public class PolarParityTests
 
             if (Math.Abs(reference) < 0.01)
             {
-                // Near-zero CL: use absolute tolerance
-                Assert.True(Math.Abs(actual) < 0.15,
+                // Near-zero CL: use absolute tolerance (actual ~ 0.077 from BL-march)
+                Assert.True(Math.Abs(actual) < 0.12,
                     $"CL at alpha={alpha}: should be near zero, got {actual:F6}");
             }
             else
@@ -172,7 +183,7 @@ public class PolarParityTests
             Assert.True(actual > 0.0005 && actual < 0.05,
                 $"CD at alpha={alpha} should be in [0.0005, 0.05], got {actual:F6}");
 
-            // At high alpha (>=8), separation effects degrade BL march drag accuracy;
+            // At high alpha (>=8), separation effects degrade hybrid solver drag accuracy;
             // use wider tolerance. At moderate alpha, use standard tolerance.
             double cdTol = Math.Abs(alpha) >= 8 ? 0.95 : CD_RelativeTolerance;
             AssertWithinFactor(actual, reference, cdTol,
@@ -192,7 +203,7 @@ public class PolarParityTests
         double cdPos2 = results[2].DragDecomposition.CD;
 
         // CL should be approximately antisymmetric.
-        // BL march produces asymmetry from panel discretization and DIJ coupling;
+        // Hybrid BL-march produces asymmetry from panel discretization and DIJ coupling;
         // larger tolerance needed at 160 panels.
         Assert.True(Math.Abs(clNeg2 + clPos2) < 0.20,
             $"CL(-2)+CL(2) should be ~0 for symmetric airfoil: {clNeg2:F4} + {clPos2:F4} = {clNeg2 + clPos2:F4}");
@@ -218,8 +229,8 @@ public class PolarParityTests
     public void CLSweep_Naca2412_AlphaIncreasingWithCL()
     {
         var results = RunCLSweep();
-        // CL sweep uses alpha-based iteration internally; alpha should generally increase.
-        // Some non-converged points may have alpha=0; filter to converged only.
+        // CL sweep uses alpha-based iteration internally; alpha should generally increase
+        // with CL target. Some non-converged points may have alpha=0; filter to converged.
         var converged = results.Where(r => r.Converged || r.Iterations >= 10).ToList();
 
         Assert.True(converged.Count >= 3,
@@ -263,8 +274,8 @@ public class PolarParityTests
         var results = RunCLSweep();
         var converged = results.Where(r => r.Converged).ToList();
 
-        // Most converged points should have CM < 0.02 for positively cambered airfoil.
-        // BL march CM can have sign errors; check at least some are negative.
+        // Most converged points should have CM < 0.05 for positively cambered airfoil.
+        // Hybrid solver CM can have sign errors; check at least some are reasonably bounded.
         int negCMCount = converged.Count(r => r.MomentCoefficient < 0.05);
         Assert.True(negCMCount >= converged.Count / 2,
             $"At least half of converged points should have CM < 0.05 for NACA 2412, " +
