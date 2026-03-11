@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.IO;
 using XFoil.Solver.Models;
 
 namespace XFoil.Solver.Numerics;
@@ -21,7 +23,7 @@ public static class BlockTridiagonalSolver
     /// <param name="system">The Newton system to solve. VDEL is overwritten with the solution.</param>
     /// <param name="vaccel">VACCEL acceleration parameter. Small VM coefficients below
     /// VACCEL * |diagonal| are dropped for speed. Default 0.01.</param>
-    public static void Solve(ViscousNewtonSystem system, double vaccel = 0.01)
+    public static void Solve(ViscousNewtonSystem system, double vaccel = 0.01, TextWriter? debugWriter = null)
     {
         int nsys = system.NSYS;
         if (nsys <= 0) return;
@@ -98,12 +100,36 @@ public static class BlockTridiagonalSolver
                 }
             }
 
+            // Diagnostic: log VDEL after forward sweep for first 5 entries
+            if (debugWriter != null)
+            {
+                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "BLSOLV_POST_FORWARD EQ={0}", eq));
+                int logCount = Math.Min(5, nsys);
+                for (int j = 0; j < logCount; j++)
+                {
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VDEL_FWD IV={0,4}{1,15:E8}", j + 1, d[j]));
+                }
+            }
+
             // Back substitution
             double[] x = new double[nsys];
             x[nsys - 1] = d[nsys - 1];
             for (int iv = nsys - 2; iv >= 0; iv--)
             {
                 x[iv] = d[iv] - c[iv] * x[iv + 1];
+            }
+
+            // Diagnostic: log VDEL solution for first 5 entries
+            if (debugWriter != null)
+            {
+                int logCount = Math.Min(5, nsys);
+                for (int j = 0; j < logCount; j++)
+                {
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VDEL_SOL IV={0,4}{1,15:E8}", j + 1, x[j]));
+                }
             }
 
             // Write solution back to VDEL[eq, 0, iv]

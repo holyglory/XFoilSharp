@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.IO;
 using XFoil.Solver.Models;
 
 namespace XFoil.Solver.Services;
@@ -63,7 +65,8 @@ public static class ViscousNewtonAssembler
         double reybl, double reybl_re, double reybl_ms,
         double hvrat,
         int isp = -1,
-        int nPanel = -1)
+        int nPanel = -1,
+        TextWriter? debugWriter = null)
     {
         int nsys = newtonSystem.NSYS;
         var va = newtonSystem.VA;
@@ -172,6 +175,11 @@ public static class ViscousNewtonAssembler
                         blState.ITRAN[side] = ibl;
                         tran = true;
                         turb = true;
+                        if (debugWriter != null)
+                        {
+                            debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                                "TRANSITION IS={0} IBL={1} XT={2,15:E8}", side + 1, ibl, xsi));
+                        }
                     }
                 }
 
@@ -255,6 +263,34 @@ public static class ViscousNewtonAssembler
                 {
                     vdel[k, 0, iv] = localResult.Residual[k];
                     vdel[k, 1, iv] = 0.0;
+                }
+
+                // Diagnostic dump: station BL state, VA/VB blocks, VDEL residuals
+                if (debugWriter != null)
+                {
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "STATION IS={0,2} IBL={1,4} IV={2,4}", side + 1, ibl, iv + 1));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "BL_STATE x={0,15:E8} Ue={1,15:E8} th={2,15:E8} ds={3,15:E8} m={4,15:E8}",
+                        xsi, uei, thi, dsi, mdi));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VA_ROW1{0,15:E8}{1,15:E8}", va[0, 0, iv], va[0, 1, iv]));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VA_ROW2{0,15:E8}{1,15:E8}", va[1, 0, iv], va[1, 1, iv]));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VA_ROW3{0,15:E8}{1,15:E8}", va[2, 0, iv], va[2, 1, iv]));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VB_ROW1{0,15:E8}{1,15:E8}", vb[0, 0, iv], vb[0, 1, iv]));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VB_ROW2{0,15:E8}{1,15:E8}", vb[1, 0, iv], vb[1, 1, iv]));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VB_ROW3{0,15:E8}{1,15:E8}", vb[2, 0, iv], vb[2, 1, iv]));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VDEL_R{0,15:E8}{1,15:E8}{2,15:E8}",
+                        vdel[0, 0, iv], vdel[1, 0, iv], vdel[2, 0, iv]));
+                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "VSREZ{0,15:E8}{1,15:E8}{2,15:E8}",
+                        localResult.Residual[0], localResult.Residual[1], localResult.Residual[2]));
                 }
 
                 // Add DIJ coupling into VM (mass influence column)

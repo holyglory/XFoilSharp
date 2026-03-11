@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.IO;
 using XFoil.Solver.Models;
 
 namespace XFoil.Solver.Services;
@@ -41,18 +43,19 @@ public static class ViscousNewtonUpdater
         double currentRmsbl,
         double[,]? dij = null,
         int isp = -1,
-        int nPanel = -1)
+        int nPanel = -1,
+        TextWriter? debugWriter = null)
     {
         if (mode == ViscousSolverMode.XFoilRelaxation)
         {
-            double rlx = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, dij, isp, nPanel);
+            double rlx = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, dij, isp, nPanel, debugWriter);
             double rmsbl = ComputeUpdateRms(blState, newtonSystem);
             return (rlx, rmsbl, trustRadius, true);
         }
         else
         {
             return ApplyTrustRegionUpdate(blState, newtonSystem, hstinv, wakeGap,
-                trustRadius, previousRmsbl, currentRmsbl, dij, isp, nPanel);
+                trustRadius, previousRmsbl, currentRmsbl, dij, isp, nPanel, debugWriter);
         }
     }
 
@@ -68,7 +71,8 @@ public static class ViscousNewtonUpdater
         double[] wakeGap,
         double[,]? dij,
         int isp,
-        int nPanel)
+        int nPanel,
+        TextWriter? debugWriter)
     {
         var vdel = newtonSystem.VDEL;
         var isys = newtonSystem.ISYS;
@@ -134,6 +138,26 @@ public static class ViscousNewtonUpdater
         // Ensure rlx is positive and at most 1.0
         rlx = Math.Max(0.01, Math.Min(1.0, rlx));
 
+        // Diagnostic: log first 5 stations' Newton deltas and the relaxation factor
+        if (debugWriter != null)
+        {
+            int logCount = Math.Min(5, nsys);
+            for (int jv = 0; jv < logCount; jv++)
+            {
+                int iblDbg = isys[jv, 0];
+                int sideDbg = isys[jv, 1];
+                double dctauDbg = vdel[0, 0, jv];
+                double dthetDbg = vdel[1, 0, jv];
+                double dmassDbg = vdel[2, 0, jv];
+                double duedgDbg = duedgArr != null ? duedgArr[jv] : 0.0;
+                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "UPDATE IS={0} IBL={1} IV={2} dC={3,15:E8} dT={4,15:E8} dM={5,15:E8} dU={6,15:E8}",
+                    sideDbg + 1, iblDbg, jv + 1, dctauDbg, dthetDbg, dmassDbg, duedgDbg));
+            }
+            debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                "UPDATE_RLX RLX={0,15:E8}", rlx));
+        }
+
         // Second pass: apply the relaxed update
         ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, duedgArr);
 
@@ -153,7 +177,8 @@ public static class ViscousNewtonUpdater
         double currentRmsbl,
         double[,]? dij,
         int isp,
-        int nPanel)
+        int nPanel,
+        TextWriter? debugWriter)
     {
         // Compute step norm
         double stepNorm = ComputeStepNorm(blState, newtonSystem);
@@ -163,6 +188,25 @@ public static class ViscousNewtonUpdater
             ? trustRadius / stepNorm
             : 1.0;
         rlx = Math.Max(0.01, Math.Min(1.0, rlx));
+
+        // Diagnostic: log first 5 stations' Newton deltas and relaxation factor
+        if (debugWriter != null)
+        {
+            var vdelTr = newtonSystem.VDEL;
+            var isysTr = newtonSystem.ISYS;
+            int nsysTr = newtonSystem.NSYS;
+            int logCount = Math.Min(5, nsysTr);
+            for (int jv = 0; jv < logCount; jv++)
+            {
+                int iblDbg = isysTr[jv, 0];
+                int sideDbg = isysTr[jv, 1];
+                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "UPDATE IS={0} IBL={1} IV={2} dC={3,15:E8} dT={4,15:E8} dM={5,15:E8} dU={6,15:E8}",
+                    sideDbg + 1, iblDbg, jv + 1, vdelTr[0, 0, jv], vdelTr[1, 0, jv], vdelTr[2, 0, jv], 0.0));
+            }
+            debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                "UPDATE_RLX RLX={0,15:E8}", rlx));
+        }
 
         // Save current state for potential rollback
         var savedThet = (double[,])blState.THET.Clone();

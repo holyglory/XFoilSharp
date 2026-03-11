@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
@@ -34,7 +36,8 @@ public static class ViscousSolverEngine
     public static ViscousAnalysisResult SolveViscous(
         (double[] x, double[] y) geometry,
         AnalysisSettings settings,
-        double alphaRadians)
+        double alphaRadians,
+        TextWriter? debugWriter = null)
     {
         // Step 1: Run inviscid analysis to get baseline
         int maxNodes = settings.PanelCount + 40;
@@ -53,7 +56,7 @@ public static class ViscousSolverEngine
 
         // Step 2: Run viscous coupling iteration
         return SolveViscousFromInviscid(
-            panel, inviscidState, inviscidResult, settings, alphaRadians);
+            panel, inviscidState, inviscidResult, settings, alphaRadians, debugWriter);
     }
 
     /// <summary>
@@ -68,7 +71,8 @@ public static class ViscousSolverEngine
         InviscidSolverState inviscidState,
         LinearVortexInviscidResult inviscidResult,
         AnalysisSettings settings,
-        double alphaRadians)
+        double alphaRadians,
+        TextWriter? debugWriter = null)
     {
         int n = panel.NodeCount;
         int nWake = Math.Max(n / 6, 4); // Wake stations (matching XFoil heuristic)
@@ -148,6 +152,9 @@ public static class ViscousSolverEngine
 
         for (int iter = 0; iter < maxIter; iter++)
         {
+            debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                "=== ITER {0} ===", iter + 1));
+
             // a. BL march: update theta, dstar, ctau from current edge velocities.
             //    This calls TransitionModel.CheckTransition for natural transition detection.
             double marchRms = MarchBoundaryLayer(blState, settings, reinf);
@@ -172,10 +179,10 @@ public static class ViscousSolverEngine
                 hstinv, hstinv_ms,
                 rstbl, rstbl_ms,
                 reybl, reybl_re, reybl_ms, HvRat,
-                isp, n);
+                isp, n, debugWriter);
 
             // d. Solve block-tridiagonal system (BLSOLV)
-            BlockTridiagonalSolver.Solve(newtonSystem, vaccel: 0.01);
+            BlockTridiagonalSolver.Solve(newtonSystem, vaccel: 0.01, debugWriter: debugWriter);
 
             // e. Attempt Newton update -- only applied if it improves the solution.
             //    Save state, try update, revert if it made things worse.
@@ -195,7 +202,7 @@ public static class ViscousSolverEngine
                     ViscousNewtonUpdater.ApplyNewtonUpdate(
                         blState, newtonSystem, settings.ViscousSolverMode,
                         hstinv, wakeGap, trustRadius, prevMarchRms, rmsbl,
-                        dij, isp, n);
+                        dij, isp, n, debugWriter);
 
                 // Check if Newton update improved things
                 double postNewtonRms = MarchResidual(blState, settings, reinf);
@@ -220,6 +227,13 @@ public static class ViscousSolverEngine
 
             prevMarchRms = marchRms;
 
+            if (debugWriter != null)
+            {
+                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "POST_UPDATE RMSBL={0,15:E8} RMXBL={1,15:E8} RLX={2,15:E8}",
+                    marchRms, marchRms * 2.0, rlx));
+            }
+
             // f. Relocate stagnation point if it has moved (STMOVE)
             double[] currentSpeeds = ConvertUedgToSpeeds(blState, isp, n);
             int newIsp = FindStagnationPointByMinSpeed(currentSpeeds, n);
@@ -242,6 +256,12 @@ public static class ViscousSolverEngine
             double cd = EstimateDrag(blState, qinf, reinf);
             double cm = ComputeViscousCM(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
 
+            if (debugWriter != null)
+            {
+                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "POST_CALC CL={0,15:E8} CD={1,15:E8} CM={2,15:E8}", cl, cd, cm));
+            }
+
             convergenceHistory.Add(new ViscousConvergenceInfo
             {
                 Iteration = iter,
@@ -259,6 +279,8 @@ public static class ViscousSolverEngine
             // h. Check convergence
             if (marchRms < tolerance)
             {
+                debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                    "CONVERGED iter={0}", iter + 1));
                 converged = true;
                 break;
             }
