@@ -333,7 +333,8 @@ public static class BoundaryLayerSystemAssembler
         double dw1, double dw2,
         double msq1, double msq2,
         double ampl1, double ampl2,
-        double amcrit)
+        double amcrit,
+        double reybl = 1e6)
     {
         var result = new BldifResult();
         result.Residual = new double[3];
@@ -361,8 +362,8 @@ public static class BoundaryLayerSystemAssembler
         else
         {
             // Use a reasonable default Rt for shape parameter if needed
-            double rt1est = Math.Max(u1 * t1 * 1e6, 200.0);
-            double rt2est = Math.Max(u2 * t2 * 1e6, 200.0);
+            double rt1est = Math.Max(u1 * t1 * reybl, 200.0);
+            double rt2est = Math.Max(u2 * t2 * reybl, 200.0);
             (hs1, hs1_hk, hs1_rt, hs1_msq) = BoundaryLayerCorrelations.TurbulentShapeParameter(hk1, rt1est, msq1);
             (hs2, hs2_hk, hs2_rt, hs2_msq) = BoundaryLayerCorrelations.TurbulentShapeParameter(hk2, rt2est, msq2);
         }
@@ -377,18 +378,18 @@ public static class BoundaryLayerSystemAssembler
         }
         else if (ityp == 1)
         {
-            (cf1, cf1_hk, cf1_rt, cf1_m) = BoundaryLayerCorrelations.LaminarSkinFriction(hk1, Math.Max(u1 * t1 * 1e6, 200.0), msq1);
-            (cf2, cf2_hk, cf2_rt, cf2_m) = BoundaryLayerCorrelations.LaminarSkinFriction(hk2, Math.Max(u2 * t2 * 1e6, 200.0), msq2);
+            (cf1, cf1_hk, cf1_rt, cf1_m) = BoundaryLayerCorrelations.LaminarSkinFriction(hk1, Math.Max(u1 * t1 * reybl, 200.0), msq1);
+            (cf2, cf2_hk, cf2_rt, cf2_m) = BoundaryLayerCorrelations.LaminarSkinFriction(hk2, Math.Max(u2 * t2 * reybl, 200.0), msq2);
         }
         else
         {
-            (cf1, cf1_hk, cf1_rt, cf1_m) = BoundaryLayerCorrelations.TurbulentSkinFriction(hk1, Math.Max(u1 * t1 * 1e6, 200.0), msq1);
-            (cf2, cf2_hk, cf2_rt, cf2_m) = BoundaryLayerCorrelations.TurbulentSkinFriction(hk2, Math.Max(u2 * t2 * 1e6, 200.0), msq2);
+            (cf1, cf1_hk, cf1_rt, cf1_m) = BoundaryLayerCorrelations.TurbulentSkinFriction(hk1, Math.Max(u1 * t1 * reybl, 200.0), msq1);
+            (cf2, cf2_hk, cf2_rt, cf2_m) = BoundaryLayerCorrelations.TurbulentSkinFriction(hk2, Math.Max(u2 * t2 * reybl, 200.0), msq2);
         }
 
         // Midpoint Cf
-        var mid = ComputeMidpointCorrelations(ityp, hk1, Math.Max(u1 * t1 * 1e6, 200.0), msq1,
-                                                          hk2, Math.Max(u2 * t2 * 1e6, 200.0), msq2);
+        var mid = ComputeMidpointCorrelations(ityp, hk1, Math.Max(u1 * t1 * reybl, 200.0), msq1,
+                                                          hk2, Math.Max(u2 * t2 * reybl, 200.0), msq2);
 
         // Logarithmic differences
         double xlog = Math.Log(x2 / x1);
@@ -419,14 +420,14 @@ public static class BoundaryLayerSystemAssembler
         {
             // Turbulent/wake: shear lag equation
             double sa = (1.0 - upw) * s1 + upw * s2;
-            double cq1v = ComputeLocalCteq(hk1, hs1, h1, Math.Max(u1 * t1 * 1e6, 200.0), ityp);
-            double cq2v = ComputeLocalCteq(hk2, hs2, h2v, Math.Max(u2 * t2 * 1e6, 200.0), ityp);
+            double cq1v = ComputeLocalCteq(hk1, hs1, h1, Math.Max(u1 * t1 * reybl, 200.0), ityp);
+            double cq2v = ComputeLocalCteq(hk2, hs2, h2v, Math.Max(u2 * t2 * reybl, 200.0), ityp);
             double cqa = (1.0 - upw) * cq1v + upw * cq2v;
             double cfa = (1.0 - upw) * cf1 + upw * cf2;
             double hka = (1.0 - upw) * hk1 + upw * hk2;
 
             double usa = 0.5 * (ComputeUs(hk1, hs1, h1) + ComputeUs(hk2, hs2, h2v));
-            double rta = 0.5 * (u1 * t1 * 1e6 + u2 * t2 * 1e6);
+            double rta = 0.5 * (u1 * t1 * reybl + u2 * t2 * reybl);
             double dea = 0.5 * (ComputeDe(hk1, t1) + ComputeDe(hk2, t2));
             double da = 0.5 * (d1 + d2);
 
@@ -492,13 +493,13 @@ public static class BoundaryLayerSystemAssembler
             double di1v, di2v;
             if (ityp == 1)
             {
-                (di1v, _, _) = BoundaryLayerCorrelations.LaminarDissipation(hk1, Math.Max(u1 * t1 * 1e6, 200.0));
-                (di2v, _, _) = BoundaryLayerCorrelations.LaminarDissipation(hk2, Math.Max(u2 * t2 * 1e6, 200.0));
+                (di1v, _, _) = BoundaryLayerCorrelations.LaminarDissipation(hk1, Math.Max(u1 * t1 * reybl, 200.0));
+                (di2v, _, _) = BoundaryLayerCorrelations.LaminarDissipation(hk2, Math.Max(u2 * t2 * reybl, 200.0));
             }
             else
             {
-                di1v = ComputeTurbDi(hk1, hs1, h1, cf1, s1, u1 * t1 * 1e6, ityp);
-                di2v = ComputeTurbDi(hk2, hs2, h2v, cf2, s2, u2 * t2 * 1e6, ityp);
+                di1v = ComputeTurbDi(hk1, hs1, h1, cf1, s1, u1 * t1 * reybl, ityp);
+                di2v = ComputeTurbDi(hk2, hs2, h2v, cf2, s2, u2 * t2 * reybl, ityp);
             }
 
             double dix = (1.0 - upw) * di1v * xot1 + upw * di2v * xot2;
@@ -614,7 +615,7 @@ public static class BoundaryLayerSystemAssembler
 
         var bldif = ComputeFiniteDifferences(
             ityp, x1, x2, u1, u2, t1, t2, d1, d2, s1, s2,
-            dw1, dw2, msq1, msq2, ampl1, ampl2, amcrit);
+            dw1, dw2, msq1, msq2, ampl1, ampl2, amcrit, reybl);
 
         // Copy residuals
         for (int k = 0; k < 3; k++)

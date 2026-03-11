@@ -66,7 +66,9 @@ public static class ViscousNewtonAssembler
         double hvrat,
         int isp = -1,
         int nPanel = -1,
-        TextWriter? debugWriter = null)
+        TextWriter? debugWriter = null,
+        double[,]? uedgPrev = null,
+        double[,]? massPrev = null)
     {
         int nsys = newtonSystem.NSYS;
         var va = newtonSystem.VA;
@@ -105,6 +107,11 @@ public static class ViscousNewtonAssembler
             double dw1 = 0;
             double ampl1 = 0;
             double hk1 = 2.1, rt1 = 200.0; // Previous station Hk and Rt for transition check
+
+            // DUE/DDS: track edge velocity and displacement thickness changes
+            // from previous iteration for forced-change terms in VDEL RHS.
+            // Initialized to 0 for station 1 (matching Fortran: DUE1=0, DDS1=0 at first station).
+            double due1 = 0.0, dds1 = 0.0;
 
             // March from IBL=2 to NBL (matching Fortran SETBL's DO IBL=2,NBL(IS))
             for (int ibl = 2; ibl < blState.NBL[side]; ibl++)
@@ -259,10 +266,31 @@ public static class ViscousNewtonAssembler
                     }
                 }
 
+                // Compute DUE/DDS forced-change terms for VDEL RHS
+                // These represent the change in Ue and D* since the last SETBL call
+                // (i.e., from the edge velocity update via DIJ in the previous iteration).
+                // Fortran: VDEL(k,1,IV) = VSREZ(k) + VS1(k,4)*DUE1 + VS1(k,3)*DDS1
+                //                                   + VS2(k,4)*DUE2 + VS2(k,3)*DDS2
+                double due2 = 0.0, dds2 = 0.0;
+                if (uedgPrev != null && massPrev != null)
+                {
+                    double ueiPrev = uedgPrev[ibl, side];
+                    double dsiPrev = (Math.Abs(ueiPrev) > 1e-30) ? massPrev[ibl, side] / ueiPrev : 0.0;
+                    due2 = uei - ueiPrev;
+                    dds2 = dsi - dsiPrev;
+                }
+
                 // Residuals go into VDEL -- indexed by iv
+                // Include VS1/VS2 DUE/DDS forced-change terms matching Fortran SETBL
+                // C# VS column layout: 0=Ctau/Ampl, 1=Theta, 2=D*, 3=Ue, 4=x
+                // Fortran 1-based: col 3=D*, col 4=Ue => C# col 2=D*, col 3=Ue
                 for (int k = 0; k < 3; k++)
                 {
-                    vdel[k, 0, iv] = localResult.Residual[k];
+                    vdel[k, 0, iv] = localResult.Residual[k]
+                                   + localResult.VS1[k, 3] * due1  // VS1 Ue sensitivity * DUE1
+                                   + localResult.VS1[k, 2] * dds1  // VS1 D* sensitivity * DDS1
+                                   + localResult.VS2[k, 3] * due2  // VS2 Ue sensitivity * DUE2
+                                   + localResult.VS2[k, 2] * dds2; // VS2 D* sensitivity * DDS2
                     vdel[k, 1, iv] = 0.0;
                 }
 
@@ -351,6 +379,8 @@ public static class ViscousNewtonAssembler
                 ampl1 = (ibl < blState.ITRAN[side]) ? blState.CTAU[ibl, side] : 0.0;
                 hk1 = hk2;
                 rt1 = rt2;
+                due1 = due2;
+                dds1 = dds2;
             }
         }
 
