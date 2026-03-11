@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-11 (Fortran XFoil debug instrumentation)
-last_updated: "2026-03-11T20:52:00.000Z"
-last_activity: 2026-03-11 -- Completed 03-11 (Fortran XFoil debug instrumentation and reference dump capture)
+stopped_at: Completed 03-12 (C# diagnostic logging for Fortran comparison)
+last_updated: "2026-03-11T20:59:00.000Z"
+last_activity: 2026-03-11 -- Completed 03-12 (C# diagnostic logging for Fortran comparison)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 19
-  completed_plans: 17
-  percent: 79
+  completed_plans: 18
+  percent: 84
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 11 of 14 in current phase (03-11 Complete)
+Plan: 12 of 14 in current phase (03-12 Complete)
 Status: Executing Phase 3
-Last activity: 2026-03-11 -- Completed 03-11 (Fortran XFoil debug instrumentation and reference dump capture)
+Last activity: 2026-03-11 -- Completed 03-12 (C# diagnostic logging for Fortran comparison)
 
-Progress: [████████░░] 79%
+Progress: [████████░░] 84%
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [████████░░] 79%
 | Phase 03 P09 | 7min | 2 tasks | 6 files |
 | Phase 03 P10 | 30min | 2 tasks | 5 files |
 | Phase 03 P11 | 7min | 2 tasks | 6 files |
+| Phase 03 P12 | 13min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Panel x-coordinate for XTransition instead of arc-length to keep values in (0,1]
 - [Phase 03]: Parity tolerances: CL 25%, CD 90% -- BL march accuracy ceiling; 1e-5 requires Newton Jacobian debugging
 - [Phase 03]: Debug instrumentation via WRITE(50,...) to file unit 50 (not stdout) with fixed-width E15.8 tag-prefix format for machine-parseable comparison
+- [Phase 03]: Opt-in C# diagnostic via TextWriter? debugWriter=null default -- zero overhead when not used
+- [Phase 03]: Fortran 1-based indexing in debug output (side+1, iv+1) for direct line-by-line comparison
+- [Phase 03]: Newton UPDATE logging only appears when newtonHealthy=true (BL march is primary driver)
 
 ### Pending Todos
 
@@ -138,6 +142,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T20:52:00Z
-Stopped at: Completed 03-11 (Fortran XFoil debug instrumentation and reference dump capture)
+Last session: 2026-03-11T20:59:00Z
+Stopped at: Completed 03-12 (C# diagnostic logging for Fortran comparison)
 Resume file: None
