@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-08 (Viscous parity and polar validation tests)
-last_updated: "2026-03-11T01:20:00.000Z"
-last_activity: 2026-03-11 -- Completed 03-08 (Viscous parity and polar validation tests)
+stopped_at: Completed 03-09 (Newton system indexing fix)
+last_updated: "2026-03-11T14:26:00.000Z"
+last_activity: 2026-03-11 -- Completed 03-09 (Newton system indexing fix)
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 16
+  completed_plans: 16
   percent: 100
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 3 of 4 (Viscous Solver Parity and Polar Validation) -- COMPLETE
-Plan: 8 of 8 in current phase (03-08 Complete)
-Status: Phase 3 Complete
-Last activity: 2026-03-11 -- Completed 03-08 (Viscous parity and polar validation tests)
+Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
+Plan: 9 of 10 in current phase (03-09 Complete)
+Status: Executing gap closure plans
+Last activity: 2026-03-11 -- Completed 03-09 (Newton system indexing fix)
 
 Progress: [██████████] 100%
 
@@ -65,6 +65,7 @@ Progress: [██████████] 100%
 | Phase 03 P06 | 13min | 2 tasks | 5 files |
 | Phase 03 P07 | 25min | 2 tasks | 23 files |
 | Phase 03 P08 | 14min | 2 tasks | 2 files |
+| Phase 03 P09 | 7min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,11 @@ Recent decisions affecting current work:
 - [Phase 03]: Two-tier parity validation: aerodynamic correctness tests (must pass) + XFoil reference tracking (documented for tightening)
 - [Phase 03]: Current solver tolerances: CL ~10%, CD ~50%, CM ~0.06 abs -- Picard coupling accuracy; 0.001% requires Newton system
 - [Phase 03]: All XFoil reference values from actual Fortran XFoil 6.97 binary runs (f_xfoil/build/src/xfoil), not placeholders
+- [Phase 03]: Newton system arrays sized by nsys (global system lines) not maxStations -- prevents side-0/side-1 ibl collision
+- [Phase 03]: GetPanelIndex uses ISP-based panel mapping for correct DIJ lookup (ISP-ibl upper, ISP+ibl lower)
+- [Phase 03]: u2_uei chain factor added to VM assembly for incompressible-to-compressible DIJ sensitivity conversion
+- [Phase 03]: Ue update computed from full DIJ sum in ViscousNewtonUpdater (was hardcoded to 0.0, root cause of O(1e7) corrections)
+- [Phase 03]: TransitionModel.CheckTransition wired into ViscousNewtonAssembler BL march for natural transition detection
 
 ### Pending Todos
 
@@ -125,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T01:20:00Z
-Stopped at: Completed 03-08 (Viscous parity and polar validation tests) -- Phase 3 Complete
+Last session: 2026-03-11T14:26:00Z
+Stopped at: Completed 03-09 (Newton system indexing fix)
 Resume file: None
