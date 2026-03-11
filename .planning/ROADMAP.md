@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation Cleanup** - Fix stale docs and upgrade to .NET 10
 - [ ] **Phase 2: Inviscid Kernel Parity** - Clean C# implementation of XFoil's linear-vorticity inviscid solver alongside existing Hess-Smith
-- [x] **Phase 3: Viscous Solver Parity and Polar Validation** - Replace surrogates with true viscous system, validate all sweep types (completed 2026-03-11)
+- [ ] **Phase 3: Viscous Solver Parity and Polar Validation** - Replace surrogates with true viscous system, validate all sweep types
 - [ ] **Phase 4: Randomized Test Bench** - Automated random-case testing against reference XFoil binary
 
 ## Phase Details
@@ -60,7 +60,7 @@ Plans:
   2. Full e^n transition model replaces the laminar amplification surrogate
   3. Drag decomposition (form, friction, pressure) matches original XFoil values
   4. Alpha sweep (Type 1), CL sweep (Type 2), and Re sweep (Type 3) polars all match original XFoil within 0.001%
-**Plans**: 10 plans
+**Plans**: 14 plans
 
 Plans:
 - [x] 03-01-PLAN.md -- State models, AnalysisSettings extension, and BL correlation functions (xblsys.f)
@@ -71,8 +71,12 @@ Plans:
 - [x] 03-06-PLAN.md -- Drag decomposition (CDCALC) and ViscousSolverEngine drag wiring
 - [x] 03-07-PLAN.md -- Polar sweep runner (Type 1/2/3) and AirfoilAnalysisService integration
 - [x] 03-08-PLAN.md -- Parity validation tests (single-point and polar sweep against XFoil reference)
-- [ ] 03-09-PLAN.md -- Gap closure: fix Newton system indexing (IV-based), DIJ coupling, wire TransitionModel
-- [ ] 03-10-PLAN.md -- Gap closure: rewire ViscousSolverEngine to Newton loop, tighten parity tolerances to 0.001%
+- [x] 03-09-PLAN.md -- Gap closure: fix Newton system indexing (IV-based), DIJ coupling, wire TransitionModel
+- [x] 03-10-PLAN.md -- Gap closure: rewire ViscousSolverEngine to Newton loop, tighten parity tolerances to 0.001%
+- [ ] 03-11-PLAN.md -- Gap closure: instrument Fortran XFoil with debug logging, build and run reference case
+- [ ] 03-12-PLAN.md -- Gap closure: add diagnostic logging to C# viscous solver, run reference case dump
+- [ ] 03-13-PLAN.md -- Gap closure: compare Fortran vs C# intermediate values, fix Newton Jacobian divergence
+- [ ] 03-14-PLAN.md -- Gap closure: tighten parity test tolerances to 0.001% after Newton convergence achieved
 
 ### Phase 4: Randomized Test Bench
 **Goal**: Automated test bench continuously validates parity using random real-world airfoils against a reference XFoil binary
@@ -100,5 +104,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
 | 2. Inviscid Kernel Parity | 5/5 | Complete | 2026-03-10 |
-| 3. Viscous Solver Parity and Polar Validation | 10/10 | Complete   | 2026-03-11 |
+| 3. Viscous Solver Parity and Polar Validation | 10/14 | Gap closure | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |
