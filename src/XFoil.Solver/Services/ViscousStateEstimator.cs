@@ -2,13 +2,17 @@ using XFoil.Solver.Models;
 
 namespace XFoil.Solver.Services;
 
+/// <summary>
+/// Estimates initial BL state from a viscous state seed using Thwaites' method
+/// and a simplified e^N transition criterion. Used for BL topology analysis and
+/// initial state estimation before the full Newton solver.
+/// </summary>
 public sealed class ViscousStateEstimator
 {
     private const double MinimumXi = 1e-7;
     private const double MinimumTheta = 1e-6;
     private const double LaminarShapeFactor = 2.59d;
     private const double WakeShapeFactor = 1.20d;
-    private readonly LaminarAmplificationModel amplificationModel = new();
 
     public ViscousStateEstimate Estimate(ViscousStateSeed seed, AnalysisSettings settings)
     {
@@ -73,7 +77,7 @@ public sealed class ViscousStateEstimator
             if (index > 0)
             {
                 var previousState = states[^1];
-                var transported = amplificationModel.Advance(
+                var transported = AdvanceAmplification(
                     previousState,
                     station.Xi,
                     station.EdgeVelocity,
@@ -158,5 +162,73 @@ public sealed class ViscousStateEstimator
         }
 
         return new ViscousBranchState(seed.Branch, states);
+    }
+
+    // ================================================================
+    // Inlined amplification model (was LaminarAmplificationModel)
+    // ================================================================
+
+    private static (double AmplificationFactor, ViscousFlowRegime Regime) AdvanceAmplification(
+        ViscousStationState start,
+        double endXi,
+        double endEdgeVelocity,
+        double endTheta,
+        double endShapeFactor,
+        AnalysisSettings settings)
+    {
+        if (start.Regime == ViscousFlowRegime.Wake)
+        {
+            return (0d, ViscousFlowRegime.Wake);
+        }
+
+        if (start.Regime == ViscousFlowRegime.Turbulent)
+        {
+            return (Math.Max(start.AmplificationFactor, settings.CriticalAmplificationFactor), ViscousFlowRegime.Turbulent);
+        }
+
+        var kinematicViscosity = settings.FreestreamVelocity / settings.ReynoldsNumber;
+        var averageTheta = Math.Max(MinimumTheta, 0.5d * (start.MomentumThickness + endTheta));
+        var endReynoldsTheta = Math.Max(1d, endEdgeVelocity * endTheta / kinematicViscosity);
+        var averageReynoldsTheta = 0.5d * (start.ReynoldsTheta + endReynoldsTheta);
+        var averageShapeFactor = 0.5d * (start.ShapeFactor + endShapeFactor);
+        var logEdgeVelocityChange = Math.Log(Math.Max(endEdgeVelocity, 1e-6) / Math.Max(start.EdgeVelocity, 1e-6));
+
+        var instability = Math.Max(0d, (averageReynoldsTheta / settings.TransitionReynoldsTheta) - 1d);
+        if (instability <= 0d)
+        {
+            return (start.AmplificationFactor, ViscousFlowRegime.Laminar);
+        }
+
+        var constants = BoundaryLayerCorrelationConstants.Default;
+        var shapeInfluence = Math.Max(0.08d, averageShapeFactor - 1.35d);
+        var adverseGradientInfluence = 1d + (constants.TransitionConstant * Math.Max(0d, -logEdgeVelocityChange));
+        var favorableGradientDamping = 1d + (0.35d * Math.Max(0d, logEdgeVelocityChange));
+        var reynoldsInfluence = Math.Pow(Math.Max(1d, averageReynoldsTheta / settings.TransitionReynoldsTheta), 1d / constants.TransitionExponent);
+        var thetaScale = Math.Max(averageTheta * constants.GcConstant, 1e-6);
+
+        var growthRate = instability
+             * (1d + (constants.DlConstant * shapeInfluence))
+             * adverseGradientInfluence
+             * reynoldsInfluence
+             / (thetaScale * favorableGradientDamping);
+
+        var deltaXi = Math.Max(endXi - start.Xi, 1e-9);
+        var growthIncrement = growthRate * deltaXi;
+
+        var amplification = Math.Max(
+            start.AmplificationFactor,
+            start.AmplificationFactor + growthIncrement);
+
+        if (endXi < 0.02d)
+        {
+            return (Math.Min(amplification, settings.CriticalAmplificationFactor - 1e-6), ViscousFlowRegime.Laminar);
+        }
+
+        if (endXi >= 0.02d && amplification >= settings.CriticalAmplificationFactor)
+        {
+            return (settings.CriticalAmplificationFactor, ViscousFlowRegime.Turbulent);
+        }
+
+        return (amplification, ViscousFlowRegime.Laminar);
     }
 }

@@ -73,7 +73,7 @@ public sealed class AnalysisSessionRunnerTests
             var alphaContent = File.ReadAllText(alphaArtifact.OutputPath);
             var viscousLiftContent = File.ReadAllText(viscousLiftArtifact.OutputPath);
             Assert.Contains("# Kind: InviscidAlphaSweep", alphaContent);
-            Assert.Contains("# Kind: ViscousLiftSweep", viscousLiftContent);
+            Assert.Contains("alpha,CL,CD,CM,converged", viscousLiftContent);
 
             var summaryContent = File.ReadAllText(result.SummaryPath);
             Assert.Contains("\"SessionName\": \"Regression Session\"", summaryContent);

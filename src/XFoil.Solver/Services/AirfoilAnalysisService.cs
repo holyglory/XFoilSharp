@@ -1,28 +1,35 @@
+using System.Collections.Generic;
 using XFoil.Core.Models;
 using XFoil.Solver.Models;
 
 namespace XFoil.Solver.Services;
 
+/// <summary>
+/// Primary entry point for airfoil analysis. Supports inviscid analysis (Hess-Smith
+/// and linear-vortex solvers) and viscous analysis via the Newton-coupled BL solver.
+///
+/// The surrogate viscous pipeline (ViscousLaminarSolver, ViscousInteractionCoupler,
+/// EdgeVelocityFeedbackBuilder, etc.) has been replaced by the full Newton solver
+/// (ViscousSolverEngine + PolarSweepRunner). The old surrogate-pipeline methods
+/// now throw NotSupportedException directing callers to the Newton path.
+/// </summary>
 public sealed class AirfoilAnalysisService
 {
-    private const double DisplacementConvergenceThreshold = 1e-4;
-    private const double AerodynamicConvergenceThreshold = 0.02d;
-    private const int DisplacementInnerInteractionIterations = 2;
     private readonly PanelMeshGenerator panelMeshGenerator;
     private readonly HessSmithInviscidSolver inviscidSolver;
     private readonly BoundaryLayerTopologyBuilder boundaryLayerTopologyBuilder;
     private readonly ViscousStateSeedBuilder viscousStateSeedBuilder;
     private readonly ViscousStateEstimator viscousStateEstimator;
-    private readonly ViscousIntervalSystemBuilder viscousIntervalSystemBuilder;
     private readonly ViscousLaminarCorrector viscousLaminarCorrector;
-    private readonly ViscousLaminarSolver viscousLaminarSolver;
-    private readonly ViscousInteractionCoupler viscousInteractionCoupler;
-    private readonly EdgeVelocityFeedbackBuilder edgeVelocityFeedbackBuilder;
-    private readonly ViscousForceEstimator viscousForceEstimator;
-    private readonly DisplacementSurfaceGeometryBuilder displacementSurfaceGeometryBuilder;
 
     public AirfoilAnalysisService()
-        : this(new PanelMeshGenerator(), new HessSmithInviscidSolver(), new BoundaryLayerTopologyBuilder(), new ViscousStateSeedBuilder(), new ViscousStateEstimator(), new ViscousIntervalSystemBuilder(), new ViscousLaminarCorrector(), new ViscousLaminarSolver(), new ViscousInteractionCoupler(), new EdgeVelocityFeedbackBuilder(), new ViscousForceEstimator(), new DisplacementSurfaceGeometryBuilder())
+        : this(
+            new PanelMeshGenerator(),
+            new HessSmithInviscidSolver(),
+            new BoundaryLayerTopologyBuilder(),
+            new ViscousStateSeedBuilder(),
+            new ViscousStateEstimator(),
+            new ViscousLaminarCorrector())
     {
     }
 
@@ -32,27 +39,19 @@ public sealed class AirfoilAnalysisService
         BoundaryLayerTopologyBuilder boundaryLayerTopologyBuilder,
         ViscousStateSeedBuilder viscousStateSeedBuilder,
         ViscousStateEstimator viscousStateEstimator,
-        ViscousIntervalSystemBuilder viscousIntervalSystemBuilder,
-        ViscousLaminarCorrector viscousLaminarCorrector,
-        ViscousLaminarSolver viscousLaminarSolver,
-        ViscousInteractionCoupler viscousInteractionCoupler,
-        EdgeVelocityFeedbackBuilder edgeVelocityFeedbackBuilder,
-        ViscousForceEstimator viscousForceEstimator,
-        DisplacementSurfaceGeometryBuilder displacementSurfaceGeometryBuilder)
+        ViscousLaminarCorrector viscousLaminarCorrector)
     {
         this.panelMeshGenerator = panelMeshGenerator ?? throw new ArgumentNullException(nameof(panelMeshGenerator));
         this.inviscidSolver = inviscidSolver ?? throw new ArgumentNullException(nameof(inviscidSolver));
         this.boundaryLayerTopologyBuilder = boundaryLayerTopologyBuilder ?? throw new ArgumentNullException(nameof(boundaryLayerTopologyBuilder));
         this.viscousStateSeedBuilder = viscousStateSeedBuilder ?? throw new ArgumentNullException(nameof(viscousStateSeedBuilder));
         this.viscousStateEstimator = viscousStateEstimator ?? throw new ArgumentNullException(nameof(viscousStateEstimator));
-        this.viscousIntervalSystemBuilder = viscousIntervalSystemBuilder ?? throw new ArgumentNullException(nameof(viscousIntervalSystemBuilder));
         this.viscousLaminarCorrector = viscousLaminarCorrector ?? throw new ArgumentNullException(nameof(viscousLaminarCorrector));
-        this.viscousLaminarSolver = viscousLaminarSolver ?? throw new ArgumentNullException(nameof(viscousLaminarSolver));
-        this.viscousInteractionCoupler = viscousInteractionCoupler ?? throw new ArgumentNullException(nameof(viscousInteractionCoupler));
-        this.edgeVelocityFeedbackBuilder = edgeVelocityFeedbackBuilder ?? throw new ArgumentNullException(nameof(edgeVelocityFeedbackBuilder));
-        this.viscousForceEstimator = viscousForceEstimator ?? throw new ArgumentNullException(nameof(viscousForceEstimator));
-        this.displacementSurfaceGeometryBuilder = displacementSurfaceGeometryBuilder ?? throw new ArgumentNullException(nameof(displacementSurfaceGeometryBuilder));
     }
+
+    // ================================================================
+    // Inviscid analysis (unchanged)
+    // ================================================================
 
     public InviscidAnalysisResult AnalyzeInviscid(
         AirfoilGeometry geometry,
@@ -104,27 +103,144 @@ public sealed class AirfoilAnalysisService
         return viscousStateEstimator.Estimate(seed, settings);
     }
 
+    // ================================================================
+    // Viscous analysis via Newton solver (new API)
+    // ================================================================
+
+    /// <summary>
+    /// Runs a single-point viscous analysis using the Newton-coupled BL solver
+    /// (ViscousSolverEngine). This is the primary viscous analysis entry point.
+    /// </summary>
+    /// <param name="geometry">Airfoil geometry.</param>
+    /// <param name="angleOfAttackDegrees">Angle of attack in degrees.</param>
+    /// <param name="settings">Analysis settings (Re, Mach, NCrit, etc.).</param>
+    /// <returns>Full viscous analysis result with CL, CD, CM, drag decomposition, BL profiles.</returns>
+    public ViscousAnalysisResult AnalyzeViscous(
+        AirfoilGeometry geometry,
+        double angleOfAttackDegrees,
+        AnalysisSettings? settings = null)
+    {
+        if (geometry is null)
+        {
+            throw new ArgumentNullException(nameof(geometry));
+        }
+
+        settings ??= new AnalysisSettings();
+
+        var coords = ExtractCoordinates(geometry);
+        double alphaRadians = angleOfAttackDegrees * Math.PI / 180.0;
+
+        return ViscousSolverEngine.SolveViscous(coords, settings, alphaRadians);
+    }
+
+    /// <summary>
+    /// Performs an alpha sweep using the Newton-coupled viscous solver (Type 1 polar).
+    /// Delegates to PolarSweepRunner.SweepAlpha with warm-start between points.
+    /// </summary>
+    public List<ViscousAnalysisResult> SweepViscousAlpha(
+        AirfoilGeometry geometry,
+        double alphaStartDegrees,
+        double alphaEndDegrees,
+        double alphaStepDegrees,
+        AnalysisSettings? settings = null)
+    {
+        if (geometry is null)
+        {
+            throw new ArgumentNullException(nameof(geometry));
+        }
+
+        settings ??= new AnalysisSettings();
+
+        var coords = ExtractCoordinates(geometry);
+        return PolarSweepRunner.SweepAlpha(
+            coords, settings, alphaStartDegrees, alphaEndDegrees, alphaStepDegrees);
+    }
+
+    /// <summary>
+    /// Performs a CL sweep using the Newton-coupled viscous solver (Type 2 polar).
+    /// Delegates to PolarSweepRunner.SweepCL.
+    /// </summary>
+    public List<ViscousAnalysisResult> SweepViscousCL(
+        AirfoilGeometry geometry,
+        double clStart,
+        double clEnd,
+        double clStep,
+        AnalysisSettings? settings = null)
+    {
+        if (geometry is null)
+        {
+            throw new ArgumentNullException(nameof(geometry));
+        }
+
+        settings ??= new AnalysisSettings();
+
+        var coords = ExtractCoordinates(geometry);
+        return PolarSweepRunner.SweepCL(coords, settings, clStart, clEnd, clStep);
+    }
+
+    /// <summary>
+    /// Performs a Reynolds number sweep at fixed CL (Type 3 polar).
+    /// Delegates to PolarSweepRunner.SweepRe.
+    /// </summary>
+    public List<ViscousAnalysisResult> SweepViscousRe(
+        AirfoilGeometry geometry,
+        double fixedCL,
+        double reStart,
+        double reEnd,
+        double reStep,
+        AnalysisSettings? settings = null)
+    {
+        if (geometry is null)
+        {
+            throw new ArgumentNullException(nameof(geometry));
+        }
+
+        settings ??= new AnalysisSettings();
+
+        var coords = ExtractCoordinates(geometry);
+        return PolarSweepRunner.SweepRe(coords, settings, fixedCL, reStart, reEnd, reStep);
+    }
+
+    // ================================================================
+    // Surrogate pipeline methods (replaced -- throw NotSupportedException)
+    // ================================================================
+
+    /// <summary>
+    /// [REMOVED] The surrogate ViscousIntervalSystem has been replaced by the Newton solver.
+    /// Use <see cref="AnalyzeViscous"/> instead.
+    /// </summary>
+    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
     public ViscousIntervalSystem AnalyzeViscousIntervalSystem(
         AirfoilGeometry geometry,
         double angleOfAttackDegrees,
         AnalysisSettings? settings = null)
     {
-        settings ??= new AnalysisSettings();
-        var state = AnalyzeViscousInitialState(geometry, angleOfAttackDegrees, settings);
-        return viscousIntervalSystemBuilder.Build(state, settings);
+        throw new NotSupportedException(
+            "The surrogate viscous interval system has been replaced by the Newton solver. " +
+            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
     }
 
+    /// <summary>
+    /// [REMOVED] The surrogate laminar correction has been replaced by the Newton solver.
+    /// Use <see cref="AnalyzeViscous"/> instead.
+    /// </summary>
+    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
     public ViscousCorrectionResult AnalyzeViscousLaminarCorrection(
         AirfoilGeometry geometry,
         double angleOfAttackDegrees,
         AnalysisSettings? settings = null,
         int iterations = 3)
     {
-        settings ??= new AnalysisSettings();
-        var system = AnalyzeViscousIntervalSystem(geometry, angleOfAttackDegrees, settings);
-        return viscousLaminarCorrector.Correct(system, settings, iterations);
+        throw new NotSupportedException(
+            "The surrogate laminar correction has been replaced by the Newton solver. " +
+            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
     }
 
+    /// <summary>
+    /// [REMOVED] The surrogate laminar solver has been replaced by the Newton solver.
+    /// Use <see cref="AnalyzeViscous"/> instead.
+    /// </summary>
+    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
     public ViscousSolveResult AnalyzeViscousLaminarSolve(
         AirfoilGeometry geometry,
         double angleOfAttackDegrees,
@@ -132,11 +248,16 @@ public sealed class AirfoilAnalysisService
         int maxIterations = 10,
         double residualTolerance = 0.2d)
     {
-        settings ??= new AnalysisSettings();
-        var system = AnalyzeViscousIntervalSystem(geometry, angleOfAttackDegrees, settings);
-        return viscousLaminarSolver.Solve(system, settings, maxIterations, residualTolerance);
+        throw new NotSupportedException(
+            "The surrogate laminar solver has been replaced by the Newton solver. " +
+            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
     }
 
+    /// <summary>
+    /// [REMOVED] The surrogate viscous interaction coupler has been replaced by the Newton solver.
+    /// Use <see cref="AnalyzeViscous"/> instead.
+    /// </summary>
+    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
     public ViscousInteractionResult AnalyzeViscousInteraction(
         AirfoilGeometry geometry,
         double angleOfAttackDegrees,
@@ -146,11 +267,16 @@ public sealed class AirfoilAnalysisService
         int viscousIterations = 8,
         double residualTolerance = 0.3d)
     {
-        settings ??= new AnalysisSettings();
-        var seed = AnalyzeViscousStateSeed(geometry, angleOfAttackDegrees, settings);
-        return viscousInteractionCoupler.Couple(seed, settings, interactionIterations, couplingFactor, viscousIterations, residualTolerance);
+        throw new NotSupportedException(
+            "The surrogate viscous interaction coupler has been replaced by the Newton solver. " +
+            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
     }
 
+    /// <summary>
+    /// [REMOVED] The surrogate displacement-coupled solver has been replaced by the Newton solver.
+    /// Use <see cref="AnalyzeViscous"/> or <see cref="SweepViscousAlpha"/> instead.
+    /// </summary>
+    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
     public DisplacementCoupledResult AnalyzeDisplacementCoupledViscous(
         AirfoilGeometry geometry,
         double angleOfAttackDegrees,
@@ -160,113 +286,81 @@ public sealed class AirfoilAnalysisService
         double residualTolerance = 0.3d,
         double displacementRelaxation = 0.5d)
     {
-        if (geometry is null)
-        {
-            throw new ArgumentNullException(nameof(geometry));
-        }
-
-        if (iterations < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(iterations), "Iteration count must be positive.");
-        }
-
-        settings ??= new AnalysisSettings();
-        var initialAnalysis = AnalyzeInviscid(geometry, angleOfAttackDegrees, settings);
-        var currentGeometry = geometry;
-        var finalAnalysis = initialAnalysis;
-        ViscousSolveResult? finalSolve = null;
-        AirfoilGeometry? displacedGeometry = null;
-        var maxSurfaceDisplacement = 0d;
-        var previousSurfaceDisplacement = double.PositiveInfinity;
-        var previousAnalysis = initialAnalysis;
-        var converged = false;
-        var executedIterations = 0;
-        var currentRelaxation = displacementRelaxation;
-        var finalLiftDelta = double.PositiveInfinity;
-        var finalMomentDelta = double.PositiveInfinity;
-        var finalSeedEdgeVelocityChange = 0d;
-        var finalInnerInteractionIterations = 0;
-        var finalInnerInteractionConverged = false;
-        ViscousStateEstimate? previousSolvedState = null;
-
-        for (var iteration = 0; iteration < iterations; iteration++)
-        {
-            var analysis = AnalyzeInviscid(currentGeometry, angleOfAttackDegrees, settings);
-            var topology = boundaryLayerTopologyBuilder.Build(analysis);
-            var seed = viscousStateSeedBuilder.Build(analysis, topology);
-            if (previousSolvedState is not null)
-            {
-                var hybridCouplingFactor = ComputeHybridSeedCouplingFactor(currentRelaxation, previousSolvedState);
-                var adjustedSeed = edgeVelocityFeedbackBuilder.ApplyDisplacementFeedback(seed, previousSolvedState, hybridCouplingFactor);
-                finalSeedEdgeVelocityChange = edgeVelocityFeedbackBuilder.ComputeAverageRelativeEdgeVelocityChange(seed, adjustedSeed);
-                seed = adjustedSeed;
-            }
-
-            var innerCouplingFactor = ComputeHybridSeedCouplingFactor(currentRelaxation, previousSolvedState);
-            var interactionResult = viscousInteractionCoupler.Couple(
-                seed,
-                settings,
-                DisplacementInnerInteractionIterations,
-                innerCouplingFactor,
-                viscousIterations,
-                residualTolerance);
-            finalSolve = interactionResult.SolveResult;
-            previousSolvedState = finalSolve.SolvedSystem.State;
-            finalInnerInteractionIterations = interactionResult.InteractionIterations;
-            finalInnerInteractionConverged = interactionResult.Converged;
-            finalSeedEdgeVelocityChange = Math.Max(finalSeedEdgeVelocityChange, interactionResult.AverageRelativeEdgeVelocityChange);
-
-            currentRelaxation = ComputeAdaptiveDisplacementRelaxation(
-                displacementRelaxation,
-                finalSolve,
-                previousSurfaceDisplacement,
-                maxSurfaceDisplacement,
-                previousAnalysis,
-                analysis);
-            var displaced = displacementSurfaceGeometryBuilder.Build(
-                analysis.Mesh,
-                finalSolve.SolvedSystem.State,
-                geometry.Name,
-                currentRelaxation);
-            displacedGeometry = displaced.Geometry;
-            maxSurfaceDisplacement = Math.Max(maxSurfaceDisplacement, displaced.MaxSurfaceDisplacement);
-            currentGeometry = displaced.Geometry;
-            finalAnalysis = AnalyzeInviscid(currentGeometry, angleOfAttackDegrees, settings);
-            executedIterations = iteration + 1;
-            finalLiftDelta = Math.Abs(finalAnalysis.LiftCoefficient - previousAnalysis.LiftCoefficient);
-            finalMomentDelta = Math.Abs(finalAnalysis.MomentCoefficientQuarterChord - previousAnalysis.MomentCoefficientQuarterChord);
-
-            if (finalSolve.Converged
-                && finalSolve.FinalTransitionResidual <= residualTolerance
-                && finalLiftDelta <= AerodynamicConvergenceThreshold
-                && finalMomentDelta <= AerodynamicConvergenceThreshold
-                && (displaced.MaxSurfaceDisplacement <= DisplacementConvergenceThreshold
-                    || Math.Abs(displaced.MaxSurfaceDisplacement - previousSurfaceDisplacement) <= DisplacementConvergenceThreshold))
-            {
-                converged = true;
-                break;
-            }
-
-            previousSurfaceDisplacement = displaced.MaxSurfaceDisplacement;
-            previousAnalysis = finalAnalysis;
-        }
-
-        return new DisplacementCoupledResult(
-            initialAnalysis,
-            finalAnalysis,
-            finalSolve ?? throw new InvalidOperationException("Displacement-coupled solve did not execute."),
-            displacedGeometry ?? geometry,
-            executedIterations,
-            maxSurfaceDisplacement,
-            viscousForceEstimator.EstimateProfileDragCoefficient(previousSolvedState ?? throw new InvalidOperationException("Displacement-coupled solve did not produce a viscous state.")),
-            converged,
-            finalInnerInteractionIterations,
-            finalInnerInteractionConverged,
-            finalSeedEdgeVelocityChange,
-            currentRelaxation,
-            double.IsFinite(finalLiftDelta) ? finalLiftDelta : 0d,
-            double.IsFinite(finalMomentDelta) ? finalMomentDelta : 0d);
+        throw new NotSupportedException(
+            "The surrogate displacement-coupled solver has been replaced by the Newton solver. " +
+            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
     }
+
+    /// <summary>
+    /// [REMOVED] The surrogate displacement-coupled alpha sweep has been replaced.
+    /// Use <see cref="SweepViscousAlpha"/> instead.
+    /// </summary>
+    [Obsolete("Surrogate viscous pipeline removed. Use SweepViscousAlpha() instead.")]
+    public ViscousPolarSweepResult SweepDisplacementCoupledAlpha(
+        AirfoilGeometry geometry,
+        double alphaStartDegrees,
+        double alphaEndDegrees,
+        double alphaStepDegrees,
+        AnalysisSettings? settings = null,
+        int couplingIterations = 2,
+        int viscousIterations = 8,
+        double residualTolerance = 0.3d,
+        double displacementRelaxation = 0.5d)
+    {
+        throw new NotSupportedException(
+            "The surrogate displacement-coupled alpha sweep has been replaced. " +
+            "Use SweepViscousAlpha() instead.");
+    }
+
+    /// <summary>
+    /// [REMOVED] The surrogate displacement-coupled CL sweep has been replaced.
+    /// Use <see cref="SweepViscousCL"/> instead.
+    /// </summary>
+    [Obsolete("Surrogate viscous pipeline removed. Use SweepViscousCL() instead.")]
+    public ViscousLiftSweepResult SweepDisplacementCoupledLiftCoefficient(
+        AirfoilGeometry geometry,
+        double liftStart,
+        double liftEnd,
+        double liftStep,
+        AnalysisSettings? settings = null,
+        int couplingIterations = 2,
+        int viscousIterations = 8,
+        double residualTolerance = 0.3d,
+        double displacementRelaxation = 0.5d,
+        double initialAlphaDegrees = 0d,
+        double liftTolerance = 0.05d,
+        int maxIterations = 12)
+    {
+        throw new NotSupportedException(
+            "The surrogate displacement-coupled CL sweep has been replaced. " +
+            "Use SweepViscousCL() instead.");
+    }
+
+    /// <summary>
+    /// [REMOVED] The surrogate displacement-coupled CL find has been replaced.
+    /// Use <see cref="AnalyzeViscous"/> with the target CL approach instead.
+    /// </summary>
+    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
+    public ViscousTargetLiftResult AnalyzeDisplacementCoupledForLiftCoefficient(
+        AirfoilGeometry geometry,
+        double targetLiftCoefficient,
+        AnalysisSettings? settings = null,
+        int couplingIterations = 2,
+        int viscousIterations = 8,
+        double residualTolerance = 0.3d,
+        double displacementRelaxation = 0.5d,
+        double initialAlphaDegrees = 0d,
+        double liftTolerance = 0.05d,
+        int maxIterations = 12)
+    {
+        throw new NotSupportedException(
+            "The surrogate displacement-coupled CL finder has been replaced. " +
+            "Use AnalyzeViscous() or SweepViscousCL() instead.");
+    }
+
+    // ================================================================
+    // Inviscid sweep methods (unchanged)
+    // ================================================================
 
     public PolarSweepResult SweepInviscidAlpha(
         AirfoilGeometry geometry,
@@ -297,108 +391,6 @@ public sealed class AirfoilAnalysisService
         }
 
         return new PolarSweepResult(geometry, settings, points);
-    }
-
-    public ViscousPolarSweepResult SweepDisplacementCoupledAlpha(
-        AirfoilGeometry geometry,
-        double alphaStartDegrees,
-        double alphaEndDegrees,
-        double alphaStepDegrees,
-        AnalysisSettings? settings = null,
-        int couplingIterations = 2,
-        int viscousIterations = 8,
-        double residualTolerance = 0.3d,
-        double displacementRelaxation = 0.5d)
-    {
-        if (geometry is null)
-        {
-            throw new ArgumentNullException(nameof(geometry));
-        }
-
-        if (Math.Abs(alphaStepDegrees) < 1e-12)
-        {
-            throw new ArgumentException("Alpha step must be non-zero.", nameof(alphaStepDegrees));
-        }
-
-        settings ??= new AnalysisSettings();
-        var step = NormalizeStep(alphaStartDegrees, alphaEndDegrees, alphaStepDegrees);
-        var points = new List<ViscousPolarPoint>();
-
-        for (var alpha = alphaStartDegrees; ShouldContinue(alpha, alphaEndDegrees, step); alpha += step)
-        {
-            var coupled = AnalyzeDisplacementCoupledViscous(
-                geometry,
-                alpha,
-                settings,
-                couplingIterations,
-                viscousIterations,
-                residualTolerance,
-                displacementRelaxation);
-
-            points.Add(new ViscousPolarPoint(
-                alpha,
-                coupled.FinalAnalysis.LiftCoefficient,
-                coupled.EstimatedProfileDragCoefficient,
-                coupled.FinalAnalysis.MomentCoefficientQuarterChord,
-                coupled.FinalSolveResult.FinalSurfaceResidual,
-                coupled.FinalSolveResult.FinalTransitionResidual,
-                coupled.FinalSolveResult.FinalWakeResidual,
-                coupled.Converged,
-                coupled.InnerInteractionConverged,
-                coupled.FinalDisplacementRelaxation,
-                coupled.FinalSeedEdgeVelocityChange));
-        }
-
-        return new ViscousPolarSweepResult(geometry, settings, points);
-    }
-
-    public ViscousLiftSweepResult SweepDisplacementCoupledLiftCoefficient(
-        AirfoilGeometry geometry,
-        double liftStart,
-        double liftEnd,
-        double liftStep,
-        AnalysisSettings? settings = null,
-        int couplingIterations = 2,
-        int viscousIterations = 8,
-        double residualTolerance = 0.3d,
-        double displacementRelaxation = 0.5d,
-        double initialAlphaDegrees = 0d,
-        double liftTolerance = 0.05d,
-        int maxIterations = 12)
-    {
-        if (geometry is null)
-        {
-            throw new ArgumentNullException(nameof(geometry));
-        }
-
-        if (Math.Abs(liftStep) < 1e-12)
-        {
-            throw new ArgumentException("Lift step must be non-zero.", nameof(liftStep));
-        }
-
-        settings ??= new AnalysisSettings();
-        var step = NormalizeStep(liftStart, liftEnd, liftStep);
-        var points = new List<ViscousTargetLiftResult>();
-        var alphaGuess = initialAlphaDegrees;
-
-        for (var targetLift = liftStart; ShouldContinue(targetLift, liftEnd, step); targetLift += step)
-        {
-            var result = AnalyzeDisplacementCoupledForLiftCoefficient(
-                geometry,
-                targetLift,
-                settings,
-                couplingIterations,
-                viscousIterations,
-                residualTolerance,
-                displacementRelaxation,
-                alphaGuess,
-                liftTolerance,
-                maxIterations);
-            alphaGuess = result.SolvedAngleOfAttackDegrees;
-            points.Add(result);
-        }
-
-        return new ViscousLiftSweepResult(geometry, settings, points);
     }
 
     public InviscidLiftSweepResult SweepInviscidLiftCoefficient(
@@ -463,126 +455,21 @@ public sealed class AirfoilAnalysisService
         return AnalyzeInviscidForLiftCoefficient(preparedSystem, targetLiftCoefficient, settings, initialAlphaDegrees, liftTolerance, maxIterations);
     }
 
-    public ViscousTargetLiftResult AnalyzeDisplacementCoupledForLiftCoefficient(
-        AirfoilGeometry geometry,
-        double targetLiftCoefficient,
-        AnalysisSettings? settings = null,
-        int couplingIterations = 2,
-        int viscousIterations = 8,
-        double residualTolerance = 0.3d,
-        double displacementRelaxation = 0.5d,
-        double initialAlphaDegrees = 0d,
-        double liftTolerance = 0.05d,
-        int maxIterations = 12)
+    // ================================================================
+    // Private helpers
+    // ================================================================
+
+    private static (double[] x, double[] y) ExtractCoordinates(AirfoilGeometry geometry)
     {
-        if (geometry is null)
+        var points = geometry.Points;
+        var inputX = new double[points.Count];
+        var inputY = new double[points.Count];
+        for (var i = 0; i < points.Count; i++)
         {
-            throw new ArgumentNullException(nameof(geometry));
+            inputX[i] = points[i].X;
+            inputY[i] = points[i].Y;
         }
-
-        if (liftTolerance <= 0d)
-        {
-            throw new ArgumentOutOfRangeException(nameof(liftTolerance), "Lift tolerance must be positive.");
-        }
-
-        if (maxIterations < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Iteration count must be positive.");
-        }
-
-        settings ??= new AnalysisSettings();
-
-        var alpha1 = initialAlphaDegrees;
-        var result1 = AnalyzeDisplacementCoupledViscous(
-            geometry,
-            alpha1,
-            settings,
-            couplingIterations,
-            viscousIterations,
-            residualTolerance,
-            displacementRelaxation);
-        var error1 = targetLiftCoefficient - result1.FinalAnalysis.LiftCoefficient;
-        if (Math.Abs(error1) <= liftTolerance)
-        {
-            return new ViscousTargetLiftResult(targetLiftCoefficient, alpha1, result1);
-        }
-
-        double seedStep = Math.Sign(error1);
-        if (seedStep == 0d)
-        {
-            seedStep = 1d;
-        }
-
-        var alpha2 = alpha1 + (2d * seedStep);
-        var result2 = AnalyzeDisplacementCoupledViscous(
-            geometry,
-            alpha2,
-            settings,
-            couplingIterations,
-            viscousIterations,
-            residualTolerance,
-            displacementRelaxation);
-        var error2 = targetLiftCoefficient - result2.FinalAnalysis.LiftCoefficient;
-        if (Math.Abs(error2) <= liftTolerance)
-        {
-            return new ViscousTargetLiftResult(targetLiftCoefficient, alpha2, result2);
-        }
-
-        var bestAlpha = Math.Abs(error2) < Math.Abs(error1) ? alpha2 : alpha1;
-        var bestResult = Math.Abs(error2) < Math.Abs(error1) ? result2 : result1;
-        var bestError = Math.Min(Math.Abs(error1), Math.Abs(error2));
-
-        for (var iteration = 0; iteration < maxIterations; iteration++)
-        {
-            var denominator = result2.FinalAnalysis.LiftCoefficient - result1.FinalAnalysis.LiftCoefficient;
-            double nextAlpha;
-
-            if (Math.Abs(denominator) < 1e-9)
-            {
-                nextAlpha = alpha2 + (0.5d * Math.Sign(error2 == 0d ? 1d : error2));
-            }
-            else
-            {
-                nextAlpha = alpha2 + ((targetLiftCoefficient - result2.FinalAnalysis.LiftCoefficient) * (alpha2 - alpha1) / denominator);
-            }
-
-            nextAlpha = Math.Clamp(nextAlpha, -20d, 20d);
-            if (Math.Abs(nextAlpha - alpha2) < 1e-6)
-            {
-                nextAlpha = alpha2 + (0.25d * Math.Sign(error2 == 0d ? 1d : error2));
-            }
-
-            var nextResult = AnalyzeDisplacementCoupledViscous(
-                geometry,
-                nextAlpha,
-                settings,
-                couplingIterations,
-                viscousIterations,
-                residualTolerance,
-                displacementRelaxation);
-            var nextError = targetLiftCoefficient - nextResult.FinalAnalysis.LiftCoefficient;
-            if (Math.Abs(nextError) < bestError)
-            {
-                bestError = Math.Abs(nextError);
-                bestAlpha = nextAlpha;
-                bestResult = nextResult;
-            }
-
-            if (Math.Abs(nextError) <= liftTolerance)
-            {
-                return new ViscousTargetLiftResult(targetLiftCoefficient, nextAlpha, nextResult);
-            }
-
-            alpha1 = alpha2;
-            result1 = result2;
-            error1 = error2;
-
-            alpha2 = nextAlpha;
-            result2 = nextResult;
-            error2 = nextError;
-        }
-
-        return new ViscousTargetLiftResult(targetLiftCoefficient, bestAlpha, bestResult);
+        return (inputX, inputY);
     }
 
     private InviscidAnalysisResult AnalyzeInviscidForLiftCoefficient(
@@ -668,7 +555,6 @@ public sealed class AirfoilAnalysisService
         double angleOfAttackDegrees,
         AnalysisSettings settings)
     {
-        // Extract raw coordinates from geometry for the linear-vortex solver
         var points = geometry.Points;
         var inputX = new double[points.Count];
         var inputY = new double[points.Count];
@@ -678,22 +564,19 @@ public sealed class AirfoilAnalysisService
             inputY[i] = points[i].Y;
         }
 
-        // Run linear-vortex solver
         var lvResult = LinearVortexInviscidSolver.AnalyzeInviscid(
             inputX, inputY, points.Count,
             angleOfAttackDegrees,
             settings.PanelCount,
             settings.MachNumber);
 
-        // Generate mesh for downstream consumers that read result.Mesh
         var mesh = panelMeshGenerator.Generate(geometry, settings.PanelCount, settings.Paneling);
 
-        // Adapt LinearVortexInviscidResult to InviscidAnalysisResult
         return new InviscidAnalysisResult(
             mesh,
             angleOfAttackDegrees,
             settings.MachNumber,
-            circulation: 0.0, // Not computed by linear-vortex path
+            circulation: 0.0,
             liftCoefficient: lvResult.LiftCoefficient,
             dragCoefficient: lvResult.PressureDragCoefficient,
             correctedPressureIntegratedLiftCoefficient: lvResult.LiftCoefficient,
@@ -701,9 +584,9 @@ public sealed class AirfoilAnalysisService
             pressureIntegratedLiftCoefficient: lvResult.LiftCoefficient,
             pressureIntegratedDragCoefficient: lvResult.PressureDragCoefficient,
             momentCoefficientQuarterChord: lvResult.MomentCoefficient,
-            sourceStrengths: Array.Empty<double>(), // Hess-Smith concept, not applicable
-            vortexStrength: 0.0, // Hess-Smith concept, not applicable
-            pressureSamples: Array.Empty<PressureCoefficientSample>(), // Cp mapping deferred to Phase 3
+            sourceStrengths: Array.Empty<double>(),
+            vortexStrength: 0.0,
+            pressureSamples: Array.Empty<PressureCoefficientSample>(),
             wake: new WakeGeometry(Array.Empty<WakePoint>()));
     }
 
@@ -746,58 +629,5 @@ public sealed class AirfoilAnalysisService
         }
 
         return current >= end - tolerance;
-    }
-
-    private static double ComputeAdaptiveDisplacementRelaxation(
-        double baseRelaxation,
-        ViscousSolveResult solveResult,
-        double previousSurfaceDisplacement,
-        double maxSurfaceDisplacement,
-        InviscidAnalysisResult previousAnalysis,
-        InviscidAnalysisResult currentAnalysis)
-    {
-        var relaxation = baseRelaxation;
-        if (solveResult.FinalTransitionResidual > 1d || solveResult.FinalSurfaceResidual > 0.5d)
-        {
-            relaxation *= 0.55d;
-        }
-        else if (solveResult.FinalTransitionResidual > 0.5d || solveResult.FinalSurfaceResidual > 0.3d)
-        {
-            relaxation *= 0.7d;
-        }
-
-        var liftDelta = Math.Abs(currentAnalysis.LiftCoefficient - previousAnalysis.LiftCoefficient);
-        var momentDelta = Math.Abs(currentAnalysis.MomentCoefficientQuarterChord - previousAnalysis.MomentCoefficientQuarterChord);
-        if (liftDelta > 0.05d || momentDelta > 0.05d)
-        {
-            relaxation *= 0.75d;
-        }
-
-        if (maxSurfaceDisplacement >= 0.019d
-            || (double.IsFinite(previousSurfaceDisplacement) && previousSurfaceDisplacement >= 0.019d))
-        {
-            relaxation *= 0.6d;
-        }
-
-        return Math.Clamp(relaxation, 0.08d, baseRelaxation);
-    }
-
-    private static double ComputeHybridSeedCouplingFactor(double displacementRelaxation, ViscousStateEstimate? solvedState)
-    {
-        if (solvedState is null)
-        {
-            return Math.Clamp(0.08d + (0.12d * displacementRelaxation), 0.05d, 0.16d);
-        }
-
-        var maxTransitionResidualSignal = solvedState.UpperSurface.Stations
-            .Concat(solvedState.LowerSurface.Stations)
-            .Max(station => station.AmplificationFactor);
-        var baseFactor = 0.08d + (0.12d * displacementRelaxation);
-        if (maxTransitionResidualSignal > 2d)
-        {
-            baseFactor *= 0.85d;
-        }
-
-        return Math.Clamp(baseFactor, 0.05d, 0.16d);
     }
 }

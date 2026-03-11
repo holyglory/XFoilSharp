@@ -48,27 +48,6 @@ public sealed class TransitionModelTests
         Assert.True(FindTransitionXi(delayedState.LowerSurface.Stations) > FindTransitionXi(earlyState.LowerSurface.Stations));
     }
 
-    [Fact]
-    public void ViscousIntervalSystem_UsesTurbulentIntervalKindAfterTransition()
-    {
-        var generator = new NacaAirfoilGenerator();
-        var service = new AirfoilAnalysisService();
-        var geometry = generator.Generate4Digit("0012", 161);
-        var settings = new AnalysisSettings(
-            panelCount: 120,
-            machNumber: 0.2d,
-            reynoldsNumber: 500_000d,
-            transitionReynoldsTheta: 100d,
-            criticalAmplificationFactor: 3d);
-
-        var system = service.AnalyzeViscousIntervalSystem(geometry, 4d, settings);
-
-        Assert.Contains(system.UpperSurfaceIntervals, interval => interval.Kind == ViscousIntervalKind.Turbulent);
-        Assert.Contains(system.LowerSurfaceIntervals, interval => interval.Kind == ViscousIntervalKind.Turbulent);
-        AssertTurbulentIntervalsAreSticky(system.UpperSurfaceIntervals);
-        AssertTurbulentIntervalsAreSticky(system.LowerSurfaceIntervals);
-    }
-
     private static void AssertBranchTransitionBehavior(IReadOnlyList<ViscousStationState> stations, double criticalAmplificationFactor)
     {
         Assert.NotEmpty(stations);
@@ -94,23 +73,6 @@ public sealed class TransitionModelTests
         }
 
         Assert.True(seenTurbulent);
-    }
-
-    private static void AssertTurbulentIntervalsAreSticky(IReadOnlyList<ViscousIntervalState> intervals)
-    {
-        var seenTurbulent = false;
-        foreach (var interval in intervals)
-        {
-            if (interval.Kind == ViscousIntervalKind.Turbulent)
-            {
-                seenTurbulent = true;
-            }
-
-            if (seenTurbulent)
-            {
-                Assert.Equal(ViscousIntervalKind.Turbulent, interval.Kind);
-            }
-        }
     }
 
     private static double FindTransitionXi(IReadOnlyList<ViscousStationState> stations)

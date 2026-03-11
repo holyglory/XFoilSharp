@@ -196,36 +196,43 @@ public sealed class AnalysisSessionRunner
 
     private AnalysisSessionArtifact ExportViscousAlphaSweep(SessionSweepDefinition sweep, AirfoilGeometry geometry, string artifactName, string outputPath)
     {
+        // Surrogate displacement-coupled pipeline replaced by Newton solver.
+        // Use SweepViscousAlpha for the Newton path.
         var settings = CreateViscousSettings(sweep);
-        var result = analysisService.SweepDisplacementCoupledAlpha(
+        var results = analysisService.SweepViscousAlpha(
             geometry,
             sweep.Start,
             sweep.End,
             sweep.Step,
-            settings,
-            sweep.CouplingIterations ?? 2,
-            sweep.ViscousIterations ?? 8,
-            sweep.ResidualTolerance ?? 0.3d,
-            sweep.DisplacementRelaxation ?? 0.5d);
-        polarExporter.Export(outputPath, result);
-        return CreateArtifact(artifactName, "viscous-alpha", outputPath, result.Points.Count);
+            settings);
+        // Write a simple CSV of the viscous polar points
+        var lines = new List<string> { "alpha,CL,CD,CM,converged" };
+        foreach (var r in results)
+        {
+            lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged}");
+        }
+        System.IO.File.WriteAllLines(outputPath, lines);
+        return CreateArtifact(artifactName, "viscous-alpha", outputPath, results.Count);
     }
 
     private AnalysisSessionArtifact ExportViscousLiftSweep(SessionSweepDefinition sweep, AirfoilGeometry geometry, string artifactName, string outputPath)
     {
+        // Surrogate displacement-coupled pipeline replaced by Newton solver.
+        // Use SweepViscousCL for the Newton path.
         var settings = CreateViscousSettings(sweep);
-        var result = analysisService.SweepDisplacementCoupledLiftCoefficient(
+        var results = analysisService.SweepViscousCL(
             geometry,
             sweep.Start,
             sweep.End,
             sweep.Step,
-            settings,
-            sweep.CouplingIterations ?? 2,
-            sweep.ViscousIterations ?? 8,
-            sweep.ResidualTolerance ?? 0.3d,
-            sweep.DisplacementRelaxation ?? 0.5d);
-        polarExporter.Export(outputPath, result);
-        return CreateArtifact(artifactName, "viscous-cl", outputPath, result.Points.Count);
+            settings);
+        var lines = new List<string> { "alpha,CL,CD,CM,converged" };
+        foreach (var r in results)
+        {
+            lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged}");
+        }
+        System.IO.File.WriteAllLines(outputPath, lines);
+        return CreateArtifact(artifactName, "viscous-cl", outputPath, results.Count);
     }
 
     private AirfoilGeometry LoadGeometry(SessionAirfoilDefinition airfoil, string manifestDirectory)
