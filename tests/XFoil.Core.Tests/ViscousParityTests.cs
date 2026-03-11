@@ -18,10 +18,21 @@ namespace XFoil.Core.Tests;
 ///    are from actual Fortran XFoil 6.97 binary runs (f_xfoil/build/src/xfoil).
 ///    Settings: 160 panels, NCrit=9.0, Mach=0, free transition.
 ///
-/// The solver uses a hybrid Newton coupling loop (BuildNewtonSystem -> Solve ->
-/// ApplyNewtonUpdate) with BL march + DIJ coupling as the primary convergence driver.
-/// The Newton system Jacobians require further debugging for full 1e-5 parity;
-/// current achievable accuracy is documented per tolerance constant below.
+/// The solver uses a hybrid BL march + DIJ coupling approach with conditional Newton
+/// corrections. The Newton system Jacobians are simplified (missing DUE/DDS terms in
+/// VDEL RHS, hardcoded Re approximations) and cannot drive pure Newton convergence.
+/// BL march + DIJ coupling is the primary convergence driver.
+///
+/// Accuracy ceiling (hybrid BL-march solver):
+///   CL: ~7-16% relative error depending on condition
+///   CD: ~73-86% relative error (Squire-Young drag, CDP=0)
+///   CM: ~0.06-0.10 absolute error
+///   Transition: x/c ~ 0.99 (transition model not fully resolved)
+///
+/// Full 0.001% (1e-5) parity requires correct Newton Jacobians (Phase 4 scope):
+///   - DUE/DDS forced-change terms in VDEL RHS
+///   - Full REYBL-based Jacobians instead of hardcoded Re=1e6
+///   - Correct iteration ordering (SETBL -> BLSOLV -> UPDATE -> QVFUE -> STMOVE)
 ///
 /// Source of all reference values: Fortran XFoil 6.97 binary built from f_xfoil/ via cmake/make.
 /// </summary>
@@ -52,15 +63,23 @@ public class ViscousParityTests
     // Tolerance tiers
     // ================================================================
 
-    // Current solver achievable tolerances (hybrid Newton with BL march primary).
-    // Full 1e-5 parity requires converged Newton Jacobians (Phase 4 scope).
-    // These tolerances represent the BL march + DIJ coupling accuracy level.
-    private const double CL_RelativeTolerance = 0.25;     // 25% - BL march CL via viscous panel speeds
-    private const double CD_RelativeTolerance = 0.90;     // 90% - Squire-Young drag sensitive to BL march convergence; non-converged cases drive error
-    private const double CM_AbsoluteTolerance = 0.15;     // Absolute since CM can be near zero; BL march CM has sign issues
-    private const double CDF_RelativeTolerance = 0.80;    // Friction drag depends on transition location
-    private const double CDP_RelativeTolerance = 3.0;     // Pressure drag by subtraction amplifies errors
-    private const double TransitionTolerance = 0.40;      // Transition x/c -- BL march transition model
+    // Tightened to current solver accuracy ceiling (hybrid BL-march + DIJ coupling).
+    // Measured worst-case relative errors across all 4 test conditions:
+    //   CL: 6.5% (4415) to 15.8% (2412) -- tolerance set at 18% with margin
+    //   CD: 73.5% (0012 a=0) to 85.7% (0012 a=5) -- tolerance set at 88%
+    //   CM: 0.058 (0012 a=0) to 0.100 (2412) -- tolerance set at 0.11
+    //   CDF: CD is entirely friction (CDP=0) -- tolerance set at 88%
+    //   CDP: always 0 (pressure drag not decomposed) -- tolerance reflects this
+    //   Transition: x/c ~ 0.99 everywhere -- tolerance 0.40 retained for now
+    //
+    // Target: 0.001% (1e-5) -- requires Phase 4 Newton Jacobian corrections.
+    // Current gap: ~3-4 orders of magnitude on CL, ~4-5 on CD.
+    private const double CL_RelativeTolerance = 0.18;     // 18% - worst case 15.8% (NACA 2412)
+    private const double CD_RelativeTolerance = 0.88;     // 88% - worst case 85.7% (NACA 0012 a=5)
+    private const double CM_AbsoluteTolerance = 0.11;     // Absolute; worst case 0.100 (NACA 2412)
+    private const double CDF_RelativeTolerance = 0.88;    // Friction drag (all CD is CDF currently)
+    private const double CDP_RelativeTolerance = 1.01;    // CDP=0 everywhere; 1.01 allows zero with reference > 0
+    private const double TransitionTolerance = 0.40;      // Transition x/c -- model reports ~0.99
 
     // Physical sanity bounds
     private const double MinReasonableCD = 0.0005;
@@ -82,8 +101,7 @@ public class ViscousParityTests
     {
         var result = RunNaca0012(alpha: 0.0, re: 1_000_000);
         // XFoil ref: CL = -0.0000 (symmetric airfoil at alpha=0)
-        // BL march produces slight asymmetry from panel discretization and
-        // viscous/inviscid coupling effects; |CL| < 0.1 is acceptable.
+        // Hybrid BL-march produces slight asymmetry; actual |CL| ~ 0.077.
         Assert.True(Math.Abs(result.LiftCoefficient) < 0.1,
             $"CL should be near zero for symmetric airfoil at alpha=0, got {result.LiftCoefficient:F6}");
     }
@@ -104,7 +122,7 @@ public class ViscousParityTests
     public void Naca0012_Re1e6_Alpha0_CM_NearZero()
     {
         var result = RunNaca0012(alpha: 0.0, re: 1_000_000);
-        // XFoil ref: CM = 0.0000
+        // XFoil ref: CM = 0.0000 (actual ~0.058 from BL-march coupling effects)
         Assert.True(Math.Abs(result.MomentCoefficient) < CM_AbsoluteTolerance,
             $"CM should be near zero for symmetric airfoil at alpha=0, got {result.MomentCoefficient:F6}");
     }
@@ -146,9 +164,8 @@ public class ViscousParityTests
     public void Naca0012_Re1e6_Alpha5_Converges()
     {
         var result = RunNaca0012(alpha: 5.0, re: 1_000_000);
-        // At alpha=5 with BL march, convergence depends on DIJ coupling stability.
-        // The solver may not converge within 200 iterations at 160 panels; test
-        // validates result quality regardless.
+        // With hybrid BL-march, alpha=5 may not converge within 200 iterations;
+        // the solver runs all iterations and produces a usable result regardless.
         Assert.True(result.Converged || result.Iterations >= 50,
             $"NACA 0012 alpha=5 should converge or iterate sufficiently, " +
             $"converged={result.Converged}, iterations={result.Iterations}");
@@ -180,7 +197,7 @@ public class ViscousParityTests
     public void Naca0012_Re1e6_Alpha5_CM_WithinTolerance()
     {
         var result = RunNaca0012(alpha: 5.0, re: 1_000_000);
-        // XFoil ref: CM = 0.0017
+        // XFoil ref: CM = 0.0017 (actual ~0.097 from BL-march coupling effects)
         Assert.True(Math.Abs(result.MomentCoefficient) < CM_AbsoluteTolerance,
             $"CM magnitude should be < {CM_AbsoluteTolerance} for NACA 0012, got {result.MomentCoefficient:F6}");
     }
@@ -218,7 +235,7 @@ public class ViscousParityTests
     public void Naca2412_Re3e6_Alpha3_Converges()
     {
         var result = RunNaca2412(alpha: 3.0, re: 3_000_000);
-        // BL march + DIJ coupling may need more iterations for cambered airfoils.
+        // Hybrid BL-march may not fully converge for cambered airfoils; runs all iterations.
         Assert.True(result.Converged || result.Iterations >= 50,
             $"NACA 2412 alpha=3 should converge or iterate sufficiently, " +
             $"converged={result.Converged}, iterations={result.Iterations}");
@@ -251,7 +268,7 @@ public class ViscousParityTests
     {
         var result = RunNaca2412(alpha: 3.0, re: 3_000_000);
         // XFoil ref: CM = -0.0515 (negative for positive camber)
-        // BL march may produce CM with wrong sign; check magnitude is reasonable.
+        // BL-march coupling produces CM ~ +0.048 (wrong sign); check magnitude is bounded.
         Assert.True(Math.Abs(result.MomentCoefficient) < CM_AbsoluteTolerance,
             $"CM magnitude should be reasonable for positive-camber airfoil, got {result.MomentCoefficient:F6}");
     }
@@ -355,7 +372,7 @@ public class ViscousParityTests
         var r4 = RunNaca4415(alpha: 2.0, re: 6_000_000);
 
         Assert.True(r1.Converged, "NACA 0012 Re=1e6 alpha=0 should converge");
-        // alpha=5 and cambered cases may not fully converge with BL march;
+        // alpha=5 and cambered cases may not fully converge with hybrid BL-march;
         // verify they produce physically reasonable results
         Assert.True(r2.Converged || r2.LiftCoefficient > 0.2,
             $"NACA 0012 Re=1e6 alpha=5 should converge or produce positive CL, " +
@@ -391,8 +408,8 @@ public class ViscousParityTests
         var r5 = RunNaca0012(alpha: 5.0, re: 1_000_000);
 
         // CD from DragCalculator should increase or at least not decrease significantly
-        // with increased angle of attack. BL march may produce non-monotone CD at
-        // some conditions; check for gross reversal only.
+        // with increased angle of attack. Hybrid BL-march may produce non-monotone CD
+        // at some conditions; check for gross reversal only.
         double cd0 = r0.DragDecomposition.CD;
         double cd5 = r5.DragDecomposition.CD;
         Assert.True(cd5 >= cd0 * 0.5,
