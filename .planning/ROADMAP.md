@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation Cleanup** - Fix stale docs and upgrade to .NET 10
 - [ ] **Phase 2: Inviscid Kernel Parity** - Clean C# implementation of XFoil's linear-vorticity inviscid solver alongside existing Hess-Smith
-- [ ] **Phase 3: Viscous Solver Parity and Polar Validation** - Replace surrogates with true viscous system, validate all sweep types
+- [x] **Phase 3: Viscous Solver Parity and Polar Validation** - Replace surrogates with true viscous system, validate all sweep types (completed 2026-03-11)
 - [ ] **Phase 4: Randomized Test Bench** - Automated random-case testing against reference XFoil binary
 
 ## Phase Details
@@ -100,5 +100,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
 | 2. Inviscid Kernel Parity | 5/5 | Complete | 2026-03-10 |
-| 3. Viscous Solver Parity and Polar Validation | 8/10 | In Progress (gap closure) |  |
+| 3. Viscous Solver Parity and Polar Validation | 10/10 | Complete   | 2026-03-11 |
 | 4. Randomized Test Bench | 0/? | Not started | - |

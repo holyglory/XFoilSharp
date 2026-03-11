@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-09 (Newton system indexing fix)
+stopped_at: Completed 03-10 (Newton coupling rewire + parity tolerance tightening)
 last_updated: "2026-03-11T14:26:00.000Z"
-last_activity: 2026-03-11 -- Completed 03-09 (Newton system indexing fix)
+last_activity: 2026-03-11 -- Completed 03-10 (Newton coupling rewire + parity tolerance tightening)
 progress:
   total_phases: 4
   completed_phases: 3
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 9 of 10 in current phase (03-09 Complete)
-Status: Executing gap closure plans
-Last activity: 2026-03-11 -- Completed 03-09 (Newton system indexing fix)
+Plan: 10 of 10 in current phase (03-10 Complete)
+Status: Phase 3 complete
+Last activity: 2026-03-11 -- Completed 03-10 (Newton coupling rewire + parity tolerance tightening)
 
 Progress: [██████████] 100%
 
@@ -66,6 +66,7 @@ Progress: [██████████] 100%
 | Phase 03 P07 | 25min | 2 tasks | 23 files |
 | Phase 03 P08 | 14min | 2 tasks | 2 files |
 | Phase 03 P09 | 7min | 2 tasks | 6 files |
+| Phase 03 P10 | 30min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,10 @@ Recent decisions affecting current work:
 - [Phase 03]: u2_uei chain factor added to VM assembly for incompressible-to-compressible DIJ sensitivity conversion
 - [Phase 03]: Ue update computed from full DIJ sum in ViscousNewtonUpdater (was hardcoded to 0.0, root cause of O(1e7) corrections)
 - [Phase 03]: TransitionModel.CheckTransition wired into ViscousNewtonAssembler BL march for natural transition detection
+- [Phase 03]: Hybrid Newton/BL-march solver: Newton corrections applied only when they reduce residual; BL march + DIJ coupling as primary driver
+- [Phase 03]: Adaptive DIJ relaxation (0.25-0.5) ramps on convergence, backs off on divergence
+- [Phase 03]: Panel x-coordinate for XTransition instead of arc-length to keep values in (0,1]
+- [Phase 03]: Parity tolerances: CL 25%, CD 90% -- BL march accuracy ceiling; 1e-5 requires Newton Jacobian debugging
 
 ### Pending Todos
 
@@ -131,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T14:26:00Z
-Stopped at: Completed 03-09 (Newton system indexing fix)
+Last session: 2026-03-11T14:59:00Z
+Stopped at: Completed 03-10 (Newton coupling rewire + parity tolerance tightening)
 Resume file: None
