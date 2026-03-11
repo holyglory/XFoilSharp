@@ -137,41 +137,35 @@ public static class ViscousSolverEngine
         for (int i = 0; i < wakeGap.Length; i++)
             wakeGap[i] = teGap * Math.Exp(-0.5 * i);
 
-        // --- Newton coupling iteration (matching VISCAL) ---
-        // Strategy: BL march + DIJ coupling provides the primary convergence engine.
-        // The Newton system (SETBL -> BLSOLV -> UPDATE) is assembled and solved each
-        // iteration per the XFoil architecture. When Newton corrections reduce the
-        // residual, they are applied; otherwise the BL march drives convergence.
+        // --- Newton coupling iteration (matching Fortran VISCAL order) ---
+        // Correct Fortran VISCAL order:
+        //   a. SETBL: Build Newton system (assembles BL equations at current state)
+        //   b. BLSOLV: Solve block-tridiagonal system
+        //   c. UPDATE: Apply Newton update (always, with RLXBL relaxation)
+        //   d. QVFUE: Edge velocity update via DIJ
+        //   e. STMOVE: Relocate stagnation point
+        //   f. CL/CD/CM and convergence check
+        // MarchBoundaryLayer is NOT called inside the primary Newton coupling loop.
         var convergenceHistory = new List<ViscousConvergenceInfo>();
         bool converged = false;
         int maxIter = settings.MaxViscousIterations;
         double tolerance = settings.ViscousConvergenceTolerance;
         double trustRadius = 1.0;
-        double prevMarchRms = double.MaxValue;
+        double prevRmsbl = double.MaxValue;
         double rlxDij = 0.25; // DIJ coupling relaxation -- ramps up as solution stabilizes
+
+        // Initialize previous-iteration UEDG/MASS for DUE/DDS computation.
+        // On the first iteration, prev = current so DUE/DDS = 0 (matching Fortran).
+        double[,] uedgPrev = (double[,])blState.UEDG.Clone();
+        double[,] massPrev = (double[,])blState.MASS.Clone();
 
         for (int iter = 0; iter < maxIter; iter++)
         {
             debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
                 "=== ITER {0} ===", iter + 1));
 
-            // a. BL march: update theta, dstar, ctau from current edge velocities.
-            //    This calls TransitionModel.CheckTransition for natural transition detection.
-            double marchRms = MarchBoundaryLayer(blState, settings, reinf);
-
-            // b. Edge velocity update via DIJ influence matrix (viscous/inviscid coupling).
-            //    Uses full panel-to-panel influence from the factored inviscid system.
-            UpdateEdgeVelocityDIJCoupling(blState, ueInv, dij, isp, n, nWake, rlxDij);
-
-            // Ramp up DIJ relaxation as solution stabilizes (start gentle, increase)
-            if (marchRms < prevMarchRms)
-                rlxDij = Math.Min(rlxDij * 1.1, 0.5);
-            else
-                rlxDij = Math.Max(rlxDij * 0.7, 0.05);
-
-            // c. Build Newton system (SETBL) -- assembles the global BL system.
-            //    The Newton system provides residual measurement even when its
-            //    corrections are not applied (Jacobian debugging is out of scope).
+            // a. SETBL: Build Newton system -- assembles the global BL system.
+            //    Uses uedgPrev/massPrev to compute DUE/DDS forced-change terms.
             double rmsbl = ViscousNewtonAssembler.BuildNewtonSystem(
                 blState, newtonSystem, dij, settings,
                 isAlphaPrescribed: true, wakeGap,
@@ -179,62 +173,48 @@ public static class ViscousSolverEngine
                 hstinv, hstinv_ms,
                 rstbl, rstbl_ms,
                 reybl, reybl_re, reybl_ms, HvRat,
-                isp, n, debugWriter);
+                isp, n, debugWriter,
+                uedgPrev, massPrev);
 
-            // d. Solve block-tridiagonal system (BLSOLV)
+            // b. BLSOLV: Solve block-tridiagonal system
             BlockTridiagonalSolver.Solve(newtonSystem, vaccel: 0.01, debugWriter: debugWriter);
 
-            // e. Attempt Newton update -- only applied if it improves the solution.
-            //    Save state, try update, revert if it made things worse.
-            bool newtonHealthy = !double.IsInfinity(rmsbl) && !double.IsNaN(rmsbl)
-                && rmsbl < 1e6 && rmsbl < prevMarchRms;
-            double rlx = 0.0;
-            if (newtonHealthy)
-            {
-                // Save BL state before Newton update
-                var savedThet = (double[,])blState.THET.Clone();
-                var savedDstr = (double[,])blState.DSTR.Clone();
-                var savedCtau = (double[,])blState.CTAU.Clone();
-                var savedMass = (double[,])blState.MASS.Clone();
-                var savedUedg = (double[,])blState.UEDG.Clone();
+            // Save current UEDG/MASS as previous-iteration values for next iteration's DUE/DDS
+            Array.Copy(blState.UEDG, uedgPrev, blState.UEDG.Length);
+            Array.Copy(blState.MASS, massPrev, blState.MASS.Length);
 
+            // c. UPDATE: Apply Newton update (always, with relaxation from RLXBL).
+            //    With correct Jacobians (reybl threading + DUE/DDS terms), Newton
+            //    should converge. No save-try-revert pattern needed.
+            double rlx = 0.0;
+            if (!double.IsInfinity(rmsbl) && !double.IsNaN(rmsbl))
+            {
                 var (newtonRlx, updatedRms, newTrustRadius, accepted) =
                     ViscousNewtonUpdater.ApplyNewtonUpdate(
                         blState, newtonSystem, settings.ViscousSolverMode,
-                        hstinv, wakeGap, trustRadius, prevMarchRms, rmsbl,
+                        hstinv, wakeGap, trustRadius, rmsbl, rmsbl,
                         dij, isp, n, debugWriter);
-
-                // Check if Newton update improved things
-                double postNewtonRms = MarchResidual(blState, settings, reinf);
-                if (postNewtonRms < marchRms * 0.99 && !double.IsNaN(postNewtonRms)
-                    && !double.IsInfinity(postNewtonRms))
-                {
-                    // Newton update helped -- keep it
-                    trustRadius = newTrustRadius;
-                    rlx = newtonRlx;
-                    marchRms = postNewtonRms;
-                }
-                else
-                {
-                    // Newton update made things worse -- revert
-                    Array.Copy(savedThet, blState.THET, savedThet.Length);
-                    Array.Copy(savedDstr, blState.DSTR, savedDstr.Length);
-                    Array.Copy(savedCtau, blState.CTAU, savedCtau.Length);
-                    Array.Copy(savedMass, blState.MASS, savedMass.Length);
-                    Array.Copy(savedUedg, blState.UEDG, savedUedg.Length);
-                }
+                trustRadius = newTrustRadius;
+                rlx = newtonRlx;
             }
 
-            prevMarchRms = marchRms;
+            // d. QVFUE: Edge velocity update via DIJ influence matrix
+            UpdateEdgeVelocityDIJCoupling(blState, ueInv, dij, isp, n, nWake, rlxDij);
+
+            // Adaptive DIJ relaxation keyed off rmsbl
+            if (rmsbl < prevRmsbl)
+                rlxDij = Math.Min(rlxDij * 1.1, 0.5);
+            else
+                rlxDij = Math.Max(rlxDij * 0.7, 0.05);
 
             if (debugWriter != null)
             {
                 debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
                     "POST_UPDATE RMSBL={0,15:E8} RMXBL={1,15:E8} RLX={2,15:E8}",
-                    marchRms, marchRms * 2.0, rlx));
+                    rmsbl, rmsbl * 2.0, rlx));
             }
 
-            // f. Relocate stagnation point if it has moved (STMOVE)
+            // e. STMOVE: Relocate stagnation point if it has moved
             double[] currentSpeeds = ConvertUedgToSpeeds(blState, isp, n);
             int newIsp = FindStagnationPointByMinSpeed(currentSpeeds, n);
             newIsp = Math.Max(1, Math.Min(n - 2, newIsp));
@@ -251,7 +231,7 @@ public static class ViscousSolverEngine
                 newtonSystem.SetupISYS(isysNew, nsysNew);
             }
 
-            // g. Compute CL, CD, CM from current viscous solution
+            // f. CL/CD/CM and convergence check
             double cl = ComputeViscousCL(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
             double cd = EstimateDrag(blState, qinf, reinf);
             double cm = ComputeViscousCM(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
@@ -265,8 +245,8 @@ public static class ViscousSolverEngine
             convergenceHistory.Add(new ViscousConvergenceInfo
             {
                 Iteration = iter,
-                RmsResidual = marchRms,
-                MaxResidual = marchRms * 2.0,
+                RmsResidual = rmsbl,
+                MaxResidual = rmsbl * 2.0,
                 MaxResidualStation = 0,
                 MaxResidualSide = 0,
                 RelaxationFactor = rlx,
@@ -276,14 +256,16 @@ public static class ViscousSolverEngine
                 CM = cm
             });
 
-            // h. Check convergence
-            if (marchRms < tolerance)
+            // Convergence check uses rmsbl (Newton RMS from BuildNewtonSystem)
+            if (rmsbl < tolerance)
             {
                 debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
                     "CONVERGED iter={0}", iter + 1));
                 converged = true;
                 break;
             }
+
+            prevRmsbl = rmsbl;
         }
 
         // --- Post-convergence: package results ---
