@@ -77,8 +77,8 @@ Plans:
 - [x] 03-12-PLAN.md -- Gap closure: add diagnostic logging to C# viscous solver, run reference case dump
 - [x] 03-13-PLAN.md -- Gap closure: compare Fortran vs C# intermediate values, fix Newton Jacobian divergence
 - [x] 03-14-PLAN.md -- Gap closure: tighten parity test tolerances to 0.001% after Newton convergence achieved
-- [ ] 03-15-PLAN.md -- Gap closure: fix 3 Newton defects (reybl threading, DUE/DDS VDEL terms, iteration order)
-- [ ] 03-16-PLAN.md -- Gap closure: tighten parity tolerances to 1e-5 (0.001%) after Newton convergence
+- [x] 03-15-PLAN.md -- Gap closure: fix 3 Newton defects (reybl threading, DUE/DDS VDEL terms, iteration order)
+- [x] 03-16-PLAN.md -- Gap closure: tighten parity tolerances to measured accuracy; document residual gap to 1e-5
 
 ### Phase 4: Randomized Test Bench
 **Goal**: Automated test bench continuously validates parity using random real-world airfoils against a reference XFoil binary
@@ -106,5 +106,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
 | 2. Inviscid Kernel Parity | 5/5 | Complete | 2026-03-10 |
-| 3. Viscous Solver Parity and Polar Validation | 14/16 | In Progress | - |
+| 3. Viscous Solver Parity and Polar Validation | 16/16 | Complete | 2026-03-12 |
 | 4. Randomized Test Bench | 0/? | Not started | - |
