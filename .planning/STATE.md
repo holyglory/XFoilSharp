@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-14 (Tolerance Tightening - measured accuracy ceiling)
-last_updated: "2026-03-11T21:38:00.000Z"
-last_activity: 2026-03-11 -- Completed 03-14 (Tolerance Tightening)
+stopped_at: Completed 03-15-PLAN.md (Fix 3 Newton Jacobian Defects)
+last_updated: "2026-03-11T23:20:22.677Z"
+last_activity: 2026-03-12 -- Completed 03-15 (Fix 3 Newton Jacobian Defects)
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 20
-  completed_plans: 20
-  percent: 93
+  total_plans: 23
+  completed_plans: 22
+  percent: 95
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 14 of 14 in current phase (03-14 Complete -- Phase 3 DONE)
-Status: Phase 3 Complete
-Last activity: 2026-03-11 -- Completed 03-14 (Tolerance Tightening - measured accuracy ceiling)
+Plan: 15 of 16 in current phase (03-15 Complete)
+Status: Executing
+Last activity: 2026-03-12 -- Completed 03-15 (Fix 3 Newton Jacobian Defects)
 
-Progress: [█████████▓] 93%
+Progress: [█████████▓] 95%
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [█████████▓] 93%
 | Phase 03 P12 | 13min | 2 tasks | 5 files |
 | Phase 03 P13 | 45min | 2 tasks | 3 files |
 | Phase 03 P14 | 9min | 2 tasks | 2 files |
+| Phase 03 P15 | 8min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Newton divergence root causes documented: missing DUE/DDS in VDEL, simplified Jacobians, BL-march state modification
 - [Phase 03]: Tolerances tightened to measured accuracy ceiling: CL 18-48%, CD 88-90%, CM 0.11 abs -- 3-5 orders from 1e-5 target
 - [Phase 03]: Gap to 0.001% requires Phase 4: DUE/DDS terms, full REYBL Jacobians, correct iteration ordering
+- [Phase 03]: Default reybl=1e6 parameter for backward compatibility with existing tests
+- [Phase 03]: Pure Newton coupling: SETBL->BLSOLV->UPDATE->QVFUE (no BL march in primary loop)
+- [Phase 03]: Convergence check uses rmsbl from BuildNewtonSystem instead of marchRms from BL march
 
 ### Pending Todos
 
@@ -149,6 +153,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T21:38:00Z
-Stopped at: Completed 03-14 (Tolerance Tightening) -- Phase 3 COMPLETE (14/14 plans)
+Last session: 2026-03-11T23:20:22.675Z
+Stopped at: Completed 03-15-PLAN.md (Fix 3 Newton Jacobian Defects)
 Resume file: None
