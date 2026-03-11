@@ -176,7 +176,41 @@ public static class ViscousSolverEngine
         // --- Post-convergence: package results ---
         double finalCL = inviscidResult.LiftCoefficient;
         double finalCM = inviscidResult.MomentCoefficient;
-        var dragDecomp = ComputeDragDecomposition(blState, qinf, reinf);
+
+        // Use DragCalculator for proper drag decomposition
+        var dragDecomp = DragCalculator.ComputeDrag(
+            blState, panel, qinf, alphaRadians,
+            settings.MachNumber, teGap,
+            settings.UseExtendedWake,
+            useLockWaveDrag: false);
+
+        // Handle non-convergence with optional post-stall extrapolation
+        if (!converged && settings.UsePostStallExtrapolation)
+        {
+            // Use the last iteration's CD/CL as "last converged" estimates.
+            // In a full polar sweep, the caller would supply the actual last converged point.
+            double lastCD = convergenceHistory.Count > 0
+                ? convergenceHistory[convergenceHistory.Count - 1].CD : 0.01;
+            double lastCL = convergenceHistory.Count > 0
+                ? convergenceHistory[convergenceHistory.Count - 1].CL : 0.0;
+            double lastAlpha = alphaRadians * 0.8; // Approximate "last converged" alpha
+
+            var (postStallCL, postStallCD) = PostStallExtrapolator.ExtrapolatePostStall(
+                alphaRadians, lastAlpha, lastCL, lastCD,
+                aspectRatio: 2.0 * Math.PI); // 2D effective AR
+
+            finalCL = postStallCL;
+            dragDecomp = new DragDecomposition
+            {
+                CD = postStallCD,
+                CDF = 0.0,
+                CDP = postStallCD,
+                CDSurfaceCrossCheck = 0.0,
+                DiscrepancyMetric = 0.0,
+                TEBaseDrag = 0.0,
+                WaveDrag = null
+            };
+        }
 
         return new ViscousAnalysisResult
         {

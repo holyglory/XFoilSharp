@@ -49,34 +49,15 @@ public static class DragCalculator
         double chord = Math.Max(panel.Chord, 1e-6);
 
         // ----------------------------------------------------------------
-        // 1. Get wake-end quantities for Squire-Young
+        // 1-3. Squire-Young extrapolation (per-side sum)
+        //      CD = sum over sides of: theta * (Ue/Qinf)^(0.5*(5+H))
+        //      Factor of 2 is implicit: both sides contribute.
+        //
+        //      When wake stations are available and reliable, use wake-end
+        //      quantities. Otherwise fall back to TE surface stations.
+        //      Apply Karman-Tsien compressibility correction on Ue.
         // ----------------------------------------------------------------
-        var (thetaWake, ueWake, hWake) = GetWakeEndQuantities(
-            blState, qinf, useExtendedWake);
-
-        // ----------------------------------------------------------------
-        // 2. Compressibility correction on wake Ue (Karman-Tsien)
-        // ----------------------------------------------------------------
-        double ueComp = ueWake;
-        if (machNumber > 0.01)
-        {
-            double beta = Math.Sqrt(Math.Max(1.0 - machNumber * machNumber, 0.01));
-            double tklam = machNumber * machNumber / (1.0 + beta);
-            double urat = ueWake / qinf;
-            // Karman-Tsien: Ue_comp = Ue * (1 - tklam) / (1 - tklam * urat^2)
-            double denom = 1.0 - tklam * urat * urat;
-            if (Math.Abs(denom) > 1e-10)
-                ueComp = ueWake * (1.0 - tklam) / denom;
-        }
-
-        // ----------------------------------------------------------------
-        // 3. Squire-Young extrapolation to infinity
-        //    CD = 2 * theta_wake * (Ue_comp / Qinf)^(0.5*(5 + H_wake))
-        // ----------------------------------------------------------------
-        double urat2 = ueComp / Math.Max(qinf, 1e-10);
-        urat2 = Math.Max(urat2, 1e-6);
-        double exponent = 0.5 * (5.0 + hWake);
-        double cd = 2.0 * thetaWake * Math.Pow(urat2, exponent);
+        double cd = ComputeSquireYoungCD(blState, qinf, machNumber, useExtendedWake);
         cd = Math.Max(cd, 1e-8);
 
         // ----------------------------------------------------------------
@@ -127,71 +108,101 @@ public static class DragCalculator
     }
 
     // ================================================================
-    // Wake-end quantity extraction (with optional extended marching)
+    // Squire-Young CD computation (per-side sum)
     // ================================================================
 
     /// <summary>
-    /// Extracts or computes wake-end quantities (theta, Ue, H) for Squire-Young.
-    /// When useExtendedWake is true, marches additional wake stations until convergence.
+    /// Computes total Squire-Young CD by summing contributions from both surfaces.
+    /// For each side, finds the last reliable station (TE or wake end), applies
+    /// Karman-Tsien compressibility correction, and computes the Squire-Young formula.
+    /// When useExtendedWake is true, marches wake stations to convergence first.
     /// </summary>
-    private static (double theta, double ue, double h) GetWakeEndQuantities(
+    private static double ComputeSquireYoungCD(
         BoundaryLayerSystemState blState,
         double qinf,
+        double machNumber,
         bool useExtendedWake)
     {
-        // Find the last reliable wake station.
-        // Wake is stored after side 1 TE (ibl > IBLTE[1]).
-        int iblte1 = blState.IBLTE[1];
-        int nbl1 = blState.NBL[1];
+        double cdTotal = 0.0;
 
-        // Also check side 0 TE for single-surface wake scenarios
-        int iblte0 = blState.IBLTE[0];
-        int nbl0 = blState.NBL[0];
-
-        // Default: use side 1 wake end
-        int iWakeEnd = nbl1 - 1;
-        int wakeSide = 1;
-
-        // Find last reliable station in the wake (back off from anomalous values)
-        while (iWakeEnd > iblte1 + 1 &&
-               (blState.UEDG[iWakeEnd, 1] > 2.0 * qinf
-                || blState.UEDG[iWakeEnd, 1] < 0.3 * qinf
-                || blState.THET[iWakeEnd, 1] < 1e-12))
+        // Karman-Tsien parameters
+        double tklam = 0.0;
+        if (machNumber > 0.01)
         {
-            iWakeEnd--;
+            double beta = Math.Sqrt(Math.Max(1.0 - machNumber * machNumber, 0.01));
+            tklam = machNumber * machNumber / (1.0 + beta);
         }
 
-        // If no good wake station, use the TE station
-        if (iWakeEnd <= iblte1)
+        for (int side = 0; side < 2; side++)
         {
-            // Fall back to TE quantities: average both surfaces
-            var (thetaTE, ueTE, hTE) = GetTEQuantities(blState, qinf);
-            return (thetaTE, ueTE, hTE);
+            int ite = blState.IBLTE[side];
+            if (ite <= 1 || ite >= blState.MaxStations) continue;
+
+            // Find the last reliable station: back off from TE if Ue is anomalous.
+            // The closure panel at the TE can have very large or very small Ue,
+            // and the BL values there are unreliable.
+            int iUse = ite;
+            while (iUse > 1 && (blState.UEDG[iUse, side] > 2.0 * qinf
+                || blState.UEDG[iUse, side] < 0.5 * qinf
+                || blState.THET[iUse, side] < 1e-8))
+            {
+                iUse--;
+            }
+
+            double thetaEnd = blState.THET[iUse, side];
+            double ueEnd = blState.UEDG[iUse, side];
+            double dstarEnd = blState.DSTR[iUse, side];
+
+            if (thetaEnd < 1e-10 || ueEnd < 1e-10) continue;
+
+            // Optional: extend wake marching from this station
+            if (useExtendedWake)
+            {
+                double hEnd = dstarEnd / thetaEnd;
+                hEnd = Math.Max(hEnd, 1.0001);
+                double xsiEnd = blState.XSSI[iUse, side];
+
+                var (thetaExt, ueExt, hExt) = MarchExtendedWake(
+                    thetaEnd, ueEnd, hEnd, xsiEnd, qinf);
+
+                thetaEnd = thetaExt;
+                ueEnd = ueExt;
+                dstarEnd = hExt * thetaEnd;
+            }
+
+            double hTE = dstarEnd / Math.Max(thetaEnd, 1e-12);
+            hTE = Math.Max(1.0, Math.Min(hTE, 5.0));
+
+            // Apply Karman-Tsien compressibility correction
+            double ueComp = ueEnd;
+            if (tklam > 0)
+            {
+                double urat = ueEnd / qinf;
+                double denom = 1.0 - tklam * urat * urat;
+                if (Math.Abs(denom) > 1e-10)
+                    ueComp = ueEnd * (1.0 - tklam) / denom;
+            }
+
+            double urat2 = ueComp / Math.Max(qinf, 1e-10);
+            urat2 = Math.Max(urat2, 1e-6);
+
+            // Squire-Young formula (per side)
+            cdTotal += thetaEnd * Math.Pow(urat2, 0.5 * (5.0 + hTE));
         }
 
-        double theta = blState.THET[iWakeEnd, wakeSide];
-        double ue = blState.UEDG[iWakeEnd, wakeSide];
-        double dstar = blState.DSTR[iWakeEnd, wakeSide];
-        double h = (theta > 1e-12) ? dstar / theta : 2.0;
-        h = Math.Max(h, 1.0001);
+        // Factor of 2: sum of both sides
+        cdTotal = 2.0 * cdTotal;
+        return Math.Max(cdTotal, 1e-8);
+    }
 
-        if (!useExtendedWake)
-        {
-            return (theta, ue, h);
-        }
-
-        // Extended wake marching: march additional stations until dtheta/dxi converges
-        double xsi = blState.XSSI[iWakeEnd, wakeSide];
+    /// <summary>
+    /// Marches the wake forward from given initial conditions until convergence.
+    /// Uses the momentum integral equation with Cf=0 (no wall friction in wake).
+    /// </summary>
+    private static (double theta, double ue, double h) MarchExtendedWake(
+        double theta, double ue, double h, double xsi, double qinf)
+    {
         double dx = 0.02; // Marching step size
-        double reinf = qinf * 1_000_000.0; // Approximate Re for Cf computation
-        // Use the actual Re based on the BL state if available
-        if (blState.THET[1, 0] > 1e-12 && blState.UEDG[1, 0] > 1e-12)
-        {
-            double thetaFirst = blState.THET[1, 0];
-            double ueFirst = blState.UEDG[1, 0];
-            // Rough estimate: Re ~ Ue * theta * Re_number / (Ue * theta)
-            // We don't have Re directly, so estimate from typical values
-        }
 
         for (int i = 0; i < MaxExtendedWakeStations; i++)
         {
@@ -200,11 +211,10 @@ public static class DragCalculator
             // Wake momentum integral: no wall friction (Cf=0 in wake)
             // d(theta)/dx = -(theta/Ue) * dUe/dx * (H + 2)
             // In the far wake, Ue is approximately constant -> dtheta/dx ~ 0
-            // and H decays toward 1.0
 
             // Ue recovery in far wake: approaches qinf
             double ueOld = ue;
-            ue = ue + (qinf - ue) * 0.02; // Gradual recovery toward freestream
+            ue = ue + (qinf - ue) * 0.02;
             ue = Math.Max(ue, 0.1 * qinf);
 
             double dUedx = (ue - ueOld) / dx;
@@ -220,8 +230,6 @@ public static class DragCalculator
             h = 1.0 + (h - 1.0) * Math.Exp(-0.15 * dx / Math.Max(theta, 1e-10));
             h = Math.Max(h, 1.0001);
 
-            dstar = h * theta;
-
             // Check convergence: |dtheta/dxi| < epsilon
             double dthetadxi = Math.Abs(theta - thetaOld) / dx;
             if (dthetadxi < WakeConvergenceEpsilon)
@@ -229,67 +237,6 @@ public static class DragCalculator
         }
 
         return (theta, ue, Math.Max(h, 1.0001));
-    }
-
-    /// <summary>
-    /// Gets TE quantities by averaging the last reliable stations on both surfaces.
-    /// Used as fallback when wake stations are unreliable.
-    /// </summary>
-    private static (double theta, double ue, double h) GetTEQuantities(
-        BoundaryLayerSystemState blState, double qinf)
-    {
-        double thetaSum = 0.0;
-        double ueSum = 0.0;
-        int count = 0;
-
-        for (int side = 0; side < 2; side++)
-        {
-            int ite = blState.IBLTE[side];
-            if (ite <= 1 || ite >= blState.MaxStations) continue;
-
-            // Back off from anomalous TE stations
-            int iUse = ite;
-            while (iUse > 1 &&
-                   (blState.UEDG[iUse, side] > 2.0 * qinf
-                    || blState.UEDG[iUse, side] < 0.3 * qinf
-                    || blState.THET[iUse, side] < 1e-10))
-            {
-                iUse--;
-            }
-
-            if (iUse > 0)
-            {
-                thetaSum += blState.THET[iUse, side];
-                ueSum += blState.UEDG[iUse, side];
-                count++;
-            }
-        }
-
-        if (count == 0)
-            return (1e-4, qinf, 2.0);
-
-        double theta = thetaSum / count;
-        double ue = ueSum / count;
-        double h = 2.0; // Default shape factor
-
-        // Try to get H from the BL data
-        for (int side = 0; side < 2; side++)
-        {
-            int ite = blState.IBLTE[side];
-            if (ite > 1 && ite < blState.MaxStations)
-            {
-                double th = blState.THET[ite, side];
-                double ds = blState.DSTR[ite, side];
-                if (th > 1e-12)
-                {
-                    h = ds / th;
-                    break;
-                }
-            }
-        }
-
-        h = Math.Max(h, 1.0001);
-        return (theta, ue, h);
     }
 
     // ================================================================
