@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-07 (Polar sweep runner and AirfoilAnalysisService integration)
-last_updated: "2026-03-11T01:25:00.000Z"
-last_activity: 2026-03-11 -- Completed 03-07 (Polar sweep runner and AirfoilAnalysisService integration)
+stopped_at: Completed 03-08 (Viscous parity and polar validation tests)
+last_updated: "2026-03-11T01:20:00.000Z"
+last_activity: 2026-03-11 -- Completed 03-08 (Viscous parity and polar validation tests)
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 15
-  completed_plans: 14
-  percent: 87
+  completed_plans: 15
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 
 ## Current Position
 
-Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 7 of 8 in current phase (03-07 Complete)
-Status: In Progress
-Last activity: 2026-03-11 -- Completed 03-07 (Polar sweep runner and AirfoilAnalysisService integration)
+Phase: 3 of 4 (Viscous Solver Parity and Polar Validation) -- COMPLETE
+Plan: 8 of 8 in current phase (03-08 Complete)
+Status: Phase 3 Complete
+Last activity: 2026-03-11 -- Completed 03-08 (Viscous parity and polar validation tests)
 
-Progress: [█████████░] 87%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [█████████░] 87%
 | Phase 03 P05 | 40min | 2 tasks | 4 files |
 | Phase 03 P06 | 13min | 2 tasks | 5 files |
 | Phase 03 P07 | 25min | 2 tasks | 23 files |
+| Phase 03 P08 | 14min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,9 @@ Recent decisions affecting current work:
 - [Phase 03]: BLSnapshot simplified to AlphaRadians-only for warm-start (ViscousSolverEngine reinitializes BL from scratch)
 - [Phase 03]: LaminarAmplificationModel inlined into ViscousStateEstimator rather than keeping separate file
 - [Phase 03]: CLI surrogate diagnostic commands replaced with deprecation notices (not full rewrites)
+- [Phase 03]: Two-tier parity validation: aerodynamic correctness tests (must pass) + XFoil reference tracking (documented for tightening)
+- [Phase 03]: Current solver tolerances: CL ~10%, CD ~50%, CM ~0.06 abs -- Picard coupling accuracy; 0.001% requires Newton system
+- [Phase 03]: All XFoil reference values from actual Fortran XFoil 6.97 binary runs (f_xfoil/build/src/xfoil), not placeholders
 
 ### Pending Todos
 
@@ -121,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T01:25:00Z
-Stopped at: Completed 03-07 (Polar sweep runner and AirfoilAnalysisService integration)
+Last session: 2026-03-11T01:20:00Z
+Stopped at: Completed 03-08 (Viscous parity and polar validation tests) -- Phase 3 Complete
 Resume file: None
