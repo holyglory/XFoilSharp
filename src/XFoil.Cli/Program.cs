@@ -2305,39 +2305,30 @@ static void WriteViscousPolarSummary(
     AirfoilAnalysisService analysisService)
 {
     var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
-    var sweep = analysisService.SweepDisplacementCoupledAlpha(
+    var results = analysisService.SweepViscousAlpha(
         geometry,
         alphaStartDegrees,
         alphaEndDegrees,
         alphaStepDegrees,
-        settings,
-        couplingIterations,
-        viscousIterations,
-        residualTolerance,
-        displacementRelaxation);
+        settings);
 
     Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"Panels: {sweep.Settings.PanelCount}");
-    Console.WriteLine($"Mach: {sweep.Settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {sweep.Settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Panels: {settings.PanelCount}");
+    Console.WriteLine($"Mach: {settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine("AlphaDeg\tCL\tCDvisc\tCMc/4\tSurfRes\tTransRes\tWakeRes\tOuterConv\tInnerConv\tRelax\tSeedUe");
+    Console.WriteLine("AlphaDeg\tCL\tCD\tCM\tConverged\tIterations");
 
-    foreach (var point in sweep.Points)
+    foreach (var r in results)
     {
         Console.WriteLine(
-            $"{point.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}\t" +
-            $"{point.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.EstimatedProfileDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OuterConverged}\t" +
-            $"{point.InnerInteractionConverged}\t" +
-            $"{point.FinalDisplacementRelaxation.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.FinalSeedEdgeVelocityChange.ToString("F6", CultureInfo.InvariantCulture)}");
+            $"{r.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.Converged}\t" +
+            $"{r.Iterations}");
     }
 }
 
@@ -2382,19 +2373,20 @@ static void ExportViscousPolarCsv(
     PolarCsvExporter polarExporter)
 {
     var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
-    var sweep = analysisService.SweepDisplacementCoupledAlpha(
+    var results = analysisService.SweepViscousAlpha(
         geometry,
         alphaStartDegrees,
         alphaEndDegrees,
         alphaStepDegrees,
-        settings,
-        couplingIterations,
-        viscousIterations,
-        residualTolerance,
-        displacementRelaxation);
+        settings);
 
-    polarExporter.Export(outputPath, sweep);
-    WriteExportSummary("ViscousAlphaSweep", outputPath, sweep.Points.Count);
+    var lines = new List<string> { "alpha,CL,CD,CM,converged" };
+    foreach (var r in results)
+    {
+        lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged}");
+    }
+    System.IO.File.WriteAllLines(outputPath, lines);
+    WriteExportSummary("ViscousAlphaSweep", outputPath, results.Count);
 }
 
 static void ExportLiftSweepCsv(
@@ -2537,19 +2529,20 @@ static void ExportViscousLiftSweepCsv(
     PolarCsvExporter polarExporter)
 {
     var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
-    var sweep = analysisService.SweepDisplacementCoupledLiftCoefficient(
+    var results = analysisService.SweepViscousCL(
         geometry,
         liftStart,
         liftEnd,
         liftStep,
-        settings,
-        couplingIterations,
-        viscousIterations,
-        residualTolerance,
-        displacementRelaxation);
+        settings);
 
-    polarExporter.Export(outputPath, sweep);
-    WriteExportSummary("ViscousLiftSweep", outputPath, sweep.Points.Count);
+    var lines = new List<string> { "alpha,CL,CD,CM,converged" };
+    foreach (var r in results)
+    {
+        lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged}");
+    }
+    System.IO.File.WriteAllLines(outputPath, lines);
+    WriteExportSummary("ViscousLiftSweep", outputPath, results.Count);
 }
 
 static void WriteTargetLiftSummary(
@@ -2588,30 +2581,35 @@ static void WriteViscousTargetLiftSummary(
     AirfoilAnalysisService analysisService)
 {
     var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
-    var result = analysisService.AnalyzeDisplacementCoupledForLiftCoefficient(
+    // Use a narrow CL sweep to find a single operating point near the target CL
+    var results = analysisService.SweepViscousCL(
         geometry,
         targetLiftCoefficient,
-        settings,
-        couplingIterations,
-        viscousIterations,
-        residualTolerance,
-        displacementRelaxation);
+        targetLiftCoefficient,
+        0.1d,
+        settings);
 
     Console.WriteLine($"Name: {geometry.Name}");
     Console.WriteLine($"TargetCL: {targetLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"SolvedAlphaDeg: {result.SolvedAngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CL: {result.OperatingPoint.FinalAnalysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CDvisc: {result.OperatingPoint.EstimatedProfileDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CMc/4: {result.OperatingPoint.FinalAnalysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"OuterConverged: {result.OperatingPoint.Converged}");
-    Console.WriteLine($"InnerInteractionConverged: {result.OperatingPoint.InnerInteractionConverged}");
-    Console.WriteLine($"FinalSurfaceResidual: {result.OperatingPoint.FinalSolveResult.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalTransitionResidual: {result.OperatingPoint.FinalSolveResult.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalWakeResidual: {result.OperatingPoint.FinalSolveResult.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+
+    if (results.Count > 0)
+    {
+        var r = results[0];
+        Console.WriteLine($"SolvedAlphaDeg: {r.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}");
+        Console.WriteLine($"CL: {r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+        Console.WriteLine($"CD: {r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}");
+        Console.WriteLine($"CM: {r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+        Console.WriteLine($"Converged: {r.Converged}");
+        Console.WriteLine($"Iterations: {r.Iterations}");
+    }
+    else
+    {
+        Console.WriteLine("No results returned for target CL.");
+    }
 }
 
 static void WriteLiftSweepSummary(
@@ -2663,38 +2661,30 @@ static void WriteViscousLiftSweepSummary(
     AirfoilAnalysisService analysisService)
 {
     var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
-    var sweep = analysisService.SweepDisplacementCoupledLiftCoefficient(
+    var results = analysisService.SweepViscousCL(
         geometry,
         liftStart,
         liftEnd,
         liftStep,
-        settings,
-        couplingIterations,
-        viscousIterations,
-        residualTolerance,
-        displacementRelaxation);
+        settings);
 
     Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"Panels: {sweep.Settings.PanelCount}");
-    Console.WriteLine($"Mach: {sweep.Settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {sweep.Settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Panels: {settings.PanelCount}");
+    Console.WriteLine($"Mach: {settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine("TargetCL\tSolvedAlphaDeg\tCL\tCDvisc\tCMc/4\tSurfRes\tTransRes\tWakeRes\tOuterConv\tInnerConv");
+    Console.WriteLine("AlphaDeg\tCL\tCD\tCM\tConverged\tIterations");
 
-    foreach (var point in sweep.Points)
+    foreach (var r in results)
     {
         Console.WriteLine(
-            $"{point.TargetLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.SolvedAngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.FinalAnalysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.EstimatedProfileDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.FinalAnalysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.FinalSolveResult.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.FinalSolveResult.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.FinalSolveResult.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.Converged}\t" +
-            $"{point.OperatingPoint.InnerInteractionConverged}");
+            $"{r.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.Converged}\t" +
+            $"{r.Iterations}");
     }
 }
 
@@ -2798,31 +2788,8 @@ static void WriteViscousIntervalSummary(
     double criticalAmplificationFactor,
     AirfoilAnalysisService analysisService)
 {
-    var system = analysisService.AnalyzeViscousIntervalSystem(
-        geometry,
-        angleOfAttackDegrees,
-        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor));
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperIntervals: {system.UpperSurfaceIntervals.Count}");
-    Console.WriteLine($"LowerIntervals: {system.LowerSurfaceIntervals.Count}");
-    Console.WriteLine($"WakeIntervals: {system.WakeIntervals.Count}");
-    Console.WriteLine($"UpperTurbulentIntervals: {system.UpperSurfaceIntervals.Count(interval => interval.Kind == ViscousIntervalKind.Turbulent)}");
-    Console.WriteLine($"LowerTurbulentIntervals: {system.LowerSurfaceIntervals.Count(interval => interval.Kind == ViscousIntervalKind.Turbulent)}");
-    Console.WriteLine($"UpperUpwind0: {system.UpperSurfaceIntervals[0].UpwindWeight.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperAmplificationGrowth0: {system.UpperSurfaceIntervals[0].AmplificationGrowthRate.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperAmplificationResidual0: {system.UpperSurfaceIntervals[0].AmplificationResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperMomentumResidual0: {system.UpperSurfaceIntervals[0].MomentumResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerShapeResidual0: {system.LowerSurfaceIntervals[0].ShapeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerAmplificationGrowth0: {system.LowerSurfaceIntervals[0].AmplificationGrowthRate.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerAmplificationResidual0: {system.LowerSurfaceIntervals[0].AmplificationResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeUpwind0: {system.WakeIntervals[0].UpwindWeight.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeMomentumResidual0: {system.WakeIntervals[0].MomentumResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("[DEPRECATED] The surrogate interval system pipeline has been replaced by the Newton-coupled viscous solver.");
+    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
 static void WriteViscousCorrectionSummary(
@@ -2836,34 +2803,8 @@ static void WriteViscousCorrectionSummary(
     double criticalAmplificationFactor,
     AirfoilAnalysisService analysisService)
 {
-    var correction = analysisService.AnalyzeViscousLaminarCorrection(
-        geometry,
-        angleOfAttackDegrees,
-        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor),
-        iterations);
-
-    var initialResidual =
-        correction.InitialSystem.UpperSurfaceIntervals.Average(interval => Math.Abs(interval.MomentumResidual))
-        + correction.InitialSystem.LowerSurfaceIntervals.Average(interval => Math.Abs(interval.MomentumResidual));
-    var correctedResidual =
-        correction.CorrectedSystem.UpperSurfaceIntervals.Average(interval => Math.Abs(interval.MomentumResidual))
-        + correction.CorrectedSystem.LowerSurfaceIntervals.Average(interval => Math.Abs(interval.MomentumResidual));
-    var initialTransitionResidual = ComputeTransitionResidual(correction.InitialSystem);
-    var correctedTransitionResidual = ComputeTransitionResidual(correction.CorrectedSystem);
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Iterations: {correction.Iterations}");
-    Console.WriteLine($"InitialSurfaceResidual: {initialResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CorrectedSurfaceResidual: {correctedResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"InitialTransitionResidual: {initialTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CorrectedTransitionResidual: {correctedTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTeTheta: {correction.CorrectedSystem.State.UpperSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTeTheta: {correction.CorrectedSystem.State.LowerSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("[DEPRECATED] The surrogate laminar correction pipeline has been replaced by the Newton-coupled viscous solver.");
+    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
 static void WriteViscousSolveSummary(
@@ -2878,36 +2819,8 @@ static void WriteViscousSolveSummary(
     double criticalAmplificationFactor,
     AirfoilAnalysisService analysisService)
 {
-    var result = analysisService.AnalyzeViscousLaminarSolve(
-        geometry,
-        angleOfAttackDegrees,
-        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor),
-        maxIterations,
-        residualTolerance);
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"MaxIterations: {maxIterations}");
-    Console.WriteLine($"ResidualTolerance: {residualTolerance.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Iterations: {result.Iterations}");
-    Console.WriteLine($"Converged: {result.Converged}");
-    Console.WriteLine($"InitialSurfaceResidual: {result.InitialSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalSurfaceResidual: {result.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"InitialTransitionResidual: {result.InitialTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalTransitionResidual: {result.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"InitialWakeResidual: {result.InitialWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalWakeResidual: {result.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTeTheta: {result.SolvedSystem.State.UpperSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTeTheta: {result.SolvedSystem.State.LowerSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTransitionXi: {FindTransitionXi(result.SolvedSystem.State.UpperSurface).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTransitionN: {FindTransitionAmplification(result.SolvedSystem.State.UpperSurface).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTransitionXi: {FindTransitionXi(result.SolvedSystem.State.LowerSurface).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTransitionN: {FindTransitionAmplification(result.SolvedSystem.State.LowerSurface).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeThetaEnd: {result.SolvedSystem.State.Wake.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("[DEPRECATED] The surrogate laminar solve pipeline has been replaced by the Newton-coupled viscous solver.");
+    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
 static void WriteViscousInteractionSummary(
@@ -2924,33 +2837,8 @@ static void WriteViscousInteractionSummary(
     double criticalAmplificationFactor,
     AirfoilAnalysisService analysisService)
 {
-    var result = analysisService.AnalyzeViscousInteraction(
-        geometry,
-        angleOfAttackDegrees,
-        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor),
-        interactionIterations,
-        couplingFactor,
-        viscousIterations,
-        residualTolerance);
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"InteractionIterations: {result.InteractionIterations}");
-    Console.WriteLine($"InteractionConverged: {result.Converged}");
-    Console.WriteLine($"CouplingFactor: {couplingFactor.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"AverageUeChange: {result.AverageRelativeEdgeVelocityChange.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalIterationUeChange: {result.FinalIterationRelativeEdgeVelocityChange.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Converged: {result.SolveResult.Converged}");
-    Console.WriteLine($"InitialSurfaceResidual: {result.SolveResult.InitialSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalSurfaceResidual: {result.SolveResult.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"InitialTransitionResidual: {result.SolveResult.InitialTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalTransitionResidual: {result.SolveResult.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"InitialWakeResidual: {result.SolveResult.InitialWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalWakeResidual: {result.SolveResult.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("[DEPRECATED] The surrogate viscous interaction pipeline has been replaced by the Newton-coupled viscous solver.");
+    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
 static void WriteDisplacementCoupledSummary(
@@ -2967,38 +2855,8 @@ static void WriteDisplacementCoupledSummary(
     double criticalAmplificationFactor,
     AirfoilAnalysisService analysisService)
 {
-    var result = analysisService.AnalyzeDisplacementCoupledViscous(
-        geometry,
-        angleOfAttackDegrees,
-        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor),
-        couplingIterations,
-        viscousIterations,
-        residualTolerance,
-        displacementRelaxation);
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CouplingIterations: {result.Iterations}");
-    Console.WriteLine($"CoupledConverged: {result.Converged}");
-    Console.WriteLine($"InnerInteractionIterations: {result.InnerInteractionIterations}");
-    Console.WriteLine($"InnerInteractionConverged: {result.InnerInteractionConverged}");
-    Console.WriteLine($"FinalSeedUeChange: {result.FinalSeedEdgeVelocityChange.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalDisplacementRelaxation: {result.FinalDisplacementRelaxation.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"MaxSurfaceDisplacement: {result.MaxSurfaceDisplacement.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"InitialCL: {result.InitialAnalysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalCL: {result.FinalAnalysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalCDvisc: {result.EstimatedProfileDragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalLiftDelta: {result.FinalLiftDelta.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"InitialCMc/4: {result.InitialAnalysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalCMc/4: {result.FinalAnalysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalMomentDelta: {result.FinalMomentDelta.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalSurfaceResidual: {result.FinalSolveResult.FinalSurfaceResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalTransitionResidual: {result.FinalSolveResult.FinalTransitionResidual.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"FinalWakeResidual: {result.FinalSolveResult.FinalWakeResidual.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("[DEPRECATED] The surrogate displacement-coupled pipeline has been replaced by the Newton-coupled viscous solver.");
+    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
 static double FindTransitionXi(ViscousBranchState branch)
@@ -3684,20 +3542,6 @@ static void RunSession(string manifestPath, string outputDirectory, AnalysisSess
     {
         Console.WriteLine($"{artifact.Name}\t{artifact.Kind}\t{artifact.PointCount}\t{artifact.OutputPath}");
     }
-}
-
-static double ComputeTransitionResidual(ViscousIntervalSystem system)
-{
-    var laminarIntervals = system.UpperSurfaceIntervals
-        .Concat(system.LowerSurfaceIntervals)
-        .Where(interval => interval.Kind == ViscousIntervalKind.Laminar)
-        .ToArray();
-    if (laminarIntervals.Length == 0)
-    {
-        return 0d;
-    }
-
-    return laminarIntervals.Average(interval => Math.Abs(interval.AmplificationResidual));
 }
 
 static double ParseDouble(string raw, string label)
