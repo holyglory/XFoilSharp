@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-06 (Drag decomposition and post-stall)
-last_updated: "2026-03-11T00:35:00.000Z"
-last_activity: 2026-03-11 -- Completed 03-06 (Drag decomposition and post-stall)
+stopped_at: Completed 03-07 (Polar sweep runner and AirfoilAnalysisService integration)
+last_updated: "2026-03-11T01:25:00.000Z"
+last_activity: 2026-03-11 -- Completed 03-07 (Polar sweep runner and AirfoilAnalysisService integration)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 15
-  completed_plans: 13
-  percent: 80
+  completed_plans: 14
+  percent: 87
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 6 of 8 in current phase (03-06 Complete)
+Plan: 7 of 8 in current phase (03-07 Complete)
 Status: In Progress
-Last activity: 2026-03-11 -- Completed 03-06 (Drag decomposition and post-stall)
+Last activity: 2026-03-11 -- Completed 03-07 (Polar sweep runner and AirfoilAnalysisService integration)
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [████████░░] 80%
 | Phase 03 P02 | 19min | 2 tasks | 2 files |
 | Phase 03 P05 | 40min | 2 tasks | 4 files |
 | Phase 03 P06 | 13min | 2 tasks | 5 files |
+| Phase 03 P07 | 25min | 2 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Per-side Squire-Young summation for DragCalculator (handles TE closure artifacts correctly)
 - [Phase 03]: Viterna-Corrigan A2 coefficient with sin(stall)/cos^2(stall) scaling for correct post-stall CL decrease
 - [Phase 03]: TE-based Squire-Young for surface cross-check rather than Cf+Cp integration
+- [Phase 03]: BLSnapshot simplified to AlphaRadians-only for warm-start (ViscousSolverEngine reinitializes BL from scratch)
+- [Phase 03]: LaminarAmplificationModel inlined into ViscousStateEstimator rather than keeping separate file
+- [Phase 03]: CLI surrogate diagnostic commands replaced with deprecation notices (not full rewrites)
 
 ### Pending Todos
 
@@ -117,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T00:35:00Z
-Stopped at: Completed 03-06 (Drag decomposition and post-stall)
+Last session: 2026-03-11T01:25:00Z
+Stopped at: Completed 03-07 (Polar sweep runner and AirfoilAnalysisService integration)
 Resume file: None

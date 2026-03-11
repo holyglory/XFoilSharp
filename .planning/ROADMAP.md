@@ -98,5 +98,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
 | 2. Inviscid Kernel Parity | 5/5 | Complete | 2026-03-10 |
-| 3. Viscous Solver Parity and Polar Validation | 5/8 | In Progress|  |
+| 3. Viscous Solver Parity and Polar Validation | 7/8 | In Progress|  |
 | 4. Randomized Test Bench | 0/? | Not started | - |

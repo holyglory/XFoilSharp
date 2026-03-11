@@ -34,9 +34,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Polar Generation
 
-- [ ] **POL-01**: Alpha sweep (Type 1) produces results within 0.001% of original XFoil
-- [ ] **POL-02**: CL sweep (Type 2) produces results within 0.001% of original XFoil
-- [ ] **POL-03**: Re sweep (Type 3, fixed CL varying Re) produces results within 0.001% of original XFoil
+- [x] **POL-01**: Alpha sweep (Type 1) produces results within 0.001% of original XFoil
+- [x] **POL-02**: CL sweep (Type 2) produces results within 0.001% of original XFoil
+- [x] **POL-03**: Re sweep (Type 3, fixed CL varying Re) produces results within 0.001% of original XFoil
 
 ### Test Bench
 
@@ -87,9 +87,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VISC-03 | Phase 3 | Complete |
 | VISC-04 | Phase 3 | Complete |
 | VISC-05 | Phase 3 | Complete |
-| POL-01 | Phase 3 | Pending |
-| POL-02 | Phase 3 | Pending |
-| POL-03 | Phase 3 | Pending |
+| POL-01 | Phase 3 | Complete |
+| POL-02 | Phase 3 | Complete |
+| POL-03 | Phase 3 | Complete |
 | TEST-01 | Phase 4 | Pending |
 | TEST-02 | Phase 4 | Pending |
 | TEST-03 | Phase 4 | Pending |
