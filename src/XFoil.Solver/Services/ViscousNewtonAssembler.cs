@@ -91,8 +91,15 @@ public static class ViscousNewtonAssembler
         {
             double ncrit = settings.GetEffectiveNCrit(side);
 
-            // Previous station variables -- zeroed at start of each side (similarity)
-            double x1 = 0, u1 = 0, t1 = 0, d1 = 0, s1 = 0, dw1 = 0;
+            // Previous station variables -- initialized from station 0 (stagnation point)
+            // For the similarity station (ibl=1), SETBL uses current station values to avoid
+            // division by zero in BLDIF (d1/t1 and log(x2/x1)).
+            double x1 = Math.Max(blState.XSSI[0, side], 1e-10);
+            double u1 = Math.Max(blState.UEDG[0, side], 1e-10);
+            double t1 = Math.Max(blState.THET[0, side], 1e-10);
+            double d1 = Math.Max(blState.DSTR[0, side], 1e-10);
+            double s1 = blState.CTAU[0, side];
+            double dw1 = 0;
             double ampl1 = 0;
             double hk1 = 2.1, rt1 = 200.0; // Previous station Hk and Rt for transition check
 

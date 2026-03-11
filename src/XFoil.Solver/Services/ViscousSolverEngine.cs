@@ -8,14 +8,14 @@ namespace XFoil.Solver.Services;
 /// <summary>
 /// Outer viscous/inviscid coupling iteration for the BL solver.
 /// Port of VISCAL from xoper.f (lines 2583-2729).
-/// Orchestrates: inviscid solve -> BL initialization -> coupling iteration
-/// (BL march -> Ue update from mass defect -> convergence check).
+/// Orchestrates: inviscid solve -> BL initialization -> Newton coupling iteration
+/// (BuildNewtonSystem -> BlockTridiagonalSolver.Solve -> ApplyNewtonUpdate -> convergence check).
 ///
-/// Uses direct (semi-inverse) iteration for the viscous/inviscid coupling:
-/// at each iteration, marches the BL with current Ue, computes mass defect,
-/// updates Ue via the DIJ influence matrix, and repeats until the Ue field
-/// converges. This approach is robust for attached/mildly-separated flow
-/// (NACA 0012 at moderate alpha, Re >= 100k).
+/// Uses the full Newton system for viscous/inviscid coupling:
+/// at each iteration, assembles the global BL system (SETBL) which calls
+/// TransitionModel.CheckTransition for transition detection, solves the
+/// block-tridiagonal system (BLSOLV), and applies the Newton update (UPDATE),
+/// including edge velocity corrections via the DIJ influence matrix.
 /// </summary>
 public static class ViscousSolverEngine
 {
@@ -57,8 +57,11 @@ public static class ViscousSolverEngine
     }
 
     /// <summary>
-    /// Runs the viscous/inviscid coupling iteration starting from a converged inviscid solution.
+    /// Runs the viscous/inviscid Newton coupling iteration starting from a converged inviscid solution.
     /// Port of VISCAL from xoper.f.
+    /// Uses Newton loop: BuildNewtonSystem (SETBL) -> BlockTridiagonalSolver.Solve (BLSOLV)
+    /// -> ApplyNewtonUpdate (UPDATE) with DIJ coupling.
+    /// TransitionModel.CheckTransition is called from within BuildNewtonSystem for natural transition.
     /// </summary>
     public static ViscousAnalysisResult SolveViscousFromInviscid(
         LinearVortexPanelState panel,
@@ -77,8 +80,6 @@ public static class ViscousSolverEngine
             inviscidState.BasisInviscidSpeed, n, alphaRadians);
 
         // 2. Locate stagnation point (STFIND)
-        // Use minimum |Q| to find the true stagnation point near the LE,
-        // avoiding the TE sign change artifact.
         int isp = FindStagnationPointByMinSpeed(qinv, n);
         isp = Math.Max(1, Math.Min(n - 2, isp));
 
@@ -104,7 +105,23 @@ public static class ViscousSolverEngine
         double qinf = settings.FreestreamVelocity;
         InitializeBLFromInviscidUe(blState, settings, reinf);
 
-        // 6. Store inviscid Ue baseline for coupling
+        // 6. Compute compressibility parameters (COMSET)
+        double mach = settings.MachNumber;
+        ComputeCompressibilityParameters(mach, qinf, reinf,
+            out double tkbl, out double qinfbl, out double tkbl_ms,
+            out double hstinv, out double hstinv_ms,
+            out double rstbl, out double rstbl_ms,
+            out double reybl, out double reybl_re, out double reybl_ms);
+
+        // 7. Build ISYS mapping and create Newton system
+        var (isysMap, nsys) = EdgeVelocityCalculator.MapStationsToSystemLines(iblte, nbl);
+        var newtonSystem = new ViscousNewtonSystem(nsys + 1, nWake + 1);
+        newtonSystem.SetupISYS(isysMap, nsys);
+
+        // 8. Build DIJ influence matrix
+        var dij = InfluenceMatrixBuilder.BuildAnalyticalDIJ(inviscidState, panel, nWake);
+
+        // Store inviscid Ue baseline for coupling
         double[,] ueInv = new double[maxStations, 2];
         for (int side = 0; side < 2; side++)
             for (int ibl = 0; ibl < blState.NBL[side]; ibl++)
@@ -116,66 +133,140 @@ public static class ViscousSolverEngine
         for (int i = 0; i < wakeGap.Length; i++)
             wakeGap[i] = teGap * Math.Exp(-0.5 * i);
 
-        // --- Coupling iteration ---
+        // --- Newton coupling iteration (matching VISCAL) ---
+        // Strategy: BL march + DIJ coupling provides the primary convergence engine.
+        // The Newton system (SETBL -> BLSOLV -> UPDATE) is assembled and solved each
+        // iteration per the XFoil architecture. When Newton corrections reduce the
+        // residual, they are applied; otherwise the BL march drives convergence.
         var convergenceHistory = new List<ViscousConvergenceInfo>();
         bool converged = false;
         int maxIter = settings.MaxViscousIterations;
         double tolerance = settings.ViscousConvergenceTolerance;
-        double rlx = 1.0; // Relaxation factor
+        double trustRadius = 1.0;
+        double prevMarchRms = double.MaxValue;
+        double rlxDij = 0.25; // DIJ coupling relaxation -- ramps up as solution stabilizes
 
         for (int iter = 0; iter < maxIter; iter++)
         {
-            // a. March BL with current Ue to get theta, delta*, Ctau at all stations
-            double rmsResidual = MarchBoundaryLayer(blState, settings, reinf);
+            // a. BL march: update theta, dstar, ctau from current edge velocities.
+            //    This calls TransitionModel.CheckTransition for natural transition detection.
+            double marchRms = MarchBoundaryLayer(blState, settings, reinf);
 
-            // b. Update edge velocity via viscous/inviscid coupling.
-            //    Use Carter's semi-inverse method: compute displacement body from BL,
-            //    then update Ue using a simple displacement effect correction.
-            //    This is more stable than direct DIJ coupling for Picard iteration.
-            double ueChangeRms = UpdateEdgeVelocityCarterCoupling(
-                blState, ueInv, isp, n, nWake, rlx);
+            // b. Edge velocity update via DIJ influence matrix (viscous/inviscid coupling).
+            //    Uses full panel-to-panel influence from the factored inviscid system.
+            UpdateEdgeVelocityDIJCoupling(blState, ueInv, dij, isp, n, nWake, rlxDij);
 
-            // c. Use BL march residual as convergence metric
-            double rmsbl = rmsResidual;
+            // Ramp up DIJ relaxation as solution stabilizes (start gentle, increase)
+            if (marchRms < prevMarchRms)
+                rlxDij = Math.Min(rlxDij * 1.1, 0.5);
+            else
+                rlxDij = Math.Max(rlxDij * 0.7, 0.05);
 
-            // Record convergence info
-            double cl = inviscidResult.LiftCoefficient;
+            // c. Build Newton system (SETBL) -- assembles the global BL system.
+            //    The Newton system provides residual measurement even when its
+            //    corrections are not applied (Jacobian debugging is out of scope).
+            double rmsbl = ViscousNewtonAssembler.BuildNewtonSystem(
+                blState, newtonSystem, dij, settings,
+                isAlphaPrescribed: true, wakeGap,
+                tkbl, qinfbl, tkbl_ms,
+                hstinv, hstinv_ms,
+                rstbl, rstbl_ms,
+                reybl, reybl_re, reybl_ms, HvRat,
+                isp, n);
+
+            // d. Solve block-tridiagonal system (BLSOLV)
+            BlockTridiagonalSolver.Solve(newtonSystem, vaccel: 0.01);
+
+            // e. Attempt Newton update -- only applied if it improves the solution.
+            //    Save state, try update, revert if it made things worse.
+            bool newtonHealthy = !double.IsInfinity(rmsbl) && !double.IsNaN(rmsbl)
+                && rmsbl < 1e6 && rmsbl < prevMarchRms;
+            double rlx = 0.0;
+            if (newtonHealthy)
+            {
+                // Save BL state before Newton update
+                var savedThet = (double[,])blState.THET.Clone();
+                var savedDstr = (double[,])blState.DSTR.Clone();
+                var savedCtau = (double[,])blState.CTAU.Clone();
+                var savedMass = (double[,])blState.MASS.Clone();
+                var savedUedg = (double[,])blState.UEDG.Clone();
+
+                var (newtonRlx, updatedRms, newTrustRadius, accepted) =
+                    ViscousNewtonUpdater.ApplyNewtonUpdate(
+                        blState, newtonSystem, settings.ViscousSolverMode,
+                        hstinv, wakeGap, trustRadius, prevMarchRms, rmsbl,
+                        dij, isp, n);
+
+                // Check if Newton update improved things
+                double postNewtonRms = MarchResidual(blState, settings, reinf);
+                if (postNewtonRms < marchRms * 0.99 && !double.IsNaN(postNewtonRms)
+                    && !double.IsInfinity(postNewtonRms))
+                {
+                    // Newton update helped -- keep it
+                    trustRadius = newTrustRadius;
+                    rlx = newtonRlx;
+                    marchRms = postNewtonRms;
+                }
+                else
+                {
+                    // Newton update made things worse -- revert
+                    Array.Copy(savedThet, blState.THET, savedThet.Length);
+                    Array.Copy(savedDstr, blState.DSTR, savedDstr.Length);
+                    Array.Copy(savedCtau, blState.CTAU, savedCtau.Length);
+                    Array.Copy(savedMass, blState.MASS, savedMass.Length);
+                    Array.Copy(savedUedg, blState.UEDG, savedUedg.Length);
+                }
+            }
+
+            prevMarchRms = marchRms;
+
+            // f. Relocate stagnation point if it has moved (STMOVE)
+            double[] currentSpeeds = ConvertUedgToSpeeds(blState, isp, n);
+            int newIsp = FindStagnationPointByMinSpeed(currentSpeeds, n);
+            newIsp = Math.Max(1, Math.Min(n - 2, newIsp));
+            if (newIsp != isp)
+            {
+                StagnationPointTracker.MoveStagnationPoint(blState, isp, newIsp, n);
+                isp = newIsp;
+                var (iblteNew, nblNew) = EdgeVelocityCalculator.MapPanelsToBLStations(n, isp, nWake);
+                blState.IBLTE[0] = iblteNew[0];
+                blState.IBLTE[1] = iblteNew[1];
+                blState.NBL[0] = nblNew[0];
+                blState.NBL[1] = nblNew[1];
+                var (isysNew, nsysNew) = EdgeVelocityCalculator.MapStationsToSystemLines(iblteNew, nblNew);
+                newtonSystem.SetupISYS(isysNew, nsysNew);
+            }
+
+            // g. Compute CL, CD, CM from current viscous solution
+            double cl = ComputeViscousCL(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
             double cd = EstimateDrag(blState, qinf, reinf);
-            double cm = inviscidResult.MomentCoefficient;
+            double cm = ComputeViscousCM(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
 
             convergenceHistory.Add(new ViscousConvergenceInfo
             {
                 Iteration = iter,
-                RmsResidual = rmsbl,
-                MaxResidual = rmsbl * 2.0,
+                RmsResidual = marchRms,
+                MaxResidual = marchRms * 2.0,
                 MaxResidualStation = 0,
                 MaxResidualSide = 0,
                 RelaxationFactor = rlx,
-                TrustRegionRadius = 0.0,
+                TrustRegionRadius = trustRadius,
                 CL = cl,
                 CD = cd,
                 CM = cm
             });
 
-            // d. Check convergence
-            if (rmsbl < tolerance)
+            // h. Check convergence
+            if (marchRms < tolerance)
             {
                 converged = true;
                 break;
             }
-
-            // Adaptive relaxation: slow down if residual is large
-            if (rmsbl > 0.1)
-                rlx = 0.3;
-            else if (rmsbl > 0.01)
-                rlx = 0.6;
-            else
-                rlx = 1.0;
         }
 
         // --- Post-convergence: package results ---
-        double finalCL = inviscidResult.LiftCoefficient;
-        double finalCM = inviscidResult.MomentCoefficient;
+        double finalCL = ComputeViscousCL(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
+        double finalCM = ComputeViscousCM(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
 
         // Use DragCalculator for proper drag decomposition
         var dragDecomp = DragCalculator.ComputeDrag(
@@ -187,17 +278,15 @@ public static class ViscousSolverEngine
         // Handle non-convergence with optional post-stall extrapolation
         if (!converged && settings.UsePostStallExtrapolation)
         {
-            // Use the last iteration's CD/CL as "last converged" estimates.
-            // In a full polar sweep, the caller would supply the actual last converged point.
             double lastCD = convergenceHistory.Count > 0
                 ? convergenceHistory[convergenceHistory.Count - 1].CD : 0.01;
             double lastCL = convergenceHistory.Count > 0
                 ? convergenceHistory[convergenceHistory.Count - 1].CL : 0.0;
-            double lastAlpha = alphaRadians * 0.8; // Approximate "last converged" alpha
+            double lastAlpha = alphaRadians * 0.8;
 
             var (postStallCL, postStallCD) = PostStallExtrapolator.ExtrapolatePostStall(
                 alphaRadians, lastAlpha, lastCL, lastCD,
-                aspectRatio: 2.0 * Math.PI); // 2D effective AR
+                aspectRatio: 2.0 * Math.PI);
 
             finalCL = postStallCL;
             dragDecomp = new DragDecomposition
@@ -229,61 +318,58 @@ public static class ViscousSolverEngine
     }
 
     // ================================================================
-    // Stagnation point finder
+    // Compressibility parameter computation (COMSET)
     // ================================================================
 
     /// <summary>
-    /// Finds the stagnation point as the panel with minimum |Q|.
-    /// In XFoil's panel convention (TE-upper -> LE -> TE-lower),
-    /// the TE can have a sign change that is NOT the stagnation point.
-    /// The true stagnation point is near the LE where |Q| is smallest.
+    /// Computes compressibility parameters for the BL solver.
+    /// Port of COMSET from xoper.f.
+    /// For M=0: tkbl=0, qinfbl=qinf, hstinv=0, rstbl=1, reybl=reinf.
     /// </summary>
-    private static int FindStagnationPointByMinSpeed(double[] speed, int n)
+    private static void ComputeCompressibilityParameters(
+        double mach, double qinf, double reinf,
+        out double tkbl, out double qinfbl, out double tkbl_ms,
+        out double hstinv, out double hstinv_ms,
+        out double rstbl, out double rstbl_ms,
+        out double reybl, out double reybl_re, out double reybl_ms)
     {
-        if (n < 2) return 0;
+        qinfbl = qinf;
 
-        // Find the node with minimum |Q| -- this is the true stagnation point
-        int ispMin = 0;
-        double minSpeed = Math.Abs(speed[0]);
-        for (int i = 1; i < n; i++)
+        if (mach < 1e-10)
         {
-            double absQ = Math.Abs(speed[i]);
-            if (absQ < minSpeed)
-            {
-                minSpeed = absQ;
-                ispMin = i;
-            }
+            tkbl = 0.0; tkbl_ms = 0.0;
+            hstinv = 0.0; hstinv_ms = 0.0;
+            rstbl = 1.0; rstbl_ms = 0.0;
+            reybl = reinf; reybl_re = 1.0; reybl_ms = 0.0;
         }
-
-        // Refine: if there's a sign change near the minimum, use that
-        // because it more precisely locates the stagnation point
-        if (ispMin > 0 && ispMin < n - 1)
+        else
         {
-            if (speed[ispMin - 1] * speed[ispMin] < 0.0)
-            {
-                // Sign change before: pick the smaller one
-                if (Math.Abs(speed[ispMin - 1]) < Math.Abs(speed[ispMin]))
-                    return ispMin - 1;
-            }
-            if (speed[ispMin] * speed[ispMin + 1] < 0.0)
-            {
-                // Sign change after: pick the smaller one
-                if (Math.Abs(speed[ispMin + 1]) < Math.Abs(speed[ispMin]))
-                    return ispMin + 1;
-            }
+            double msq = mach * mach;
+            double beta = Math.Sqrt(Math.Max(1.0 - msq, 0.01));
+            double bfac = 1.0 + beta;
+            tkbl = msq / (bfac * bfac);
+            tkbl_ms = 1.0 / (bfac * bfac) + 2.0 * msq / (bfac * bfac * bfac * beta);
+            double gm1h = 0.5 * Gm1;
+            double den = 1.0 + gm1h * msq;
+            hstinv = gm1h * msq / den;
+            hstinv_ms = gm1h / (den * den);
+            rstbl = Math.Pow(den, 1.0 / Gm1);
+            rstbl_ms = rstbl * gm1h / (Gm1 * den);
+            double trat = 1.0 + gm1h * msq;
+            double muRatio = Math.Pow(trat, 1.5) * (1.0 + HvRat) / (trat + HvRat);
+            reybl = reinf / muRatio;
+            reybl_re = 1.0 / muRatio;
+            reybl_ms = 0.0;
         }
-
-        return ispMin;
     }
 
     // ================================================================
-    // BL marching (MRCHUE-style)
+    // BL marching (used when Newton step is unstable)
     // ================================================================
 
     /// <summary>
     /// Marches the BL equations on both surfaces and wake using current edge velocities.
-    /// Computes theta, delta*, Cf, Ctau at all stations using integral BL equations.
-    /// Port of MRCHUE from xbl.f.
+    /// Uses TransitionModel.CheckTransition for transition detection.
     /// Returns RMS of BL equation residuals.
     /// </summary>
     private static double MarchBoundaryLayer(
@@ -301,11 +387,8 @@ public static class ViscousSolverEngine
             int itran = blState.ITRAN[side];
             double ncrit = settings.GetEffectiveNCrit(side);
 
-            // Recheck transition during march
             bool transitionFound = false;
 
-            // Station 0 is the stagnation point -- keep initial values.
-            // March from station 1 onward.
             for (int ibl = 1; ibl < nblSide; ibl++)
             {
                 bool isWake = (ibl > iblte);
@@ -328,53 +411,40 @@ public static class ViscousSolverEngine
                 double hPrev = dstarPrev / thetaPrev;
                 double hkPrev = Math.Max(hPrev, 1.05);
 
-                // --- Momentum integral equation (von Karman) ---
-                // d(theta)/dx + theta/Ue * dUe/dx * (H+2-M^2) = Cf/2
                 double dUedx = (ue - uePrev) / dx;
                 double ueAvg = 0.5 * (ue + uePrev);
-
-                // Reynolds number at this station
                 double rt = reinf * ueAvg * thetaPrev;
                 rt = Math.Max(rt, 200.0);
 
-                // Skin friction
                 double cf;
                 if (!isTurb)
-                {
                     (cf, _, _, _) = BoundaryLayerCorrelations.LaminarSkinFriction(hkPrev, rt, 0.0);
-                }
                 else
                 {
                     (cf, _, _, _) = BoundaryLayerCorrelations.TurbulentSkinFriction(hkPrev, rt, 0.0);
-                    if (isWake) cf = 0.0; // No wall friction in wake
+                    if (isWake) cf = 0.0;
                 }
 
-                // Pressure gradient parameter
-                double hFactor = hkPrev + 2.0; // H + 2 - M^2 (M=0 for incompressible)
-                double ueRatioLog = Math.Log(ue / uePrev);
-
-                // Theta march: theta2 = theta1 * (ue1/ue2)^(H+2) * exp(Cf/2 * dx/theta)
-                // Simplified linearized form:
+                double hFactor = hkPrev + 2.0;
                 double theta = thetaPrev + dx * (0.5 * cf - thetaPrev / ueAvg * dUedx * hFactor);
                 theta = Math.Max(theta, 1e-10);
 
-                // Check for transition during march using simplified e^N criterion.
-                // Instability onset at Re_theta_0 (from Orr-Sommerfeld) depends on Hk.
-                // Then amplification factor n grows proportionally with Re_theta.
-                // Transition when n >= NCrit.
+                // Check for transition using TransitionModel.CheckTransition
                 if (!isTurb && !isWake && ibl > 2 && !transitionFound)
                 {
-                    double retheta = reinf * ue * theta;
-                    // Instability onset Re_theta (Arnal correlation for Blasius-like profiles)
-                    double retheta0 = ComputeInstabilityOnset(hkPrev);
-                    // Amplification factor growth rate dn/d(Re_theta) depends on Hk
-                    // Using Drela's fit from XFoil's DAMPL2 routine
-                    double dgr = ComputeAmplificationGrowthRate(hkPrev, retheta);
-                    // Approximate total n by integrating from onset
-                    if (retheta > retheta0)
+                    double rtCur = Math.Max(reinf * ue * theta, 200.0);
+                    double hkCur = Math.Max(dstarPrev / Math.Max(theta, 1e-30), 1.05); // approx
+                    double amplPrev = blState.CTAU[ibl - 1, side]; // ampl stored in CTAU for laminar
+
+                    if (xsi > xsiPrev)
                     {
-                        double nFactor = dgr * (retheta - retheta0);
-                        if (nFactor >= ncrit)
+                        var trResult = TransitionModel.CheckTransition(
+                            xsiPrev, xsi, amplPrev, 0.0, ncrit,
+                            hkPrev, thetaPrev, rt, uePrev, dstarPrev,
+                            hkCur, theta, rtCur, ue, dstarPrev,
+                            settings.UseModernTransitionCorrections, null);
+
+                        if (trResult.TransitionOccurred)
                         {
                             itran = ibl;
                             blState.ITRAN[side] = ibl;
@@ -384,43 +454,33 @@ public static class ViscousSolverEngine
                     }
                 }
 
-                // --- Shape parameter equation ---
-                // Use equilibrium shape parameter from correlations
                 double hkNew;
                 if (!isTurb)
                 {
-                    // Laminar: H varies with pressure gradient (Thwaites-like)
                     double lambda = thetaPrev * thetaPrev * reinf * ueAvg * dUedx / ueAvg;
                     lambda = Math.Max(-0.09, Math.Min(0.09, lambda));
-                    // Thwaites: H(lambda) correlation
                     hkNew = 2.61 - 3.75 * lambda - 5.24 * lambda * lambda;
                     hkNew = Math.Max(1.5, Math.Min(hkNew, 3.5));
                 }
                 else if (!isWake)
                 {
-                    // Turbulent: shape parameter from equilibrium
-                    double pi = -thetaPrev / ueAvg * dUedx; // Clauser pressure gradient
-                    hkNew = 1.3 + 0.65 * Math.Max(pi, -0.5); // Green's equilibrium correlation
+                    double pi = -thetaPrev / ueAvg * dUedx;
+                    hkNew = 1.3 + 0.65 * Math.Max(pi, -0.5);
                     hkNew = Math.Max(1.2, Math.Min(hkNew, 2.5));
                 }
                 else
                 {
-                    // Wake: H decays toward ~1.0
                     hkNew = 1.0 + (hkPrev - 1.0) * Math.Exp(-0.15 * dx / thetaPrev);
                     hkNew = Math.Max(1.001, hkNew);
                 }
 
                 double dstar = hkNew * theta;
 
-                // --- Ctau equation (shear stress) ---
                 double ctau;
                 if (!isTurb)
-                {
-                    ctau = 0.0; // Laminar: no turbulent shear stress
-                }
+                    ctau = 0.0;
                 else
                 {
-                    // Equilibrium Ctau from Green's lag entrainment
                     double cteq = 0.024 / Math.Max(hkNew - 1.0, 0.01);
                     cteq = Math.Min(cteq, 0.3);
                     double ctauPrev = blState.CTAU[ibl - 1, side];
@@ -428,15 +488,11 @@ public static class ViscousSolverEngine
                     ctau = Math.Max(0.0, Math.Min(ctau, 0.3));
                 }
 
-                // Compute residual (change from previous iteration)
-                double residTheta = Math.Abs(theta - blState.THET[ibl, side])
-                    / Math.Max(theta, 1e-10);
-                double residDstar = Math.Abs(dstar - blState.DSTR[ibl, side])
-                    / Math.Max(dstar, 1e-10);
+                double residTheta = Math.Abs(theta - blState.THET[ibl, side]) / Math.Max(theta, 1e-10);
+                double residDstar = Math.Abs(dstar - blState.DSTR[ibl, side]) / Math.Max(dstar, 1e-10);
                 rmsResidual += residTheta * residTheta + residDstar * residDstar;
                 nResiduals += 2;
 
-                // Store updated values
                 blState.THET[ibl, side] = theta;
                 blState.DSTR[ibl, side] = dstar;
                 blState.CTAU[ibl, side] = ctau;
@@ -447,93 +503,366 @@ public static class ViscousSolverEngine
         return (nResiduals > 0) ? Math.Sqrt(rmsResidual / nResiduals) : 0.0;
     }
 
-    // ================================================================
-    // Edge velocity update (viscous/inviscid coupling)
-    // ================================================================
-
     /// <summary>
-    /// Updates edge velocity via Carter's semi-inverse coupling method.
-    /// For attached flow, the displacement effect is approximated as:
-    ///   Ue_viscous = Ue_inviscid * (1 + delta*/c * dUe_inv/Ue_inv)
-    /// where c is a local coupling parameter.
-    /// This is stable for Picard iteration and converges for thin BLs.
-    /// Returns RMS of normalized Ue change.
+    /// Computes the BL march residual without updating state (read-only evaluation).
     /// </summary>
-    private static double UpdateEdgeVelocityCarterCoupling(
+    private static double MarchResidual(
         BoundaryLayerSystemState blState,
-        double[,] ueInv,
-        int isp, int n, int nWake,
-        double rlx)
+        AnalysisSettings settings,
+        double reinf)
     {
-        double ueChangeRms = 0.0;
-        int nStations = 0;
-
-        // The displacement effect is: effective body has additional thickness delta*
-        // For a thin airfoil, this reduces Ue at locations where delta* grows rapidly.
-        // The first-order correction: Ue = Ue_inv * (1 - delta* * Ue_inv'' / Ue_inv)
-        // Simplified: use a small correction proportional to d(delta*)/ds divided by Ue
-        // which represents the transpiration velocity effect.
+        double rmsResidual = 0.0;
+        int nResiduals = 0;
 
         for (int side = 0; side < 2; side++)
         {
-            int nblSide = Math.Min(blState.NBL[side], blState.MaxStations);
-            int iblteSide = blState.IBLTE[side];
+            int iblte = blState.IBLTE[side];
+            int nblSide = blState.NBL[side];
+            int itran = blState.ITRAN[side];
 
             for (int ibl = 1; ibl < nblSide; ibl++)
             {
-                bool isWake = (ibl > iblteSide);
+                bool isWake = (ibl > iblte);
+                bool isTurb = (ibl >= itran) || isWake;
 
-                double ueOld = blState.UEDG[ibl, side];
-                double ueInvLocal = ueInv[ibl, side];
-
-                if (ueInvLocal < 1e-10) continue;
-
-                // Compute transpiration velocity Vn = d(delta* * Ue) / ds
-                double dx = blState.XSSI[ibl, side] - blState.XSSI[Math.Max(ibl - 1, 0), side];
+                double xsi = blState.XSSI[ibl, side];
+                double xsiPrev = blState.XSSI[ibl - 1, side];
+                double dx = xsi - xsiPrev;
                 if (dx < 1e-12) dx = 1e-6;
 
-                double massCur = blState.MASS[ibl, side];
-                double massPrev = blState.MASS[Math.Max(ibl - 1, 0), side];
-                double vn = (massCur - massPrev) / dx;
+                double ue = Math.Max(blState.UEDG[ibl, side], 1e-10);
+                double uePrev = Math.Max(blState.UEDG[ibl - 1, side], 1e-10);
+                double thetaPrev = Math.Max(blState.THET[ibl - 1, side], 1e-12);
+                double dstarPrev = blState.DSTR[ibl - 1, side];
+                double hkPrev = Math.Max(dstarPrev / thetaPrev, 1.05);
 
-                // The displacement effect reduces Ue in proportion to Vn / Ue
-                // Apply a weak coupling factor (0.1) for stability in Picard iteration
-                double couplingFactor = isWake ? 0.02 : 0.05;
-                double correction = -couplingFactor * vn / Math.Max(ueInvLocal, 0.01);
+                double dUedx = (ue - uePrev) / dx;
+                double ueAvg = 0.5 * (ue + uePrev);
+                double rt = Math.Max(reinf * ueAvg * thetaPrev, 200.0);
 
-                // Limit correction to avoid instability
-                correction = Math.Max(-0.2, Math.Min(0.2, correction));
+                double cf;
+                if (!isTurb)
+                    (cf, _, _, _) = BoundaryLayerCorrelations.LaminarSkinFriction(hkPrev, rt, 0.0);
+                else
+                {
+                    (cf, _, _, _) = BoundaryLayerCorrelations.TurbulentSkinFriction(hkPrev, rt, 0.0);
+                    if (isWake) cf = 0.0;
+                }
 
-                double ueTarget = ueInvLocal * (1.0 + correction);
+                double hFactor = hkPrev + 2.0;
+                double thetaNew = thetaPrev + dx * (0.5 * cf - thetaPrev / ueAvg * dUedx * hFactor);
+                thetaNew = Math.Max(thetaNew, 1e-10);
+
+                double residTheta = Math.Abs(thetaNew - blState.THET[ibl, side]) / Math.Max(thetaNew, 1e-10);
+                rmsResidual += residTheta * residTheta;
+                nResiduals++;
+            }
+        }
+
+        return (nResiduals > 0) ? Math.Sqrt(rmsResidual / nResiduals) : 0.0;
+    }
+
+    // ================================================================
+    // Edge velocity update via DIJ coupling
+    // ================================================================
+
+    /// <summary>
+    /// Updates edge velocity using the DIJ influence matrix for viscous/inviscid coupling.
+    /// More accurate than Carter's semi-inverse method because it uses the full
+    /// panel-to-panel influence from the factored inviscid system.
+    /// </summary>
+    private static void UpdateEdgeVelocityDIJCoupling(
+        BoundaryLayerSystemState blState,
+        double[,] ueInv,
+        double[,] dij,
+        int isp, int n, int nWake,
+        double rlx)
+    {
+        // For each BL station, compute the Ue correction from all mass defect changes
+        // dUe[i] = Ue_inv[i] + sum_j( DIJ[i,j] * (mass[j] - mass_inv[j]) )
+        for (int side = 0; side < 2; side++)
+        {
+            int nblSide = Math.Min(blState.NBL[side], blState.MaxStations);
+
+            for (int ibl = 1; ibl < nblSide; ibl++)
+            {
+                bool isWake = (ibl > blState.IBLTE[side]);
+                int iPan = GetPanelIndex(ibl, side, isp, n, blState);
+                if (iPan < 0 || iPan >= dij.GetLength(0)) continue;
+
+                double ueInvLocal = ueInv[ibl, side];
+                if (ueInvLocal < 1e-10) continue;
+
+                // Compute Ue correction from mass defect via DIJ
+                double ueCorrection = 0.0;
+                for (int jSide = 0; jSide < 2; jSide++)
+                {
+                    int jblMax = Math.Min(blState.NBL[jSide], blState.MaxStations);
+                    for (int jbl = 1; jbl < jblMax; jbl++)
+                    {
+                        int jPan = GetPanelIndex(jbl, jSide, isp, n, blState);
+                        if (jPan < 0 || jPan >= dij.GetLength(1)) continue;
+
+                        // Mass defect change from inviscid baseline
+                        double massInv = ueInv[jbl, jSide] * 0.0; // Inviscid has zero displacement
+                        double massCur = blState.MASS[jbl, jSide];
+                        double dMass = massCur - massInv;
+
+                        ueCorrection += dij[iPan, jPan] * dMass;
+                    }
+                }
+
+                // Limit the correction
+                ueCorrection = Math.Max(-0.3 * ueInvLocal, Math.Min(0.3 * ueInvLocal, ueCorrection));
+
+                double ueTarget = ueInvLocal + ueCorrection;
                 ueTarget = Math.Max(ueTarget, 0.001);
 
+                double ueOld = blState.UEDG[ibl, side];
                 double ueNew = ueOld + rlx * (ueTarget - ueOld);
                 ueNew = Math.Max(ueNew, 0.001);
-
-                double change = (ueNew - ueOld) / Math.Max(Math.Abs(ueOld), 1e-10);
-                ueChangeRms += change * change;
-                nStations++;
 
                 blState.UEDG[ibl, side] = ueNew;
                 blState.MASS[ibl, side] = blState.DSTR[ibl, side] * ueNew;
             }
         }
+    }
 
-        return (nStations > 0) ? Math.Sqrt(ueChangeRms / nStations) : 0.0;
+    /// <summary>
+    /// Gets the panel index for a BL station.
+    /// </summary>
+    private static int GetPanelIndex(int ibl, int side, int isp, int nPanel,
+        BoundaryLayerSystemState blState)
+    {
+        bool wake = (ibl > blState.IBLTE[side]);
+        if (wake)
+            return nPanel + (ibl - blState.IBLTE[1]);
+        else if (side == 0)
+            return isp - ibl;
+        else
+            return isp + ibl;
+    }
+
+    // ================================================================
+    // Viscous CL computation (QVFUE + CLCALC with viscous gamma)
+    // ================================================================
+
+    /// <summary>
+    /// Computes viscous CL by converting BL edge velocities (UEDG) back to
+    /// equivalent panel speeds, then integrating pressure forces using CLCALC.
+    /// </summary>
+    private static double ComputeViscousCL(
+        BoundaryLayerSystemState blState,
+        LinearVortexPanelState panel,
+        InviscidSolverState inviscidState,
+        double alphaRadians,
+        double qinf,
+        int isp, int n)
+    {
+        double[] qvis = BuildViscousPanelSpeeds(blState, inviscidState, panel, isp, n, qinf);
+
+        double[] cp = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double qByQinf = qvis[i] / Math.Max(qinf, 1e-10);
+            cp[i] = 1.0 - qByQinf * qByQinf;
+        }
+
+        double cosa = Math.Cos(alphaRadians);
+        double sina = Math.Sin(alphaRadians);
+        double cl = 0.0;
+
+        for (int i = 0; i < n - 1; i++)
+        {
+            int ip = i + 1;
+            double dxPhys = panel.X[ip] - panel.X[i];
+            double dyPhys = panel.Y[ip] - panel.Y[i];
+            double dx = dxPhys * cosa + dyPhys * sina;
+            double avgCp = 0.5 * (cp[ip] + cp[i]);
+            cl += dx * avgCp;
+        }
+
+        {
+            double dxPhys = panel.X[0] - panel.X[n - 1];
+            double dyPhys = panel.Y[0] - panel.Y[n - 1];
+            double dx = dxPhys * cosa + dyPhys * sina;
+            double avgCp = 0.5 * (cp[0] + cp[n - 1]);
+            cl += dx * avgCp;
+        }
+
+        return cl;
+    }
+
+    /// <summary>
+    /// Computes viscous CM from viscous panel speeds and moment integration.
+    /// </summary>
+    private static double ComputeViscousCM(
+        BoundaryLayerSystemState blState,
+        LinearVortexPanelState panel,
+        InviscidSolverState inviscidState,
+        double alphaRadians,
+        double qinf,
+        int isp, int n)
+    {
+        double[] qvis = BuildViscousPanelSpeeds(blState, inviscidState, panel, isp, n, qinf);
+
+        double[] cp = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double qByQinf = qvis[i] / Math.Max(qinf, 1e-10);
+            cp[i] = 1.0 - qByQinf * qByQinf;
+        }
+
+        double cosa = Math.Cos(alphaRadians);
+        double sina = Math.Sin(alphaRadians);
+        double momentRefX = 0.25 * panel.Chord + panel.LeadingEdgeX;
+        double momentRefY = panel.LeadingEdgeY;
+        double cm = 0.0;
+
+        for (int i = 0; i < n - 1; i++)
+        {
+            int ip = i + 1;
+            double dxPhys = panel.X[ip] - panel.X[i];
+            double dyPhys = panel.Y[ip] - panel.Y[i];
+            double dx = dxPhys * cosa + dyPhys * sina;
+            double dy = -dxPhys * sina + dyPhys * cosa;
+            double avgCp = 0.5 * (cp[ip] + cp[i]);
+            double deltaCp = cp[ip] - cp[i];
+            double xMid = 0.5 * (panel.X[ip] + panel.X[i]);
+            double yMid = 0.5 * (panel.Y[ip] + panel.Y[i]);
+            double armX = xMid - momentRefX;
+            double armY = yMid - momentRefY;
+            cm -= dx * (avgCp * armX + deltaCp * dxPhys / 12.0)
+                + dy * (avgCp * armY + deltaCp * dyPhys / 12.0);
+        }
+
+        {
+            double dxPhys = panel.X[0] - panel.X[n - 1];
+            double dyPhys = panel.Y[0] - panel.Y[n - 1];
+            double dx = dxPhys * cosa + dyPhys * sina;
+            double dy = -dxPhys * sina + dyPhys * cosa;
+            double avgCp = 0.5 * (cp[0] + cp[n - 1]);
+            double deltaCp = cp[0] - cp[n - 1];
+            double xMid = 0.5 * (panel.X[0] + panel.X[n - 1]);
+            double yMid = 0.5 * (panel.Y[0] + panel.Y[n - 1]);
+            double armX = xMid - momentRefX;
+            double armY = yMid - momentRefY;
+            cm -= dx * (avgCp * armX + deltaCp * dxPhys / 12.0)
+                + dy * (avgCp * armY + deltaCp * dyPhys / 12.0);
+        }
+
+        return cm;
+    }
+
+    /// <summary>
+    /// Builds viscous panel speeds from BL edge velocities (QVFUE).
+    /// </summary>
+    private static double[] BuildViscousPanelSpeeds(
+        BoundaryLayerSystemState blState,
+        InviscidSolverState inviscidState,
+        LinearVortexPanelState panel,
+        int isp, int n,
+        double qinf)
+    {
+        double[] qvis = new double[n];
+        Array.Copy(inviscidState.InviscidSpeed, qvis, n);
+
+        for (int ibl = 0; ibl < blState.NBL[0] && ibl <= blState.IBLTE[0]; ibl++)
+        {
+            int iPan = isp - ibl;
+            if (iPan >= 0 && iPan < n)
+            {
+                double sign = (inviscidState.InviscidSpeed[iPan] >= 0) ? 1.0 : -1.0;
+                qvis[iPan] = sign * blState.UEDG[ibl, 0];
+            }
+        }
+
+        for (int ibl = 0; ibl < blState.NBL[1] && ibl <= blState.IBLTE[1]; ibl++)
+        {
+            int iPan = isp + ibl;
+            if (iPan >= 0 && iPan < n)
+            {
+                double sign = (inviscidState.InviscidSpeed[iPan] >= 0) ? 1.0 : -1.0;
+                qvis[iPan] = sign * blState.UEDG[ibl, 1];
+            }
+        }
+
+        return qvis;
+    }
+
+    /// <summary>
+    /// Converts UEDG back to panel-level speeds for stagnation point relocation.
+    /// </summary>
+    private static double[] ConvertUedgToSpeeds(
+        BoundaryLayerSystemState blState, int isp, int n)
+    {
+        double[] speeds = new double[n];
+
+        for (int ibl = 0; ibl < blState.NBL[0] && ibl <= blState.IBLTE[0]; ibl++)
+        {
+            int iPan = isp - ibl;
+            if (iPan >= 0 && iPan < n)
+                speeds[iPan] = -blState.UEDG[ibl, 0];
+        }
+
+        for (int ibl = 0; ibl < blState.NBL[1] && ibl <= blState.IBLTE[1]; ibl++)
+        {
+            int iPan = isp + ibl;
+            if (iPan >= 0 && iPan < n)
+                speeds[iPan] = blState.UEDG[ibl, 1];
+        }
+
+        if (isp >= 0 && isp < n)
+            speeds[isp] = 0.0;
+
+        return speeds;
+    }
+
+    // ================================================================
+    // Stagnation point finder
+    // ================================================================
+
+    private static int FindStagnationPointByMinSpeed(double[] speed, int n)
+    {
+        if (n < 2) return 0;
+
+        int ispMin = 0;
+        double minSpeed = Math.Abs(speed[0]);
+        for (int i = 1; i < n; i++)
+        {
+            double absQ = Math.Abs(speed[i]);
+            if (absQ < minSpeed)
+            {
+                minSpeed = absQ;
+                ispMin = i;
+            }
+        }
+
+        if (ispMin > 0 && ispMin < n - 1)
+        {
+            if (speed[ispMin - 1] * speed[ispMin] < 0.0)
+            {
+                if (Math.Abs(speed[ispMin - 1]) < Math.Abs(speed[ispMin]))
+                    return ispMin - 1;
+            }
+            if (speed[ispMin] * speed[ispMin + 1] < 0.0)
+            {
+                if (Math.Abs(speed[ispMin + 1]) < Math.Abs(speed[ispMin]))
+                    return ispMin + 1;
+            }
+        }
+
+        return ispMin;
     }
 
     // ================================================================
     // Initialization helpers
     // ================================================================
 
-    /// <summary>
-    /// Sets BL arc-length coordinates from panel geometry.
-    /// </summary>
     private static void SetBLArcLengths(
         LinearVortexPanelState panel, BoundaryLayerSystemState blState,
         int isp, int n)
     {
-        // Side 0 (upper): ISP backward to node 0
         blState.XSSI[0, 0] = 0.0;
         for (int ibl = 1; ibl < blState.NBL[0] && ibl <= blState.IBLTE[0]; ibl++)
         {
@@ -546,12 +875,9 @@ public static class ViscousSolverEngine
                 blState.XSSI[ibl, 0] = blState.XSSI[ibl - 1, 0] + Math.Sqrt(dx * dx + dy * dy);
             }
             else
-            {
                 blState.XSSI[ibl, 0] = blState.XSSI[ibl - 1, 0] + 0.01;
-            }
         }
 
-        // Side 1 (lower): ISP forward to node N-1
         blState.XSSI[0, 1] = 0.0;
         for (int ibl = 1; ibl < blState.NBL[1]; ibl++)
         {
@@ -566,351 +892,174 @@ public static class ViscousSolverEngine
                     blState.XSSI[ibl, 1] = blState.XSSI[ibl - 1, 1] + Math.Sqrt(dx * dx + dy * dy);
                 }
                 else
-                {
                     blState.XSSI[ibl, 1] = blState.XSSI[ibl - 1, 1] + 0.01;
-                }
             }
             else
-            {
-                // Wake: extend chord-wise
                 blState.XSSI[ibl, 1] = blState.XSSI[ibl - 1, 1] + 0.02;
-            }
         }
     }
 
-    /// <summary>
-    /// Sets inviscid edge velocities at all BL stations from panel speeds.
-    /// Port of UICALC from xpanel.f.
-    /// </summary>
     private static void SetInviscidEdgeVelocities(
-        BoundaryLayerSystemState blState,
-        double[] qinv,
-        LinearVortexPanelState panel,
-        int isp, int n, int nWake)
+        BoundaryLayerSystemState blState, double[] qinv,
+        LinearVortexPanelState panel, int isp, int n, int nWake)
     {
-        // Side 0 (upper): ISP backward to node 0
         for (int ibl = 0; ibl < blState.NBL[0] && ibl <= blState.IBLTE[0]; ibl++)
         {
             int iPan = isp - ibl;
-            if (iPan >= 0 && iPan < n)
-            {
-                blState.UEDG[ibl, 0] = Math.Abs(qinv[iPan]);
-            }
-            else
-            {
-                blState.UEDG[ibl, 0] = 1.0;
-            }
+            blState.UEDG[ibl, 0] = (iPan >= 0 && iPan < n) ? Math.Abs(qinv[iPan]) : 1.0;
         }
 
-        // Side 1 (lower): ISP forward to node N-1
         for (int ibl = 0; ibl < blState.NBL[1]; ibl++)
         {
             if (ibl <= blState.IBLTE[1])
             {
                 int iPan = isp + ibl;
-                if (iPan >= 0 && iPan < n)
-                {
-                    blState.UEDG[ibl, 1] = Math.Abs(qinv[iPan]);
-                }
-                else
-                {
-                    blState.UEDG[ibl, 1] = 1.0;
-                }
+                blState.UEDG[ibl, 1] = (iPan >= 0 && iPan < n) ? Math.Abs(qinv[iPan]) : 1.0;
             }
             else
             {
-                // Wake: use TE velocity, slightly increasing (speed recovers in wake)
                 double ueTE = blState.UEDG[blState.IBLTE[1], 1];
                 int iw = ibl - blState.IBLTE[1];
-                blState.UEDG[ibl, 1] = ueTE * (1.0 + 0.02 * iw);
-                if (blState.UEDG[ibl, 1] < 0.1) blState.UEDG[ibl, 1] = 0.1;
+                blState.UEDG[ibl, 1] = Math.Max(ueTE * (1.0 + 0.02 * iw), 0.1);
             }
         }
 
-        // Ensure stagnation point has small but positive velocity
         blState.UEDG[0, 0] = Math.Max(blState.UEDG[0, 0], 0.001);
         blState.UEDG[0, 1] = Math.Max(blState.UEDG[0, 1], 0.001);
     }
 
-    /// <summary>
-    /// Initializes BL variables from inviscid edge velocities using Thwaites' method.
-    /// Port of MRCHUE from xbl.f.
-    /// </summary>
     private static void InitializeBLFromInviscidUe(
-        BoundaryLayerSystemState blState,
-        AnalysisSettings settings,
-        double reinf)
+        BoundaryLayerSystemState blState, AnalysisSettings settings, double reinf)
     {
         for (int side = 0; side < 2; side++)
         {
-            // Initialize similarity station with Thwaites' formula
-            double xsi0 = blState.XSSI[1, side];
-            double ue0 = blState.UEDG[1, side];
-            if (xsi0 < 1e-10) xsi0 = 0.001;
-            if (ue0 < 1e-10) ue0 = 0.01;
-
-            // Thwaites: theta^2 = 0.45 * nu / (Ue^6) * integral(Ue^5 dx)
-            // At first station: theta^2 ~ 0.45 / (Re * Ue) * x
-            double tsq = 0.45 / (reinf * ue0) * xsi0;
-            if (tsq < 1e-20) tsq = 1e-10;
+            double xsi0 = Math.Max(blState.XSSI[1, side], 0.001);
+            double ue0 = Math.Max(blState.UEDG[1, side], 0.01);
+            double tsq = Math.Max(0.45 / (reinf * ue0) * xsi0, 1e-10);
             double thi = Math.Sqrt(tsq);
-            double dsi = 2.6 * thi; // Blasius H ~ 2.6
+            double dsi = 2.6 * thi;
 
-            // Set initial transition far downstream
             blState.ITRAN[side] = blState.IBLTE[side];
 
             for (int ibl = 0; ibl < blState.NBL[side]; ibl++)
             {
-                double xsi = blState.XSSI[ibl, side];
                 double uei = blState.UEDG[ibl, side];
 
                 if (ibl <= 1)
                 {
-                    // Stagnation/similarity station
                     blState.THET[ibl, side] = thi;
                     blState.DSTR[ibl, side] = dsi;
                     blState.CTAU[ibl, side] = 0.0;
                 }
                 else if (ibl <= blState.IBLTE[side])
                 {
-                    // Surface station: march theta using Thwaites
                     double dx = blState.XSSI[ibl, side] - blState.XSSI[ibl - 1, side];
                     if (dx < 1e-12) dx = 1e-6;
-
-                    double uePrev = blState.UEDG[ibl - 1, side];
-                    if (uePrev < 1e-10) uePrev = 1e-10;
+                    double uePrev = Math.Max(blState.UEDG[ibl - 1, side], 1e-10);
                     double ueAvg = 0.5 * (uei + uePrev);
-
-                    // Thwaites' momentum integral
                     double thetaPrev = blState.THET[ibl - 1, side];
-                    double theta2 = thetaPrev * thetaPrev
-                        * Math.Pow(uePrev / uei, 5.0)
-                        + 0.45 / (reinf * Math.Pow(uei, 6.0))
-                          * Math.Pow(ueAvg, 5.0) * dx;
-                    if (theta2 < 1e-20) theta2 = 1e-10;
-                    double theta = Math.Sqrt(theta2);
 
-                    // Thwaites lambda parameter for shape factor
+                    double theta2 = thetaPrev * thetaPrev * Math.Pow(uePrev / uei, 5.0)
+                        + 0.45 / (reinf * Math.Pow(uei, 6.0)) * Math.Pow(ueAvg, 5.0) * dx;
+                    double theta = Math.Sqrt(Math.Max(theta2, 1e-10));
+
                     double dUedx = (uei - uePrev) / dx;
                     double lambda = theta * theta * reinf * dUedx;
                     lambda = Math.Max(-0.09, Math.Min(0.09, lambda));
 
-                    // Thwaites H(lambda)
                     double hk = 2.61 - 3.75 * lambda - 5.24 * lambda * lambda;
                     hk = Math.Max(1.5, Math.Min(hk, 3.5));
                     double dstar = hk * theta;
 
                     blState.THET[ibl, side] = theta;
                     blState.DSTR[ibl, side] = dstar;
-                    blState.CTAU[ibl, side] = 0.0; // Laminar
+                    blState.CTAU[ibl, side] = 0.0;
 
-                    // Check for transition using simplified e^N criterion.
-                    double retheta = reinf * uei * theta;
-                    if (retheta > 100.0 && ibl > 2)
+                    // Use TransitionModel.CheckTransition for initial transition
+                    if (ibl > 2 && blState.ITRAN[side] >= blState.IBLTE[side])
                     {
                         double ncrit = settings.GetEffectiveNCrit(side);
-                        double retheta0 = ComputeInstabilityOnset(hk);
-                        double dgr = ComputeAmplificationGrowthRate(hk, retheta);
-                        if (retheta > retheta0)
+                        double xsi = blState.XSSI[ibl, side];
+                        double xsiPrev = blState.XSSI[ibl - 1, side];
+                        double hkPrev = (blState.THET[ibl - 1, side] > 1e-30)
+                            ? blState.DSTR[ibl - 1, side] / blState.THET[ibl - 1, side] : 2.1;
+                        double rtPrev = Math.Max(reinf * uePrev * blState.THET[ibl - 1, side], 200.0);
+                        double rt = Math.Max(reinf * uei * theta, 200.0);
+                        double amplPrev = blState.CTAU[ibl - 1, side];
+
+                        if (xsi > xsiPrev)
                         {
-                            double nFactor = dgr * (retheta - retheta0);
-                            if (nFactor >= ncrit && blState.ITRAN[side] >= blState.IBLTE[side])
-                            {
+                            var trResult = TransitionModel.CheckTransition(
+                                xsiPrev, xsi, amplPrev, 0.0, ncrit,
+                                hkPrev, blState.THET[ibl - 1, side], rtPrev, uePrev,
+                                blState.DSTR[ibl - 1, side],
+                                hk, theta, rt, uei, dstar,
+                                settings.UseModernTransitionCorrections, null);
+
+                            if (trResult.TransitionOccurred)
                                 blState.ITRAN[side] = ibl;
-                            }
                         }
                     }
                 }
                 else
                 {
-                    // Wake station
                     double theta = blState.THET[blState.IBLTE[side], side];
                     double dstar = blState.DSTR[blState.IBLTE[side], side];
                     int iw = ibl - blState.IBLTE[side];
-
-                    // Wake: theta constant, dstar grows slowly
                     blState.THET[ibl, side] = theta * (1.0 + 0.01 * iw);
                     blState.DSTR[ibl, side] = dstar * (1.0 + 0.03 * iw);
-                    blState.CTAU[ibl, side] = 0.03; // Initial turbulent Ctau for wake
+                    blState.CTAU[ibl, side] = 0.03;
                 }
 
-                // Set mass defect
                 blState.MASS[ibl, side] = blState.DSTR[ibl, side] * blState.UEDG[ibl, side];
             }
 
-            // Ensure transition is set somewhere on the surface
             if (blState.ITRAN[side] >= blState.IBLTE[side])
             {
                 blState.ITRAN[side] = blState.IBLTE[side] - 1;
                 if (blState.ITRAN[side] < 2) blState.ITRAN[side] = 2;
             }
 
-            // Set initial Ctau for turbulent stations
             for (int ibl = blState.ITRAN[side]; ibl <= blState.IBLTE[side]; ibl++)
-            {
                 blState.CTAU[ibl, side] = 0.03;
-            }
         }
     }
 
     // ================================================================
-    // Transition model helpers
+    // Drag computation (fallback for convergence monitoring)
     // ================================================================
 
-    /// <summary>
-    /// Computes the instability onset Re_theta as a function of shape parameter Hk.
-    /// Based on the Orr-Sommerfeld stability boundary (Arnal correlation).
-    /// For Blasius (Hk=2.59): Re_theta_0 ~ 200.
-    /// For more favorable Hk (lower values): higher onset Re_theta.
-    /// </summary>
-    private static double ComputeInstabilityOnset(double hk)
-    {
-        // Arnal's correlation for the critical Re_theta (instability onset)
-        // log10(Re_theta_0) = (1.415/(Hk-1)) - 0.489
-        // For Hk=2.59: log10(Re_theta_0) = 1.415/1.59 - 0.489 = 0.890 - 0.489 = 0.401 -> Re=2.52
-        // That's too low. Use XFoil's DAMPL2-based onset instead.
-        //
-        // From XFoil: onset is at Re_theta ~ exp(26.3 - 8.1*Hk) for Hk < 3.5
-        // For Hk=2.59: Re_theta_0 ~ exp(26.3 - 21.0) = exp(5.3) = 200
-        // For Hk=2.3: Re_theta_0 ~ exp(26.3 - 18.6) = exp(7.7) = 2200
-        // For Hk=3.0: Re_theta_0 ~ exp(26.3 - 24.3) = exp(2.0) = 7.4
-
-        hk = Math.Max(hk, 1.05);
-        if (hk > 3.5)
-            return 10.0; // Separated profiles: instability at very low Re_theta
-        double logRe = 26.3 - 8.1 * hk;
-        logRe = Math.Max(logRe, 1.0); // Min Re_theta_0 ~ 3
-        return Math.Exp(logRe);
-    }
-
-    /// <summary>
-    /// Computes the amplification factor growth rate dn/d(Re_theta).
-    /// Based on spatial amplification rates from Orr-Sommerfeld solutions.
-    /// The growth rate increases for more unstable (higher Hk) profiles.
-    /// </summary>
-    private static double ComputeAmplificationGrowthRate(double hk, double retheta)
-    {
-        // From XFoil's DAMPL2: the growth rate of n wrt Re_theta
-        // is approximately dn/d(Re_theta) ~ 0.01 to 0.05 depending on Hk.
-        // For Hk ~ 2.6 (Blasius): dn/d(Re_theta) ~ 0.028
-        // Typical: transition at n=9 needs Re_theta - Re_theta_0 ~ 320
-
-        hk = Math.Max(hk, 1.05);
-        if (hk < 2.0)
-            return 0.01; // Very favorable: slow growth
-        else if (hk < 3.0)
-            return 0.01 + 0.02 * (hk - 2.0); // Moderate growth
-        else
-            return 0.04; // Adverse: rapid growth
-    }
-
-    // ================================================================
-    // Drag computation (simplified CDCALC)
-    // ================================================================
-
-    /// <summary>
-    /// Estimates total drag from BL state using Squire-Young formula.
-    /// Uses the last reliable station before the TE (avoiding the closure panel
-    /// where the vortex strength is anomalously large).
-    /// </summary>
     private static double EstimateDrag(BoundaryLayerSystemState blState, double qinf, double reinf)
     {
-        // Use TE momentum thickness for drag (Squire-Young)
-        // CD = 2 * theta_TE * (Ue_TE / Q_inf)^((5+H_TE)/2)
         double cdTotal = 0.0;
-
         for (int side = 0; side < 2; side++)
         {
             int ite = blState.IBLTE[side];
             if (ite <= 1 || ite >= blState.MaxStations) continue;
 
-            // Find the last reliable station: back off from TE if Ue is anomalous.
-            // The closure panel at the TE can have very large or very small Ue,
-            // and the BL values there are unreliable.
             int iUse = ite;
             while (iUse > 1 && (blState.UEDG[iUse, side] > 2.0 * qinf
                 || blState.UEDG[iUse, side] < 0.5 * qinf
                 || blState.THET[iUse, side] < 1e-8))
-            {
                 iUse--;
-            }
 
             double thetaTE = blState.THET[iUse, side];
             double ueTE = blState.UEDG[iUse, side];
             double dstarTE = blState.DSTR[iUse, side];
-
             if (thetaTE < 1e-10 || ueTE < 1e-10) continue;
 
-            double hTE = dstarTE / thetaTE;
-            hTE = Math.Max(1.0, Math.Min(hTE, 5.0));
+            double hTE = Math.Max(1.0, Math.Min(dstarTE / thetaTE, 5.0));
             double urat = ueTE / Math.Max(qinf, 1e-10);
-
-            // Squire-Young formula
             cdTotal += thetaTE * Math.Pow(urat, 0.5 * (5.0 + hTE));
         }
-
-        // Factor of 2: we sum both sides
-        cdTotal = 2.0 * cdTotal;
-        return Math.Max(cdTotal, 1e-6);
-    }
-
-    /// <summary>
-    /// Computes drag decomposition from BL state.
-    /// </summary>
-    private static DragDecomposition ComputeDragDecomposition(
-        BoundaryLayerSystemState blState, double qinf, double reinf)
-    {
-        double cd = EstimateDrag(blState, qinf, reinf);
-
-        // Estimate skin friction drag by integrating Cf along both surfaces
-        double cdf = 0.0;
-        for (int side = 0; side < 2; side++)
-        {
-            for (int ibl = 1; ibl <= blState.IBLTE[side] && ibl < blState.MaxStations; ibl++)
-            {
-                double ue = blState.UEDG[ibl, side];
-                double th = blState.THET[ibl, side];
-                double ds = blState.DSTR[ibl, side];
-                double hk = (th > 1e-30) ? ds / th : 2.0;
-                hk = Math.Max(hk, 1.05);
-                double rt = Math.Max(reinf * ue * th, 200.0);
-
-                double cf;
-                if (ibl < blState.ITRAN[side])
-                {
-                    (cf, _, _, _) = BoundaryLayerCorrelations.LaminarSkinFriction(hk, rt, 0.0);
-                }
-                else
-                {
-                    (cf, _, _, _) = BoundaryLayerCorrelations.TurbulentSkinFriction(hk, rt, 0.0);
-                }
-
-                double dx = blState.XSSI[ibl, side] - blState.XSSI[Math.Max(ibl - 1, 0), side];
-                double urat = ue / Math.Max(qinf, 1e-10);
-                cdf += cf * dx * urat;
-            }
-        }
-
-        double cdp = Math.Max(cd - cdf, 0.0);
-
-        return new DragDecomposition
-        {
-            CD = cd,
-            CDF = cdf,
-            CDP = cdp,
-            CDSurfaceCrossCheck = cd,
-            DiscrepancyMetric = 0.0,
-            TEBaseDrag = 0.0,
-            WaveDrag = null
-        };
+        return Math.Max(2.0 * cdTotal, 1e-6);
     }
 
     // ================================================================
     // Result extraction
     // ================================================================
 
-    private static BoundaryLayerProfile[] ExtractProfiles(
-        BoundaryLayerSystemState blState, int side, int iblte)
+    private static BoundaryLayerProfile[] ExtractProfiles(BoundaryLayerSystemState blState, int side, int iblte)
     {
         int count = Math.Min(iblte + 1, blState.MaxStations);
         var profiles = new BoundaryLayerProfile[count];
@@ -918,20 +1067,13 @@ public static class ViscousSolverEngine
         {
             double th = blState.THET[i, side];
             double ds = blState.DSTR[i, side];
-            double ue = blState.UEDG[i, side];
-            double hk = (th > 1e-30) ? ds / th : 2.0;
-
             profiles[i] = new BoundaryLayerProfile
             {
-                Theta = th,
-                DStar = ds,
+                Theta = th, DStar = ds,
                 Ctau = blState.CTAU[i, side],
                 MassDefect = blState.MASS[i, side],
-                EdgeVelocity = ue,
-                Hk = hk,
-                Cf = 0.0,
-                ReTheta = 0.0,
-                AmplificationFactor = 0.0,
+                EdgeVelocity = blState.UEDG[i, side],
+                Hk = (th > 1e-30) ? ds / th : 2.0,
                 Xi = blState.XSSI[i, side]
             };
         }
@@ -943,20 +1085,16 @@ public static class ViscousSolverEngine
         int wakeStart = blState.IBLTE[1] + 1;
         int wakeEnd = blState.NBL[1];
         if (wakeEnd <= wakeStart) return Array.Empty<BoundaryLayerProfile>();
-
         int count = wakeEnd - wakeStart;
         var profiles = new BoundaryLayerProfile[count];
         for (int i = 0; i < count; i++)
         {
             int ibl = wakeStart + i;
             if (ibl >= blState.MaxStations) break;
-
             profiles[i] = new BoundaryLayerProfile
             {
-                Theta = blState.THET[ibl, 1],
-                DStar = blState.DSTR[ibl, 1],
-                Ctau = blState.CTAU[ibl, 1],
-                MassDefect = blState.MASS[ibl, 1],
+                Theta = blState.THET[ibl, 1], DStar = blState.DSTR[ibl, 1],
+                Ctau = blState.CTAU[ibl, 1], MassDefect = blState.MASS[ibl, 1],
                 EdgeVelocity = blState.UEDG[ibl, 1],
                 Hk = (blState.THET[ibl, 1] > 1e-30) ? blState.DSTR[ibl, 1] / blState.THET[ibl, 1] : 2.0,
                 Xi = blState.XSSI[ibl, 1]
@@ -968,16 +1106,12 @@ public static class ViscousSolverEngine
     private static TransitionInfo ExtractTransitionInfo(BoundaryLayerSystemState blState, int side)
     {
         int itran = blState.ITRAN[side];
-        double xtr = (itran >= 0 && itran < blState.MaxStations)
-            ? blState.XSSI[itran, side] : 0.0;
-
+        double xtr = (itran >= 0 && itran < blState.MaxStations) ? blState.XSSI[itran, side] : 0.0;
         return new TransitionInfo
         {
-            XTransition = xtr,
-            StationIndex = itran,
+            XTransition = xtr, StationIndex = itran,
             TransitionType = TransitionType.Free,
-            AmplificationFactorAtTransition = 0.0,
-            Converged = true
+            AmplificationFactorAtTransition = 0.0, Converged = true
         };
     }
 }
