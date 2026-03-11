@@ -80,30 +80,30 @@ public static class EdgeVelocityCalculator
     public static (int[,] isys, int nsys) MapStationsToSystemLines(int[] iblte, int[] nbl)
     {
         // Total system lines: sum of all BL stations on both sides
-        int nsys = 0;
+        // Fortran IBLSYS: DO IBL=2,NBL(IS) -- skip station 0 (stag) AND station 1 (similarity)
+        // Station 1 is the similarity station with no "previous" station for finite-differencing.
+        int side1Lines = nbl[0] - 2;  // stations 2..NBL[0]-1
+        int side2Lines = nbl[1] - 2;  // stations 2..NBL[1]-1
 
-        // Calculate total
-        // Side 1: stations 1..NBL[0] (skip station 0 = stagnation, no equations there)
-        int side1Lines = nbl[0] - 1;
-        // Side 2: stations 1..NBL[1] (skip station 0 = stagnation)
-        int side2Lines = nbl[1] - 1;
+        if (side1Lines < 0) side1Lines = 0;
+        if (side2Lines < 0) side2Lines = 0;
 
-        nsys = side1Lines + side2Lines;
+        int nsys = side1Lines + side2Lines;
 
         int[,] isys = new int[nsys + 1, 2];
 
         int lineNum = 0;
 
-        // Side 1: stations 1 through NBL[0]-1
-        for (int i = 1; i < nbl[0]; i++)
+        // Side 1: stations 2 through NBL[0]-1 (matching Fortran DO IBL=2,NBL(IS))
+        for (int i = 2; i < nbl[0]; i++)
         {
             isys[lineNum, 0] = i;    // BL station index
             isys[lineNum, 1] = 0;    // Side 0 (upper)
             lineNum++;
         }
 
-        // Side 2: stations 1 through NBL[1]-1
-        for (int i = 1; i < nbl[1]; i++)
+        // Side 2: stations 2 through NBL[1]-1
+        for (int i = 2; i < nbl[1]; i++)
         {
             isys[lineNum, 0] = i;    // BL station index
             isys[lineNum, 1] = 1;    // Side 1 (lower)

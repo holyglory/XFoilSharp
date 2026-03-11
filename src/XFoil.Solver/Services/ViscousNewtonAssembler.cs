@@ -94,19 +94,20 @@ public static class ViscousNewtonAssembler
         {
             double ncrit = settings.GetEffectiveNCrit(side);
 
-            // Previous station variables -- initialized from station 0 (stagnation point)
-            // For the similarity station (ibl=1), SETBL uses current station values to avoid
-            // division by zero in BLDIF (d1/t1 and log(x2/x1)).
-            double x1 = Math.Max(blState.XSSI[0, side], 1e-10);
-            double u1 = Math.Max(blState.UEDG[0, side], 1e-10);
-            double t1 = Math.Max(blState.THET[0, side], 1e-10);
-            double d1 = Math.Max(blState.DSTR[0, side], 1e-10);
-            double s1 = blState.CTAU[0, side];
+            // Previous station variables -- initialized from station 1 (similarity station)
+            // Fortran SETBL starts DO IBL=2,NBL(IS) with station 1 providing the "previous" state.
+            // Station 1 is the similarity station where x1=x2, u1=u2 (similarity assumption).
+            double x1 = Math.Max(blState.XSSI[1, side], 1e-10);
+            double u1 = Math.Max(blState.UEDG[1, side], 1e-10);
+            double t1 = Math.Max(blState.THET[1, side], 1e-10);
+            double d1 = Math.Max(blState.DSTR[1, side], 1e-10);
+            double s1 = blState.CTAU[1, side];
             double dw1 = 0;
             double ampl1 = 0;
             double hk1 = 2.1, rt1 = 200.0; // Previous station Hk and Rt for transition check
 
-            for (int ibl = 1; ibl < blState.NBL[side]; ibl++)
+            // March from IBL=2 to NBL (matching Fortran SETBL's DO IBL=2,NBL(IS))
+            for (int ibl = 2; ibl < blState.NBL[side]; ibl++)
             {
                 int iv = -1;
                 // Find IV from ISYS mapping
@@ -120,7 +121,7 @@ public static class ViscousNewtonAssembler
                 }
                 if (iv < 0) continue;
 
-                bool simi = (ibl == 1);
+                bool simi = (ibl == 2); // Fortran: SIMI = IBL.EQ.2
                 bool wake = (ibl > blState.IBLTE[side]);
                 bool tran = (ibl == blState.ITRAN[side]);
                 bool turb = (ibl >= blState.ITRAN[side]);
