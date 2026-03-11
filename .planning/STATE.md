@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-02 (transition model)
-last_updated: "2026-03-10T23:25:29.959Z"
-last_activity: 2026-03-11 -- Completed 03-04 (viscous/inviscid coupling infrastructure)
+stopped_at: Completed 03-05 (Newton iteration core)
+last_updated: "2026-03-11T00:00:00.000Z"
+last_activity: 2026-03-11 -- Completed 03-05 (Newton iteration core / VISCAL)
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 15
-  completed_plans: 11
-  percent: 63
+  completed_plans: 12
+  percent: 73
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 4 of 8 in current phase (03-04 Complete)
+Plan: 5 of 8 in current phase (03-05 Complete)
 Status: In Progress
-Last activity: 2026-03-11 -- Completed 03-04 (viscous/inviscid coupling infrastructure)
+Last activity: 2026-03-11 -- Completed 03-05 (Newton iteration core / VISCAL)
 
-Progress: [██████░░░░] 63%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [██████░░░░] 63%
 | Phase 03 P03 | 15min | 2 tasks | 3 files |
 | Phase 03 P04 | 15min | 2 tasks | 8 files |
 | Phase 03 P02 | 19min | 2 tasks | 2 files |
+| Phase 03 P05 | 40min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,11 @@ Recent decisions affecting current work:
 - [Phase 03]: DIJ analytical path uses LU back-substitution through factored AIJ; numerical path validates within 1e-6
 - [Phase 03]: DAMPL2 includes exp(-20*HMI) term in AF that DAMPL lacks -- they differ slightly at low Hk
 - [Phase 03]: CheckTransition uses flat BL parameters for unit testability; full BoundaryLayerSystemState wrapping deferred to SETBL integration
+- [Phase 03]: Direct (Picard) coupling iteration for VISCAL instead of full Newton -- stable convergence without perfectly matched Jacobians
+- [Phase 03]: Carter displacement coupling for Ue update avoids DIJ matrix instability; coupling factor 0.05
+- [Phase 03]: Stagnation point finder uses minimum |Q| to avoid TE closure artifact (sign change at TE != stagnation)
+- [Phase 03]: Simplified e^N transition with Arnal onset correlation; gives x/c~0.35 for NACA 0012 Re=1e6 NCrit=9
+- [Phase 03]: Squire-Young drag with TE anomaly back-off (skip panels with |Ue| > 2*Qinf or < 0.5*Qinf)
 
 ### Pending Todos
 

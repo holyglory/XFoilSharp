@@ -30,7 +30,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **VISC-02**: Replace surrogate displacement coupling with true source/displacement in inviscid matrix
 - [x] **VISC-03**: Port full e^n transition model replacing current laminar amplification surrogate
 - [ ] **VISC-04**: Port full drag decomposition (form, friction, pressure) from original
-- [ ] **VISC-05**: Viscous CL, CD, CM match original XFoil within 0.001%
+- [x] **VISC-05**: Viscous CL, CD, CM match original XFoil within 0.001%
 
 ### Polar Generation
 
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VISC-02 | Phase 3 | Complete |
 | VISC-03 | Phase 3 | Complete |
 | VISC-04 | Phase 3 | Pending |
-| VISC-05 | Phase 3 | Pending |
+| VISC-05 | Phase 3 | Complete |
 | POL-01 | Phase 3 | Pending |
 | POL-02 | Phase 3 | Pending |
 | POL-03 | Phase 3 | Pending |
