@@ -96,25 +96,29 @@ public static class ViscousNewtonAssembler
         {
             double ncrit = settings.GetEffectiveNCrit(side);
 
-            // Previous station variables -- initialized from station 1 (similarity station)
-            // Fortran SETBL starts DO IBL=2,NBL(IS) with station 1 providing the "previous" state.
-            // Station 1 is the similarity station where x1=x2, u1=u2 (similarity assumption).
-            double x1 = Math.Max(blState.XSSI[1, side], 1e-10);
-            double u1 = Math.Max(blState.UEDG[1, side], 1e-10);
-            double t1 = Math.Max(blState.THET[1, side], 1e-10);
-            double d1 = Math.Max(blState.DSTR[1, side], 1e-10);
-            double s1 = blState.CTAU[1, side];
+            // Previous station variables -- initialized from station 0 (virtual stagnation).
+            // Station 0 has XSSI=0, UEDG=0, THET=0, DSTR=0 (Fortran IBL=1).
+            // Leave at zero so the ternary fallbacks (u1 > 0 ? u1 : uei) in the
+            // AssembleStationSystem call correctly substitute current-station values
+            // for the similarity station. SIMI zeros VS1 so prev-station doesn't matter.
+            double x1 = blState.XSSI[0, side];
+            double u1 = blState.UEDG[0, side];
+            double t1 = blState.THET[0, side];
+            double d1 = blState.DSTR[0, side];
+            double s1 = blState.CTAU[0, side];
             double dw1 = 0;
             double ampl1 = 0;
             double hk1 = 2.1, rt1 = 200.0; // Previous station Hk and Rt for transition check
 
             // DUE/DDS: track edge velocity and displacement thickness changes
             // from previous iteration for forced-change terms in VDEL RHS.
-            // Initialized to 0 for station 1 (matching Fortran: DUE1=0, DDS1=0 at first station).
+            // Initialized to 0 (matching Fortran: DUE1=0, DDS1=0 before the march loop).
             double due1 = 0.0, dds1 = 0.0;
 
-            // March from IBL=2 to NBL (matching Fortran SETBL's DO IBL=2,NBL(IS))
-            for (int ibl = 2; ibl < blState.NBL[side]; ibl++)
+            // March from station 1 (similarity) to NBL-1.
+            // Fortran: DO IBL=2,NBL(IS) — station 2 is similarity in 1-based.
+            // C# 0-based: station 1 = Fortran IBL=2 (similarity).
+            for (int ibl = 1; ibl < blState.NBL[side]; ibl++)
             {
                 int iv = -1;
                 // Find IV from ISYS mapping
@@ -128,7 +132,7 @@ public static class ViscousNewtonAssembler
                 }
                 if (iv < 0) continue;
 
-                bool simi = (ibl == 2); // Fortran: SIMI = IBL.EQ.2
+                bool simi = (ibl == 1); // C# station 1 = Fortran IBL=2 (similarity)
                 bool wake = (ibl > blState.IBLTE[side]);
                 bool tran = (ibl == blState.ITRAN[side]);
                 bool turb = (ibl >= blState.ITRAN[side]);
@@ -392,54 +396,22 @@ public static class ViscousNewtonAssembler
     }
 
     /// <summary>
-    /// Gets the panel node index for a given BL station and side.
-    /// For side 0 (upper): IPAN[ibl] = ISP - ibl (going backward from stag point)
-    /// For side 1 (lower): IPAN[ibl] = ISP + ibl (going forward from stag point)
-    /// For wake: IPAN[ibl] = N + (ibl - IBLTE[1]) (after last airfoil node)
-    /// Falls back to simplified linear offset if isp/nPanel not provided.
+    /// Gets the panel node index for a given BL station and side from the IPAN array.
+    /// Returns -1 for virtual stagnation (station 0) or out-of-range stations.
     /// </summary>
     private static int GetPanelIndex(int ibl, int side, int isp, int nPanel,
         BoundaryLayerSystemState blState)
     {
-        // If isp/nPanel not provided, use simplified linear offset (backward compatibility)
-        if (isp < 0 || nPanel < 0)
-        {
-            if (side == 0)
-                return ibl;
-            else
-                return blState.IBLTE[0] + ibl;
-        }
-
-        bool wake = (ibl > blState.IBLTE[side]);
-        if (wake)
-        {
-            // Wake panel indices: after all airfoil panels
-            return nPanel + (ibl - blState.IBLTE[1]);
-        }
-        else if (side == 0)
-        {
-            // Upper surface: ISP backward to node 0
-            return isp - ibl;
-        }
-        else
-        {
-            // Lower surface: ISP forward to node N-1
-            return isp + ibl;
-        }
+        if (ibl < 0 || ibl >= blState.MaxStations) return -1;
+        return blState.IPAN[ibl, side];
     }
 
     /// <summary>
-    /// Gets the VTI sign factor for a BL station.
-    /// VTI = +1 on side 0 (upper, speed positive going from stag to TE)
-    /// VTI = -1 on side 1 (lower, speed is in opposite direction)
-    /// VTI = +1 for wake.
+    /// Gets the VTI sign factor for a BL station from the VTI array.
     /// </summary>
     private static double GetVTI(int ibl, int side, BoundaryLayerSystemState blState)
     {
-        if (ibl > blState.IBLTE[side])
-            return 1.0; // wake
-        if (side == 0)
-            return 1.0; // upper surface
-        return -1.0; // lower surface
+        if (ibl < 0 || ibl >= blState.MaxStations) return 1.0;
+        return blState.VTI[ibl, side];
     }
 }

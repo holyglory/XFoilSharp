@@ -77,18 +77,18 @@ public static class ViscousSolverEngine
         int n = panel.NodeCount;
         int nWake = Math.Max(n / 6, 4); // Wake stations (matching XFoil heuristic)
 
-        // --- Initialization sequence ---
+        // --- Initialization sequence (ports STFIND, IBLPAN, XICALC, UICALC, MRCHUE) ---
 
         // 1. Set inviscid speeds for alpha (QISET)
         double[] qinv = EdgeVelocityCalculator.SetInviscidSpeeds(
             inviscidState.BasisInviscidSpeed, n, alphaRadians);
 
-        // 2. Locate stagnation point (STFIND)
-        int isp = FindStagnationPointByMinSpeed(qinv, n);
+        // 2. Locate stagnation point (STFIND — fractional interpolation)
+        var (isp, sst) = FindStagnationPointXFoil(qinv, panel, n);
         isp = Math.Max(1, Math.Min(n - 2, isp));
 
-        // 3. Set BL station mappings (IBLPAN)
-        var (iblte, nbl) = EdgeVelocityCalculator.MapPanelsToBLStations(n, isp, nWake);
+        // 3. Compute station counts (IBLPAN)
+        var (iblte, nbl) = ComputeStationCountsXFoil(n, isp, nWake);
 
         // Allocate BL state
         int maxStations = Math.Max(nbl[0], nbl[1]) + nWake + 10;
@@ -98,16 +98,13 @@ public static class ViscousSolverEngine
         blState.NBL[0] = nbl[0];
         blState.NBL[1] = nbl[1];
 
-        // Compute BL arc-length coordinates (XICALC)
-        SetBLArcLengths(panel, blState, isp, n);
+        // 4. Populate IPAN, VTI, XSSI, UEDG (IBLPAN + XICALC + UICALC)
+        InitializeXFoilStationMapping(blState, panel, qinv, isp, sst, n, nWake);
 
-        // 4. Set inviscid BL edge velocity (UICALC)
-        SetInviscidEdgeVelocities(blState, qinv, panel, isp, n, nWake);
-
-        // 5. Initialize BL variables from inviscid Ue (MRCHUE)
+        // 5. Initialize BL variables from inviscid Ue (MRCHUE / Thwaites)
         double reinf = settings.ReynoldsNumber;
         double qinf = settings.FreestreamVelocity;
-        InitializeBLFromInviscidUe(blState, settings, reinf);
+        InitializeBLThwaitesXFoil(blState, settings, reinf);
 
         // 6. Compute compressibility parameters (COMSET)
         double mach = settings.MachNumber;
@@ -215,18 +212,22 @@ public static class ViscousSolverEngine
             }
 
             // e. STMOVE: Relocate stagnation point if it has moved
-            double[] currentSpeeds = ConvertUedgToSpeeds(blState, isp, n);
-            int newIsp = FindStagnationPointByMinSpeed(currentSpeeds, n);
+            // Convert UEDG back to panel speeds, then find stagnation by sign change
+            double[] currentSpeeds = ConvertUedgToSpeeds(blState, n);
+            var (newIsp, newSst) = FindStagnationPointXFoil(currentSpeeds, panel, n);
             newIsp = Math.Max(1, Math.Min(n - 2, newIsp));
             if (newIsp != isp)
             {
                 StagnationPointTracker.MoveStagnationPoint(blState, isp, newIsp, n);
                 isp = newIsp;
-                var (iblteNew, nblNew) = EdgeVelocityCalculator.MapPanelsToBLStations(n, isp, nWake);
+                sst = newSst;
+                var (iblteNew, nblNew) = ComputeStationCountsXFoil(n, isp, nWake);
                 blState.IBLTE[0] = iblteNew[0];
                 blState.IBLTE[1] = iblteNew[1];
                 blState.NBL[0] = nblNew[0];
                 blState.NBL[1] = nblNew[1];
+                // Rebuild IPAN/VTI/XSSI for new stag point
+                InitializeXFoilStationMapping(blState, panel, currentSpeeds, isp, sst, n, nWake);
                 var (isysNew, nsysNew) = EdgeVelocityCalculator.MapStationsToSystemLines(iblteNew, nblNew);
                 newtonSystem.SetupISYS(isysNew, nsysNew);
             }
@@ -241,6 +242,10 @@ public static class ViscousSolverEngine
                 debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
                     "POST_CALC CL={0,15:E8} CD={1,15:E8} CM={2,15:E8}", cl, cd, cm));
             }
+
+            // Guard against NaN from transient numerical issues
+            if (double.IsNaN(rmsbl) || double.IsInfinity(rmsbl))
+                rmsbl = double.MaxValue;
 
             convergenceHistory.Add(new ViscousConvergenceInfo
             {
@@ -633,18 +638,13 @@ public static class ViscousSolverEngine
     }
 
     /// <summary>
-    /// Gets the panel index for a BL station.
+    /// Gets the panel index for a BL station from the IPAN array.
     /// </summary>
     private static int GetPanelIndex(int ibl, int side, int isp, int nPanel,
         BoundaryLayerSystemState blState)
     {
-        bool wake = (ibl > blState.IBLTE[side]);
-        if (wake)
-            return nPanel + (ibl - blState.IBLTE[1]);
-        else if (side == 0)
-            return isp - ibl;
-        else
-            return isp + ibl;
+        if (ibl < 0 || ibl >= blState.MaxStations) return -1;
+        return blState.IPAN[ibl, side];
     }
 
     // ================================================================
@@ -759,7 +759,8 @@ public static class ViscousSolverEngine
     }
 
     /// <summary>
-    /// Builds viscous panel speeds from BL edge velocities (QVFUE).
+    /// Builds viscous panel speeds from BL edge velocities.
+    /// Port of QVFUE from xpanel.f: QVIS(I) = VTI(IBL,IS) * UEDG(IBL,IS).
     /// </summary>
     private static double[] BuildViscousPanelSpeeds(
         BoundaryLayerSystemState blState,
@@ -771,23 +772,14 @@ public static class ViscousSolverEngine
         double[] qvis = new double[n];
         Array.Copy(inviscidState.InviscidSpeed, qvis, n);
 
-        for (int ibl = 0; ibl < blState.NBL[0] && ibl <= blState.IBLTE[0]; ibl++)
+        // Overwrite airfoil panels with viscous speeds using IPAN/VTI
+        for (int side = 0; side < 2; side++)
         {
-            int iPan = isp - ibl;
-            if (iPan >= 0 && iPan < n)
+            for (int ibl = 1; ibl < blState.NBL[side] && ibl <= blState.IBLTE[side]; ibl++)
             {
-                double sign = (inviscidState.InviscidSpeed[iPan] >= 0) ? 1.0 : -1.0;
-                qvis[iPan] = sign * blState.UEDG[ibl, 0];
-            }
-        }
-
-        for (int ibl = 0; ibl < blState.NBL[1] && ibl <= blState.IBLTE[1]; ibl++)
-        {
-            int iPan = isp + ibl;
-            if (iPan >= 0 && iPan < n)
-            {
-                double sign = (inviscidState.InviscidSpeed[iPan] >= 0) ? 1.0 : -1.0;
-                qvis[iPan] = sign * blState.UEDG[ibl, 1];
+                int iPan = blState.IPAN[ibl, side];
+                if (iPan >= 0 && iPan < n)
+                    qvis[iPan] = blState.VTI[ibl, side] * blState.UEDG[ibl, side];
             }
         }
 
@@ -796,234 +788,321 @@ public static class ViscousSolverEngine
 
     /// <summary>
     /// Converts UEDG back to panel-level speeds for stagnation point relocation.
+    /// Uses IPAN/VTI mapping: QVIS(I) = VTI(IBL,IS) * UEDG(IBL,IS).
     /// </summary>
     private static double[] ConvertUedgToSpeeds(
-        BoundaryLayerSystemState blState, int isp, int n)
+        BoundaryLayerSystemState blState, int n)
     {
         double[] speeds = new double[n];
 
-        for (int ibl = 0; ibl < blState.NBL[0] && ibl <= blState.IBLTE[0]; ibl++)
+        for (int side = 0; side < 2; side++)
         {
-            int iPan = isp - ibl;
-            if (iPan >= 0 && iPan < n)
-                speeds[iPan] = -blState.UEDG[ibl, 0];
+            for (int ibl = 1; ibl < blState.NBL[side] && ibl <= blState.IBLTE[side]; ibl++)
+            {
+                int iPan = blState.IPAN[ibl, side];
+                if (iPan >= 0 && iPan < n)
+                    speeds[iPan] = blState.VTI[ibl, side] * blState.UEDG[ibl, side];
+            }
         }
-
-        for (int ibl = 0; ibl < blState.NBL[1] && ibl <= blState.IBLTE[1]; ibl++)
-        {
-            int iPan = isp + ibl;
-            if (iPan >= 0 && iPan < n)
-                speeds[iPan] = blState.UEDG[ibl, 1];
-        }
-
-        if (isp >= 0 && isp < n)
-            speeds[isp] = 0.0;
 
         return speeds;
     }
 
     // ================================================================
-    // Stagnation point finder
+    // XFoil-compatible stagnation point finder (STFIND, xpanel.f:1338)
     // ================================================================
 
-    private static int FindStagnationPointByMinSpeed(double[] speed, int n)
+    /// <summary>
+    /// Locates the stagnation point by finding where qinv changes sign (GAM(I) >= 0 and GAM(I+1) &lt; 0),
+    /// then interpolates to get fractional arc-length SST.
+    /// Port of STFIND from xpanel.f:1338-1373.
+    /// </summary>
+    private static (int isp, double sst) FindStagnationPointXFoil(
+        double[] qinv, LinearVortexPanelState panel, int n)
     {
-        if (n < 2) return 0;
-
-        int ispMin = 0;
-        double minSpeed = Math.Abs(speed[0]);
-        for (int i = 1; i < n; i++)
+        // Find where qinv changes from positive to negative (port of STFIND).
+        // The C# linear vortex solver can produce spuriously large GAM values
+        // at the TE nodes due to the zero-gap trailing edge singularity.
+        // Select the sign change with the smallest combined magnitude,
+        // which corresponds to the true stagnation point (near-zero crossing).
+        int ist = -1;
+        double bestMag = double.MaxValue;
+        for (int i = 0; i < n - 1; i++)
         {
-            double absQ = Math.Abs(speed[i]);
-            if (absQ < minSpeed)
+            if (qinv[i] >= 0.0 && qinv[i + 1] < 0.0)
             {
-                minSpeed = absQ;
-                ispMin = i;
-            }
-        }
-
-        if (ispMin > 0 && ispMin < n - 1)
-        {
-            if (speed[ispMin - 1] * speed[ispMin] < 0.0)
-            {
-                if (Math.Abs(speed[ispMin - 1]) < Math.Abs(speed[ispMin]))
-                    return ispMin - 1;
-            }
-            if (speed[ispMin] * speed[ispMin + 1] < 0.0)
-            {
-                if (Math.Abs(speed[ispMin + 1]) < Math.Abs(speed[ispMin]))
-                    return ispMin + 1;
-            }
-        }
-
-        return ispMin;
-    }
-
-    // ================================================================
-    // Initialization helpers
-    // ================================================================
-
-    private static void SetBLArcLengths(
-        LinearVortexPanelState panel, BoundaryLayerSystemState blState,
-        int isp, int n)
-    {
-        blState.XSSI[0, 0] = 0.0;
-        for (int ibl = 1; ibl < blState.NBL[0] && ibl <= blState.IBLTE[0]; ibl++)
-        {
-            int iPan = isp - ibl;
-            int iPanPrev = isp - ibl + 1;
-            if (iPan >= 0 && iPanPrev < n)
-            {
-                double dx = panel.X[iPan] - panel.X[iPanPrev];
-                double dy = panel.Y[iPan] - panel.Y[iPanPrev];
-                blState.XSSI[ibl, 0] = blState.XSSI[ibl - 1, 0] + Math.Sqrt(dx * dx + dy * dy);
-            }
-            else
-                blState.XSSI[ibl, 0] = blState.XSSI[ibl - 1, 0] + 0.01;
-        }
-
-        blState.XSSI[0, 1] = 0.0;
-        for (int ibl = 1; ibl < blState.NBL[1]; ibl++)
-        {
-            if (ibl <= blState.IBLTE[1])
-            {
-                int iPan = isp + ibl;
-                int iPanPrev = isp + ibl - 1;
-                if (iPan < n && iPanPrev >= 0)
+                double mag = Math.Abs(qinv[i]) + Math.Abs(qinv[i + 1]);
+                if (mag < bestMag)
                 {
-                    double dx = panel.X[iPan] - panel.X[iPanPrev];
-                    double dy = panel.Y[iPan] - panel.Y[iPanPrev];
-                    blState.XSSI[ibl, 1] = blState.XSSI[ibl - 1, 1] + Math.Sqrt(dx * dx + dy * dy);
+                    bestMag = mag;
+                    ist = i;
                 }
-                else
-                    blState.XSSI[ibl, 1] = blState.XSSI[ibl - 1, 1] + 0.01;
             }
-            else
-                blState.XSSI[ibl, 1] = blState.XSSI[ibl - 1, 1] + 0.02;
         }
+        if (ist < 0) ist = n / 2;
+
+        double dgam = qinv[ist + 1] - qinv[ist];
+        double ds = panel.ArcLength[ist + 1] - panel.ArcLength[ist];
+        double sst;
+
+        // Evaluate so as to minimize roundoff for very small qinv values
+        if (qinv[ist] < -qinv[ist + 1])
+            sst = panel.ArcLength[ist] - ds * (qinv[ist] / dgam);
+        else
+            sst = panel.ArcLength[ist + 1] - ds * (qinv[ist + 1] / dgam);
+
+        // Tweak stagnation point if it falls right on a node
+        if (sst <= panel.ArcLength[ist]) sst = panel.ArcLength[ist] + 1.0e-7;
+        if (sst >= panel.ArcLength[ist + 1]) sst = panel.ArcLength[ist + 1] - 1.0e-7;
+
+        return (ist, sst);
     }
 
-    private static void SetInviscidEdgeVelocities(
-        BoundaryLayerSystemState blState, double[] qinv,
-        LinearVortexPanelState panel, int isp, int n, int nWake)
+    // ================================================================
+    // XFoil-compatible station count computation (from IBLPAN)
+    // ================================================================
+
+    /// <summary>
+    /// Computes BL station counts matching Fortran IBLPAN convention.
+    /// Station 0 is virtual stagnation (not counted in IBLTE).
+    /// </summary>
+    private static (int[] iblte, int[] nbl) ComputeStationCountsXFoil(int n, int isp, int nWake)
     {
-        for (int ibl = 0; ibl < blState.NBL[0] && ibl <= blState.IBLTE[0]; ibl++)
+        int[] iblte = new int[2];
+        int[] nbl = new int[2];
+
+        // Side 0 (upper): panels ISP, ISP-1, ..., 0 → stations 1, 2, ..., ISP+1
+        // Station 0 = virtual stag. IBLTE = ISP+1 (TE at panel 0).
+        iblte[0] = isp + 1;
+        nbl[0] = isp + 2;
+
+        // Side 1 (lower): panels ISP+1, ISP+2, ..., N-1 → stations 1, 2, ..., N-1-ISP
+        // Station 0 = virtual stag. IBLTE = N-1-ISP (TE at panel N-1).
+        // Wake: stations IBLTE+1..IBLTE+nWake
+        iblte[1] = n - 1 - isp;
+        nbl[1] = (n - 1 - isp) + 1 + nWake;
+
+        return (iblte, nbl);
+    }
+
+    // ================================================================
+    // XFoil-compatible station mapping (IBLPAN + XICALC + UICALC)
+    // ================================================================
+
+    /// <summary>
+    /// Populates IPAN, VTI, XSSI, UEDG for all BL stations on both sides.
+    /// Combines Fortran IBLPAN (xpanel.f:1376), XICALC (xpanel.f:1436), and UICALC (xpanel.f:1523).
+    /// </summary>
+    private static void InitializeXFoilStationMapping(
+        BoundaryLayerSystemState blState,
+        LinearVortexPanelState panel,
+        double[] qinv,
+        int isp, double sst, int n, int nWake)
+    {
+        // Minimum XSSI near stagnation (XFEPS in Fortran)
+        double xeps = 1.0e-7 * (panel.ArcLength[n - 1] - panel.ArcLength[0]);
+
+        // --- Side 0 (upper surface) ---
+        // Station 0: virtual stagnation
+        blState.IPAN[0, 0] = -1;
+        blState.VTI[0, 0] = 1.0;
+        blState.XSSI[0, 0] = 0.0;
+        blState.UEDG[0, 0] = 0.0;
+
+        // Stations 1..IBLTE[0]: airfoil panels ISP, ISP-1, ..., 0
+        for (int ibl = 1; ibl <= blState.IBLTE[0]; ibl++)
         {
-            int iPan = isp - ibl;
-            blState.UEDG[ibl, 0] = (iPan >= 0 && iPan < n) ? Math.Abs(qinv[iPan]) : 1.0;
+            int iPan = isp - (ibl - 1);  // station 1→ISP, station 2→ISP-1, ...
+            blState.IPAN[ibl, 0] = iPan;
+            blState.VTI[ibl, 0] = 1.0;
+            blState.XSSI[ibl, 0] = Math.Max(sst - panel.ArcLength[iPan], xeps);
+            blState.UEDG[ibl, 0] = blState.VTI[ibl, 0] * qinv[iPan];
         }
 
-        for (int ibl = 0; ibl < blState.NBL[1]; ibl++)
+        // --- Side 1 (lower surface) ---
+        // Station 0: virtual stagnation
+        blState.IPAN[0, 1] = -1;
+        blState.VTI[0, 1] = -1.0;
+        blState.XSSI[0, 1] = 0.0;
+        blState.UEDG[0, 1] = 0.0;
+
+        // Stations 1..IBLTE[1]: airfoil panels ISP+1, ISP+2, ..., N-1
+        for (int ibl = 1; ibl <= blState.IBLTE[1]; ibl++)
         {
-            if (ibl <= blState.IBLTE[1])
+            int iPan = isp + ibl;  // station 1→ISP+1, station 2→ISP+2, ...
+            blState.IPAN[ibl, 1] = iPan;
+            blState.VTI[ibl, 1] = -1.0;
+            blState.XSSI[ibl, 1] = Math.Max(panel.ArcLength[iPan] - sst, xeps);
+            blState.UEDG[ibl, 1] = blState.VTI[ibl, 1] * qinv[iPan];
+        }
+
+        // --- Wake (on side 1) ---
+        // First wake station: XSSI = XSSI at TE
+        int iblteS1 = blState.IBLTE[1];
+        if (iblteS1 + 1 < blState.MaxStations)
+        {
+            blState.XSSI[iblteS1 + 1, 1] = blState.XSSI[iblteS1, 1];
+        }
+
+        // Also set first wake on side 0
+        int iblteS0 = blState.IBLTE[0];
+        if (iblteS0 + 1 < blState.MaxStations)
+        {
+            blState.XSSI[iblteS0 + 1, 0] = blState.XSSI[iblteS0, 0];
+        }
+
+        // Subsequent wake stations: cumulative distance
+        double teAvgUe = 0.5 * (Math.Abs(blState.UEDG[iblteS0, 0]) + Math.Abs(blState.UEDG[iblteS1, 1]));
+        for (int iw = 1; iw <= nWake; iw++)
+        {
+            int iblW1 = iblteS1 + iw;
+            if (iblW1 >= blState.MaxStations) break;
+
+            // Wake panel index: n + iw - 1 (matches Fortran I = N + IW)
+            blState.IPAN[iblW1, 1] = n + iw - 1;
+            blState.VTI[iblW1, 1] = -1.0;
+
+            if (iw == 1)
             {
-                int iPan = isp + ibl;
-                blState.UEDG[ibl, 1] = (iPan >= 0 && iPan < n) ? Math.Abs(qinv[iPan]) : 1.0;
+                // First wake station already has XSSI set above
+                blState.UEDG[iblW1, 1] = -teAvgUe;
             }
             else
             {
-                double ueTE = blState.UEDG[blState.IBLTE[1], 1];
-                int iw = ibl - blState.IBLTE[1];
-                blState.UEDG[ibl, 1] = Math.Max(ueTE * (1.0 + 0.02 * iw), 0.1);
+                // Approximate wake spacing (since we don't have explicit wake node coordinates)
+                double wakeSpacing = blState.XSSI[iblteS1, 1] / Math.Max(iblteS1, 1) * 2.0;
+                blState.XSSI[iblW1, 1] = blState.XSSI[iblW1 - 1, 1] + wakeSpacing;
+                blState.UEDG[iblW1, 1] = -teAvgUe;
+            }
+
+            // Mirror on side 0 (for plotting, matching Fortran)
+            int iblW0 = iblteS0 + iw;
+            if (iblW0 < blState.MaxStations)
+            {
+                blState.IPAN[iblW0, 0] = blState.IPAN[iblW1, 1];
+                blState.VTI[iblW0, 0] = 1.0;
+                blState.XSSI[iblW0, 0] = blState.XSSI[iblW1, 1];
+                blState.UEDG[iblW0, 0] = teAvgUe;
             }
         }
-
-        blState.UEDG[0, 0] = Math.Max(blState.UEDG[0, 0], 0.001);
-        blState.UEDG[0, 1] = Math.Max(blState.UEDG[0, 1], 0.001);
     }
 
-    private static void InitializeBLFromInviscidUe(
+    // ================================================================
+    // XFoil-compatible Thwaites initialization (MRCHUE, xbl.f:554-564)
+    // ================================================================
+
+    /// <summary>
+    /// Initializes BL variables using Thwaites formula matching XFoil's MRCHUE.
+    /// Key differences from old code: TSQ = 0.45*XSI/(6*UEI*REYBL), DSI = 2.2*THI.
+    /// Station 0 = virtual stag (UEDG=0, MASS=0), Station 1 = similarity.
+    /// </summary>
+    private static void InitializeBLThwaitesXFoil(
         BoundaryLayerSystemState blState, AnalysisSettings settings, double reinf)
     {
         for (int side = 0; side < 2; side++)
         {
-            double xsi0 = Math.Max(blState.XSSI[1, side], 0.001);
-            double ue0 = Math.Max(blState.UEDG[1, side], 0.01);
-            double tsq = Math.Max(0.45 / (reinf * ue0) * xsi0, 1e-10);
+            // Thwaites at similarity station (station 1 = Fortran IBL=2)
+            double xsi0 = Math.Max(blState.XSSI[1, side], 1e-10);
+            double ue0 = Math.Max(Math.Abs(blState.UEDG[1, side]), 1e-10);
+
+            // Fortran: BULE=1.0, UCON=UEI/XSI, TSQ=0.45/(UCON*6*REYBL)*XSI^0
+            // Simplifies to: TSQ = 0.45*XSI/(6*UEI*REYBL)
+            double tsq = Math.Max(0.45 * xsi0 / (6.0 * ue0 * reinf), 1e-20);
             double thi = Math.Sqrt(tsq);
-            double dsi = 2.6 * thi;
+            double dsi = 2.2 * thi;  // Fortran: DSI = 2.2*THI (not 2.6)
 
             blState.ITRAN[side] = blState.IBLTE[side];
 
-            for (int ibl = 0; ibl < blState.NBL[side]; ibl++)
+            // Station 0: virtual stagnation
+            blState.THET[0, side] = thi;
+            blState.DSTR[0, side] = dsi;
+            blState.CTAU[0, side] = 0.0;
+            blState.MASS[0, side] = 0.0; // UEDG=0 at virtual stag
+
+            // Station 1: similarity station
+            blState.THET[1, side] = thi;
+            blState.DSTR[1, side] = dsi;
+            blState.CTAU[1, side] = 0.0;
+            blState.MASS[1, side] = dsi * blState.UEDG[1, side];
+
+            // Stations 2..IBLTE: march with Thwaites integral
+            for (int ibl = 2; ibl <= blState.IBLTE[side]; ibl++)
             {
-                double uei = blState.UEDG[ibl, side];
+                double uei = Math.Abs(blState.UEDG[ibl, side]);
+                if (uei < 1e-10) uei = 1e-10;
+                double uePrev = Math.Max(Math.Abs(blState.UEDG[ibl - 1, side]), 1e-10);
 
-                if (ibl <= 1)
+                double dx = blState.XSSI[ibl, side] - blState.XSSI[ibl - 1, side];
+                if (dx < 1e-12) dx = 1e-6;
+                double ueAvg = 0.5 * (uei + uePrev);
+                double thetaPrev = blState.THET[ibl - 1, side];
+
+                // Thwaites integral: theta^2 * Ue^5 = const + integral(0.45*Ue^5*dx/Re)
+                double theta2 = thetaPrev * thetaPrev * Math.Pow(uePrev / uei, 5.0)
+                    + 0.45 / (reinf * Math.Pow(uei, 6.0)) * Math.Pow(ueAvg, 5.0) * dx;
+                double theta = Math.Sqrt(Math.Max(theta2, 1e-20));
+
+                double dUedx = (uei - uePrev) / dx;
+                double lambda = theta * theta * reinf * dUedx;
+                lambda = Math.Max(-0.09, Math.Min(0.09, lambda));
+
+                double hk = 2.61 - 3.75 * lambda - 5.24 * lambda * lambda;
+                hk = Math.Max(1.5, Math.Min(hk, 3.5));
+                double dstar = hk * theta;
+
+                blState.THET[ibl, side] = theta;
+                blState.DSTR[ibl, side] = dstar;
+                blState.CTAU[ibl, side] = 0.0;
+
+                // Transition check
+                if (ibl > 2 && blState.ITRAN[side] >= blState.IBLTE[side])
                 {
-                    blState.THET[ibl, side] = thi;
-                    blState.DSTR[ibl, side] = dsi;
-                    blState.CTAU[ibl, side] = 0.0;
-                }
-                else if (ibl <= blState.IBLTE[side])
-                {
-                    double dx = blState.XSSI[ibl, side] - blState.XSSI[ibl - 1, side];
-                    if (dx < 1e-12) dx = 1e-6;
-                    double uePrev = Math.Max(blState.UEDG[ibl - 1, side], 1e-10);
-                    double ueAvg = 0.5 * (uei + uePrev);
-                    double thetaPrev = blState.THET[ibl - 1, side];
+                    double ncrit = settings.GetEffectiveNCrit(side);
+                    double xsi = blState.XSSI[ibl, side];
+                    double xsiPrev = blState.XSSI[ibl - 1, side];
+                    double hkPrev = (blState.THET[ibl - 1, side] > 1e-30)
+                        ? blState.DSTR[ibl - 1, side] / blState.THET[ibl - 1, side] : 2.1;
+                    double rtPrev = Math.Max(reinf * uePrev * blState.THET[ibl - 1, side], 200.0);
+                    double rt = Math.Max(reinf * uei * theta, 200.0);
+                    double amplPrev = blState.CTAU[ibl - 1, side];
 
-                    double theta2 = thetaPrev * thetaPrev * Math.Pow(uePrev / uei, 5.0)
-                        + 0.45 / (reinf * Math.Pow(uei, 6.0)) * Math.Pow(ueAvg, 5.0) * dx;
-                    double theta = Math.Sqrt(Math.Max(theta2, 1e-10));
-
-                    double dUedx = (uei - uePrev) / dx;
-                    double lambda = theta * theta * reinf * dUedx;
-                    lambda = Math.Max(-0.09, Math.Min(0.09, lambda));
-
-                    double hk = 2.61 - 3.75 * lambda - 5.24 * lambda * lambda;
-                    hk = Math.Max(1.5, Math.Min(hk, 3.5));
-                    double dstar = hk * theta;
-
-                    blState.THET[ibl, side] = theta;
-                    blState.DSTR[ibl, side] = dstar;
-                    blState.CTAU[ibl, side] = 0.0;
-
-                    // Use TransitionModel.CheckTransition for initial transition
-                    if (ibl > 2 && blState.ITRAN[side] >= blState.IBLTE[side])
+                    if (xsi > xsiPrev)
                     {
-                        double ncrit = settings.GetEffectiveNCrit(side);
-                        double xsi = blState.XSSI[ibl, side];
-                        double xsiPrev = blState.XSSI[ibl - 1, side];
-                        double hkPrev = (blState.THET[ibl - 1, side] > 1e-30)
-                            ? blState.DSTR[ibl - 1, side] / blState.THET[ibl - 1, side] : 2.1;
-                        double rtPrev = Math.Max(reinf * uePrev * blState.THET[ibl - 1, side], 200.0);
-                        double rt = Math.Max(reinf * uei * theta, 200.0);
-                        double amplPrev = blState.CTAU[ibl - 1, side];
+                        var trResult = TransitionModel.CheckTransition(
+                            xsiPrev, xsi, amplPrev, 0.0, ncrit,
+                            hkPrev, blState.THET[ibl - 1, side], rtPrev, uePrev,
+                            blState.DSTR[ibl - 1, side],
+                            hk, theta, rt, uei, dstar,
+                            settings.UseModernTransitionCorrections, null);
 
-                        if (xsi > xsiPrev)
-                        {
-                            var trResult = TransitionModel.CheckTransition(
-                                xsiPrev, xsi, amplPrev, 0.0, ncrit,
-                                hkPrev, blState.THET[ibl - 1, side], rtPrev, uePrev,
-                                blState.DSTR[ibl - 1, side],
-                                hk, theta, rt, uei, dstar,
-                                settings.UseModernTransitionCorrections, null);
-
-                            if (trResult.TransitionOccurred)
-                                blState.ITRAN[side] = ibl;
-                        }
+                        if (trResult.TransitionOccurred)
+                            blState.ITRAN[side] = ibl;
                     }
-                }
-                else
-                {
-                    double theta = blState.THET[blState.IBLTE[side], side];
-                    double dstar = blState.DSTR[blState.IBLTE[side], side];
-                    int iw = ibl - blState.IBLTE[side];
-                    blState.THET[ibl, side] = theta * (1.0 + 0.01 * iw);
-                    blState.DSTR[ibl, side] = dstar * (1.0 + 0.03 * iw);
-                    blState.CTAU[ibl, side] = 0.03;
                 }
 
                 blState.MASS[ibl, side] = blState.DSTR[ibl, side] * blState.UEDG[ibl, side];
             }
 
+            // Wake stations: extrapolate from TE
+            for (int ibl = blState.IBLTE[side] + 1; ibl < blState.NBL[side]; ibl++)
+            {
+                double theta = blState.THET[blState.IBLTE[side], side];
+                double dstar = blState.DSTR[blState.IBLTE[side], side];
+                int iw = ibl - blState.IBLTE[side];
+                blState.THET[ibl, side] = theta * (1.0 + 0.01 * iw);
+                blState.DSTR[ibl, side] = dstar * (1.0 + 0.03 * iw);
+                blState.CTAU[ibl, side] = 0.03;
+                blState.MASS[ibl, side] = blState.DSTR[ibl, side] * blState.UEDG[ibl, side];
+            }
+
+            // Ensure transition is before TE
             if (blState.ITRAN[side] >= blState.IBLTE[side])
             {
                 blState.ITRAN[side] = blState.IBLTE[side] - 1;
                 if (blState.ITRAN[side] < 2) blState.ITRAN[side] = 2;
             }
 
+            // Set CTAU for turbulent stations
             for (int ibl = blState.ITRAN[side]; ibl <= blState.IBLTE[side]; ibl++)
                 blState.CTAU[ibl, side] = 0.03;
         }

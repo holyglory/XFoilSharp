@@ -17,6 +17,14 @@ public sealed class BoundaryLayerSystemState
         MaxStations = maxStations;
         MaxWakeStations = maxWakeStations;
 
+        // Panel node index for each BL station, per side.
+        // IPAN(IVX,2) in Fortran. Station 0 = -1 (virtual stagnation, no panel).
+        IPAN = new int[maxStations, 2];
+
+        // Tangential velocity sign for each BL station, per side.
+        // VTI(IVX,2) in Fortran. +1 for upper (side 0), -1 for lower (side 1).
+        VTI = new double[maxStations, 2];
+
         // Edge velocity at each BL station, per side.
         // UEDG(IVX,2) in Fortran.
         UEDG = new double[maxStations, 2];
@@ -62,6 +70,12 @@ public sealed class BoundaryLayerSystemState
 
     /// <summary>Maximum wake stations.</summary>
     public int MaxWakeStations { get; }
+
+    /// <summary>Panel node index for each BL station, indexed [station, side]. -1 for virtual stagnation.</summary>
+    public int[,] IPAN { get; }
+
+    /// <summary>Tangential velocity sign, indexed [station, side]. +1 upper, -1 lower.</summary>
+    public double[,] VTI { get; }
 
     /// <summary>Edge velocity, indexed [station, side].</summary>
     public double[,] UEDG { get; }
