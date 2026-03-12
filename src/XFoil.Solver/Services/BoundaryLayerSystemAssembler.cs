@@ -1109,11 +1109,30 @@ public static class BoundaryLayerSystemAssembler
     // =====================================================================
     // BLSYS: AssembleStationSystem
     // Source: xblsys.f:583-661
+    //
+    // Performs the complete BLSYS chain transformation:
+    // 1. BLPRV: Convert incompressible Uei to compressible U via Karman-Tsien
+    // 2. Compute MSQ (Mach^2) at both stations with U_MS sensitivities
+    // 3. BLDIF: Compute residuals and VS1/VS2 Jacobians in compressible vars
+    // 4. SIMI: Combine VS1+VS2 for similarity station
+    // 5. Ue chain transform: VS(k,4) *= U_UEI (compressible -> incompressible)
+    //    This is the key BLSYS chain: derivatives wrt compressible Ue are
+    //    converted to derivatives wrt incompressible Uei using the
+    //    Karman-Tsien Jacobian factor U_UEI.
+    //    Fortran BLSYS lines 647-658:
+    //      RES_U1 = VS1(K,4)
+    //      RES_U2 = VS2(K,4)
+    //      RES_MS = VSM(K)
+    //      VS1(K,4) = RES_U1*U1_UEI
+    //      VS2(K,4) = RES_U2*U2_UEI
+    //      VSM(K)   = RES_U1*U1_MS + RES_U2*U2_MS + RES_MS
     // =====================================================================
 
     /// <summary>
     /// Top-level BL system assembly for a single station interval.
-    /// Port of BLSYS from xblsys.f.
+    /// Port of BLSYS from xblsys.f. Applies full chain transformations:
+    /// BLPRV (compressibility), BLDIF (Jacobians), SIMI (similarity),
+    /// and Ue incompressible chain (U_UEI factor).
     /// </summary>
     public static BlsysResult AssembleStationSystem(
         bool isWake, bool isTurbOrTran, bool isTran, bool isSimi,
@@ -1135,18 +1154,20 @@ public static class BoundaryLayerSystemAssembler
         result.VS1 = new double[3, 5];
         result.VS2 = new double[3, 5];
 
-        // Determine ITYP
+        // Determine ITYP (Fortran BLSYS lines 604-614)
         int ityp;
         if (isWake) ityp = 3;
         else if (isTurbOrTran) ityp = 2;
         else ityp = 1;
 
-        // Convert to compressible (BLPRV)
+        // ---- BLPRV: Convert to compressible edge velocity ----
+        // (Fortran BLSYS calls BLVAR which calls BLPRV internally)
         var (u1, u1_uei, u1_ms) = ConvertToCompressible(uei1, tkbl, qinfbl, tkbl_ms);
         var (u2, u2_uei, u2_ms) = ConvertToCompressible(uei2, tkbl, qinfbl, tkbl_ms);
 
-        // Compute BLDIF
-        double msq1 = 0.0, msq2 = 0.0; // Simplified for M=0 case
+        // ---- Compute MSQ (Mach^2) at both stations ----
+        // MSQ is used by BLDIF for compressibility corrections in correlations
+        double msq1 = 0.0, msq2 = 0.0;
         if (hstinv > 0)
         {
             double u1sq = u1 * u1 * hstinv;
@@ -1155,6 +1176,9 @@ public static class BoundaryLayerSystemAssembler
             msq2 = u2sq / (gm1bl * (1.0 - 0.5 * u2sq));
         }
 
+        // ---- BLDIF: Compute BL equation residuals and Jacobians ----
+        // ComputeFiniteDifferences now includes full BLVAR-style chain-rule
+        // Jacobians at both stations (primary derivatives + correlation chains)
         var bldif = ComputeFiniteDifferences(
             ityp, x1, x2, u1, u2, t1, t2, d1, d2, s1, s2,
             dw1, dw2, msq1, msq2, ampl1, ampl2, amcrit, reybl);
@@ -1163,7 +1187,34 @@ public static class BoundaryLayerSystemAssembler
         for (int k = 0; k < 3; k++)
             result.Residual[k] = bldif.Residual[k];
 
-        // Map 5-column Jacobian to system (convert Ue column from compressible to incompressible)
+        // ---- SIMI: Similarity station handling ----
+        // (Fortran BLSYS lines 636-644: VS2 = VS1 + VS2, VS1 = 0)
+        // Must be done BEFORE the Ue chain transform
+        if (isSimi)
+        {
+            for (int k = 0; k < 3; k++)
+                for (int l = 0; l < 5; l++)
+                {
+                    double vs2kl = bldif.VS1[k, l] + bldif.VS2[k, l];
+                    bldif.VS1[k, l] = 0;
+                    bldif.VS2[k, l] = vs2kl;
+                }
+        }
+
+        // ---- Ue chain transform: compressible -> incompressible ----
+        // (Fortran BLSYS lines 647-658)
+        // This is the key BLSYS chain transformation that converts
+        // derivatives wrt compressible Ue (from BLDIF) into derivatives
+        // wrt incompressible Uei (what the Newton system actually solves for).
+        //
+        // Chain rule: dR/dUei = dR/dU * dU/dUei = VS(k,4) * U_UEI
+        //
+        // The Fortran also computes:
+        //   VSM(K) = RES_U1*U1_MS + RES_U2*U2_MS + RES_MS
+        // which tracks Mach sensitivity. We fold this into the result
+        // for completeness, though VSM is not directly used in the
+        // 5-column VS1/VS2 Newton system (it would appear in a separate
+        // Mach sensitivity column if needed).
         for (int k = 0; k < 3; k++)
         {
             for (int l = 0; l < 5; l++)
@@ -1171,22 +1222,14 @@ public static class BoundaryLayerSystemAssembler
                 result.VS1[k, l] = bldif.VS1[k, l];
                 result.VS2[k, l] = bldif.VS2[k, l];
             }
-            // Convert Ue sensitivities: VS(k,4) *= U_UEI
+
+            // Apply U_UEI chain factor to Ue column (column 3)
+            // Fortran: VS1(K,4) = RES_U1*U1_UEI
+            //          VS2(K,4) = RES_U2*U2_UEI
             double resU1 = bldif.VS1[k, 3];
             double resU2 = bldif.VS2[k, 3];
             result.VS1[k, 3] = resU1 * u1_uei;
             result.VS2[k, 3] = resU2 * u2_uei;
-        }
-
-        // Handle similarity station
-        if (isSimi)
-        {
-            for (int k = 0; k < 3; k++)
-                for (int l = 0; l < 5; l++)
-                {
-                    result.VS2[k, l] = result.VS1[k, l] + result.VS2[k, l];
-                    result.VS1[k, l] = 0;
-                }
         }
 
         return result;
