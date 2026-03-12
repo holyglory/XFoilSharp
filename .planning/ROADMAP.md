@@ -60,7 +60,7 @@ Plans:
   2. Full e^n transition model replaces the laminar amplification surrogate
   3. Drag decomposition (form, friction, pressure) matches original XFoil values
   4. Alpha sweep (Type 1), CL sweep (Type 2), and Re sweep (Type 3) polars all match original XFoil within 0.001%
-**Plans**: 16 plans
+**Plans**: 18 plans
 
 Plans:
 - [x] 03-01-PLAN.md -- State models, AnalysisSettings extension, and BL correlation functions (xblsys.f)
@@ -79,6 +79,8 @@ Plans:
 - [x] 03-14-PLAN.md -- Gap closure: tighten parity test tolerances to 0.001% after Newton convergence achieved
 - [x] 03-15-PLAN.md -- Gap closure: fix 3 Newton defects (reybl threading, DUE/DDS VDEL terms, iteration order)
 - [x] 03-16-PLAN.md -- Gap closure: tighten parity tolerances to measured accuracy; document residual gap to 1e-5
+- [ ] 03-17-PLAN.md -- Gap closure: rewrite BLDIF full chain-rule Jacobians and BLSYS chain transformations
+- [ ] 03-18-PLAN.md -- Gap closure: tighten parity tolerances to 1e-5 after Jacobian rewrite
 
 ### Phase 4: Randomized Test Bench
 **Goal**: Automated test bench continuously validates parity using random real-world airfoils against a reference XFoil binary
@@ -106,5 +108,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation Cleanup | 2/2 | Complete | 2026-03-10 |
 | 2. Inviscid Kernel Parity | 5/5 | Complete | 2026-03-10 |
-| 3. Viscous Solver Parity and Polar Validation | 16/16 | Complete | 2026-03-12 |
+| 3. Viscous Solver Parity and Polar Validation | 16/18 | In Progress | - |
 | 4. Randomized Test Bench | 0/? | Not started | - |
