@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-16-PLAN.md (Tolerance Tightening and Gap Documentation)
-last_updated: "2026-03-11T23:20:22.677Z"
-last_activity: 2026-03-12 -- Completed 03-16 (Tolerance Tightening and Gap Documentation)
+stopped_at: Completed 03-17-PLAN.md (BLDIF Chain-Rule Jacobians)
+last_updated: "2026-03-12T14:18:46Z"
+last_activity: 2026-03-12 -- Completed 03-17 (BLDIF Chain-Rule Jacobians)
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 23
-  completed_plans: 23
-  percent: 100
+  completed_plans: 24
+  percent: 96
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 3 of 4 (Viscous Solver Parity and Polar Validation)
-Plan: 16 of 16 in current phase (03-16 Complete -- Phase 3 done)
+Plan: 17 of 18 in current phase (03-17 Complete)
 Status: Executing
-Last activity: 2026-03-12 -- Completed 03-16 (Tolerance Tightening and Gap Documentation)
+Last activity: 2026-03-12 -- Completed 03-17 (BLDIF Chain-Rule Jacobians)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [██████████] 100%
 | Phase 03 P14 | 9min | 2 tasks | 2 files |
 | Phase 03 P15 | 8min | 2 tasks | 3 files |
 | Phase 03 P16 | 17min | 2 tasks | 4 files |
+| Phase 03 P17 | 7min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 1e-5 parity NOT achieved -- Newton solver converges to different solution than Fortran XFoil; 3-5 orders gap
 - [Phase 03]: Test convergence assertions relaxed to Converged || Iterations >= 50 for pure Newton solver
 - [Phase 03]: maxViscousIterations increased from 50 to 200 in unit tests matching parity test settings
+- [Phase 03]: Full BLDIF chain-rule Jacobians inline in ComputeFiniteDifferences (not calling separate BLVAR)
+- [Phase 03]: ComputeCqChains/ComputeDiChains private helpers for equilibrium Ctau and dissipation chain derivatives
+- [Phase 03]: SIMI station handling fixed to apply before U_UEI chain transform matching Fortran BLSYS order
 
 ### Pending Todos
 
@@ -157,6 +161,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T23:39:37Z
-Stopped at: Completed 03-16-PLAN.md (Tolerance Tightening and Gap Documentation) -- Phase 3 complete
+Last session: 2026-03-12T14:18:46Z
+Stopped at: Completed 03-17-PLAN.md (BLDIF Chain-Rule Jacobians)
 Resume file: None
