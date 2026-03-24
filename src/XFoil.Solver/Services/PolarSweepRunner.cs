@@ -2,6 +2,12 @@ using System;
 using System.Collections.Generic;
 using XFoil.Solver.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xoper.f :: SPECAL/SPECCL
+// Secondary legacy source: f_xfoil/src/xfoil.f :: MRCL
+// Role in port: Runs the managed Type 1, Type 2, and Type 3 viscous sweep workflows on top of the Newton-coupled solver.
+// Differences: The sweep modes follow the legacy OPER lineage, but the managed runner reuses prepared linear-vortex state, stores results in explicit lists, and keeps only lightweight warm-start metadata instead of carrying the original shared polar accumulation state.
+// Decision: Keep the managed sweep runner because it is the active public polar API, while documenting that its warm-start implementation is lighter than the original OPER workflow.
 namespace XFoil.Solver.Services;
 
 /// <summary>
@@ -25,6 +31,9 @@ public static class PolarSweepRunner
     /// <param name="alphaEndDeg">Ending alpha in degrees.</param>
     /// <param name="alphaStepDeg">Alpha step in degrees.</param>
     /// <returns>List of viscous results, one per alpha point.</returns>
+    // Legacy mapping: f_xfoil/src/xoper.f :: SPECAL polar loop.
+    // Difference from legacy: The runner reuses a prepared linear-vortex system and records managed result objects rather than operating through the original interactive OPER state.
+    // Decision: Keep the managed sweep orchestration because it fits the current solver API and still follows the Type 1 operating-point sequence.
     public static List<ViscousAnalysisResult> SweepAlpha(
         (double[] x, double[] y) geometry,
         AnalysisSettings settings,
@@ -45,9 +54,12 @@ public static class PolarSweepRunner
 
         CosineClusteringPanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
-            panel, settings.PanelCount);
+            panel, settings.PanelCount,
+            useLegacyPrecision: settings.UseLegacyPanelingPrecision);
 
         inviscidState.InitializeForNodeCount(panel.NodeCount);
+        inviscidState.UseLegacyKernelPrecision = settings.UseLegacyStreamfunctionKernelPrecision;
+        inviscidState.UseLegacyPanelingPrecision = settings.UseLegacyPanelingPrecision;
 
         // Assemble and factor the influence matrix once
         LinearVortexInviscidSolver.AssembleAndFactorSystem(
@@ -104,6 +116,9 @@ public static class PolarSweepRunner
     /// <param name="clEnd">Ending CL.</param>
     /// <param name="clStep">CL step.</param>
     /// <returns>List of viscous results, one per CL point.</returns>
+    // Legacy mapping: f_xfoil/src/xoper.f :: SPECCL polar loop.
+    // Difference from legacy: The managed code drives each target-CL point through the linear-vortex CL solver and Newton viscous solve, while the original OPER path mutates shared polar state and command-driven storage.
+    // Decision: Keep the managed orchestration because it is easier to test and reuse.
     public static List<ViscousAnalysisResult> SweepCL(
         (double[] x, double[] y) geometry,
         AnalysisSettings settings,
@@ -124,9 +139,12 @@ public static class PolarSweepRunner
 
         CosineClusteringPanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
-            panel, settings.PanelCount);
+            panel, settings.PanelCount,
+            useLegacyPrecision: settings.UseLegacyPanelingPrecision);
 
         inviscidState.InitializeForNodeCount(panel.NodeCount);
+        inviscidState.UseLegacyKernelPrecision = settings.UseLegacyStreamfunctionKernelPrecision;
+        inviscidState.UseLegacyPanelingPrecision = settings.UseLegacyPanelingPrecision;
 
         LinearVortexInviscidSolver.AssembleAndFactorSystem(
             panel, inviscidState, settings.FreestreamVelocity);
@@ -182,6 +200,9 @@ public static class PolarSweepRunner
     /// <param name="reEnd">Ending Reynolds number.</param>
     /// <param name="reStep">Reynolds number step.</param>
     /// <returns>List of viscous results, one per Re point.</returns>
+    // Legacy mapping: f_xfoil/src/xoper.f :: Type-3 OPER loop with f_xfoil/src/xfoil.f :: MRCL coupling.
+    // Difference from legacy: The current implementation only preserves the simple prescribed-Re branch and records managed results rather than the full legacy MRCL state machine.
+    // Decision: Keep the simplified managed Type-3 sweep until full MRCL coupling is needed.
     public static List<ViscousAnalysisResult> SweepRe(
         (double[] x, double[] y) geometry,
         AnalysisSettings baseSettings,
@@ -203,9 +224,12 @@ public static class PolarSweepRunner
 
         CosineClusteringPanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
-            panel, baseSettings.PanelCount);
+            panel, baseSettings.PanelCount,
+            useLegacyPrecision: baseSettings.UseLegacyPanelingPrecision);
 
         inviscidState.InitializeForNodeCount(panel.NodeCount);
+        inviscidState.UseLegacyKernelPrecision = baseSettings.UseLegacyStreamfunctionKernelPrecision;
+        inviscidState.UseLegacyPanelingPrecision = baseSettings.UseLegacyPanelingPrecision;
 
         LinearVortexInviscidSolver.AssembleAndFactorSystem(
             panel, inviscidState, baseSettings.FreestreamVelocity);
@@ -240,7 +264,10 @@ public static class PolarSweepRunner
                 viscousConvergenceTolerance: baseSettings.ViscousConvergenceTolerance,
                 nCritUpper: baseSettings.NCritUpper,
                 nCritLower: baseSettings.NCritLower,
-                usePostStallExtrapolation: baseSettings.UsePostStallExtrapolation);
+                usePostStallExtrapolation: baseSettings.UsePostStallExtrapolation,
+                useLegacyBoundaryLayerInitialization: baseSettings.UseLegacyBoundaryLayerInitialization,
+                useLegacyWakeSourceKernelPrecision: baseSettings.UseLegacyWakeSourceKernelPrecision,
+                useLegacyStreamfunctionKernelPrecision: baseSettings.UseLegacyStreamfunctionKernelPrecision);
 
             // Use SPECCL to find alpha for the fixed CL at this Re
             var inviscidResult = LinearVortexInviscidSolver.SolveAtLiftCoefficient(
@@ -285,6 +312,9 @@ public static class PolarSweepRunner
     /// Type 2: M may depend on CL (speed-of-sound coupling).
     /// Type 3: Re = REINF1 * CL^RETYP (Re-CL coupling).
     /// </summary>
+    // Legacy mapping: f_xfoil/src/xfoil.f :: MRCL.
+    // Difference from legacy: Only the simple fixed-M/fixed-Re branches are currently retained; the broader coupling options in MRCL are documented but not fully implemented.
+    // Decision: Keep the simplified helper and record that it is a managed subset of MRCL.
     private static (double re, double mach) ComputeMRCL(
         double baseRe, double baseMach, double cl, PolarType type)
     {
@@ -333,6 +363,9 @@ public static class PolarSweepRunner
     /// 2. Other nearby converged points
     /// 3. Cold-start (null) as last resort
     /// </summary>
+    // Legacy mapping: managed-only warm-start selector inspired by OPER continuation usage.
+    // Difference from legacy: The current runner keeps only a lightweight nearest-history policy instead of full BL-state continuation.
+    // Decision: Keep the helper because it captures the current warm-start strategy explicitly.
     private static BLSnapshot? FindBestWarmStart(
         List<BLSnapshot> convergedSnapshots,
         int lastConvergedIndex,
@@ -350,6 +383,9 @@ public static class PolarSweepRunner
     /// Since ViscousSolverEngine uses its own internal BL state, we capture via
     /// a re-solve approach, or simply record the alpha for the warm-start path.
     /// </summary>
+    // Legacy mapping: managed-only warm-start snapshot helper with no direct Fortran analogue.
+    // Difference from legacy: The snapshot currently records only the operating-point angle instead of the full boundary-layer state tables used by the original continuation flow.
+    // Decision: Keep the lightweight snapshot until the solver carries reusable BL state between points.
     private static BLSnapshot CaptureBLSnapshot(
         LinearVortexPanelState panel,
         InviscidSolverState inviscidState,
@@ -371,6 +407,9 @@ public static class PolarSweepRunner
     /// When warm-start is available, the solver starts from a nearby operating point
     /// which generally converges faster.
     /// </summary>
+    // Legacy mapping: f_xfoil/src/xoper.f :: viscous continuation lineage.
+    // Difference from legacy: The current implementation delegates entirely to ViscousSolverEngine and does not yet inject a real persisted BL-state warm start.
+    // Decision: Keep the wrapper because it preserves the public sweep structure while the warm-start mechanism evolves.
     private static ViscousAnalysisResult SolveViscousWithWarmStart(
         LinearVortexPanelState panel,
         InviscidSolverState inviscidState,
@@ -396,6 +435,9 @@ public static class PolarSweepRunner
     /// <summary>
     /// Creates a new ViscousAnalysisResult with angle of attack information added.
     /// </summary>
+    // Legacy mapping: managed-only result-packaging helper with no direct Fortran analogue.
+    // Difference from legacy: OPER stores sweep outputs in shared polar arrays, while the port materializes a copied result object per point.
+    // Decision: Keep the helper because it matches the managed result model.
     private static ViscousAnalysisResult WithAngleOfAttack(
         ViscousAnalysisResult result, double angleDegrees)
     {
@@ -420,11 +462,17 @@ public static class PolarSweepRunner
     // Sweep utilities
     // ================================================================
 
+    // Legacy mapping: managed-only sweep utility mirroring legacy inclusive loop direction handling.
+    // Difference from legacy: The helper centralizes signed-step normalization instead of scattering the logic across interactive loops.
+    // Decision: Keep the helper because it makes the sweep bounds explicit.
     private static double NormalizeStep(double start, double end, double step)
     {
         return (end >= start) ? Math.Abs(step) : -Math.Abs(step);
     }
 
+    // Legacy mapping: managed-only inclusive sweep-bound helper mirroring OPER loop intent.
+    // Difference from legacy: The original loops rely on command-state control flow rather than a standalone predicate.
+    // Decision: Keep the helper because it simplifies the three managed sweep modes.
     private static bool ShouldContinue(double current, double end, double step)
     {
         const double tolerance = 1e-9;

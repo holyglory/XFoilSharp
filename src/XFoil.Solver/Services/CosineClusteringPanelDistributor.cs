@@ -1,6 +1,14 @@
+using System.Numerics;
+using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f :: PANGEN
+// Secondary legacy source: f_xfoil/src/xgeom.f :: LEFIND; f_xfoil/src/spline.f :: CURV/D2VAL
+// Role in port: Directly ports XFoil's curvature-adaptive panel distribution algorithm into the managed solver.
+// Differences: The numerical flow stays aligned with PANGEN, but the managed code factors the monolithic routine into traceable helpers, uses generic numeric types, and routes parity-sensitive float contraction through explicit helper calls rather than implicit REAL temporaries.
+// Decision: Keep the decomposed managed structure and preserve the legacy evaluation order inside the parity-sensitive path because this file is the manual parity reference for paneling.
 namespace XFoil.Solver.Services;
 
 /// <summary>
@@ -22,384 +30,502 @@ public static class CosineClusteringPanelDistributor
     /// Distributes panel nodes along an airfoil surface using XFoil's PANGEN algorithm:
     /// curvature-adaptive cosine spacing with TE density control.
     /// </summary>
-    /// <param name="inputX">Raw airfoil X coordinates (0-based). Upper-TE around LE to lower-TE.</param>
-    /// <param name="inputY">Raw airfoil Y coordinates (0-based).</param>
-    /// <param name="inputCount">Number of raw input points.</param>
-    /// <param name="panel">Output panel state to populate with node positions and geometry.</param>
-    /// <param name="desiredNodeCount">Target number of panel nodes (default 160, matching XFoil NPAN).</param>
-    /// <param name="curvatureWeight">CVPAR: controls how strongly curvature affects panel density (1.0 = XFoil default).</param>
-    /// <param name="trailingEdgeDensityRatio">CTERAT: ratio of TE panel density to average LE curvature (0.15 = XFoil default).</param>
-    /// <param name="curvatureDensityRatio">CTRRAT: refinement region panel density ratio (0.2 = XFoil default).</param>
+    // Legacy mapping: f_xfoil/src/xfoil.f :: PANGEN public entry wrapper.
+    // Difference from legacy: The managed port exposes the algorithm as a typed service entry point that writes into LinearVortexPanelState and optionally selects parity precision explicitly.
+    // Decision: Keep the public wrapper because it makes the direct PANGEN port reusable across solver paths.
     public static void Distribute(
-        double[] inputX, double[] inputY, int inputCount,
+        double[] inputX,
+        double[] inputY,
+        int inputCount,
         LinearVortexPanelState panel,
         int desiredNodeCount = 160,
         double curvatureWeight = 1.0,
         double trailingEdgeDensityRatio = 0.15,
-        double curvatureDensityRatio = 0.2)
+        double curvatureDensityRatio = 0.2,
+        bool useLegacyPrecision = false)
     {
-        if (inputCount < 2) return;
+        if (useLegacyPrecision)
+        {
+            DistributeCore<float>(
+                inputX, inputY, inputCount, panel, desiredNodeCount,
+                curvatureWeight, trailingEdgeDensityRatio, curvatureDensityRatio);
+            return;
+        }
+
+        DistributeCore<double>(
+            inputX, inputY, inputCount, panel, desiredNodeCount,
+            curvatureWeight, trailingEdgeDensityRatio, curvatureDensityRatio);
+    }
+
+    // Legacy mapping: f_xfoil/src/xfoil.f :: PANGEN.
+    // Difference from legacy: The underlying algorithm is a direct port, but the managed version breaks the original routine into named phases, explicit trace hooks, and generic numeric operations so parity-sensitive float staging can be controlled precisely.
+    // Decision: Keep the structured managed decomposition and preserve the legacy order within the main redistribution flow.
+    private static void DistributeCore<T>(
+        double[] inputX,
+        double[] inputY,
+        int inputCount,
+        LinearVortexPanelState panel,
+        int desiredNodeCount,
+        double curvatureWeight,
+        double trailingEdgeDensityRatio,
+        double curvatureDensityRatio)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        string traceScope = SolverTrace.ScopeName(typeof(CosineClusteringPanelDistributor));
+        if (inputCount < 2)
+        {
+            return;
+        }
+
+        _ = curvatureDensityRatio;
 
         int nb = inputCount;
         int n = desiredNodeCount;
 
-        // --- Step 1: Spline the input coordinates ---
-        var sb = new double[nb];
-        var xb = new double[nb];
-        var yb = new double[nb];
-        var xbp = new double[nb];
-        var ybp = new double[nb];
+        T zero = T.Zero;
+        T one = T.One;
+        T two = T.CreateChecked(2.0);
+        T half = T.CreateChecked(0.5);
+        T quarter = T.CreateChecked(0.25);
+        T pointTwo = T.CreateChecked(0.2);
+        T pointZeroZeroOne = T.CreateChecked(1.0e-3);
+        T six = T.CreateChecked(6.0);
+        T ten = T.CreateChecked(10.0);
+        T twenty = T.CreateChecked(20.0);
 
-        Array.Copy(inputX, xb, nb);
-        Array.Copy(inputY, yb, nb);
+        var sb = new T[nb];
+        var xb = new T[nb];
+        var yb = new T[nb];
+        var xbp = new T[nb];
+        var ybp = new T[nb];
+
+        for (int i = 0; i < nb; i++)
+        {
+            xb[i] = T.CreateChecked(inputX[i]);
+            yb[i] = T.CreateChecked(inputY[i]);
+        }
 
         ParametricSpline.ComputeArcLength(xb, yb, sb, nb);
         ParametricSpline.FitSegmented(xb, xbp, sb, nb);
         ParametricSpline.FitSegmented(yb, ybp, sb, nb);
-
-        // Normalizing length (~ half chord, same as XFoil's SBREF)
-        double sbref = 0.5 * (sb[nb - 1] - sb[0]);
-
-        // --- Step 2: Compute curvature array (W5 in Fortran) ---
-        var w5 = new double[nb];
         for (int i = 0; i < nb; i++)
         {
-            w5[i] = Math.Abs(ComputeCurvature(sb[i], xb, xbp, yb, ybp, sb, nb)) * sbref;
+            TraceBufferSplineNode(traceScope, i + 1, xb[i], yb[i], sb[i], xbp[i], ybp[i]);
         }
 
-        // --- Step 3: Find LE arc-length parameter ---
-        double sble = FindLeadingEdge(xb, xbp, yb, ybp, sb, nb);
+        T sbref = half * (sb[nb - 1] - sb[0]);
 
-        double cvle = Math.Abs(ComputeCurvature(sble, xb, xbp, yb, ybp, sb, nb)) * sbref;
+        var w5 = new T[nb];
+        for (int i = 0; i < nb; i++)
+        {
+            w5[i] = T.Abs(ComputeCurvature(sb[i], xb, xbp, yb, ybp, sb, nb)) * sbref;
+            TracePangenCurvatureNode(traceScope, "raw", i + 1, sb[i], w5[i]);
+        }
 
-        // Check for sharp LE (doubled point)
+        T sble = FindLeadingEdge(xb, xbp, yb, ybp, sb, nb);
+        T cvle = T.Abs(ComputeCurvature(sble, xb, xbp, yb, ybp, sb, nb)) * sbref;
+
         int ible = 0;
         for (int i = 0; i < nb - 1; i++)
         {
             if (sble == sb[i] && sble == sb[i + 1])
             {
-                ible = i + 1; // 1-based index for compatibility with algorithm
+                ible = i + 1;
                 break;
             }
         }
 
-        // LE and TE coordinates
-        double xble = ParametricSpline.Evaluate(sble, xb, xbp, sb, nb);
-        double yble = ParametricSpline.Evaluate(sble, yb, ybp, sb, nb);
-        double xbte = 0.5 * (xb[0] + xb[nb - 1]);
-        double ybte = 0.5 * (yb[0] + yb[nb - 1]);
-        double chbsq = (xbte - xble) * (xbte - xble) + (ybte - yble) * (ybte - yble);
+        T xble = ParametricSpline.Evaluate(sble, xb, xbp, sb, nb);
+        T yble = ParametricSpline.Evaluate(sble, yb, ybp, sb, nb);
+        T xbte = half * (xb[0] + xb[nb - 1]);
+        T ybte = half * (yb[0] + yb[nb - 1]);
+        T chbsq = ((xbte - xble) * (xbte - xble)) + ((ybte - yble) * (ybte - yble));
 
-        // --- Step 4: Average curvature near LE ---
         int nk = 3;
-        double cvsum = 0.0;
+        T cvsum = zero;
         for (int k = -nk; k <= nk; k++)
         {
-            double frac = (double)k / nk;
-            double sbk = sble + frac * sbref / Math.Max(cvle, 20.0);
-            double cvk = Math.Abs(ComputeCurvature(sbk, xb, xbp, yb, ybp, sb, nb)) * sbref;
+            T frac = T.CreateChecked(k) / T.CreateChecked(nk);
+            T sbk = sble + (frac * sbref / Max(cvle, twenty));
+            T cvk = T.Abs(ComputeCurvature(sbk, xb, xbp, yb, ybp, sb, nb)) * sbref;
             cvsum += cvk;
+            TracePangenLeadingEdgeSample(traceScope, "buffer", k, frac, sbk, cvk, cvsum);
         }
 
-        double cvavg = cvsum / (2 * nk + 1);
-
-        // Dummy curvature for sharp LE
+        T cvavg = cvsum / T.CreateChecked((2 * nk) + 1);
         if (ible != 0)
         {
-            cvavg = 10.0;
+            cvavg = ten;
         }
 
-        // --- Step 5: Curvature attraction coefficient ---
-        double cc = 6.0 * curvatureWeight;
+        TracePangenLeadingEdge(traceScope, "buffer", sble, xble, yble, xbte, ybte, cvle, cvavg, ible);
 
-        // Artificial curvature at TE
-        double cvte = cvavg * trailingEdgeDensityRatio;
+        T cc = six * T.CreateChecked(curvatureWeight);
+        T cvte = cvavg * T.CreateChecked(trailingEdgeDensityRatio);
         w5[0] = cvte;
         w5[nb - 1] = cvte;
 
-        // --- Step 6: Smooth curvature array ---
-        double smool = Math.Max(1.0 / Math.Max(cvavg, 20.0), 0.25 / (n / 2));
-        double smoosq = (smool * sbref) * (smool * sbref);
+        // Legacy block: PANGEN curvature smoothing system.
+        // Difference: The equation set is the same as the legacy tridiagonal diffusion smoother, but the managed code exposes the coefficients as named arrays and supports segmented solves around duplicated LE nodes explicitly.
+        // Decision: Keep the named-array form because it is easier to inspect while preserving the same smoother semantics.
+        T smool = Max(one / Max(cvavg, twenty), quarter / T.CreateChecked(n / 2));
+        T smoosq = (smool * sbref) * (smool * sbref);
 
-        var w1 = new double[nb];
-        var w2 = new double[nb];
-        var w3 = new double[nb];
+        var w1 = new T[nb];
+        var w2 = new T[nb];
+        var w3 = new T[nb];
 
-        w2[0] = 1.0;
-        w3[0] = 0.0;
+        w2[0] = one;
+        w3[0] = zero;
 
         for (int i = 1; i < nb - 1; i++)
         {
-            double dsm = sb[i] - sb[i - 1];
-            double dsp = sb[i + 1] - sb[i];
-            double dso = 0.5 * (sb[i + 1] - sb[i - 1]);
+            T dsm = sb[i] - sb[i - 1];
+            T dsp = sb[i + 1] - sb[i];
+            T dso = half * (sb[i + 1] - sb[i - 1]);
 
-            if (dsm == 0.0 || dsp == 0.0)
+            if (dsm == zero || dsp == zero)
             {
-                // Corner point: leave curvature unchanged
-                w1[i] = 0.0;
-                w2[i] = 1.0;
-                w3[i] = 0.0;
+                w1[i] = zero;
+                w2[i] = one;
+                w3[i] = zero;
             }
             else
             {
-                w1[i] = smoosq * (-1.0 / dsm) / dso;
-                w2[i] = smoosq * (1.0 / dsp + 1.0 / dsm) / dso + 1.0;
-                w3[i] = smoosq * (-1.0 / dsp) / dso;
+                w1[i] = smoosq * (-one / dsm) / dso;
+                w2[i] = (smoosq * ((one / dsp) + (one / dsm)) / dso) + one;
+                w3[i] = smoosq * (-one / dsp) / dso;
             }
         }
 
-        w1[nb - 1] = 0.0;
-        w2[nb - 1] = 1.0;
+        w1[nb - 1] = zero;
+        w2[nb - 1] = one;
 
-        // Fix curvature at LE by modifying equations adjacent to LE
         for (int i = 1; i < nb - 1; i++)
         {
             if (sb[i] == sble || (ible != 0 && (i == ible - 1 || i == ible)))
             {
-                // Node falls on LE point
-                w1[i] = 0.0;
-                w2[i] = 1.0;
-                w3[i] = 0.0;
+                w1[i] = zero;
+                w2[i] = one;
+                w3[i] = zero;
                 w5[i] = cvle;
             }
             else if (sb[i - 1] < sble && sb[i] > sble)
             {
-                // Modify equation at node just before LE point
-                double dsm = sb[i - 1] - sb[i - 2];
-                double dsp = sble - sb[i - 1];
-                double dso = 0.5 * (sble - sb[i - 2]);
+                T dsm = sb[i - 1] - sb[i - 2];
+                T dsp = sble - sb[i - 1];
+                T dso = half * (sble - sb[i - 2]);
 
-                w1[i - 1] = smoosq * (-1.0 / dsm) / dso;
-                w2[i - 1] = smoosq * (1.0 / dsp + 1.0 / dsm) / dso + 1.0;
-                w3[i - 1] = 0.0;
-                w5[i - 1] = w5[i - 1] + smoosq * cvle / (dsp * dso);
+                w1[i - 1] = smoosq * (-one / dsm) / dso;
+                w2[i - 1] = (smoosq * ((one / dsp) + (one / dsm)) / dso) + one;
+                w3[i - 1] = zero;
+                w5[i - 1] += smoosq * cvle / (dsp * dso);
 
-                // Modify equation at node just after LE point
                 dsm = sb[i] - sble;
                 dsp = sb[i + 1] - sb[i];
-                dso = 0.5 * (sb[i + 1] - sble);
+                dso = half * (sb[i + 1] - sble);
 
-                w1[i] = 0.0;
-                w2[i] = smoosq * (1.0 / dsp + 1.0 / dsm) / dso + 1.0;
-                w3[i] = smoosq * (-1.0 / dsp) / dso;
-                w5[i] = w5[i] + smoosq * cvle / (dsm * dso);
-
+                w1[i] = zero;
+                w2[i] = (smoosq * ((one / dsp) + (one / dsm)) / dso) + one;
+                w3[i] = smoosq * (-one / dsp) / dso;
+                w5[i] += smoosq * cvle / (dsm * dso);
                 break;
             }
         }
 
-        // Set artificial curvature at bunching points (refinement areas)
-        // XFoil defaults: XSREF1=XSREF2=1.0, XPREF1=XPREF2=1.0 (i.e. no refinement)
-        // We skip this since the default parameters disable it.
-
-        // Solve for smoothed curvature
-        // Fortran TRISOL(A=W2, B=W1, C=W3, D=W5) => A=diagonal, B=lower, C=upper
-        // C# Solve(lower, diagonal, upper, rhs) => Solve(W1, W2, W3, W5)
         if (ible == 0)
         {
             TridiagonalSolver.Solve(w1, w2, w3, w5, nb);
         }
         else
         {
-            // Two-segment solve for sharp LE
             SolveTridiagonalSegment(w1, w2, w3, w5, 0, ible);
             SolveTridiagonalSegment(w1, w2, w3, w5, ible, nb - ible);
         }
 
-        // Find max curvature and normalize
-        double cvmax = 0.0;
+        T cvmax = zero;
         for (int i = 0; i < nb; i++)
         {
-            cvmax = Math.Max(cvmax, Math.Abs(w5[i]));
+            T abs = T.Abs(w5[i]);
+            if (abs > cvmax)
+            {
+                cvmax = abs;
+            }
         }
 
-        if (cvmax > 0.0)
+        if (cvmax > zero)
         {
             for (int i = 0; i < nb; i++)
             {
                 w5[i] /= cvmax;
+                TracePangenCurvatureNode(traceScope, "normalized", i + 1, sb[i], w5[i]);
             }
         }
 
-        // Spline the curvature array
-        var w6 = new double[nb];
+        var w6 = new T[nb];
         ParametricSpline.FitSegmented(w5, w6, sb, nb);
 
-        // --- Step 7: Set initial guess for node positions ---
         int nn = Ipfac * (n - 1) + 1;
-        var snew = new double[nn];
+        var snew = new T[nn];
 
-        // Ratio of lengths of panel at TE to one away from TE
-        double rdste = 0.667;
-        double rtf = (rdste - 1.0) * 2.0 + 1.0;
+        T rdste = T.CreateChecked(0.667);
+        T rtf = ((rdste - one) * two) + one;
 
         if (ible == 0)
         {
-            double dsavg = (sb[nb - 1] - sb[0]) / (nn - 3 + 2.0 * rtf);
+            T dsavg = (sb[nb - 1] - sb[0]) / (T.CreateChecked(nn - 3) + (two * rtf));
             snew[0] = sb[0];
             for (int i = 1; i < nn - 1; i++)
             {
-                snew[i] = sb[0] + dsavg * (i - 1 + rtf);
+                snew[i] = sb[0] + (dsavg * (T.CreateChecked(i - 1) + rtf));
             }
 
             snew[nn - 1] = sb[nb - 1];
         }
         else
         {
-            int nfrac1 = (n * (ible)) / nb; // ible is 1-based
+            int nfrac1 = (n * ible) / nb;
             int nn1 = Ipfac * (nfrac1 - 1) + 1;
-            double dsavg1 = (sble - sb[0]) / (nn1 - 2 + rtf);
+            T dsavg1 = (sble - sb[0]) / (T.CreateChecked(nn1 - 2) + rtf);
             snew[0] = sb[0];
             for (int i = 1; i < nn1; i++)
             {
-                snew[i] = sb[0] + dsavg1 * (i - 1 + rtf);
+                snew[i] = sb[0] + (dsavg1 * (T.CreateChecked(i - 1) + rtf));
             }
 
             int nn2 = nn - nn1 + 1;
-            double dsavg2 = (sb[nb - 1] - sble) / (nn2 - 2 + rtf);
+            T dsavg2 = (sb[nb - 1] - sble) / (T.CreateChecked(nn2 - 2) + rtf);
             for (int i = 1; i < nn2 - 1; i++)
             {
-                snew[i - 1 + nn1] = sble + dsavg2 * (i - 1 + rtf);
+                snew[(i - 1) + nn1] = sble + (dsavg2 * (T.CreateChecked(i - 1) + rtf));
             }
 
             snew[nn - 1] = sb[nb - 1];
         }
 
-        // --- Step 8: Newton iteration for node positions ---
-        var ww1 = new double[nn];
-        var ww2 = new double[nn];
-        var ww3 = new double[nn];
-        var ww4 = new double[nn];
+        for (int i = 0; i < nn; i++)
+        {
+            TracePangenSnewNode(traceScope, "initial", 0, i + 1, snew[i]);
+        }
 
+        var ww1 = new T[nn];
+        var ww2 = new T[nn];
+        var ww3 = new T[nn];
+        var ww4 = new T[nn];
+
+        int legacyCarryCount = Math.Min(nn, nb);
+        if (legacyCarryCount > 0)
+        {
+            // Classic XFoil reuses the same COMMON-block work arrays for the
+            // curvature smoother and the Newton redistribution rows. The
+            // first lower slot and the final upper slot are ignored by the
+            // solver, but their carried values still appear in the trace.
+            Array.Copy(w1, ww1, legacyCarryCount);
+            Array.Copy(w2, ww2, legacyCarryCount);
+            Array.Copy(w3, ww3, legacyCarryCount);
+            ww1[0] = one;
+        }
+
+        // Legacy block: PANGEN Newton redistribution loop.
+        // Difference: The row assembly and relaxation match the original algorithm, but the managed code keeps each curvature and residual term traceable and uses explicit fused helpers where REAL contraction matters.
+        // Decision: Keep the traceable decomposition and preserve the legacy arithmetic ordering inside parity mode.
         for (int iter = 0; iter < 20; iter++)
         {
-            double cv1 = ParametricSpline.Evaluate(snew[0], w5, w6, sb, nb);
-            double cv2 = ParametricSpline.Evaluate(snew[1], w5, w6, sb, nb);
-            double cvs1 = ParametricSpline.EvaluateDerivative(snew[0], w5, w6, sb, nb);
-            double cvs2 = ParametricSpline.EvaluateDerivative(snew[1], w5, w6, sb, nb);
+            T cv1 = ParametricSpline.Evaluate(snew[0], w5, w6, sb, nb);
+            T cv2 = ParametricSpline.Evaluate(snew[1], w5, w6, sb, nb);
+            T cvs1 = ParametricSpline.EvaluateDerivative(snew[0], w5, w6, sb, nb);
+            T cvs2 = ParametricSpline.EvaluateDerivative(snew[1], w5, w6, sb, nb);
 
-            double cavm = Math.Sqrt(cv1 * cv1 + cv2 * cv2);
-            double cavm_s1, cavm_s2;
-            if (cavm == 0.0)
+            // The legacy float norm keeps the square-sum fused before sqrt.
+            T cavm = T.Sqrt(LegacyPrecisionMath.FusedMultiplyAdd(cv1, cv1, cv2 * cv2));
+            T cavmS1;
+            T cavmS2;
+            if (cavm == zero)
             {
-                cavm_s1 = 0.0;
-                cavm_s2 = 0.0;
+                cavmS1 = zero;
+                cavmS2 = zero;
             }
             else
             {
-                cavm_s1 = cvs1 * cv1 / cavm;
-                cavm_s2 = cvs2 * cv2 / cavm;
+                cavmS1 = cvs1 * cv1 / cavm;
+                cavmS2 = cvs2 * cv2 / cavm;
             }
 
             for (int i = 1; i < nn - 1; i++)
             {
-                double dsm = snew[i] - snew[i - 1];
-                double dsp = snew[i] - snew[i + 1];
-                double cv3 = ParametricSpline.Evaluate(snew[i + 1], w5, w6, sb, nb);
-                double cvs3 = ParametricSpline.EvaluateDerivative(snew[i + 1], w5, w6, sb, nb);
+                T dsm = snew[i] - snew[i - 1];
+                T dsp = snew[i] - snew[i + 1];
+                T cv3 = ParametricSpline.Evaluate(snew[i + 1], w5, w6, sb, nb);
+                T cvs3 = ParametricSpline.EvaluateDerivative(snew[i + 1], w5, w6, sb, nb);
 
-                double cavp = Math.Sqrt(cv3 * cv3 + cv2 * cv2);
-                double cavp_s2, cavp_s3;
-                if (cavp == 0.0)
+                T cavp = T.Sqrt(LegacyPrecisionMath.FusedMultiplyAdd(cv3, cv3, cv2 * cv2));
+                T cavpS2;
+                T cavpS3;
+                if (cavp == zero)
                 {
-                    cavp_s2 = 0.0;
-                    cavp_s3 = 0.0;
+                    cavpS2 = zero;
+                    cavpS3 = zero;
                 }
                 else
                 {
-                    cavp_s2 = cvs2 * cv2 / cavp;
-                    cavp_s3 = cvs3 * cv3 / cavp;
+                    cavpS2 = cvs2 * cv2 / cavp;
+                    cavpS3 = cvs3 * cv3 / cavp;
                 }
 
-                double fm = cc * cavm + 1.0;
-                double fp = cc * cavp + 1.0;
+                // The reference float build also contracts the curvature scaling
+                // offsets used in the Newton row assembly.
+                T fm = LegacyPrecisionMath.FusedMultiplyAdd(cc, cavm, one);
+                T fp = LegacyPrecisionMath.FusedMultiplyAdd(cc, cavp, one);
+                T rez = LegacyPrecisionMath.FusedMultiplyAdd(dsp, fp, dsm * fm);
 
-                double rez = dsp * fp + dsm * fm;
-
-                ww1[i] = -fm + cc * dsm * cavm_s1;
-                ww2[i] = fp + fm + cc * (dsp * cavp_s2 + dsm * cavm_s2);
-                ww3[i] = -fp + cc * dsp * cavp_s3;
+                // The legacy float build contracts this lower-diagonal term to a
+                // single-rounding multiply-add. Keep that behavior in parity mode.
+                ww1[i] = LegacyPrecisionMath.FusedMultiplyAdd(cc * dsm, cavmS1, -fm);
+                ww2[i] = AddRoundedBaseWithWideScaledCurvatureTerms(fp, fm, cc, dsp, cavpS2, dsm, cavmS2);
+                ww3[i] = LegacyPrecisionMath.FusedMultiplyAdd(cc * dsp, cavpS3, -fp);
                 ww4[i] = -rez;
+
+                TracePangenNewtonState(
+                    traceScope,
+                    iter + 1,
+                    i + 1,
+                    snew[i],
+                    dsm,
+                    dsp,
+                    cv1,
+                    cv2,
+                    cv3,
+                    cvs1,
+                    cvs2,
+                    cvs3,
+                    cavm,
+                    cavmS1,
+                    cavmS2,
+                    cavp,
+                    cavpS2,
+                    cavpS3,
+                    fm,
+                    fp,
+                    rez,
+                    ww1[i],
+                    ww2[i],
+                    ww3[i],
+                    ww4[i]);
 
                 cv1 = cv2;
                 cv2 = cv3;
                 cvs1 = cvs2;
                 cvs2 = cvs3;
                 cavm = cavp;
-                cavm_s1 = cavp_s2;
-                cavm_s2 = cavp_s3;
+                cavmS1 = cavpS2;
+                cavmS2 = cavpS3;
             }
 
-            // Fix endpoints
-            ww2[0] = 1.0;
-            ww3[0] = 0.0;
-            ww4[0] = 0.0;
-            ww1[nn - 1] = 0.0;
-            ww2[nn - 1] = 1.0;
-            ww4[nn - 1] = 0.0;
+            ww2[0] = one;
+            ww3[0] = zero;
+            ww4[0] = zero;
+            ww1[nn - 1] = zero;
+            ww2[nn - 1] = one;
+            ww4[nn - 1] = zero;
 
-            if (rtf != 1.0)
+            if (rtf != one)
             {
-                // Fudge equations adjacent to TE for TE panel length ratio
                 int i2 = 1;
-                ww4[i2] = -((snew[i2] - snew[i2 - 1]) + rtf * (snew[i2] - snew[i2 + 1]));
-                ww1[i2] = -1.0;
-                ww2[i2] = 1.0 + rtf;
+                // The TE clustering constraint keeps a denormal residual in the
+                // legacy float build only when this inner sum is fused.
+                ww4[i2] = -LegacyPrecisionMath.FusedMultiplyAdd(
+                    rtf,
+                    snew[i2] - snew[i2 + 1],
+                    snew[i2] - snew[i2 - 1]);
+                ww1[i2] = -one;
+                ww2[i2] = one + rtf;
                 ww3[i2] = -rtf;
 
                 int i3 = nn - 2;
-                ww4[i3] = -((snew[i3] - snew[i3 + 1]) + rtf * (snew[i3] - snew[i3 - 1]));
-                ww3[i3] = -1.0;
-                ww2[i3] = 1.0 + rtf;
+                ww4[i3] = -LegacyPrecisionMath.FusedMultiplyAdd(
+                    rtf,
+                    snew[i3] - snew[i3 - 1],
+                    snew[i3] - snew[i3 + 1]);
+                ww3[i3] = -one;
+                ww2[i3] = one + rtf;
                 ww1[i3] = -rtf;
             }
 
-            // Fix sharp LE point
             if (ible != 0)
             {
-                int nn1 = Ipfac * ((n * ible / nb) - 1) + 1;
-                int leIdx = nn1 - 1; // 0-based
-                ww1[leIdx] = 0.0;
-                ww2[leIdx] = 1.0;
-                ww3[leIdx] = 0.0;
+                int nn1 = Ipfac * (((n * ible) / nb) - 1) + 1;
+                int leIdx = nn1 - 1;
+                ww1[leIdx] = zero;
+                ww2[leIdx] = one;
+                ww3[leIdx] = zero;
                 ww4[leIdx] = sble - snew[leIdx];
             }
 
-            // Solve for node position deltas
-            // Fortran TRISOL(W2, W1, W3, W4, NN) => A=W2=diagonal, B=W1=lower, C=W3=upper
+            for (int i = 0; i < nn; i++)
+            {
+                TracePangenNewtonRow(traceScope, iter + 1, i + 1, snew[i], ww1[i], ww2[i], ww3[i], ww4[i]);
+            }
+
             TridiagonalSolver.Solve(ww1, ww2, ww3, ww4, nn);
 
-            // Under-relaxation to prevent node order reversal
-            double rlx = 1.0;
-            double dmax = 0.0;
+            for (int i = 0; i < nn; i++)
+            {
+                TracePangenNewtonDelta(traceScope, iter + 1, i + 1, ww4[i]);
+            }
+
+            T rlx = one;
+            T dmax = zero;
             for (int i = 0; i < nn - 1; i++)
             {
-                double ds = snew[i + 1] - snew[i];
-                double dds = ww4[i + 1] - ww4[i];
-                if (ds != 0.0)
+                T ds = snew[i + 1] - snew[i];
+                T dds = ww4[i + 1] - ww4[i];
+                T rlxBefore = rlx;
+                T dmaxBefore = dmax;
+                T dsrat = zero;
+                if (ds != zero)
                 {
-                    double dsrat = 1.0 + rlx * dds / ds;
-                    if (dsrat > 4.0) rlx = (4.0 - 1.0) * ds / dds;
-                    if (dsrat < 0.2) rlx = (0.2 - 1.0) * ds / dds;
+                    dsrat = one + ((rlx * dds) / ds);
+                    if (dsrat > T.CreateChecked(4.0))
+                    {
+                        rlx = (T.CreateChecked(3.0) * ds) / dds;
+                    }
+                    if (dsrat < T.CreateChecked(0.2))
+                    {
+                        rlx = (T.CreateChecked(-0.8) * ds) / dds;
+                    }
                 }
 
-                dmax = Math.Max(Math.Abs(ww4[i]), dmax);
+                T abs = T.Abs(ww4[i]);
+                if (abs > dmax)
+                {
+                    dmax = abs;
+                }
+
+                TracePangenRelaxationStep(traceScope, iter + 1, i + 1, ds, dds, dsrat, rlxBefore, rlx, dmaxBefore, dmax);
             }
 
-            // Update node positions
             for (int i = 1; i < nn - 1; i++)
             {
-                snew[i] += rlx * ww4[i];
+                // Updating the redistributed arc-length nodes also needs a
+                // fused multiply-add to follow the legacy float rounding path.
+                snew[i] = LegacyPrecisionMath.FusedMultiplyAdd(rlx, ww4[i], snew[i]);
             }
 
-            if (Math.Abs(dmax) < 1.0e-3) break;
+            TracePangenIteration(traceScope, iter + 1, dmax, rlx);
+            for (int i = 0; i < nn; i++)
+            {
+                TracePangenSnewNode(traceScope, "updated", iter + 1, i + 1, snew[i]);
+            }
+
+            if (T.Abs(dmax) < pointZeroZeroOne)
+            {
+                break;
+            }
         }
 
-        // --- Step 9: Set final panel node coordinates ---
-        var sOut = new double[n];
-        var xOut = new double[n];
-        var yOut = new double[n];
+        var sOut = new T[n];
+        var xOut = new T[n];
+        var yOut = new T[n];
 
         for (int i = 0; i < n; i++)
         {
@@ -407,28 +533,31 @@ public static class CosineClusteringPanelDistributor
             sOut[i] = snew[ind];
             xOut[i] = ParametricSpline.Evaluate(snew[ind], xb, xbp, sb, nb);
             yOut[i] = ParametricSpline.Evaluate(snew[ind], yb, ybp, sb, nb);
+            // Match XFoil's trace order: the "final" SNEW nodes are emitted
+            // immediately after subsampling, before the corner pass and before
+            // SCALC/SEGSPL rebuild the current-panel spline state.
+            TracePangenSnewNode(traceScope, "final", 0, i + 1, sOut[i]);
         }
 
-        // --- Step 10: Handle corners (double points in buffer airfoil) ---
-        // For typical NACA airfoils there are no corners, but we handle this
-        // for completeness following XFoil's PANGEN logic.
         int finalN = n;
         for (int ib = 0; ib < nb - 1; ib++)
         {
             if (sb[ib] == sb[ib + 1])
             {
-                double sbcorn = sb[ib];
-                double xbcorn = xb[ib];
-                double ybcorn = yb[ib];
+                T sbcorn = sb[ib];
+                T xbcorn = xb[ib];
+                T ybcorn = yb[ib];
 
                 for (int i = 0; i < finalN; i++)
                 {
-                    if (sOut[i] <= sbcorn) continue;
+                    if (sOut[i] <= sbcorn)
+                    {
+                        continue;
+                    }
 
-                    // Make room for additional node
-                    var newX = new double[finalN + 1];
-                    var newY = new double[finalN + 1];
-                    var newS = new double[finalN + 1];
+                    var newX = new T[finalN + 1];
+                    var newY = new T[finalN + 1];
+                    var newS = new T[finalN + 1];
 
                     Array.Copy(xOut, 0, newX, 0, i);
                     Array.Copy(yOut, 0, newY, 0, i);
@@ -447,17 +576,16 @@ public static class CosineClusteringPanelDistributor
                     yOut = newY;
                     sOut = newS;
 
-                    // Shift adjacent nodes
                     if (i - 2 >= 0)
                     {
-                        sOut[i - 1] = 0.5 * (sOut[i] + sOut[i - 2]);
+                        sOut[i - 1] = half * (sOut[i] + sOut[i - 2]);
                         xOut[i - 1] = ParametricSpline.Evaluate(sOut[i - 1], xb, xbp, sb, nb);
                         yOut[i - 1] = ParametricSpline.Evaluate(sOut[i - 1], yb, ybp, sb, nb);
                     }
 
                     if (i + 2 < finalN)
                     {
-                        sOut[i + 1] = 0.5 * (sOut[i] + sOut[i + 2]);
+                        sOut[i + 1] = half * (sOut[i] + sOut[i + 2]);
                         xOut[i + 1] = ParametricSpline.Evaluate(sOut[i + 1], xb, xbp, sb, nb);
                         yOut[i + 1] = ParametricSpline.Evaluate(sOut[i + 1], yb, ybp, sb, nb);
                     }
@@ -467,40 +595,77 @@ public static class CosineClusteringPanelDistributor
             }
         }
 
-        // --- Step 11: Re-compute arc length, splines, and LE on final nodes ---
-        var finalArc = new double[finalN];
+        var finalArc = new T[finalN];
         ParametricSpline.ComputeArcLength(xOut, yOut, finalArc, finalN);
 
-        var finalXp = new double[finalN];
-        var finalYp = new double[finalN];
+        var finalXp = new T[finalN];
+        var finalYp = new T[finalN];
         ParametricSpline.FitSegmented(xOut, finalXp, finalArc, finalN);
         ParametricSpline.FitSegmented(yOut, finalYp, finalArc, finalN);
+        for (int i = 0; i < finalN; i++)
+        {
+            TracePangenPanelNode(traceScope, i + 1, xOut[i], yOut[i], finalArc[i], finalXp[i], finalYp[i]);
+        }
 
-        double sle = FindLeadingEdge(xOut, finalXp, yOut, finalYp, finalArc, finalN);
+        T sle = FindLeadingEdge(xOut, finalXp, yOut, finalYp, finalArc, finalN);
 
-        double xle = ParametricSpline.Evaluate(sle, xOut, finalXp, finalArc, finalN);
-        double yle = ParametricSpline.Evaluate(sle, yOut, finalYp, finalArc, finalN);
-        double xte = 0.5 * (xOut[0] + xOut[finalN - 1]);
-        double yte = 0.5 * (yOut[0] + yOut[finalN - 1]);
-        double chord = Math.Sqrt((xte - xle) * (xte - xle) + (yte - yle) * (yte - yle));
+        T xle = ParametricSpline.Evaluate(sle, xOut, finalXp, finalArc, finalN);
+        T yle = ParametricSpline.Evaluate(sle, yOut, finalYp, finalArc, finalN);
+        T xte = half * (xOut[0] + xOut[finalN - 1]);
+        T yte = half * (yOut[0] + yOut[finalN - 1]);
+        T chordT = T.Sqrt(((xte - xle) * (xte - xle)) + ((yte - yle) * (yte - yle)));
 
-        // --- Step 12: Populate panel state ---
+        TracePangenLeadingEdge(traceScope, "final", sle, xle, yle, xte, yte, zero, zero, 0);
+
         panel.Resize(finalN);
+        for (int i = 0; i < finalN; i++)
+        {
+            panel.X[i] = double.CreateChecked(xOut[i]);
+            panel.Y[i] = double.CreateChecked(yOut[i]);
+            panel.ArcLength[i] = double.CreateChecked(finalArc[i]);
+            panel.XDerivative[i] = double.CreateChecked(finalXp[i]);
+            panel.YDerivative[i] = double.CreateChecked(finalYp[i]);
+        }
 
-        Array.Copy(xOut, panel.X, finalN);
-        Array.Copy(yOut, panel.Y, finalN);
-        Array.Copy(finalArc, panel.ArcLength, finalN);
+        panel.TrailingEdgeX = double.CreateChecked(xte);
+        panel.TrailingEdgeY = double.CreateChecked(yte);
+        panel.LeadingEdgeX = double.CreateChecked(xle);
+        panel.LeadingEdgeY = double.CreateChecked(yle);
+        panel.LeadingEdgeArcLength = double.CreateChecked(sle);
+        panel.Chord = double.CreateChecked(chordT);
+    }
 
-        // Fit splines for derivatives
-        ParametricSpline.FitSegmented(panel.X, panel.XDerivative, panel.ArcLength, finalN);
-        ParametricSpline.FitSegmented(panel.Y, panel.YDerivative, panel.ArcLength, finalN);
+    // Legacy mapping: f_xfoil/src/xfoil.f :: PANGEN Newton main-diagonal row W2(I).
+    // Difference from legacy: The managed port needs an explicit mixed-width helper because
+    // the reference REAL build rounds FP+FM to float first, then evaluates the mixed curvature
+    // sum asymmetrically: DSP*CAVP_S2 stays wide while DSM*CAVM_S2 contracts back to REAL before
+    // the wide scaled add and final cast to REAL. A symmetric wide-product replay lands one ULP
+    // low on the diversified paneling rig, while rounding both products breaks the reduced 12-panel
+    // rung that originally proved this helper.
+    // Decision: Keep the localized helper here because this mixed-width staging is specific to
+    // the PANGEN Newton diagonal parity path and should not leak into the default managed branch.
+    private static T AddRoundedBaseWithWideScaledCurvatureTerms<T>(
+        T leftBase,
+        T rightBase,
+        T scale,
+        T left1,
+        T right1,
+        T left2,
+        T right2)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(float))
+        {
+            float baseSum = float.CreateChecked(leftBase + rightBase);
+            double product1 = (double)float.CreateChecked(left1) * float.CreateChecked(right1);
+            float product2 = float.CreateChecked(left2 * right2);
+            double scaledCurvature =
+                (double)float.CreateChecked(scale) *
+                (product1 + product2);
+            return T.CreateChecked((float)(baseSum + scaledCurvature));
+        }
 
-        panel.TrailingEdgeX = xte;
-        panel.TrailingEdgeY = yte;
-        panel.LeadingEdgeX = xle;
-        panel.LeadingEdgeY = yle;
-        panel.LeadingEdgeArcLength = sle;
-        panel.Chord = chord;
+        return (leftBase + rightBase) + (scale * ((left1 * right1) + (left2 * right2)));
     }
 
     /// <summary>
@@ -508,32 +673,33 @@ public static class CosineClusteringPanelDistributor
     /// The LE is defined as the point where the surface tangent is perpendicular
     /// to the chord line connecting (X(SLE),Y(SLE)) to the TE midpoint.
     /// </summary>
-    private static double FindLeadingEdge(
-        double[] x, double[] xp, double[] y, double[] yp, double[] s, int n)
+    // Legacy mapping: f_xfoil/src/xgeom.f :: LEFIND.
+    // Difference from legacy: The Newton solve is materially the same, but the managed port packages it as a reusable generic helper and emits optional trace events through the surrounding distributor.
+    // Decision: Keep the helper because it makes the PANGEN port readable without changing the LE search algorithm.
+    private static T FindLeadingEdge<T>(T[] x, T[] xp, T[] y, T[] yp, T[] s, int n)
+        where T : struct, IFloatingPointIeee754<T>
     {
-        double dseps = (s[n - 1] - s[0]) * 1.0e-5;
+        T dseps = (s[n - 1] - s[0]) * T.CreateChecked(1.0e-5);
+        T half = T.CreateChecked(0.5);
+        T pointZeroTwo = T.CreateChecked(0.02);
+        T xte = half * (x[0] + x[n - 1]);
+        T yte = half * (y[0] + y[n - 1]);
 
-        // TE coordinates
-        double xte = 0.5 * (x[0] + x[n - 1]);
-        double yte = 0.5 * (y[0] + y[n - 1]);
-
-        // Initial guess: find where dot product of (X-XTE, Y-YTE) . (dX, dY) changes sign
-        double sle = s[0];
+        T sle = s[0];
         for (int i = 2; i < n - 2; i++)
         {
-            double dxte = x[i] - xte;
-            double dyte = y[i] - yte;
-            double dx = x[i + 1] - x[i];
-            double dy = y[i + 1] - y[i];
-            double dotp = dxte * dx + dyte * dy;
-            if (dotp < 0.0)
+            T dxte = x[i] - xte;
+            T dyte = y[i] - yte;
+            T dx = x[i + 1] - x[i];
+            T dy = y[i + 1] - y[i];
+            T dotp = (dxte * dx) + (dyte * dy);
+            if (dotp < T.Zero)
             {
                 sle = s[i];
                 break;
             }
         }
 
-        // Check for sharp LE (doubled point)
         for (int i = 0; i < n - 1; i++)
         {
             if (sle == s[i] && sle == s[i + 1])
@@ -542,33 +708,36 @@ public static class CosineClusteringPanelDistributor
             }
         }
 
-        // Newton iteration
         for (int iter = 0; iter < 50; iter++)
         {
-            double xleVal = ParametricSpline.Evaluate(sle, x, xp, s, n);
-            double yleVal = ParametricSpline.Evaluate(sle, y, yp, s, n);
-            double dxds = ParametricSpline.EvaluateDerivative(sle, x, xp, s, n);
-            double dyds = ParametricSpline.EvaluateDerivative(sle, y, yp, s, n);
-            double dxdd = EvaluateSecondDerivative(sle, x, xp, s, n);
-            double dydd = EvaluateSecondDerivative(sle, y, yp, s, n);
+            T xleVal = ParametricSpline.Evaluate(sle, x, xp, s, n);
+            T yleVal = ParametricSpline.Evaluate(sle, y, yp, s, n);
+            T dxds = ParametricSpline.EvaluateDerivative(sle, x, xp, s, n);
+            T dyds = ParametricSpline.EvaluateDerivative(sle, y, yp, s, n);
+            T dxdd = EvaluateSecondDerivative(sle, x, xp, s, n);
+            T dydd = EvaluateSecondDerivative(sle, y, yp, s, n);
 
-            double xchord = xleVal - xte;
-            double ychord = yleVal - yte;
+            T xchord = xleVal - xte;
+            T ychord = yleVal - yte;
+            T res = (xchord * dxds) + (ychord * dyds);
+            T ress = (dxds * dxds) + (dyds * dyds) + (xchord * dxdd) + (ychord * dydd);
+            T dsle = -res / ress;
 
-            // Residual: dot product of chord vector and tangent
-            double res = xchord * dxds + ychord * dyds;
-            double ress = dxds * dxds + dyds * dyds + xchord * dxdd + ychord * dydd;
-
-            double dsle = -res / ress;
-
-            // Clamp step size
-            double limit = 0.02 * Math.Abs(xchord + ychord);
-            dsle = Math.Max(dsle, -limit);
-            dsle = Math.Min(dsle, limit);
+            T limit = pointZeroTwo * T.Abs(xchord + ychord);
+            if (dsle < -limit)
+            {
+                dsle = -limit;
+            }
+            if (dsle > limit)
+            {
+                dsle = limit;
+            }
 
             sle += dsle;
-
-            if (Math.Abs(dsle) < dseps) return sle;
+            if (T.Abs(dsle) < dseps)
+            {
+                return sle;
+            }
         }
 
         return sle;
@@ -578,10 +747,12 @@ public static class CosineClusteringPanelDistributor
     /// Evaluates the second derivative d2X/dS2 at parameter s.
     /// Port of XFoil's D2VAL routine from spline.f.
     /// </summary>
-    private static double EvaluateSecondDerivative(
-        double s, double[] values, double[] derivatives, double[] parameters, int count)
+    // Legacy mapping: f_xfoil/src/spline.f :: D2VAL.
+    // Difference from legacy: The second-derivative reconstruction is the same spline identity, but the managed version computes it as a local helper against the managed spline arrays.
+    // Decision: Keep the helper because it isolates one reusable spline primitive used by the paneling port.
+    private static T EvaluateSecondDerivative<T>(T s, T[] values, T[] derivatives, T[] parameters, int count)
+        where T : struct, IFloatingPointIeee754<T>
     {
-        // Binary search for interval
         int iLow = 0;
         int i = count - 1;
 
@@ -589,16 +760,21 @@ public static class CosineClusteringPanelDistributor
         {
             int mid = (i + iLow) / 2;
             if (s < parameters[mid])
+            {
                 i = mid;
+            }
             else
+            {
                 iLow = mid;
+            }
         }
 
-        double ds = parameters[i] - parameters[iLow];
-        double t = (s - parameters[iLow]) / ds;
-        double cx1 = ds * derivatives[iLow] - values[i] + values[iLow];
-        double cx2 = ds * derivatives[i] - values[i] + values[iLow];
-        double d2val = (6.0 * t - 4.0) * cx1 + (6.0 * t - 2.0) * cx2;
+        T ds = parameters[i] - parameters[iLow];
+        T t = (s - parameters[iLow]) / ds;
+        T cx1 = (ds * derivatives[iLow]) - values[i] + values[iLow];
+        T cx2 = (ds * derivatives[i]) - values[i] + values[iLow];
+        T d2val = ((T.CreateChecked(6.0) * t) - T.CreateChecked(4.0)) * cx1
+                + ((T.CreateChecked(6.0) * t) - T.CreateChecked(2.0)) * cx2;
         return d2val / (ds * ds);
     }
 
@@ -607,10 +783,18 @@ public static class CosineClusteringPanelDistributor
     /// Port of XFoil's CURV function from spline.f.
     /// Returns signed curvature: kappa = (x' * y'' - y' * x'') / |speed|^3.
     /// </summary>
-    private static double ComputeCurvature(
-        double ss, double[] x, double[] xp, double[] y, double[] yp, double[] s, int n)
+    // Legacy mapping: f_xfoil/src/spline.f :: CURV.
+    // Difference from legacy: The curvature formula is equivalent, but the managed port expresses the derivative chain through reusable spline helpers and explicit fused operations where parity requires it.
+    // Decision: Keep the helper because it makes the curvature kernel auditable while preserving the legacy result.
+    private static T ComputeCurvature<T>(T ss, T[] x, T[] xp, T[] y, T[] yp, T[] s, int n)
+        where T : struct, IFloatingPointIeee754<T>
     {
-        // Binary search for interval
+        T one = T.One;
+        T two = T.CreateChecked(2.0);
+        T three = T.CreateChecked(3.0);
+        T four = T.CreateChecked(4.0);
+        T six = T.CreateChecked(6.0);
+
         int iLow = 0;
         int i = n - 1;
 
@@ -618,45 +802,107 @@ public static class CosineClusteringPanelDistributor
         {
             int mid = (i + iLow) / 2;
             if (ss < s[mid])
+            {
                 i = mid;
+            }
             else
+            {
                 iLow = mid;
+            }
         }
 
-        double ds = s[i] - s[iLow];
-        double t = (ss - s[iLow]) / ds;
+        T ds = s[i] - s[iLow];
+        T t = (ss - s[iLow]) / ds;
 
-        double cx1 = ds * xp[iLow] - x[i] + x[iLow];
-        double cx2 = ds * xp[i] - x[i] + x[iLow];
-        double xd = x[i] - x[iLow] + (1.0 - 4.0 * t + 3.0 * t * t) * cx1 + t * (3.0 * t - 2.0) * cx2;
-        double xdd = (6.0 * t - 4.0) * cx1 + (6.0 * t - 2.0) * cx2;
+        T cx1 = T.FusedMultiplyAdd(ds, xp[iLow], -x[i]) + x[iLow];
+        T cx2 = T.FusedMultiplyAdd(ds, xp[i], -x[i]) + x[iLow];
+        // Classic XFoil evaluates this cubic coefficient in single precision with a
+        // fused add-multiply on current toolchains. Keep that contraction in the
+        // parity path so the legacy panel replay stays bitwise aligned, while the
+        // default double path keeps normal arithmetic.
+        T xFactor1 = LegacyPrecisionMath.FusedMultiplyAdd(three * t, t, one - (four * t));
+        T xFactor2 = t * ((three * t) - two);
+        T xDelta = x[i] - x[iLow];
+        T xTerm1 = xFactor1 * cx1;
+        T xTerm2 = xFactor2 * cx2;
+        T xd = xDelta + xTerm1 + xTerm2;
+        T xdd = T.FusedMultiplyAdd(
+            T.FusedMultiplyAdd(six, t, -four),
+            cx1,
+            (T.FusedMultiplyAdd(six, t, -two) * cx2));
 
-        double cy1 = ds * yp[iLow] - y[i] + y[iLow];
-        double cy2 = ds * yp[i] - y[i] + y[iLow];
-        double yd = y[i] - y[iLow] + (1.0 - 4.0 * t + 3.0 * t * t) * cy1 + t * (3.0 * t - 2.0) * cy2;
-        double ydd = (6.0 * t - 4.0) * cy1 + (6.0 * t - 2.0) * cy2;
+        T cy1 = T.FusedMultiplyAdd(ds, yp[iLow], -y[i]) + y[iLow];
+        T cy2 = T.FusedMultiplyAdd(ds, yp[i], -y[i]) + y[iLow];
+        T yFactor1 = LegacyPrecisionMath.FusedMultiplyAdd(three * t, t, one - (four * t));
+        T yFactor2 = t * ((three * t) - two);
+        T yDelta = y[i] - y[iLow];
+        T yTerm1 = yFactor1 * cy1;
+        T yTerm2 = yFactor2 * cy2;
+        T yd = yDelta + yTerm1 + yTerm2;
+        T ydd = T.FusedMultiplyAdd(
+            T.FusedMultiplyAdd(six, t, -four),
+            cy1,
+            (T.FusedMultiplyAdd(six, t, -two) * cy2));
 
-        double sd = Math.Sqrt(xd * xd + yd * yd);
-        sd = Math.Max(sd, 0.001 * ds);
+        T sd = ParametricSpline.ComputeDistance(xd, yd);
+        T minSd = T.CreateChecked(0.001) * ds;
+        if (sd < minSd)
+        {
+            sd = minSd;
+        }
 
-        return (xd * ydd - yd * xdd) / (sd * sd * sd);
+        T curvatureNumerator = T.FusedMultiplyAdd(xd, ydd, -(yd * xdd));
+        T curvature = curvatureNumerator / (sd * sd * sd);
+        TraceCurvatureEvaluation(
+            nameof(ParametricSpline),
+            "CURV",
+            iLow + 1,
+            i + 1,
+            ss,
+            ds,
+            t,
+            xDelta,
+            yDelta,
+            cx1,
+            cx2,
+            cy1,
+            cy2,
+            xFactor1,
+            xFactor2,
+            yFactor1,
+            yFactor2,
+            xTerm1,
+            xTerm2,
+            yTerm1,
+            yTerm2,
+            xd,
+            xdd,
+            yd,
+            ydd,
+            sd,
+            curvature);
+        return curvature;
     }
 
     /// <summary>
     /// Solves a tridiagonal system for a segment of the arrays starting at offset.
     /// Used when the curvature array has a sharp LE requiring two-segment solution.
     /// </summary>
-    private static void SolveTridiagonalSegment(
-        double[] lower, double[] diagonal, double[] upper, double[] rhs,
-        int offset, int count)
+    // Legacy mapping: f_xfoil/src/xfoil.f :: PANGEN segmented tridiagonal solves around duplicated LE nodes.
+    // Difference from legacy: The original code reuses a common solver on array slices; the managed port exposes the segmented solve explicitly so the LE split is easier to trace.
+    // Decision: Keep the helper because it clarifies the duplicated-node branch without changing the solve order.
+    private static void SolveTridiagonalSegment<T>(T[] lower, T[] diagonal, T[] upper, T[] rhs, int offset, int count)
+        where T : struct, IFloatingPointIeee754<T>
     {
-        if (count < 2) return;
+        if (count < 2)
+        {
+            return;
+        }
 
-        // Extract segment into temporary arrays
-        var segLower = new double[count];
-        var segDiag = new double[count];
-        var segUpper = new double[count];
-        var segRhs = new double[count];
+        var segLower = new T[count];
+        var segDiag = new T[count];
+        var segUpper = new T[count];
+        var segRhs = new T[count];
 
         Array.Copy(lower, offset, segLower, 0, count);
         Array.Copy(diagonal, offset, segDiag, 0, count);
@@ -667,4 +913,356 @@ public static class CosineClusteringPanelDistributor
 
         Array.Copy(segRhs, 0, rhs, offset, count);
     }
+
+    // Legacy mapping: none; these trace helpers are managed-only instrumentation around the direct PANGEN port.
+    // Difference from legacy: The original Fortran routine writes nothing comparable unless debug tracing is compiled in, while the managed port keeps structured trace hooks available during parity work.
+    // Decision: Keep the trace-helper block because it is essential for binary mismatch localization and does not change solver behavior.
+    private static void TracePangenCurvatureNode<T>(string scope, string stage, int index, T arcLength, T value)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_curvature_node",
+            scope,
+            new
+            {
+                stage,
+                index,
+                arcLength = double.CreateChecked(arcLength),
+                value = double.CreateChecked(value)
+            });
+    }
+
+    private static void TraceBufferSplineNode<T>(
+        string scope,
+        int index,
+        T x,
+        T y,
+        T arcLength,
+        T xp,
+        T yp)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "buffer_spline_node",
+            scope,
+            new
+            {
+                index,
+                x = double.CreateChecked(x),
+                y = double.CreateChecked(y),
+                arcLength = double.CreateChecked(arcLength),
+                xp = double.CreateChecked(xp),
+                yp = double.CreateChecked(yp)
+            });
+    }
+
+    private static void TracePangenPanelNode<T>(
+        string scope,
+        int index,
+        T x,
+        T y,
+        T arcLength,
+        T xp,
+        T yp)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_panel_node",
+            scope,
+            new
+            {
+                index,
+                x = double.CreateChecked(x),
+                y = double.CreateChecked(y),
+                arcLength = double.CreateChecked(arcLength),
+                xp = double.CreateChecked(xp),
+                yp = double.CreateChecked(yp)
+            });
+    }
+
+    private static void TracePangenLeadingEdge<T>(
+        string scope,
+        string stage,
+        T sle,
+        T xle,
+        T yle,
+        T xte,
+        T yte,
+        T cvle,
+        T cvavg,
+        int ible)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_lefind",
+            scope,
+            new
+            {
+                stage,
+                sle = double.CreateChecked(sle),
+                xle = double.CreateChecked(xle),
+                yle = double.CreateChecked(yle),
+                xte = double.CreateChecked(xte),
+                yte = double.CreateChecked(yte),
+                cvle = double.CreateChecked(cvle),
+                cvavg = double.CreateChecked(cvavg),
+                ible
+            });
+    }
+
+    private static void TracePangenLeadingEdgeSample<T>(
+        string scope,
+        string stage,
+        int sample,
+        T frac,
+        T parameter,
+        T curvatureValue,
+        T curvatureSum)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_le_sample",
+            scope,
+            new
+            {
+                stage,
+                sample,
+                frac = double.CreateChecked(frac),
+                parameter = double.CreateChecked(parameter),
+                curvatureValue = double.CreateChecked(curvatureValue),
+                curvatureSum = double.CreateChecked(curvatureSum)
+            });
+    }
+
+    private static void TracePangenIteration<T>(string scope, int iteration, T dmax, T rlx)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_iteration",
+            scope,
+            new
+            {
+                iteration,
+                dmax = double.CreateChecked(dmax),
+                rlx = double.CreateChecked(rlx)
+            });
+    }
+
+    private static void TracePangenNewtonRow<T>(
+        string scope,
+        int iteration,
+        int index,
+        T arcLength,
+        T lower,
+        T diagonal,
+        T upper,
+        T residual)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_newton_row",
+            scope,
+            new
+            {
+                iteration,
+                index,
+                arcLength = double.CreateChecked(arcLength),
+                lower = double.CreateChecked(lower),
+                diagonal = double.CreateChecked(diagonal),
+                upper = double.CreateChecked(upper),
+                residual = double.CreateChecked(residual)
+            });
+    }
+
+    private static void TracePangenNewtonState<T>(
+        string scope,
+        int iteration,
+        int index,
+        T arcLength,
+        T dsm,
+        T dsp,
+        T cv1,
+        T cv2,
+        T cv3,
+        T cvs1,
+        T cvs2,
+        T cvs3,
+        T cavm,
+        T cavmS1,
+        T cavmS2,
+        T cavp,
+        T cavpS2,
+        T cavpS3,
+        T fm,
+        T fp,
+        T rez,
+        T lower,
+        T diagonal,
+        T upper,
+        T residual)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_newton_state",
+            scope,
+            new
+            {
+                iteration,
+                index,
+                arcLength = double.CreateChecked(arcLength),
+                dsm = double.CreateChecked(dsm),
+                dsp = double.CreateChecked(dsp),
+                cv1 = double.CreateChecked(cv1),
+                cv2 = double.CreateChecked(cv2),
+                cv3 = double.CreateChecked(cv3),
+                cvs1 = double.CreateChecked(cvs1),
+                cvs2 = double.CreateChecked(cvs2),
+                cvs3 = double.CreateChecked(cvs3),
+                cavm = double.CreateChecked(cavm),
+                cavmS1 = double.CreateChecked(cavmS1),
+                cavmS2 = double.CreateChecked(cavmS2),
+                cavp = double.CreateChecked(cavp),
+                cavpS2 = double.CreateChecked(cavpS2),
+                cavpS3 = double.CreateChecked(cavpS3),
+                fm = double.CreateChecked(fm),
+                fp = double.CreateChecked(fp),
+                rez = double.CreateChecked(rez),
+                lower = double.CreateChecked(lower),
+                diagonal = double.CreateChecked(diagonal),
+                upper = double.CreateChecked(upper),
+                residual = double.CreateChecked(residual)
+            });
+    }
+
+    private static void TracePangenNewtonDelta<T>(string scope, int iteration, int index, T delta)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_newton_delta",
+            scope,
+            new
+            {
+                iteration,
+                index,
+                delta = double.CreateChecked(delta)
+            });
+    }
+
+    private static void TracePangenRelaxationStep<T>(
+        string scope,
+        int iteration,
+        int index,
+        T ds,
+        T dds,
+        T dsrat,
+        T rlxBefore,
+        T rlxAfter,
+        T dmaxBefore,
+        T dmaxAfter)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_relaxation_step",
+            scope,
+            new
+            {
+                iteration,
+                index,
+                ds = double.CreateChecked(ds),
+                dds = double.CreateChecked(dds),
+                dsrat = double.CreateChecked(dsrat),
+                rlxBefore = double.CreateChecked(rlxBefore),
+                rlxAfter = double.CreateChecked(rlxAfter),
+                dmaxBefore = double.CreateChecked(dmaxBefore),
+                dmaxAfter = double.CreateChecked(dmaxAfter)
+            });
+    }
+
+    private static void TracePangenSnewNode<T>(string scope, string stage, int iteration, int index, T value)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        SolverTrace.Event(
+            "pangen_snew_node",
+            scope,
+            new
+            {
+                stage,
+                iteration,
+                index,
+                value = double.CreateChecked(value)
+            });
+    }
+
+    private static void TraceCurvatureEvaluation<T>(
+        string scope,
+        string routine,
+        int lowerIndex,
+        int upperIndex,
+        T parameter,
+        T ds,
+        T t,
+        T xDelta,
+        T yDelta,
+        T cx1,
+        T cx2,
+        T cy1,
+        T cy2,
+        T xFactor1,
+        T xFactor2,
+        T yFactor1,
+        T yFactor2,
+        T xTerm1,
+        T xTerm2,
+        T yTerm1,
+        T yTerm2,
+        T xd,
+        T xdd,
+        T yd,
+        T ydd,
+        T sd,
+        T curvature)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        string precision = typeof(T) == typeof(float) ? "Single" : "Double";
+        SolverTrace.Event(
+            "curvature_eval",
+            scope,
+            new
+            {
+                routine,
+                lowerIndex,
+                upperIndex,
+                parameter = double.CreateChecked(parameter),
+                ds = double.CreateChecked(ds),
+                t = double.CreateChecked(t),
+                xDelta = double.CreateChecked(xDelta),
+                yDelta = double.CreateChecked(yDelta),
+                cx1 = double.CreateChecked(cx1),
+                cx2 = double.CreateChecked(cx2),
+                cy1 = double.CreateChecked(cy1),
+                cy2 = double.CreateChecked(cy2),
+                xFactor1 = double.CreateChecked(xFactor1),
+                xFactor2 = double.CreateChecked(xFactor2),
+                yFactor1 = double.CreateChecked(yFactor1),
+                yFactor2 = double.CreateChecked(yFactor2),
+                xTerm1 = double.CreateChecked(xTerm1),
+                xTerm2 = double.CreateChecked(xTerm2),
+                yTerm1 = double.CreateChecked(yTerm1),
+                yTerm2 = double.CreateChecked(yTerm2),
+                xd = double.CreateChecked(xd),
+                xdd = double.CreateChecked(xdd),
+                yd = double.CreateChecked(yd),
+                ydd = double.CreateChecked(ydd),
+                sd = double.CreateChecked(sd),
+                curvature = double.CreateChecked(curvature),
+                precision
+            });
+    }
+
+    // Legacy mapping: managed-only scalar helper corresponding to Fortran intrinsic MAX/AMAX1 usage.
+    // Difference from legacy: The original routine uses the intrinsic inline, while the managed port factors the comparison into a local generic helper.
+    // Decision: Keep the helper because it keeps the generic port readable.
+    private static T Max<T>(T a, T b)
+        where T : struct, IFloatingPointIeee754<T>
+        => a > b ? a : b;
 }

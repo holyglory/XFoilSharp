@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xpanel.f :: QISET influence/basis setup lineage
+// Role in port: Managed container for a preassembled inviscid influence system and its unit freestream basis solutions.
+// Differences: Legacy XFoil keeps these matrices and basis vectors in solver work arrays, while the managed port packages them for reuse across operating points.
+// Decision: Keep the managed container because it is the right reuse boundary for prepared inviscid solves.
 namespace XFoil.Solver.Models;
 
 public sealed class PreparedInviscidSystem

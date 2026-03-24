@@ -1,6 +1,12 @@
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xpanel.f :: NCALC, APCALC, TECALC
+// Secondary legacy source: f_xfoil/src/xfoil.f compressibility parameter setup
+// Role in port: Verifies the managed panel-geometry builder that ports legacy normal, angle, trailing-edge, and compressibility setup routines.
+// Differences: The tests use direct static helper calls and analytical fixtures instead of invoking the legacy panel-preparation sequence through global arrays.
+// Decision: Keep the managed helper structure because it preserves the same formulas while making geometry preprocessing independently testable.
 namespace XFoil.Core.Tests;
 
 public class PanelGeometryBuilderTests
@@ -11,6 +17,9 @@ public class PanelGeometryBuilderTests
     /// at each node should point radially outward (equal to the normalized position vector).
     /// </summary>
     [Fact]
+    // Legacy mapping: f_xfoil/src/xpanel.f :: NCALC.
+    // Difference from legacy: The test checks the managed normal array directly on an analytical fixture instead of inspecting legacy work arrays after panel setup.
+    // Decision: Keep the managed analytical regression because it isolates the same normal-construction formula more clearly.
     public void ComputeNormals_CircularArc_MatchesAnalyticalNormals()
     {
         const int n = 65;
@@ -58,6 +67,9 @@ public class PanelGeometryBuilderTests
     /// Uses a square-like shape where duplicate arc-length values mark corners.
     /// </summary>
     [Fact]
+    // Legacy mapping: f_xfoil/src/xpanel.f :: NCALC corner handling.
+    // Difference from legacy: Corner averaging is asserted explicitly in a managed unit test instead of being implicit in downstream panel behavior.
+    // Decision: Keep the managed corner test because it documents a critical legacy preprocessing rule.
     public void ComputeNormals_ShapeWithCorner_AveragesAtCornerPoint()
     {
         // Build an L-shaped path with a corner:
@@ -101,6 +113,9 @@ public class PanelGeometryBuilderTests
     /// XFoil convention: atan2(dy, -dx) where dx = X[i+1]-X[i], dy = Y[i+1]-Y[i].
     /// </summary>
     [Fact]
+    // Legacy mapping: f_xfoil/src/xpanel.f :: APCALC.
+    // Difference from legacy: The managed test validates panel-angle formulas against an analytical construction instead of inferring correctness from solver behavior.
+    // Decision: Keep the managed direct formula test because it is the clearest guard for the ported angle convention.
     public void ComputePanelAngles_CircularArc_CorrectAngles()
     {
         const int n = 33;
@@ -140,6 +155,9 @@ public class PanelGeometryBuilderTests
     /// Test 4: ComputeTrailingEdgeGeometry on NACA 0012 (sharp TE) sets IsSharpTrailingEdge=true.
     /// </summary>
     [Fact]
+    // Legacy mapping: f_xfoil/src/xpanel.f :: TECALC sharp trailing-edge path.
+    // Difference from legacy: The test checks structured trailing-edge state instead of the legacy global flags and arrays.
+    // Decision: Keep the managed state-based assertion because it preserves the same classification rule with better observability.
     public void ComputeTrailingEdgeGeometry_SharpTE_IdentifiedCorrectly()
     {
         // Simulate a NACA 0012-like airfoil with sharp TE:
@@ -184,6 +202,9 @@ public class PanelGeometryBuilderTests
     /// Test 5: ComputeTrailingEdgeGeometry on airfoil with finite TE gap computes correct values.
     /// </summary>
     [Fact]
+    // Legacy mapping: f_xfoil/src/xpanel.f :: TECALC finite-gap path.
+    // Difference from legacy: Finite trailing-edge gap behavior is asserted numerically through the managed state object rather than through downstream solver effects.
+    // Decision: Keep the managed numerical check because it is the strongest regression for this preprocessing branch.
     public void ComputeTrailingEdgeGeometry_FiniteGap_ComputesCorrectly()
     {
         const int n = 21;
@@ -223,6 +244,9 @@ public class PanelGeometryBuilderTests
     /// Test 6: ContinuousAtan2 returns continuous values across the -PI/+PI branch cut.
     /// </summary>
     [Fact]
+    // Legacy mapping: f_xfoil/src/xpanel.f continuous-angle handling inside panel-angle setup.
+    // Difference from legacy: The managed helper is tested directly as a reusable function rather than only through full panel preprocessing.
+    // Decision: Keep the managed helper test because it isolates the branch-cut continuity rule clearly.
     public void ContinuousAtan2_AcrossBranchCut_ReturnsContinuousValues()
     {
         // Start at angle 0.75*PI (2nd quadrant), move to 3rd quadrant (-1, -1)
@@ -251,6 +275,9 @@ public class PanelGeometryBuilderTests
     /// Test 7: ComputeCompressibilityParameters at M=0 returns neutral values.
     /// </summary>
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f compressibility parameter initialization.
+    // Difference from legacy: Neutral-parameter behavior is asserted on a direct managed helper instead of being embedded in a larger solve.
+    // Decision: Keep the managed helper regression because it protects the exact diagnostic contract exposed by the port.
     public void ComputeCompressibilityParameters_MachZero_NeutralValues()
     {
         var result = PanelGeometryBuilder.ComputeCompressibilityParameters(0.0);
@@ -269,6 +296,9 @@ public class PanelGeometryBuilderTests
     /// BFAC = 0.25 / (2 * (1 + sqrt(0.75)))
     /// </summary>
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f Karman-Tsien setup path.
+    // Difference from legacy: The managed test validates the parameter formula directly instead of relying on corrected-pressure downstream effects.
+    // Decision: Keep the managed formula test because it is the most precise regression for this legacy-derived helper.
     public void ComputeCompressibilityParameters_MachHalf_CorrectKarmanTsien()
     {
         var result = PanelGeometryBuilder.ComputeCompressibilityParameters(0.5);

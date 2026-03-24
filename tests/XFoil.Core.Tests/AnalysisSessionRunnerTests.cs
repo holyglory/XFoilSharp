@@ -2,11 +2,20 @@ using System.Text.Json;
 using XFoil.IO.Models;
 using XFoil.IO.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f :: OPER, ASEQ, CSEQ
+// Secondary legacy source: f_xfoil/src/polfit.f and saved-polar file workflows
+// Role in port: Verifies the managed batch-session runner that composes legacy-derived solver and import/export operations into reproducible manifests.
+// Differences: The legacy program is interactive and file-command driven, while the managed runner serializes whole sessions from JSON manifests and artifact policies.
+// Decision: Keep the managed orchestration layer and validate that it correctly wraps the legacy-derived analysis behaviors.
 namespace XFoil.Core.Tests;
 
 public sealed class AnalysisSessionRunnerTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f :: ASEQ/CSEQ operating workflows.
+    // Difference from legacy: This test exercises a managed manifest runner that batches multiple analyses rather than stepping through the legacy command interface.
+    // Decision: Keep the managed session-level regression because batch automation is an intentional port extension over the same underlying analysis lineage.
     public void Run_CreatesSummaryAndRequestedArtifacts()
     {
         var runner = new AnalysisSessionRunner();
@@ -90,6 +99,9 @@ public sealed class AnalysisSessionRunnerTests
     }
 
     [Fact]
+    // Legacy mapping: saved-polar import/export workflows derived from legacy polar files.
+    // Difference from legacy: The managed session runner imports a legacy artifact inside a manifest-driven pipeline instead of through interactive file commands.
+    // Decision: Keep the managed integration test because it protects the compatibility wrapper around legacy polar data.
     public void Run_ImportsLegacyPolarArtifactIntoSession()
     {
         var runner = new AnalysisSessionRunner();
@@ -100,7 +112,7 @@ public sealed class AnalysisSessionRunnerTests
         try
         {
             Directory.CreateDirectory(root);
-            var legacyInputPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "runs", "e387_09.100"));
+            var legacyInputPath = TestDataPaths.GetRunsFixturePath("e387_09.100");
             var manifest = new AnalysisSessionManifest
             {
                 Name = "Legacy Import Session",

@@ -3,6 +3,12 @@ using Xunit;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f drag accumulation and Squire-Young output
+// Secondary legacy source: f_xfoil/src/xbl.f wake/drag support and post-stall extensions added in the port
+// Role in port: Verifies the managed drag calculator and post-stall extrapolator layered over legacy-derived viscous state.
+// Differences: The port exposes a structured drag decomposition and a managed post-stall extrapolator rather than only legacy scalar reporting.
+// Decision: Keep the managed decomposition and post-stall extension while preserving legacy-derived drag formulas in the default viscous path.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -20,6 +26,8 @@ public class DragCalculatorTests
     /// Squire-Young CD must be positive for any physically valid BL state.
     /// </summary>
     [Fact]
+    // Legacy mapping: legacy Squire-Young total drag output.
+    // Difference from legacy: Total CD is asserted on a managed drag-decomposition object instead of printed scalar output. Decision: Keep the managed regression because it directly protects the ported drag accumulation.
     public void ComputeDrag_ConvergedBLState_CDIsPositive()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -39,6 +47,8 @@ public class DragCalculatorTests
     /// Expected: 0.003 < CD < 0.03.
     /// </summary>
     [Fact]
+    // Legacy mapping: legacy total-drag magnitude for a converged viscous state.
+    // Difference from legacy: The test uses a managed synthetic/ported state rather than a legacy runtime session. Decision: Keep the managed bounded-range check because it constrains the same physical output.
     public void ComputeDrag_ConvergedBLState_CDPhysicallyReasonable()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -61,6 +71,8 @@ public class DragCalculatorTests
     /// Skin friction drag must be positive.
     /// </summary>
     [Fact]
+    // Legacy mapping: skin-friction drag contribution.
+    // Difference from legacy: The port exposes CDF explicitly as part of a structured result. Decision: Keep the managed decomposition test because it documents this public API improvement.
     public void ComputeDrag_ConvergedBLState_CDFIsPositive()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -79,6 +91,8 @@ public class DragCalculatorTests
     /// CDF should be less than total CD (friction drag is a component).
     /// </summary>
     [Fact]
+    // Legacy mapping: friction-drag contribution relative to total drag.
+    // Difference from legacy: The decomposition relationship is checked directly on the managed result object. Decision: Keep the managed regression because it protects decomposition consistency.
     public void ComputeDrag_ConvergedBLState_CDFLessThanCD()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -101,6 +115,8 @@ public class DragCalculatorTests
     /// CDP = CD - CDF by definition (exact identity).
     /// </summary>
     [Fact]
+    // Legacy mapping: CDP derived from total drag minus friction drag.
+    // Difference from legacy: The identity is asserted directly on the managed drag decomposition instead of inferred from printed columns. Decision: Keep the managed test because it documents the explicit decomposition contract.
     public void ComputeDrag_ConvergedBLState_CDPEqualsSubtraction()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -127,6 +143,8 @@ public class DragCalculatorTests
     /// non-negative. Real integration tests (ViscousSolverEngineTests) validate tighter bounds.
     /// </summary>
     [Fact]
+    // Legacy mapping: surface drag cross-check.
+    // Difference from legacy: The managed code exposes a direct surface cross-check discrepancy metric. Decision: Keep the managed regression because it provides extra observability over the same drag lineage.
     public void ComputeDrag_ConvergedBLState_SurfaceCrossCheckProducesFiniteDiscrepancy()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -154,6 +172,8 @@ public class DragCalculatorTests
     /// TE base drag should be non-negative and small relative to total CD.
     /// </summary>
     [Fact]
+    // Legacy mapping: legacy trailing-edge base-drag contribution.
+    // Difference from legacy: TE base drag is surfaced explicitly inside the managed decomposition. Decision: Keep the managed regression because it documents this component clearly.
     public void ComputeDrag_ConvergedBLState_TEBaseDragSmall()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -178,6 +198,8 @@ public class DragCalculatorTests
     /// For M < 0.7, WaveDrag should be null.
     /// </summary>
     [Fact]
+    // Legacy mapping: subsonic drag with no wave-drag contribution.
+    // Difference from legacy: The port exposes wave drag as an explicit field rather than folding it into a single scalar. Decision: Keep the managed decomposition test because it clarifies the output contract.
     public void ComputeDrag_SubsonicMach_WaveDragIsNull()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -193,6 +215,8 @@ public class DragCalculatorTests
     /// For M > 0.7 with Lock wave drag enabled, WaveDrag should be non-null and positive.
     /// </summary>
     [Fact]
+    // Legacy mapping: transonic/compressibility drag contribution.
+    // Difference from legacy: Positive wave drag is checked directly on the managed result object. Decision: Keep the managed regression because it protects the added decomposition visibility.
     public void ComputeDrag_TransonicMach_WaveDragIsPositive()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -214,6 +238,8 @@ public class DragCalculatorTests
     /// Extended wake should produce a valid (positive) CD.
     /// </summary>
     [Fact]
+    // Legacy mapping: extended wake drag accumulation.
+    // Difference from legacy: The managed test toggles an explicit useExtendedWake option rather than implicit runtime behavior. Decision: Keep the managed regression because it documents the extended-wake branch clearly.
     public void ComputeDrag_ExtendedWake_CDIsPositive()
     {
         var (blState, panel, qinf, alfa) = BuildConvergedBLState();
@@ -234,6 +260,8 @@ public class DragCalculatorTests
     /// Post-stall CL should be less than CL at the last converged alpha (CL decreases after stall).
     /// </summary>
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Post-stall extrapolation uses the managed Viterna-Corrigan extension, which has no direct Fortran XFoil analogue. Decision: Keep this managed-only test because the extension is intentional functionality in the port.
     public void ExtrapolatePostStall_HighAlpha_CLDecreases()
     {
         double alpha = 20.0 * Math.PI / 180.0;
@@ -253,6 +281,8 @@ public class DragCalculatorTests
     /// Post-stall CD should be positive and larger than last converged CD.
     /// </summary>
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: This validates the managed-only post-stall drag extension rather than a legacy solver path. Decision: Keep the managed test because the extrapolator is a deliberate addition.
     public void ExtrapolatePostStall_HighAlpha_CDPositiveAndLarger()
     {
         double alpha = 20.0 * Math.PI / 180.0;
@@ -274,6 +304,8 @@ public class DragCalculatorTests
     /// At 90 degrees, CL should be near zero (flat plate broadside has zero lift).
     /// </summary>
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Ninety-degree post-stall behavior is specific to the managed extrapolation layer. Decision: Keep the managed-only regression because it defines the extension's expected output.
     public void ExtrapolatePostStall_NinetyDegrees_CLNearZero()
     {
         double alpha = 90.0 * Math.PI / 180.0;
@@ -293,6 +325,8 @@ public class DragCalculatorTests
     /// CL/CD values should not be NaN or Infinity.
     /// </summary>
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Finite-value robustness for the post-stall extrapolator is a managed-only contract. Decision: Keep the managed test because the extension must remain numerically safe.
     public void ExtrapolatePostStall_HighAlpha_NoNaNOrInfinity()
     {
         double alpha = 45.0 * Math.PI / 180.0;

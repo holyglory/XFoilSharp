@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xfoil.f :: ALFA/CLI/ASEQ/CSEQ, f_xfoil/src/xoper.f :: PACC/PWRT/DUMP, f_xfoil/src/xgdes.f :: GDES command family, f_xfoil/src/xqdes.f :: QDES command family, f_xfoil/src/xmdes.f :: MDES/MAPGEN command family
+// Role in port: Headless CLI orchestration over the managed services that port XFoil analysis, design, IO, and session workflows.
+// Differences: Classic XFoil is an interactive command interpreter with mutable COMMON state, while this file exposes deterministic argument parsing, command dispatch, and export formatting for the managed service layer.
+// Decision: Keep the managed CLI because it is .NET-specific orchestration, not a direct solver-parity target. Legacy lineage is documented per helper where commands delegate into ported workflows.
 using System.Globalization;
 using XFoil.Core.Models;
 using XFoil.Core.Services;
@@ -2096,6 +2102,9 @@ catch (Exception exception)
     return 1;
 }
 
+// Legacy mapping: f_xfoil/src/aread.f :: AREAD, f_xfoil/src/naca.f :: NACA4/NACA5, f_xfoil/src/xgeom.f :: NORM/GEOPAR.
+// Difference from legacy: This helper prints a deterministic managed summary instead of driving the interactive prompt and mutable geometry buffers.
+// Decision: Keep the managed summary projection because it is CLI presentation over existing ported services.
 static void WriteSummary(
     AirfoilGeometry geometry,
     AirfoilNormalizer normalizer,
@@ -2113,6 +2122,9 @@ static void WriteSummary(
     Console.WriteLine($"MaxCamber: {metrics.MaxCamber.ToString("F6", CultureInfo.InvariantCulture)}");
 }
 
+// Legacy mapping: none; classic XFoil exposes commands through an interactive REPL rather than a headless usage banner.
+// Difference from legacy: The managed CLI publishes a static command catalog and argument contract for scripted use.
+// Decision: Keep the managed usage banner because the headless command surface has no direct Fortran analogue.
 static void PrintUsage()
 {
     Console.WriteLine("XFoil.Cli");
@@ -2229,6 +2241,9 @@ static void PrintUsage()
     Console.WriteLine("  run-session <manifestPath> <outputDirectory>");
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: ALFA and f_xfoil/src/xoper.f :: CPWRIT/PWRT reporting lineage.
+// Difference from legacy: The managed helper delegates the analysis to services and formats a compact console summary instead of mutating global operating-point state and optional plot buffers.
+// Decision: Keep the managed summary wrapper because it is presentation logic around the ported inviscid solve.
 static void WriteInviscidSummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2254,6 +2269,9 @@ static void WriteInviscidSummary(
     Console.WriteLine($"WakeLength: {analysis.Wake.Points[^1].DistanceFromTrailingEdge.ToString("F6", CultureInfo.InvariantCulture)}");
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: ASEQ and f_xfoil/src/xoper.f :: PACC/PWRT.
+// Difference from legacy: The sweep is executed through managed services and printed directly to stdout instead of being staged through the interactive polar accumulator.
+// Decision: Keep the managed summary wrapper because it provides deterministic batch output for the same operating-point lineage.
 static void WritePolarSummary(
     AirfoilGeometry geometry,
     double alphaStartDegrees,
@@ -2288,6 +2306,9 @@ static void WritePolarSummary(
     }
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: ASEQ/VISC and f_xfoil/src/xoper.f :: PACC/PWRT.
+// Difference from legacy: The helper formats managed viscous sweep results directly rather than replaying the interactive polar-buffer workflow.
+// Decision: Keep the managed summary wrapper because it is a CLI view over the viscous solver service.
 static void WriteViscousPolarSummary(
     AirfoilGeometry geometry,
     double alphaStartDegrees,
@@ -2332,6 +2353,9 @@ static void WriteViscousPolarSummary(
     }
 }
 
+// Legacy mapping: f_xfoil/src/xoper.f :: PACC/PWRT.
+// Difference from legacy: Classic XFoil writes saved polars in its own text format, while this helper exports the managed sweep through a dedicated CSV exporter.
+// Decision: Keep the managed CSV path because stable machine-readable export is an intentional CLI improvement.
 static void ExportPolarCsv(
     AirfoilGeometry geometry,
     string outputPath,
@@ -2354,6 +2378,9 @@ static void ExportPolarCsv(
     WriteExportSummary("InviscidAlphaSweep", outputPath, sweep.Points.Count);
 }
 
+// Legacy mapping: f_xfoil/src/xoper.f :: PACC/PWRT for viscous polar persistence.
+// Difference from legacy: The managed CLI emits plain CSV lines from the viscous sweep instead of the legacy saved-polar file format.
+// Decision: Keep the managed CSV export because it is easier to automate while preserving the same operating-point lineage.
 static void ExportViscousPolarCsv(
     AirfoilGeometry geometry,
     string outputPath,
@@ -2389,6 +2416,9 @@ static void ExportViscousPolarCsv(
     WriteExportSummary("ViscousAlphaSweep", outputPath, results.Count);
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: CLI/CSEQ and f_xfoil/src/xoper.f :: PACC/PWRT.
+// Difference from legacy: The lift sweep is delegated to managed services and exported as CSV instead of entering the interactive polar buffer.
+// Decision: Keep the managed CSV export because it is a batch-friendly wrapper over the legacy operating-point lineage.
 static void ExportLiftSweepCsv(
     AirfoilGeometry geometry,
     string outputPath,
@@ -2411,6 +2441,9 @@ static void ExportLiftSweepCsv(
     WriteExportSummary("InviscidLiftSweep", outputPath, sweep.Points.Count);
 }
 
+// Legacy mapping: f_xfoil/src/xoper.f :: PWRT saved-polar format lineage.
+// Difference from legacy: The managed CLI imports an existing legacy polar and immediately re-emits it through the managed CSV exporter.
+// Decision: Keep the managed import/export bridge because it is an interoperability tool, not a direct runtime parity path.
 static void ImportLegacyPolar(
     string inputPath,
     string outputPath,
@@ -2422,6 +2455,9 @@ static void ImportLegacyPolar(
     WriteExportSummary("LegacySavedPolarImport", outputPath, polar.Records.Count);
 }
 
+// Legacy mapping: f_xfoil/src/xoper.f :: PWRT saved-polar format lineage.
+// Difference from legacy: This helper parses the saved-polar file into managed records and prints metadata rather than reloading it into interactive XFoil session state.
+// Decision: Keep the managed summary view because it is a diagnostic wrapper around the importer.
 static void WriteLegacyPolarSummary(string inputPath, LegacyPolarImporter legacyPolarImporter)
 {
     var polar = legacyPolarImporter.Import(inputPath);
@@ -2448,6 +2484,9 @@ static void WriteLegacyPolarSummary(string inputPath, LegacyPolarImporter legacy
     }
 }
 
+// Legacy mapping: none; reference polar bundles are managed regression artifacts rather than an interactive XFoil command product.
+// Difference from legacy: The CLI bridges a managed reference-polar importer directly into CSV export.
+// Decision: Keep the managed import/export wrapper because there is no direct Fortran analogue to preserve.
 static void ImportLegacyReferencePolar(
     string inputPath,
     string outputPath,
@@ -2459,6 +2498,9 @@ static void ImportLegacyReferencePolar(
     WriteExportSummary("LegacyReferencePolarImport", outputPath, polar.Blocks.Sum(block => block.Points.Count));
 }
 
+// Legacy mapping: none; reference polar block summaries are managed-only regression tooling.
+// Difference from legacy: The helper reports imported block sizes and labels instead of interacting with legacy runtime state.
+// Decision: Keep the managed summary helper because it serves repository diagnostics only.
 static void WriteLegacyReferencePolarSummary(string inputPath, LegacyReferencePolarImporter legacyReferencePolarImporter)
 {
     var polar = legacyReferencePolarImporter.Import(inputPath);
@@ -2470,6 +2512,9 @@ static void WriteLegacyReferencePolarSummary(string inputPath, LegacyReferencePo
     }
 }
 
+// Legacy mapping: f_xfoil/src/xoper.f :: DUMP/CPDUMP/BLDUMP file lineage.
+// Difference from legacy: The managed CLI parses a legacy dump and emits a normalized archive layout instead of reusing the original monolithic text file.
+// Decision: Keep the managed archive export because it improves tooling without changing the imported data content.
 static void ImportLegacyPolarDump(
     string inputPath,
     string outputPath,
@@ -2485,6 +2530,9 @@ static void ImportLegacyPolarDump(
     Console.WriteLine($"PointCount: {dump.OperatingPoints.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xoper.f :: DUMP/CPDUMP/BLDUMP file lineage.
+// Difference from legacy: The helper renders the imported dump as concise metadata instead of replaying XFoil's interactive dump inspection workflow.
+// Decision: Keep the managed summary wrapper because it is repository tooling around imported legacy artifacts.
 static void WriteLegacyPolarDumpSummary(string inputPath, LegacyPolarDumpImporter legacyPolarDumpImporter)
 {
     var dump = legacyPolarDumpImporter.Import(inputPath);
@@ -2510,6 +2558,9 @@ static void WriteLegacyPolarDumpSummary(string inputPath, LegacyPolarDumpImporte
     }
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: CSEQ/VISC and f_xfoil/src/xoper.f :: PACC/PWRT.
+// Difference from legacy: The managed CLI exports viscous lift-target sweeps as CSV rather than the legacy saved-polar text layout.
+// Decision: Keep the managed CSV export because it is a deliberate automation-oriented wrapper around the viscous sweep lineage.
 static void ExportViscousLiftSweepCsv(
     AirfoilGeometry geometry,
     string outputPath,
@@ -2545,6 +2596,9 @@ static void ExportViscousLiftSweepCsv(
     WriteExportSummary("ViscousLiftSweep", outputPath, results.Count);
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: CLI.
+// Difference from legacy: The helper prints the managed solution for a target lift coefficient directly instead of updating the interactive session display and stored operating-point buffers.
+// Decision: Keep the managed console projection because it is presentation logic over the inviscid target-lift solve.
 static void WriteTargetLiftSummary(
     AirfoilGeometry geometry,
     double targetLiftCoefficient,
@@ -2566,6 +2620,9 @@ static void WriteTargetLiftSummary(
     Console.WriteLine($"CMc/4: {analysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: CLI/VISC target-lift operating-point lineage.
+// Difference from legacy: The managed CLI uses the viscous sweep service to recover the target-CL operating point and prints a compact summary instead of driving the interactive operating-point display.
+// Decision: Keep the managed summary wrapper because it is headless presentation over the viscous solver.
 static void WriteViscousTargetLiftSummary(
     AirfoilGeometry geometry,
     double targetLiftCoefficient,
@@ -2612,6 +2669,9 @@ static void WriteViscousTargetLiftSummary(
     }
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: CSEQ and f_xfoil/src/xoper.f :: PACC/PWRT.
+// Difference from legacy: The managed helper prints the lift sweep directly from service results instead of routing through the interactive polar accumulator.
+// Decision: Keep the managed summary wrapper because it is deterministic CLI presentation over the same lift-sweep lineage.
 static void WriteLiftSweepSummary(
     AirfoilGeometry geometry,
     double liftStart,
@@ -2644,6 +2704,9 @@ static void WriteLiftSweepSummary(
     }
 }
 
+// Legacy mapping: f_xfoil/src/xfoil.f :: CSEQ/VISC and f_xfoil/src/xoper.f :: PACC/PWRT.
+// Difference from legacy: The helper formats viscous lift-sweep results directly rather than replaying the interactive saved-polar path.
+// Decision: Keep the managed summary wrapper because it is a CLI view over the viscous lift sweep.
 static void WriteViscousLiftSweepSummary(
     AirfoilGeometry geometry,
     double liftStart,
@@ -2688,6 +2751,9 @@ static void WriteViscousLiftSweepSummary(
     }
 }
 
+// Legacy mapping: f_xfoil/src/xpanel.f :: STFIND/IBLPAN and f_xfoil/src/xbl.f :: IBLSYS topology lineage.
+// Difference from legacy: The helper prints managed topology objects instead of exposing boundary-layer station arrays through the interactive prompt.
+// Decision: Keep the managed summary because topology inspection is a CLI/debugging aid, not a parity kernel.
 static void WriteBoundaryLayerTopologySummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2713,6 +2779,9 @@ static void WriteBoundaryLayerTopologySummary(
     Console.WriteLine($"LowerTeDistance: {topology.LowerSurfaceStations[^1].DistanceFromStagnation.ToString("F6", CultureInfo.InvariantCulture)}");
 }
 
+// Legacy mapping: f_xfoil/src/xoper.f :: COMSET/MRCHUE seed lineage and f_xfoil/src/xbl.f :: SETBL state setup.
+// Difference from legacy: The helper reports the managed seed object explicitly instead of relying on hidden COMMON-state inspection.
+// Decision: Keep the managed summary because seed visibility is a debugging-oriented improvement.
 static void WriteViscousSeedSummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2741,6 +2810,9 @@ static void WriteViscousSeedSummary(
     Console.WriteLine($"WakeSecondGap: {seed.Wake.Stations[Math.Min(1, seed.Wake.Stations.Count - 1)].WakeGap.ToString("F6", CultureInfo.InvariantCulture)}");
 }
 
+// Legacy mapping: f_xfoil/src/xoper.f :: COMSET/MRCHUE initial-state lineage and f_xfoil/src/xblsys.f :: transition-state data.
+// Difference from legacy: The managed helper formats a derived state summary from explicit objects rather than reading scattered solver arrays interactively.
+// Decision: Keep the managed summary because it improves visibility into the viscous initialization pipeline.
 static void WriteViscousInitialStateSummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2778,6 +2850,9 @@ static void WriteViscousInitialStateSummary(
     Console.WriteLine($"WakeReThetaEnd: {state.Wake.Stations[^1].ReynoldsTheta.ToString("F2", CultureInfo.InvariantCulture)}");
 }
 
+// Legacy mapping: none; this command reports the removal of an older managed surrogate pipeline, not a legacy XFoil routine.
+// Difference from legacy: The helper emits a deprecation notice instead of attempting to mimic a removed managed-only workflow.
+// Decision: Keep the explicit deprecation message because it preserves CLI compatibility while steering users to the active solver path.
 static void WriteViscousIntervalSummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2792,6 +2867,9 @@ static void WriteViscousIntervalSummary(
     Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
+// Legacy mapping: none; this helper documents the removal of an older managed surrogate correction path.
+// Difference from legacy: It intentionally reports deprecation rather than dispatching into a legacy or managed solver pipeline.
+// Decision: Keep the deprecation notice because it is clearer than silently dropping the command.
 static void WriteViscousCorrectionSummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2807,6 +2885,9 @@ static void WriteViscousCorrectionSummary(
     Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
+// Legacy mapping: none; this helper documents the removal of an older managed surrogate solve path.
+// Difference from legacy: It emits a deprecation notice instead of preserving a non-parity solver fork.
+// Decision: Keep the notice because the Newton-coupled solver is now the supported path.
 static void WriteViscousSolveSummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2823,6 +2904,9 @@ static void WriteViscousSolveSummary(
     Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
+// Legacy mapping: none; this helper documents the removal of an older managed interaction workflow.
+// Difference from legacy: It prints a deprecation notice rather than maintaining a second non-legacy interaction implementation.
+// Decision: Keep the notice because the active viscous workflow now lives in the Newton-coupled solver.
 static void WriteViscousInteractionSummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2841,6 +2925,9 @@ static void WriteViscousInteractionSummary(
     Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
+// Legacy mapping: none; this helper documents the retirement of the earlier managed displacement-coupled surrogate.
+// Difference from legacy: It preserves the CLI contract with a deprecation message instead of emulating obsolete behavior.
+// Decision: Keep the notice because it avoids hidden command removal.
 static void WriteDisplacementCoupledSummary(
     AirfoilGeometry geometry,
     double angleOfAttackDegrees,
@@ -2859,6 +2946,9 @@ static void WriteDisplacementCoupledSummary(
     Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
 }
 
+// Legacy mapping: f_xfoil/src/xblsys.f :: TRCHEK2 transition-state lineage.
+// Difference from legacy: The helper scans the managed branch object instead of reading transition indices from COMMON arrays.
+// Decision: Keep the managed scan because it is a presentation helper over explicit state objects.
 static double FindTransitionXi(ViscousBranchState branch)
 {
     foreach (var station in branch.Stations)
@@ -2872,6 +2962,9 @@ static double FindTransitionXi(ViscousBranchState branch)
     return -1d;
 }
 
+// Legacy mapping: f_xfoil/src/xblsys.f :: TRCHEK2 transition-state lineage.
+// Difference from legacy: The helper scans managed station objects for the first turbulent state instead of consulting implicit runtime arrays.
+// Decision: Keep the managed scan because it is a simple reporting helper.
 static double FindTransitionAmplification(ViscousBranchState branch)
 {
     foreach (var station in branch.Stations)
@@ -2885,6 +2978,9 @@ static double FindTransitionAmplification(ViscousBranchState branch)
     return -1d;
 }
 
+// Legacy mapping: none; packaging solver settings into an immutable managed object has no direct Fortran analogue.
+// Difference from legacy: Parameter values are grouped into a typed settings record instead of being assigned into global solver state slot by slot.
+// Decision: Keep the managed settings helper because it is the clean API boundary for the CLI.
 static AnalysisSettings CreateViscousSettings(
     int panelCount,
     double machNumber,
@@ -2900,6 +2996,9 @@ static AnalysisSettings CreateViscousSettings(
         criticalAmplificationFactor: criticalAmplificationFactor);
 }
 
+// Legacy mapping: none; export-summary formatting is managed-only CLI behavior.
+// Difference from legacy: The helper prints normalized export metadata after service execution rather than relying on implicit terminal feedback.
+// Decision: Keep the helper because it standardizes CLI output across commands.
 static void WriteExportSummary(string kind, string outputPath, int pointCount)
 {
     Console.WriteLine($"ExportKind: {kind}");
@@ -2907,6 +3006,9 @@ static void WriteExportSummary(string kind, string outputPath, int pointCount)
     Console.WriteLine($"PointCount: {pointCount}");
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: FLAP.
+// Difference from legacy: The helper delegates flap geometry changes to a managed service and emits deterministic export metadata instead of driving the interactive GDES session.
+// Decision: Keep the managed wrapper because it preserves the FLAP lineage while fitting the headless CLI.
 static void ExportFlapGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -2936,6 +3038,9 @@ static void ExportFlapGeometry(
     Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: TGAP.
+// Difference from legacy: The helper wraps the managed trailing-edge-gap service and prints explicit result metadata instead of mutating geometry in-place inside GDES.
+// Decision: Keep the managed wrapper because it is the right headless interface for the TGAP workflow.
 static void ExportTrailingEdgeGapGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -2962,6 +3067,9 @@ static void ExportTrailingEdgeGapGeometry(
     Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: LERAD.
+// Difference from legacy: The helper delegates the leading-edge-radius edit to a managed service and reports explicit before/after values rather than using the interactive design buffer.
+// Decision: Keep the managed wrapper because it makes the LERAD workflow scriptable.
 static void ExportLeadingEdgeRadiusGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -2988,6 +3096,9 @@ static void ExportLeadingEdgeRadiusGeometry(
     Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: SCAL and related geometry-transform commands.
+// Difference from legacy: Scaling is represented as an explicit managed result object with origin metadata instead of an in-place edit on global geometry arrays.
+// Decision: Keep the managed wrapper because it is clearer and better suited to scripted use.
 static void ExportScaledGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3016,6 +3127,9 @@ static void ExportScaledGeometry(
     Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: ADEG/ARAD/TRAN/LINS/DERO/UNIT command-family output lineage.
+// Difference from legacy: This helper only handles deterministic DAT export and summary printing after the actual transform has already been performed by managed services.
+// Decision: Keep the managed export wrapper because it decouples file writing from the transform implementations.
 static void ExportGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3029,6 +3143,9 @@ static void ExportGeometry(
     Console.WriteLine($"PointCount: {geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: ADDP/MOVP/DELP/CORN/CADD.
+// Difference from legacy: The contour edit result is surfaced as an explicit managed object and then exported, rather than being left in the mutable GDES buffer.
+// Decision: Keep the managed wrapper because it makes contour edits auditable and scriptable.
 static void ExportContourEditGeometry(
     ContourEditResult result,
     string outputPath,
@@ -3048,6 +3165,9 @@ static void ExportContourEditGeometry(
     Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: MODI.
+// Difference from legacy: The modified contour arrives as a managed result object with explicit metadata instead of an implicit in-memory QDES state update.
+// Decision: Keep the managed wrapper because it is a cleaner headless interface for the MODI lineage.
 static void ExportContourModificationGeometry(
     ContourModificationResult result,
     string outputPath,
@@ -3064,6 +3184,9 @@ static void ExportContourModificationGeometry(
     Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: QDES profile generation.
+// Difference from legacy: The helper uses managed analysis and QSpec services, then exports a stable CSV rather than entering the interactive QDES buffer/plot flow.
+// Decision: Keep the managed export wrapper because it is better suited to automation while preserving the same design lineage.
 static void ExportQSpecProfile(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3085,6 +3208,9 @@ static void ExportQSpecProfile(
     Console.WriteLine($"PointCount: {profile.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: QDES symmetry-style editing lineage.
+// Difference from legacy: Symmetry is enforced through a managed profile transformation and CSV export instead of interactive buffer edits.
+// Decision: Keep the managed wrapper because it makes a common QDES workflow reproducible in batch mode.
 static void ExportSymmetricQSpecProfile(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3107,6 +3233,9 @@ static void ExportSymmetricQSpecProfile(
     Console.WriteLine($"PointCount: {symmetricProfile.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: AQ.
+// Difference from legacy: The helper batches multiple managed QSpec profiles into one CSV set instead of stepping through an interactive alpha-driven design loop.
+// Decision: Keep the managed set export because it is a deliberate batch-oriented improvement over the legacy workflow.
 static void ExportQSpecProfileSetForAngles(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3134,6 +3263,9 @@ static void ExportQSpecProfileSetForAngles(
     Console.WriteLine($"AnglesDeg: {string.Join(", ", profiles.Select(profile => profile.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)))}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: CQ.
+// Difference from legacy: The helper walks target lift coefficients through managed target-lift solves and exports the resulting QSpec profiles as one CSV set.
+// Decision: Keep the managed batching because it is clearer and more automatable than the interactive CQ loop.
 static void ExportQSpecProfileSetForLiftCoefficients(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3163,6 +3295,9 @@ static void ExportQSpecProfileSetForLiftCoefficients(
     Console.WriteLine($"TargetCL: {string.Join(", ", targetLiftCoefficients.Select(target => target.ToString("F4", CultureInfo.InvariantCulture)))}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: MODI.
+// Difference from legacy: The helper composes managed inviscid analysis, profile construction, and QSpec modification before emitting a CSV snapshot.
+// Decision: Keep the managed wrapper because it makes the MODI lineage explicit and scriptable.
 static void ExportModifiedQSpecProfile(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3188,6 +3323,9 @@ static void ExportModifiedQSpecProfile(
     Console.WriteLine($"PointCount: {result.Profile.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: SMOOQ.
+// Difference from legacy: The managed helper smooths an explicit QSpec profile object and exports the result directly instead of relying on interactive design buffers and plots.
+// Decision: Keep the managed wrapper because it exposes SMOOQ-style editing cleanly in batch mode.
 static void ExportSmoothedQSpecProfile(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3216,6 +3354,9 @@ static void ExportSmoothedQSpecProfile(
     Console.WriteLine($"PointCount: {result.Profile.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: EXEC.
+// Difference from legacy: The helper runs the managed inverse-design execution path and exports a DAT file directly instead of mutating the interactive geometry buffer.
+// Decision: Keep the managed wrapper because it provides a deterministic headless interface for the EXEC lineage.
 static void ExportExecutedQSpecGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3245,6 +3386,9 @@ static void ExportExecutedQSpecGeometry(
     Console.WriteLine($"PointCount: {execution.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xmdes.f :: MDES.
+// Difference from legacy: The helper builds the modal spectrum through managed services and writes a CSV snapshot instead of relying on the interactive MDES spectrum view.
+// Decision: Keep the managed export because it makes modal data available to external tooling.
 static void ExportModalSpectrum(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3268,6 +3412,9 @@ static void ExportModalSpectrum(
     Console.WriteLine($"ModeCount: {spectrum.Coefficients.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xmdes.f :: EXEC.
+// Difference from legacy: The helper composes managed baseline/profile modification work with modal inverse execution and DAT export instead of editing the design buffer interactively.
+// Decision: Keep the managed wrapper because it is the correct headless surface for the MDES execution path.
 static void ExportModalExecutedGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3305,6 +3452,9 @@ static void ExportModalExecutedGeometry(
     Console.WriteLine($"PointCount: {execution.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xmdes.f :: PERT.
+// Difference from legacy: The helper applies the modal perturbation through explicit managed services and exports the resulting geometry directly.
+// Decision: Keep the managed wrapper because it makes the PERT workflow reproducible in scripts and tests.
 static void ExportPerturbedModalGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3342,6 +3492,9 @@ static void ExportPerturbedModalGeometry(
     Console.WriteLine($"PointCount: {execution.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN.
+// Difference from legacy: The helper drives the managed conformal-map execution service and prints explicit convergence metrics instead of relying on interactive MDES state and plots.
+// Decision: Keep the managed wrapper because the headless MAPGEN workflow benefits from explicit result metadata.
 static void ExportConformalMapgenGeometry(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3393,6 +3546,9 @@ static void ExportConformalMapgenGeometry(
     Console.WriteLine($"PointCount: {result.Geometry.Points.Count}");
 }
 
+// Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN.
+// Difference from legacy: The helper exports the solved conformal coefficients as CSV instead of keeping them only in an interactive MDES session.
+// Decision: Keep the managed wrapper because batch access to MAPGEN coefficients is an intentional CLI improvement.
 static void ExportConformalMapgenSpectrum(
     AirfoilGeometry geometry,
     string outputPath,
@@ -3437,6 +3593,9 @@ static void ExportConformalMapgenSpectrum(
     Console.WriteLine($"TargetTrailingEdgeAngleDeg: {result.TargetTrailingEdgeAngleDegrees.ToString("F8", CultureInfo.InvariantCulture)}");
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: QDES profile storage/inspection lineage.
+// Difference from legacy: The managed helper serializes an explicit QSpec profile into stable CSV rather than writing plot-oriented text from interactive buffers.
+// Decision: Keep the managed CSV writer because external tooling depends on a stable tabular format.
 static void WriteQSpecCsv(string outputPath, QSpecProfile profile)
 {
     var lines = new List<string>(profile.Points.Count + 1)
@@ -3461,6 +3620,9 @@ static void WriteQSpecCsv(string outputPath, QSpecProfile profile)
     File.WriteAllLines(outputPath, lines);
 }
 
+// Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN coefficient lineage.
+// Difference from legacy: Conformal coefficients are exported as a managed CSV table instead of being viewed only through interactive MDES output.
+// Decision: Keep the managed CSV writer because it exposes the MAPGEN result to automation.
 static void WriteConformalCoefficientCsv(string outputPath, IReadOnlyList<ConformalMappingCoefficient> coefficients)
 {
     var lines = new List<string>(coefficients.Count + 1)
@@ -3480,6 +3642,9 @@ static void WriteConformalCoefficientCsv(string outputPath, IReadOnlyList<Confor
     File.WriteAllLines(outputPath, lines);
 }
 
+// Legacy mapping: f_xfoil/src/xmdes.f :: MDES spectrum lineage.
+// Difference from legacy: The helper writes the modal coefficients into a stable CSV table instead of relying on interactive spectrum display.
+// Decision: Keep the managed CSV writer because it is the cleanest interchange format for modal diagnostics.
 static void WriteModalSpectrumCsv(string outputPath, ModalSpectrum spectrum)
 {
     var lines = new List<string>(spectrum.Coefficients.Count + 1)
@@ -3499,6 +3664,9 @@ static void WriteModalSpectrumCsv(string outputPath, ModalSpectrum spectrum)
     File.WriteAllLines(outputPath, lines);
 }
 
+// Legacy mapping: f_xfoil/src/xqdes.f :: AQ/CQ profile-set lineage.
+// Difference from legacy: Multiple QSpec profiles are flattened into one managed CSV file instead of being iterated one by one through the interactive design session.
+// Decision: Keep the managed batch writer because it makes multi-profile analysis easy to automate.
 static void WriteQSpecSetCsv(string outputPath, IReadOnlyList<QSpecProfile> profiles)
 {
     var estimatedRowCount = profiles.Sum(profile => profile.Points.Count) + 1;
@@ -3530,6 +3698,9 @@ static void WriteQSpecSetCsv(string outputPath, IReadOnlyList<QSpecProfile> prof
     File.WriteAllLines(outputPath, lines);
 }
 
+// Legacy mapping: none; session-manifest execution is a managed-only automation layer over ported workflows.
+// Difference from legacy: A declarative manifest drives repeated analyses and artifact capture, which classic XFoil did not provide as a first-class workflow.
+// Decision: Keep the managed session runner because it is repository infrastructure, not legacy solver behavior.
 static void RunSession(string manifestPath, string outputDirectory, AnalysisSessionRunner sessionRunner)
 {
     var result = sessionRunner.Run(manifestPath, outputDirectory);
@@ -3544,6 +3715,9 @@ static void RunSession(string manifestPath, string outputDirectory, AnalysisSess
     }
 }
 
+// Legacy mapping: none; command-line argument parsing is managed-only infrastructure.
+// Difference from legacy: Numeric parsing is explicit, culture-invariant, and exception-based instead of being driven by interactive READ statements.
+// Decision: Keep the managed parser because deterministic CLI input handling is required for scripting.
 static double ParseDouble(string raw, string label)
 {
     if (!double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
@@ -3554,6 +3728,9 @@ static double ParseDouble(string raw, string label)
     return value;
 }
 
+// Legacy mapping: none; list-style CLI argument parsing has no direct interactive Fortran analogue.
+// Difference from legacy: Remaining values are parsed eagerly into a managed list instead of being consumed incrementally from the terminal.
+// Decision: Keep the helper because it simplifies batch command handling.
 static IReadOnlyList<double> ParseRemainingDoubles(string[] args, int startIndex, string label)
 {
     if (startIndex >= args.Length)
@@ -3570,6 +3747,9 @@ static IReadOnlyList<double> ParseRemainingDoubles(string[] args, int startIndex
     return values;
 }
 
+// Legacy mapping: none; command-line integer parsing is managed-only infrastructure.
+// Difference from legacy: Parsing is culture-invariant and exception-based instead of using interactive READ semantics.
+// Decision: Keep the managed parser because it provides deterministic error handling for the CLI.
 static int ParseInteger(string raw, string label)
 {
     if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
@@ -3580,6 +3760,9 @@ static int ParseInteger(string raw, string label)
     return value;
 }
 
+// Legacy mapping: none; control-point file parsing is a managed CLI convenience around design workflows.
+// Difference from legacy: The helper reads whitespace-delimited files with comment skipping and converts them into explicit point records.
+// Decision: Keep the managed parser because external design workflows need a simple batch input format.
 static IReadOnlyList<AirfoilPoint> ParseControlPointsFile(string path)
 {
     var lines = File.ReadAllLines(path);
@@ -3606,6 +3789,9 @@ static IReadOnlyList<AirfoilPoint> ParseControlPointsFile(string path)
     return points;
 }
 
+// Legacy mapping: none; boolean flag normalization is managed-only CLI behavior.
+// Difference from legacy: The helper accepts a wider batch-friendly vocabulary than the interactive prompt ever normalized centrally.
+// Decision: Keep the managed parser because it improves command ergonomics without affecting solver behavior.
 static bool ParseBooleanFlag(string raw, string label)
 {
     return raw.ToUpperInvariant() switch
@@ -3616,6 +3802,9 @@ static bool ParseBooleanFlag(string raw, string label)
     };
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: CADD parameter-mode lineage.
+// Difference from legacy: The mode is normalized into a managed enum instead of being carried as a character or integer flag in the design session.
+// Decision: Keep the managed parser because the enum makes the CLI contract explicit.
 static CornerRefinementParameterMode ParseCornerRefinementMode(string raw)
 {
     return raw.ToUpperInvariant() switch
@@ -3626,6 +3815,9 @@ static CornerRefinementParameterMode ParseCornerRefinementMode(string raw)
     };
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: CADD parameter-mode lineage.
+// Difference from legacy: The helper offers tolerant probe-style parsing so the CLI can disambiguate between optional mode and point-count arguments.
+// Decision: Keep the managed parser because this ambiguity resolution is specific to the headless command surface.
 static bool TryParseCornerRefinementMode(string raw, out CornerRefinementParameterMode mode)
 {
     switch (raw.ToUpperInvariant())
@@ -3647,6 +3839,9 @@ static bool TryParseCornerRefinementMode(string raw, out CornerRefinementParamet
     }
 }
 
+// Legacy mapping: f_xfoil/src/xgdes.f :: scale-origin command lineage.
+// Difference from legacy: The origin choice is normalized into a managed enum instead of being interpreted from interactive prompt state.
+// Decision: Keep the managed parser because it makes scale-command inputs explicit and type-safe.
 static GeometryScaleOrigin ParseScaleOrigin(string raw)
 {
     return raw.ToUpperInvariant() switch
@@ -3658,6 +3853,9 @@ static GeometryScaleOrigin ParseScaleOrigin(string raw)
     };
 }
 
+// Legacy mapping: none; CSV escaping is managed-only export infrastructure.
+// Difference from legacy: The helper emits RFC-style escaped fields for modern CSV consumers instead of relying on legacy free-form text output.
+// Decision: Keep the managed helper because stable CSV export is an intentional repository feature.
 static string EscapeCsv(string value)
 {
     if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))

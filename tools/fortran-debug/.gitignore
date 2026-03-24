@@ -1,0 +1,28 @@
+# Generated managed/debug capture trees
+/agents/
+/csharp/
+
+# Generated build outputs
+/build*/
+
+# Generated top-level trace and dump outputs
+/*.jsonl
+/csharp_dump.txt
+/reference_dump.txt
+/trace_counter.txt
+
+# Generated matrix reports
+/micro-rig-matrix/[0-9]*/
+/micro-rig-matrix/latest.json
+/micro-rig-matrix/latest.md
+
+# Generated ad hoc and sweep reference captures
+/reference/harness_recipe_*/
+/reference/live_compare_smoke_*/
+/reference/main_adhoc_*/
+/reference/micro_rig_matrix_*/
+/reference/sweep_*/
+
+# Scratch workspaces
+/.tmp-*/
+/isolated/

@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xbl.f :: per-station XI/UEDG state arrays
+// Role in port: Managed DTO for one boundary-layer station location and primary edge-velocity data.
+// Differences: Classic XFoil stores station values in parallel REAL arrays, while the managed port uses an explicit object per station.
+// Decision: Keep the managed DTO because it improves readability and result transport.
 using XFoil.Core.Models;
 
 namespace XFoil.Solver.Models;

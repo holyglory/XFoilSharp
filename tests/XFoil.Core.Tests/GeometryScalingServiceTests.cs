@@ -2,11 +2,20 @@ using XFoil.Core.Models;
 using XFoil.Design.Models;
 using XFoil.Design.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xgdes.f :: SCAL
+// Secondary legacy source: f_xfoil/src/geom.f
+// Role in port: Verifies the managed geometry-scaling service derived from the legacy scale command.
+// Differences: The managed API makes origin selection explicit and returns structured metadata instead of mutating the active geometry in the editor.
+// Decision: Keep the managed service shape because it cleanly expresses the same scaling behavior.
 namespace XFoil.Core.Tests;
 
 public sealed class GeometryScalingServiceTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f :: SCAL about leading edge.
+    // Difference from legacy: The origin point is exposed explicitly in the managed result rather than inferred from editor state.
+    // Decision: Keep the managed result contract because it makes the preserved scaling reference unambiguous.
     public void Scale_AboutLeadingEdge_PreservesLeadingEdgeAndScalesTrailingEdge()
     {
         var service = new GeometryScalingService();
@@ -22,6 +31,9 @@ public sealed class GeometryScalingServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f :: SCAL about trailing edge.
+    // Difference from legacy: The managed test asserts midpoint preservation directly instead of checking the transformed contour interactively.
+    // Decision: Keep the managed invariant because it is the clearest regression for this scaling mode.
     public void Scale_AboutTrailingEdge_PreservesTrailingEdgeMidpoint()
     {
         var service = new GeometryScalingService();
@@ -37,6 +49,9 @@ public sealed class GeometryScalingServiceTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Supplying an arbitrary explicit origin is a managed API refinement over the legacy scale command.
+    // Decision: Keep this managed improvement because it extends the scaling utility without replacing the preserved legacy modes.
     public void Scale_AboutPoint_UsesSuppliedOrigin()
     {
         var service = new GeometryScalingService();

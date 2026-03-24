@@ -2,11 +2,20 @@ using XFoil.Core.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xbl.f initial boundary-layer state setup
+// Secondary legacy source: f_xfoil/src/xblsys.f laminar/wake seed assembly
+// Role in port: Verifies the managed viscous initial-state estimator derived from the legacy boundary-layer initialization workflow.
+// Differences: The test inspects structured branch/station objects instead of the mutable legacy state arrays.
+// Decision: Keep the managed state-object tests because they expose the same initialization invariants more clearly.
 namespace XFoil.Core.Tests;
 
 public sealed class ViscousInitialStateTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f initial surface branch setup.
+    // Difference from legacy: The managed test asserts physical positivity on explicit station objects rather than on legacy work arrays.
+    // Decision: Keep the managed invariant because it is the clearest regression for initial surface-state construction.
     public void ViscousInitialState_ProducesPositiveThicknessOnSurfaceBranches()
     {
         var generator = new NacaAirfoilGenerator();
@@ -32,6 +41,9 @@ public sealed class ViscousInitialStateTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f wake initialization path.
+    // Difference from legacy: Wake-gap and thickness continuity are checked through immutable managed results instead of internal legacy buffers.
+    // Decision: Keep the managed wake-state regression because it documents the same initialization guarantees at the public API.
     public void ViscousInitialState_WakeStartsFromFiniteThicknessAndKeepsWakeGap()
     {
         var generator = new NacaAirfoilGenerator();

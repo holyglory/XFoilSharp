@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xoper.f :: MRCHUE seed-station lineage
+// Role in port: Managed DTO for one seed station before the full viscous state is solved.
+// Differences: Legacy XFoil keeps the same information in seed arrays, while the managed port packages it into an immutable point object.
+// Decision: Keep the managed DTO because it simplifies seed tracing and testing.
 using XFoil.Core.Models;
 
 namespace XFoil.Solver.Models;

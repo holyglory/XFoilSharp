@@ -5,6 +5,12 @@ using Xunit;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f :: ASEQ, CSEQ, Type-3 Reynolds sweep workflow
+// Secondary legacy source: viscous operating-point solves in xbl/xblsys
+// Role in port: Verifies the managed polar sweep runner that batches legacy-derived operating-point solves into alpha, lift, and Reynolds sweeps.
+// Differences: The managed runner exposes deterministic list-returning APIs instead of the legacy interactive sweep commands and accumulated plot state.
+// Decision: Keep the managed sweep orchestration because it preserves the same workflow semantics with a clearer programmatic surface.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -26,6 +32,8 @@ public class PolarSweepRunnerTests
     /// All points should produce valid CL, CD, CM values.
     /// </summary>
     [Fact]
+    // Legacy mapping: xfoil alpha sweep (ASEQ).
+    // Difference from legacy: The test inspects a managed result list rather than the legacy sweep tables. Decision: Keep the managed regression because it protects the batched sweep contract of the port.
     public void SweepAlpha_Naca0012_AllPointsProduceCLCDCM()
     {
         var settings = CreateSettings(reynoldsNumber: 1_000_000);
@@ -53,6 +61,8 @@ public class PolarSweepRunnerTests
     /// CL should increase roughly linearly with alpha for NACA 0012 at moderate angles.
     /// </summary>
     [Fact]
+    // Legacy mapping: ASEQ aerodynamic lift trend.
+    // Difference from legacy: The managed test checks monotonic CL behavior directly on returned sweep points. Decision: Keep the managed trend check because it is the clearest regression for sweep ordering.
     public void SweepAlpha_Naca0012_CLIncreasesWithAlpha()
     {
         var settings = CreateSettings(reynoldsNumber: 1_000_000);
@@ -79,6 +89,8 @@ public class PolarSweepRunnerTests
     /// CD should be positive at every point and have minimum near alpha=0 for NACA 0012.
     /// </summary>
     [Fact]
+    // Legacy mapping: ASEQ drag trend near zero incidence.
+    // Difference from legacy: The managed suite evaluates drag positivity and minimum behavior on typed sweep points instead of plotted polars. Decision: Keep the managed regression because it documents the expected sweep trend explicitly.
     public void SweepAlpha_Naca0012_CDPositiveWithMinimumNearZero()
     {
         var settings = CreateSettings(reynoldsNumber: 1_000_000);
@@ -99,6 +111,8 @@ public class PolarSweepRunnerTests
     /// All converged points should have physically reasonable CD range.
     /// </summary>
     [Fact]
+    // Legacy mapping: ASEQ converged-point drag range.
+    // Difference from legacy: The port records convergence and drag on explicit result objects rather than legacy interactive buffers. Decision: Keep the managed bounded-output regression because it protects sweep usability.
     public void SweepAlpha_Naca0012_ConvergedPointsCDInRange()
     {
         var settings = CreateSettings(reynoldsNumber: 1_000_000);
@@ -129,6 +143,8 @@ public class PolarSweepRunnerTests
     /// Should produce results at each CL with alpha increasing with CL.
     /// </summary>
     [Fact]
+    // Legacy mapping: xfoil lift sweep (CL / CSEQ).
+    // Difference from legacy: The managed runner exposes solved-alpha results directly instead of accumulating them inside the command loop. Decision: Keep the managed regression because it preserves the same lift-sweep semantics programmatically.
     public void SweepCL_Naca2412_AlphaIncreasesWithCL()
     {
         var settings = CreateSettings(reynoldsNumber: 3_000_000);
@@ -158,6 +174,8 @@ public class PolarSweepRunnerTests
     /// CL sweep should produce physically reasonable CD at each point.
     /// </summary>
     [Fact]
+    // Legacy mapping: CSEQ drag trend for cambered section.
+    // Difference from legacy: Drag reasonableness is checked on managed sweep results rather than plotted legacy polars. Decision: Keep the managed regression because it clearly constrains the batched sweep output.
     public void SweepCL_Naca2412_CDPhysicallyReasonable()
     {
         var settings = CreateSettings(reynoldsNumber: 3_000_000);
@@ -189,6 +207,8 @@ public class PolarSweepRunnerTests
     /// (verifies determinism and warm-start correctness).
     /// </summary>
     [Fact]
+    // Legacy mapping: sweep warm-start reuse in legacy operating-point sequences.
+    // Difference from legacy: The managed runner exposes warm-start behavior as repeatable deterministic API output. Decision: Keep the managed comparison because it validates an important orchestration detail.
     public void SweepAlpha_WarmStart_SecondRunProducesSameResults()
     {
         var settings = CreateSettings(reynoldsNumber: 1_000_000);
@@ -220,6 +240,8 @@ public class PolarSweepRunnerTests
     /// using the Newton solver path.
     /// </summary>
     [Fact]
+    // Legacy mapping: single viscous operating-point solve.
+    // Difference from legacy: The test checks the managed runner/service integration rather than the interactive OPER command path. Decision: Keep the managed regression because it protects the public analysis facade.
     public void AnalyzeViscous_Naca0012_ReturnsViscousResult()
     {
         var service = new AirfoilAnalysisService();
@@ -238,6 +260,8 @@ public class PolarSweepRunnerTests
     /// AirfoilAnalysisService.SweepViscousAlpha should produce a Type 1 polar.
     /// </summary>
     [Fact]
+    // Legacy mapping: viscous alpha sweep orchestration.
+    // Difference from legacy: Multiple operating points are returned as managed objects instead of accumulated into legacy session state. Decision: Keep the managed sweep regression because it documents the batched API.
     public void SweepViscousAlpha_Naca0012_ProducesMultiplePoints()
     {
         var service = new AirfoilAnalysisService();
@@ -260,6 +284,8 @@ public class PolarSweepRunnerTests
     /// not be importable.
     /// </summary>
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Surrogate-file removal is a managed project policy check with no direct Fortran analogue. Decision: Keep the managed-only test because it guards repository/runtime behavior specific to the port.
     public void SurrogateFilesDeleted_OldPipelineNotAvailable()
     {
         // If this test compiles, it means the old surrogate types no longer exist
@@ -274,6 +300,8 @@ public class PolarSweepRunnerTests
     /// Existing inviscid tests should not be affected by the viscous wiring changes.
     /// </summary>
     [Fact]
+    // Legacy mapping: inviscid analysis path remains available alongside viscous sweep wiring.
+    // Difference from legacy: This test validates the managed service composition after refactoring rather than a legacy command workflow. Decision: Keep the managed regression because it protects the public facade contract.
     public void AnalyzeInviscid_StillWorks_AfterViscousWiring()
     {
         var service = new AirfoilAnalysisService();

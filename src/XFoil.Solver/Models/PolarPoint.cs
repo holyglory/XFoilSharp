@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xoper.f :: PACC/PWRT operating-point storage
+// Role in port: Managed DTO for one inviscid polar point.
+// Differences: Legacy XFoil accumulates the same values in polar arrays and save buffers, while the managed port uses an immutable object per point.
+// Decision: Keep the managed DTO because it is clearer for sweeps, exports, and tests.
 namespace XFoil.Solver.Models;
 
 public sealed class PolarPoint

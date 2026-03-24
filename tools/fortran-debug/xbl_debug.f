@@ -34,6 +34,12 @@ C-------------------------------------------------
       REAL ULE1_M(2*IVX), ULE2_M(2*IVX)
       REAL UTE1_M(2*IVX), UTE2_M(2*IVX)
       REAL MA_CLMR, MSQ_CLMR, MDI
+      CHARACTER*256 TRLINE
+      CHARACTER*8 XSIBITS, UEIBITS, THIBITS, DSIBITS, MDIBITS
+      CHARACTER*8 UEMBITS, MASSBITS, CONTRBITS
+C
+C---- structured trace
+      CALL TRACE_ENTER('SETBL')
 C
 C---- set the CL used to define Mach, Reynolds numbers
       IF(LALFA) THEN
@@ -92,6 +98,14 @@ C
 C
 C---- march BL with current Ue and Ds to establish transition
       CALL MRCHDU
+C
+C---- DEBUG: log full wake geometry for parity diagnostics
+      DO 4 IW=1, NW
+        I = N + IW
+        WRITE(50,9907) IW, X(I), Y(I), NX(I), NY(I), APANEL(I)
+        CALL TRACE_WAKE_NODE('SETBL', IW, X(I), Y(I), NX(I), NY(I),
+     &                       APANEL(I))
+    4 CONTINUE
 C
       DO 5 IS=1, 2
         DO 6 IBL=2, NBL(IS)
@@ -201,7 +215,27 @@ C
           JV = ISYS(JBL,JS)
           U2_M(JV) = -VTI(IBL,IS)*VTI(JBL,JS)*DIJ(I,J)
           D2_M(JV) = D2_U2*U2_M(JV)
-  310   CONTINUE
+          U2CONTR = U2_M(JV)*MASS(JBL,JS)
+          IF(IS.EQ.1 .AND. IBL.EQ.2 .AND. JBL.LE.IBLTE(JS)) THEN
+            CALL TRACE_REALHEX(U2_M(JV), UEMBITS)
+            CALL TRACE_REALHEX(MASS(JBL,JS), MASSBITS)
+            CALL TRACE_REALHEX(U2CONTR, CONTRBITS)
+            WRITE(50,9911) IS, IBL, JS, JBL, J,
+     &                      U2_M(JV), UEMBITS,
+     &                      MASS(JBL,JS), MASSBITS,
+     &                      U2CONTR, CONTRBITS
+          ENDIF
+          IF(IS.EQ.1 .AND. IBL.EQ.2 .AND. JS.EQ.2
+     &       .AND. JBL.GT.IBLTE(JS) .AND. JBL.LE.IBLTE(JS)+5) THEN
+            CALL TRACE_REALHEX(U2_M(JV), UEMBITS)
+            CALL TRACE_REALHEX(MASS(JBL,JS), MASSBITS)
+            CALL TRACE_REALHEX(U2CONTR, CONTRBITS)
+            WRITE(50,9906) IS, IBL, JS, JBL, J,
+     &                      U2_M(JV), UEMBITS,
+     &                      MASS(JBL,JS), MASSBITS,
+     &                      U2CONTR, CONTRBITS
+          ENDIF
+ 310   CONTINUE
    30 CONTINUE
       D2_M(IV) = D2_M(IV) + D2_M2
 C
@@ -214,6 +248,8 @@ C---- "forced" changes due to mismatch between UEDG and USAV=UINV+dij*MASS
 C
 C---- DEBUG: log forced change
       WRITE(50,*) 'DUE2=', DUE2, ' DDS2=', DDS2
+      WRITE(TRLINE,9908) DUE2, DDS2
+      CALL TRACE_TEXT('SETBL', 'forced_change', TRLINE)
 C
       CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
       CALL BLKIN
@@ -268,7 +304,9 @@ C----- "forced" changes from  UEDG --- USAV=UINV+dij*MASS  mismatch
 C
       ELSE
 C
-       CALL BLSYS
+       TRACE_SIDE = IS
+       TRACE_STATION = IBL
+       CALL BLSYS(1)
 C
       ENDIF
 C
@@ -322,6 +360,13 @@ C---- set XI sensitivities wrt LE Ue changes
        XI_ULE2 =  SST_GP
       ENDIF
 C
+      CALL TRACE_SETBL_FORCING_INPUTS('SETBL', IS, IBL, IV,
+     & UEDG(IBL,IS), USAV(IBL,IS), D2_U2, DUE2, DDS2,
+     & UEDG(2,1), USAV(2,1), DULE1,
+     & UEDG(2,2), USAV(2,2), DULE2,
+     & SST_GO, SST_GP, XI_ULE1, XI_ULE2,
+     & XI_ULE1*DULE1 + XI_ULE2*DULE2)
+C
 C---- stuff BL system coefficients into main Jacobian matrix
 C
       DO 40 JV=1, NSYS
@@ -352,6 +397,17 @@ C
      &   + (VS2(1,4)*DUE2 + VS2(1,3)*DDS2)
      &   + (VS1(1,5) + VS2(1,5) + VSX(1))
      &    *(XI_ULE1*DULE1 + XI_ULE2*DULE2)
+      CALL TRACE_SETBL_VDEL_TERMS('SETBL', IS, IBL, IV, 1,
+     & VSREZ(1),
+     & VS1(1,4), DUE1, VS1(1,4)*DUE1,
+     & VS1(1,3), DDS1, VS1(1,3)*DDS1,
+     & VS2(1,4), DUE2, VS2(1,4)*DUE2,
+     & VS2(1,3), DDS2, VS2(1,3)*DDS2,
+     & VS1(1,5), VS2(1,5), VSX(1),
+     & XI_ULE1*DULE1 + XI_ULE2*DULE2,
+     & (VS1(1,5) + VS2(1,5))*(XI_ULE1*DULE1 + XI_ULE2*DULE2),
+     & VSX(1)*(XI_ULE1*DULE1 + XI_ULE2*DULE2),
+     & VDEL(1,1,IV))
 C
 C
       DO 50 JV=1, NSYS
@@ -382,6 +438,17 @@ C
      &   + (VS2(2,4)*DUE2 + VS2(2,3)*DDS2)
      &   + (VS1(2,5) + VS2(2,5) + VSX(2))
      &    *(XI_ULE1*DULE1 + XI_ULE2*DULE2)
+      CALL TRACE_SETBL_VDEL_TERMS('SETBL', IS, IBL, IV, 2,
+     & VSREZ(2),
+     & VS1(2,4), DUE1, VS1(2,4)*DUE1,
+     & VS1(2,3), DDS1, VS1(2,3)*DDS1,
+     & VS2(2,4), DUE2, VS2(2,4)*DUE2,
+     & VS2(2,3), DDS2, VS2(2,3)*DDS2,
+     & VS1(2,5), VS2(2,5), VSX(2),
+     & XI_ULE1*DULE1 + XI_ULE2*DULE2,
+     & (VS1(2,5) + VS2(2,5))*(XI_ULE1*DULE1 + XI_ULE2*DULE2),
+     & VSX(2)*(XI_ULE1*DULE1 + XI_ULE2*DULE2),
+     & VDEL(2,1,IV))
 C
 C
       DO 60 JV=1, NSYS
@@ -412,26 +479,104 @@ C
      &   + (VS2(3,4)*DUE2 + VS2(3,3)*DDS2)
      &   + (VS1(3,5) + VS2(3,5) + VSX(3))
      &    *(XI_ULE1*DULE1 + XI_ULE2*DULE2)
+      CALL TRACE_SETBL_VDEL_TERMS('SETBL', IS, IBL, IV, 3,
+     & VSREZ(3),
+     & VS1(3,4), DUE1, VS1(3,4)*DUE1,
+     & VS1(3,3), DDS1, VS1(3,3)*DDS1,
+     & VS2(3,4), DUE2, VS2(3,4)*DUE2,
+     & VS2(3,3), DDS2, VS2(3,3)*DDS2,
+     & VS1(3,5), VS2(3,5), VSX(3),
+     & XI_ULE1*DULE1 + XI_ULE2*DULE2,
+     & (VS1(3,5) + VS2(3,5))*(XI_ULE1*DULE1 + XI_ULE2*DULE2),
+     & VSX(3)*(XI_ULE1*DULE1 + XI_ULE2*DULE2),
+     & VDEL(3,1,IV))
 C
 C---- DEBUG: dump per-station BL system coefficients
       WRITE(50,9900) IS, IBL, IV
-      WRITE(50,9901) 'BL_STATE', XSI, UEI, THI, DSI, MDI
+      WRITE(TRLINE,9900) IS, IBL, IV
+      CALL TRACE_TEXT('SETBL', 'station', TRLINE)
+      CALL TRACE_REALHEX(XSI, XSIBITS)
+      CALL TRACE_REALHEX(UEI, UEIBITS)
+      CALL TRACE_REALHEX(THI, THIBITS)
+      CALL TRACE_REALHEX(DSI, DSIBITS)
+      CALL TRACE_REALHEX(MDI, MDIBITS)
+      WRITE(50,9901) 'BL_STATE',
+     &                XSI, XSIBITS, UEI, UEIBITS, THI, THIBITS,
+     &                DSI, DSIBITS, MDI, MDIBITS
+      WRITE(TRLINE,9901) 'BL_STATE',
+     &                    XSI, XSIBITS, UEI, UEIBITS, THI, THIBITS,
+     &                    DSI, DSIBITS, MDI, MDIBITS
+      CALL TRACE_TEXT('SETBL', 'bl_state', TRLINE)
+      CALL TRACE_STATION_STATE('SETBL', IS, IBL, IV,
+     &                         XSI, UEI, THI, DSI, MDI,
+     &                         DUE2, DDS2)
       WRITE(50,9902) 'VA_ROW1', VA(1,1,IV), VA(1,2,IV)
+      WRITE(TRLINE,9902) 'VA_ROW1', VA(1,1,IV), VA(1,2,IV)
+      CALL TRACE_TEXT('SETBL', 'va_row1', TRLINE)
+      CALL TRACE_ARRAY2('SETBL', 'va_row1', VA(1,1,IV), VA(1,2,IV))
       WRITE(50,9902) 'VA_ROW2', VA(2,1,IV), VA(2,2,IV)
+      WRITE(TRLINE,9902) 'VA_ROW2', VA(2,1,IV), VA(2,2,IV)
+      CALL TRACE_TEXT('SETBL', 'va_row2', TRLINE)
+      CALL TRACE_ARRAY2('SETBL', 'va_row2', VA(2,1,IV), VA(2,2,IV))
       WRITE(50,9902) 'VA_ROW3', VA(3,1,IV), VA(3,2,IV)
+      WRITE(TRLINE,9902) 'VA_ROW3', VA(3,1,IV), VA(3,2,IV)
+      CALL TRACE_TEXT('SETBL', 'va_row3', TRLINE)
+      CALL TRACE_ARRAY2('SETBL', 'va_row3', VA(3,1,IV), VA(3,2,IV))
       WRITE(50,9902) 'VB_ROW1', VB(1,1,IV), VB(1,2,IV)
+      WRITE(TRLINE,9902) 'VB_ROW1', VB(1,1,IV), VB(1,2,IV)
+      CALL TRACE_TEXT('SETBL', 'vb_row1', TRLINE)
+      CALL TRACE_ARRAY2('SETBL', 'vb_row1', VB(1,1,IV), VB(1,2,IV))
       WRITE(50,9902) 'VB_ROW2', VB(2,1,IV), VB(2,2,IV)
+      WRITE(TRLINE,9902) 'VB_ROW2', VB(2,1,IV), VB(2,2,IV)
+      CALL TRACE_TEXT('SETBL', 'vb_row2', TRLINE)
+      CALL TRACE_ARRAY2('SETBL', 'vb_row2', VB(2,1,IV), VB(2,2,IV))
       WRITE(50,9902) 'VB_ROW3', VB(3,1,IV), VB(3,2,IV)
-      WRITE(50,9903) 'VDEL_R', VDEL(1,1,IV),VDEL(2,1,IV),VDEL(3,1,IV)
-      WRITE(50,9903) 'VDEL_S', VDEL(1,2,IV),VDEL(2,2,IV),VDEL(3,2,IV)
+      WRITE(TRLINE,9902) 'VB_ROW3', VB(3,1,IV), VB(3,2,IV)
+      CALL TRACE_TEXT('SETBL', 'vb_row3', TRLINE)
+      CALL TRACE_ARRAY2('SETBL', 'vb_row3', VB(3,1,IV), VB(3,2,IV))
+      WRITE(50,9903) 'VDEL_R', VDEL(1,1,IV),
+     &                VDEL(2,1,IV), VDEL(3,1,IV)
+      WRITE(TRLINE,9903) 'VDEL_R', VDEL(1,1,IV),
+     &                    VDEL(2,1,IV), VDEL(3,1,IV)
+      CALL TRACE_TEXT('SETBL', 'vdel_r', TRLINE)
+      CALL TRACE_ARRAY3('SETBL', 'vdel_r',
+     &                  VDEL(1,1,IV), VDEL(2,1,IV), VDEL(3,1,IV))
+      WRITE(50,9903) 'VDEL_S', VDEL(1,2,IV),
+     &                VDEL(2,2,IV), VDEL(3,2,IV)
+      WRITE(TRLINE,9903) 'VDEL_S', VDEL(1,2,IV),
+     &                    VDEL(2,2,IV), VDEL(3,2,IV)
+      CALL TRACE_TEXT('SETBL', 'vdel_s', TRLINE)
+      CALL TRACE_ARRAY3('SETBL', 'vdel_s',
+     &                  VDEL(1,2,IV), VDEL(2,2,IV), VDEL(3,2,IV))
       WRITE(50,9904) 'VSREZ', VSREZ(1), VSREZ(2), VSREZ(3)
+      WRITE(TRLINE,9904) 'VSREZ', VSREZ(1), VSREZ(2), VSREZ(3)
+      CALL TRACE_TEXT('SETBL', 'vsrez', TRLINE)
+      CALL TRACE_ARRAY3('SETBL', 'vsrez',
+     &                  VSREZ(1), VSREZ(2), VSREZ(3))
       WRITE(50,9904) 'VS2_14', VS2(1,4), VS2(2,4), VS2(3,4)
+      WRITE(TRLINE,9904) 'VS2_14', VS2(1,4), VS2(2,4), VS2(3,4)
+      CALL TRACE_TEXT('SETBL', 'vs2_14', TRLINE)
+      CALL TRACE_ARRAY3('SETBL', 'vs2_14',
+     &                  VS2(1,4), VS2(2,4), VS2(3,4))
  9900 FORMAT('STATION IS=',I2,' IBL=',I4,' IV=',I4)
- 9901 FORMAT(A,' x=',E15.8,' Ue=',E15.8,' th=',E15.8,
-     &       ' ds=',E15.8,' m=',E15.8)
+ 9901 FORMAT(A,' x=',E15.8,' [',A8,']',' Ue=',E15.8,' [',A8,']',
+     &       ' th=',E15.8,' [',A8,']',' ds=',E15.8,' [',A8,']',
+     &       ' m=',E15.8,' [',A8,']')
  9902 FORMAT(A,2E15.8)
  9903 FORMAT(A,3E15.8)
  9904 FORMAT(A,3E15.8)
+ 9908 FORMAT('DUE2=',1PE15.8,' DDS2=',1PE15.8)
+ 9906 FORMAT('USAV_WAKE_TERM IS=',I2,' IBL=',I4,' JS=',I2,' JBL=',I4,
+     &       ' J=',I4,' UE_M=',1PE15.8,' [',A8,']',
+     &       ' MASS=',1PE15.8,' [',A8,']',
+     &       ' CONTR=',1PE15.8,' [',A8,']')
+ 9911 FORMAT('USAV_AIR_TERM IS=',I2,' IBL=',I4,' JS=',I2,' JBL=',I4,
+     &       ' J=',I4,' UE_M=',1PE15.8,' [',A8,']',
+     &       ' MASS=',1PE15.8,' [',A8,']',
+     &       ' CONTR=',1PE15.8,' [',A8,']')
+ 9907 FORMAT('WAKE_NODE IW=',I4,' X=',1PE15.8,' Y=',1PE15.8,
+     &       ' NX=',1PE15.8,' NY=',1PE15.8,' APAN=',1PE15.8)
+ 9910 FORMAT('TRANSITION IS=',I2,' IBL=',I4,' XT=',1PE15.8)
 C
 C
       IF(IBL.EQ.IBLTE(IS)+1) THEN
@@ -465,6 +610,8 @@ C------ save transition location
 C
 C------ DEBUG: log transition
         WRITE(50,*) 'TRANSITION IS=', IS, ' IBL=', IBL, ' XT=', XT
+        WRITE(TRLINE,9910) IS, IBL, XT
+        CALL TRACE_TEXT('SETBL', 'transition', TRLINE)
 C
 C------ interpolate airfoil geometry to find transition x/c
 C-      (for user output)
@@ -526,6 +673,7 @@ C
 C---- next airfoil side
  2000 CONTINUE
 C
+      CALL TRACE_EXIT('SETBL')
       RETURN
       END
 
@@ -564,7 +712,10 @@ C----------------------------------------------------
       INCLUDE 'XFOIL.INC'
       INCLUDE 'XBL.INC'
       LOGICAL DIRECT
-      REAL MSQ
+      REAL MSQ, RESNORM
+      CHARACTER*7 SEEDMODE
+C
+      CALL TRACE_ENTER('MRCHUE')
 C
 C---- shape parameters for separation criteria
       HLMAX = 3.8
@@ -653,9 +804,26 @@ C
            DTE = DSTR(IBLTE(1),1) + DSTR(IBLTE(2),2) + ANTE
            CTE = ( CTAU(IBLTE(1),1)*THET(IBLTE(1),1)
      &           + CTAU(IBLTE(2),2)*THET(IBLTE(2),2) ) / TTE
-           CALL TESYS(CTE,TTE,DTE)
+          CALL TESYS(CTE,TTE,DTE)
           ELSE
-           CALL BLSYS
+           TRACE_SIDE = IS
+           TRACE_STATION = IBL
+           CALL BLSYS(2)
+          ENDIF
+C
+          IF(IBL.EQ.ITRAN(IS)) THEN
+           SEEDMODE = 'direct '
+           HTTRACE = 0.0
+           IF(.NOT.DIRECT) THEN
+            SEEDMODE = 'inverse'
+            HTTRACE = HTARG
+           ENDIF
+           CALL TRACE_TRANSITION_SEED_SYSTEM('MRCHUE', IS, IBL, ITBL,
+     &      SEEDMODE, XT, UEI, THI, DSI, AMI, CTI, HK2, HK2_T2,
+     &      HK2_D2, HK2_U2, HTTRACE, VSREZ(1), VSREZ(2), VSREZ(3),
+     &      VS2(1,1), VS2(1,2), VS2(1,3), VS2(1,4),
+     &      VS2(2,1), VS2(2,2), VS2(2,3), VS2(2,4),
+     &      VS2(3,1), VS2(3,2), VS2(3,3), VS2(3,4))
           ENDIF
 C
           IF(DIRECT) THEN
@@ -666,6 +834,14 @@ C--------- try direct mode (set dUe = 0 in currently empty 4th line)
            VS2(4,3) = 0.
            VS2(4,4) = 1.0
            VSREZ(4) = 0.
+           SEEDMODE = 'direct '
+           CALL TRACE_LAMINAR_SEED_SYSTEM('MRCHUE', IS, IBL, ITBL,
+     &      SEEDMODE, UEI, THI, DSI, AMI, CTI, HK2, HK2_T2, HK2_D2,
+     &      HK2_U2, 0.0, VSREZ(1), VSREZ(2), VSREZ(3), VSREZ(4),
+     &      VS2(1,1), VS2(1,2), VS2(1,3), VS2(1,4),
+     &      VS2(2,1), VS2(2,2), VS2(2,3), VS2(2,4),
+     &      VS2(3,1), VS2(3,2), VS2(3,3), VS2(3,4),
+     &      VS2(4,1), VS2(4,2), VS2(4,3), VS2(4,4))
 C
 C--------- solve Newton system for current "2" station
            CALL GAUSS(4,4,VS2,VSREZ,1)
@@ -676,8 +852,34 @@ C--------- determine max changes and underrelax if necessary
            IF(IBL.LT.ITRAN(IS)) DMAX = MAX(DMAX,ABS(VSREZ(1)/10.0))
            IF(IBL.GE.ITRAN(IS)) DMAX = MAX(DMAX,ABS(VSREZ(1)/CTI ))
 C
+           DSHR = VSREZ(1)
+           DTH  = VSREZ(2)
+           DDS  = VSREZ(3)
+           DUE  = VSREZ(4)
+           IF(IBL.LT.ITRAN(IS)) THEN
+            RSHR = ABS(VSREZ(1)/10.0)
+           ELSE
+            RSHR = ABS(VSREZ(1)/CTI)
+           ENDIF
+           RTH = ABS(VSREZ(2)/THI)
+           RDS = ABS(VSREZ(3)/DSI)
+           RUE = 0.0
+C
            RLX = 1.0
            IF(DMAX.GT.0.3) RLX = 0.3/DMAX
+           RESNORM = SQRT(VSREZ(1)*VSREZ(1) + VSREZ(2)*VSREZ(2)
+     &                    + VSREZ(3)*VSREZ(3))
+           SEEDMODE = 'direct '
+           SQSHR = VSREZ(1)*VSREZ(1)
+           SQTH  = VSREZ(2)*VSREZ(2)
+           SQDS  = VSREZ(3)*VSREZ(3)
+           SUMSQ = SQSHR + SQTH + SQDS
+           CALL TRACE_LAMINAR_SEED_STEP_NORM('MRCHUE', IS, IBL, ITBL,
+     &      SEEDMODE, DSHR, DTH, DDS, SQSHR, SQTH, SQDS, SUMSQ,
+     &      RESNORM)
+           CALL TRACE_LAMINAR_SEED_STEP('MRCHUE', IS, IBL, ITBL,
+     &      SEEDMODE, UEI, THI, DSI, AMI, DSHR, DTH, DDS, DUE,
+     &      RSHR, RTH, RDS, RUE, DMAX, RLX, RESNORM)
 C
 C--------- see if direct mode is not applicable
            IF(IBL .NE. IBLTE(IS)+1) THEN
@@ -725,11 +927,14 @@ C----------- turbulent case: relatively fast decrease in Hk downstream
             ENDIF
 C
 C---------- limit specified Hk to something reasonable
+            HTRAW = HTARG
             IF(WAKE) THEN
              HTARG = MAX( HTARG , 1.01 )
             ELSE
              HTARG = MAX( HTARG , HMAX )
             ENDIF
+            CALL TRACE_SEED_INVERSE_TARGET('MRCHUE', IS, IBL, ITBL,
+     &           HK1, X1, X2, T1, XT, HKTEST, HMAX, HTRAW, HTARG)
 C
             WRITE(*,1300) IBL, HTARG
  1300       FORMAT(' MRCHUE: Inverse mode at', I4, '     Hk =', F8.3)
@@ -747,6 +952,14 @@ C-------- inverse mode (force Hk to prescribed value HTARG)
            VS2(4,3) = HK2_D2
            VS2(4,4) = HK2_U2
            VSREZ(4) = HTARG - HK2
+           SEEDMODE = 'inverse'
+           CALL TRACE_LAMINAR_SEED_SYSTEM('MRCHUE', IS, IBL, ITBL,
+     &      SEEDMODE, UEI, THI, DSI, AMI, CTI, HK2, HK2_T2, HK2_D2,
+     &      HK2_U2, HTARG, VSREZ(1), VSREZ(2), VSREZ(3), VSREZ(4),
+     &      VS2(1,1), VS2(1,2), VS2(1,3), VS2(1,4),
+     &      VS2(2,1), VS2(2,2), VS2(2,3), VS2(2,4),
+     &      VS2(3,1), VS2(3,2), VS2(3,3), VS2(3,4),
+     &      VS2(4,1), VS2(4,2), VS2(4,3), VS2(4,4))
 C
            CALL GAUSS(4,4,VS2,VSREZ,1)
 C
@@ -756,8 +969,34 @@ C--------- added Ue clamp   MD  3 Apr 03
      &                 ABS(VSREZ(4)/UEI)  )
            IF(IBL.GE.ITRAN(IS)) DMAX = MAX( DMAX , ABS(VSREZ(1)/CTI))
 C
+           DSHR = VSREZ(1)
+           DTH  = VSREZ(2)
+           DDS  = VSREZ(3)
+           DUE  = VSREZ(4)
+           IF(IBL.GE.ITRAN(IS)) THEN
+            RSHR = ABS(VSREZ(1)/CTI)
+           ELSE
+            RSHR = ABS(VSREZ(1)/10.0)
+           ENDIF
+           RTH = ABS(VSREZ(2)/THI)
+           RDS = ABS(VSREZ(3)/DSI)
+           RUE = ABS(VSREZ(4)/UEI)
+C
            RLX = 1.0
            IF(DMAX.GT.0.3) RLX = 0.3/DMAX
+           RESNORM = SQRT(VSREZ(1)*VSREZ(1) + VSREZ(2)*VSREZ(2)
+     &                    + VSREZ(3)*VSREZ(3))
+           SEEDMODE = 'inverse'
+           SQSHR = VSREZ(1)*VSREZ(1)
+           SQTH  = VSREZ(2)*VSREZ(2)
+           SQDS  = VSREZ(3)*VSREZ(3)
+           SUMSQ = SQSHR + SQTH + SQDS
+           CALL TRACE_LAMINAR_SEED_STEP_NORM('MRCHUE', IS, IBL, ITBL,
+     &      SEEDMODE, DSHR, DTH, DDS, SQSHR, SQTH, SQDS, SUMSQ,
+     &      RESNORM)
+           CALL TRACE_LAMINAR_SEED_STEP('MRCHUE', IS, IBL, ITBL,
+     &      SEEDMODE, UEI, THI, DSI, AMI, DSHR, DTH, DDS, DUE,
+     &      RSHR, RTH, RDS, RUE, DMAX, RLX, RESNORM)
 C
 C--------- update variables
 ccc           IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
@@ -852,6 +1091,8 @@ C------ store primary variables
         CTQ(IBL,IS)  = CQ2
         DELT(IBL,IS) = DE2
         TSTR(IBL,IS) = HS2*T2
+        CALL TRACE_LAMINAR_SEED_FINAL('MRCHUE', IS, IBL, THI, DSI,
+     &   AMI, CTI, MASS(IBL,IS))
 C
 C------ set "1" variables to "2" variables for next streamwise station
         CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
@@ -879,6 +1120,7 @@ C
  1000 CONTINUE
  2000 CONTINUE
 C
+      CALL TRACE_EXIT('MRCHUE')
       RETURN
       END
   
@@ -896,8 +1138,12 @@ C----------------------------------------------------
       INCLUDE 'XFOIL.INC'
       INCLUDE 'XBL.INC'
       REAL VTMP(4,5), VZTMP(4)
-      REAL MSQ
+      REAL MSQ, RESNORM, AMTRACE, CTTRACE
+      LOGICAL LCONV
+      CHARACTER*7 CONMODE
 ccc   REAL MDI
+C
+      CALL TRACE_ENTER('MRCHDU')
 C
       DATA DEPS / 5.0E-6 /
 C
@@ -960,6 +1206,7 @@ C
 C
         IF(IBL.LE.IBLTE(IS)) DSI = MAX(DSI-DSWAKI,1.02000*THI) + DSWAKI
         IF(IBL.GT.IBLTE(IS)) DSI = MAX(DSI-DSWAKI,1.00005*THI) + DSWAKI
+        LCONV = .FALSE.
 C
 C------ Newton iteration loop for current station
         DO 100 ITBL=1, 25
@@ -986,7 +1233,9 @@ C
      &           + CTAU(IBLTE(2),2)*THET(IBLTE(2),2) ) / TTE
            CALL TESYS(CTE,TTE,DTE)
           ELSE
-           CALL BLSYS
+           TRACE_SIDE = IS
+           TRACE_STATION = IBL
+           CALL BLSYS(3)
           ENDIF
 C
 C-------- set stuff at first iteration...
@@ -1028,6 +1277,7 @@ C--------- for similarity station or first wake point, prescribe Ue
            VS2(4,3) = 0.
            VS2(4,4) = U2_UEI
            VSREZ(4) = UEREF - U2
+           CONMODE = 'direct'
 C
           ELSE
 C
@@ -1065,11 +1315,21 @@ C--------- set prescribed Ue-Hk combination
            VS2(4,4) =( HK2_U2 * HKREF  +  SENS/UEREF )*U2_UEI
            VSREZ(4) = -(HKREF**2)*(HK2 / HKREF - 1.0)
      &                     - SENS*(U2  / UEREF - 1.0)
+           CONMODE = 'inverse'
 C
           ENDIF
 C
+          RESNORM = SQRT(VSREZ(1)*VSREZ(1) + VSREZ(2)*VSREZ(2)
+     &                  + VSREZ(3)*VSREZ(3))
+          CALL TRACE_LEGACY_SEED_CONSTRAINT('MRCHDU', IS, IBL, ITBL,
+     &     CONMODE, U2, U2_UEI, HK2, HKREF, UEREF, SENS, SENNEW)
+C
 C-------- solve Newton system for current "2" station
+          CALL TRACE_LEGACY_SEED_SYSTEM('MRCHDU', IS, IBL, ITBL,
+     &     CONMODE, VS2, VSREZ)
           CALL GAUSS(4,4,VS2,VSREZ,1)
+          CALL TRACE_LEGACY_SEED_DELTA('MRCHDU', IS, IBL, ITBL,
+     &     CONMODE, VSREZ)
 C
 C-------- determine max changes and underrelax if necessary
 C-------- (added Ue clamp   MD  3 Apr 03)
@@ -1080,6 +1340,13 @@ C-------- (added Ue clamp   MD  3 Apr 03)
 C
           RLX = 1.0
           IF(DMAX.GT.0.3) RLX = 0.3/DMAX
+C
+          CTTRACE = CTI
+          AMTRACE = AMI
+          IF(IBL.GE.ITRAN(IS)) AMTRACE = 0.0
+          CALL TRACE_LEGACY_SEED_ITERATION('MRCHDU', IS, IBL, ITBL,
+     &     WAKE, TURB, TRAN, DMAX, RLX, UEI, THI, DSI, CTTRACE,
+     &     AMTRACE, RESNORM)
 C
 C-------- update as usual
           IF(IBL.LT.ITRAN(IS)) AMI = AMI + RLX*VSREZ(1)
@@ -1104,7 +1371,10 @@ C
           CALL DSLIM(DSW,THI,UEI,MSQ,HKLIM)
           DSI = DSW + DSWAKI
 C
-          IF(DMAX.LE.DEPS) GO TO 110
+          IF(DMAX.LE.DEPS) THEN
+           LCONV = .TRUE.
+           GO TO 110
+          ENDIF
 C
   100   CONTINUE
 C
@@ -1175,6 +1445,13 @@ C------ store primary variables
         DELT(IBL,IS) = DE2
         TSTR(IBL,IS) = HS2*T2
 C
+        CTTRACE = CTI
+        AMTRACE = AMI
+        IF(IBL.GE.ITRAN(IS)) AMTRACE = 0.0
+        CALL TRACE_LEGACY_SEED_FINAL('MRCHDU', IS, IBL, WAKE, TURB,
+     &   TRAN, LCONV, UEI, THI, DSI, CTTRACE, AMTRACE, ITRAN(IS),
+     &   MASS(IBL,IS))
+C
 C------ set "1" variables to "2" variables for next streamwise station
         CALL BLPRV(XSI,AMI,CTI,THI,DSI,DSWAKI,UEI)
         CALL BLKIN
@@ -1198,6 +1475,7 @@ C
 C
  2000 CONTINUE
 C
+      CALL TRACE_EXIT('MRCHDU')
       RETURN
       END
   
@@ -1209,8 +1487,11 @@ C-----------------------------------------------------
       INCLUDE 'XFOIL.INC'
       INCLUDE 'XBL.INC'
 C
+      CALL TRACE_ENTER('XIFSET')
+C
       IF(XSTRIP(IS).GE.1.0) THEN
        XIFORC = XSSI(IBLTE(IS),IS)
+       CALL TRACE_EXIT('XIFSET')
        RETURN
       ENDIF
 C
@@ -1253,6 +1534,7 @@ C
        XIFORC = XSSI(IBLTE(IS),IS)
       ENDIF
 C
+      CALL TRACE_EXIT('XIFSET')
       RETURN
       END
 
@@ -1276,6 +1558,9 @@ C------------------------------------------------------------------
       EQUIVALENCE (VA(1,1,IVX), U_AC(1,1)) ,
      &            (VB(1,1,IVX), Q_AC(1)  )
       REAL MSQ
+      CHARACTER*256 TRLINE
+C
+      CALL TRACE_ENTER('UPDATE')
 C
 C---- max allowable alpha changes per iteration
       DALMAX =  0.5*DTOR
@@ -1410,6 +1695,9 @@ C
 C---- DEBUG: log RLX computation
       WRITE(50,*) 'UPDATE_RLX RLX=', RLX, ' DAC=', DAC,
      &            ' CLNEW=', CLNEW
+      WRITE(TRLINE,9910) RLX, DAC, CLNEW
+      CALL TRACE_TEXT('UPDATE', 'relaxation', TRLINE)
+      CALL TRACE_RELAXATION_FACTOR('UPDATE', RLX, DAC, CLNEW)
 C
       RMSBL = 0.
       RMXBL = 0.
@@ -1435,6 +1723,9 @@ C-------- DEBUG: log Newton deltas for first 5 stations per side
           IF(IBL.LE.6) THEN
             WRITE(50,9905) 'UPDATE', IS, IBL, IV,
      &                     DCTAU, DTHET, DMASS, DUEDG
+            WRITE(TRLINE,9905) 'UPDATE', IS, IBL, IV,
+     &                     DCTAU, DTHET, DMASS, DUEDG
+            CALL TRACE_TEXT('UPDATE', 'station_delta', TRLINE)
  9905       FORMAT(A,' IS=',I2,' IBL=',I4,' IV=',I4,
      &             ' dC=',E15.8,' dT=',E15.8,
      &             ' dM=',E15.8,' dU=',E15.8)
@@ -1551,6 +1842,10 @@ C
 C
 C-------- set new mass defect (nonlinear update)
           MASS(IBL,IS) = DSTR(IBL,IS) * UEDG(IBL,IS)
+          CALL TRACE_STATION_UPDATE('UPDATE', IS, IBL, IV,
+     &                              UEDG(IBL,IS), CTAU(IBL,IS),
+     &                              THET(IBL,IS), DSTR(IBL,IS),
+     &                              MASS(IBL,IS))
 C
    50   CONTINUE
 C
@@ -1578,7 +1873,9 @@ C---- equate upper wake arrays to lower wake arrays
         TSTR(IBLTE(1)+KBL,1) = TSTR(IBLTE(2)+KBL,2)
     6 CONTINUE
 C
+      CALL TRACE_EXIT('UPDATE')
       RETURN
+ 9910 FORMAT('RLX=',1PE15.8,' DAC=',1PE15.8,' CLNEW=',1PE15.8)
       END
 
 
@@ -1617,4 +1914,3 @@ C
 C
       RETURN
       END
-

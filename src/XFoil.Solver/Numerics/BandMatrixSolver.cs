@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xsolve.f :: BLSOLV
+// Role in port: Managed alternative linear solver that reuses the viscous Newton system but solves it through an explicit tridiagonal reduction.
+// Differences: Classic XFoil does not reformulate the viscous Newton solve through this separate band-style helper; this is a managed experimental solver path alongside the direct BLSOLV replay.
+// Decision: Keep the managed alternative because it is useful for comparison and debugging, but it is not the parity reference path.
 using System;
 using XFoil.Solver.Models;
 
@@ -18,6 +24,9 @@ public static class BandMatrixSolver
     /// Arrays are indexed by global system line iv directly.
     /// </summary>
     /// <param name="system">The Newton system to solve. VDEL is overwritten with the solution.</param>
+    // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV system solve lineage.
+    // Difference from legacy: The helper extracts per-equation tridiagonal systems and applies a Thomas solve instead of replaying the original block-tridiagonal elimination directly.
+    // Decision: Keep the managed alternative because it is a debugging/comparison tool rather than the legacy replay path.
     public static void Solve(ViscousNewtonSystem system)
     {
         int nsys = system.NSYS;

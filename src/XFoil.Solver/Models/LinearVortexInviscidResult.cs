@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/orrs/src :: linear-vorticity formulation lineage, f_xfoil/src/xpanel.f :: inviscid coefficient output lineage
+// Role in port: Managed immutable result for the alternative linear-vorticity inviscid solver.
+// Differences: This solver/result shape is a managed extension beyond the classic XFoil Hess-Smith path, so the object has no one-to-one legacy runtime counterpart.
+// Decision: Keep the managed result object because it is the right contract for the alternative solver implementation.
 namespace XFoil.Solver.Models;
 
 /// <summary>

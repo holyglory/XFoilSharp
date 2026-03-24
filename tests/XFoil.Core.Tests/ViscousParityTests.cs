@@ -1,9 +1,16 @@
 using System;
 using System.Collections.Generic;
 using Xunit;
+using XFoil.Core.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f viscous operating-point workflow
+// Secondary legacy source: f_xfoil/src/xbl.f, xblsys.f, xblsolv.f and authoritative Fortran XFoil 6.97 reference runs
+// Role in port: Verifies single-point viscous solver parity against frozen Fortran XFoil reference values across representative cases.
+// Differences: The managed parity harness compares typed results, drag decomposition, and transition metadata against embedded authoritative references instead of reading interactive legacy output.
+// Decision: Keep the managed parity suite because it is the main executable contract between the port and legacy viscous behavior.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -37,6 +44,7 @@ namespace XFoil.Core.Tests;
 /// </summary>
 public class ViscousParityTests
 {
+    private const int ClassicXFoilNacaPointCount = 239;
     // ================================================================
     // XFoil 6.97 Reference Values (from Fortran binary)
     // These are the AUTHORITATIVE reference values for parity tracking.
@@ -91,6 +99,8 @@ public class ViscousParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 viscous reference case NACA 0012, Re=1e6, alpha=0.
+    // Difference from legacy: The managed test checks structured result metadata instead of interactive convergence output. Decision: Keep the managed parity regression because it codifies the reference case directly.
     public void Naca0012_Re1e6_Alpha0_Converges()
     {
         var result = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -103,6 +113,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CL for NACA 0012, Re=1e6, alpha=0.
+    // Difference from legacy: The managed suite compares typed solver output against the frozen reference value instead of a saved polar line. Decision: Keep the managed parity regression because it directly tracks lift fidelity.
     public void Naca0012_Re1e6_Alpha0_CL_NearZero()
     {
         var result = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -114,6 +126,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CD for NACA 0012, Re=1e6, alpha=0.
+    // Difference from legacy: CD is read from the managed drag decomposition rather than a legacy scalar output. Decision: Keep the managed parity regression because it protects drag fidelity on the baseline case.
     public void Naca0012_Re1e6_Alpha0_CD_PhysicallyReasonable()
     {
         var result = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -126,6 +140,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CM for NACA 0012, Re=1e6, alpha=0.
+    // Difference from legacy: The managed test checks the typed moment field directly. Decision: Keep the managed parity regression because it tracks moment fidelity on the baseline case.
     public void Naca0012_Re1e6_Alpha0_CM_NearZero()
     {
         var result = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -136,6 +152,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: drag decomposition identity on the baseline viscous reference case.
+    // Difference from legacy: The port exposes CDF/CDP explicitly, allowing direct validation beyond legacy scalar output. Decision: Keep the managed parity regression because it guards a richer public API on a legacy case.
     public void Naca0012_Re1e6_Alpha0_DragDecomposition_Valid()
     {
         var result = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -153,6 +171,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference transition positions for the baseline viscous case.
+    // Difference from legacy: Transition is validated on structured managed metadata rather than implicit internal arrays. Decision: Keep the managed parity regression because it tracks this exposed output against legacy behavior.
     public void Naca0012_Re1e6_Alpha0_Transition_OnSurface()
     {
         var result = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -169,6 +189,8 @@ public class ViscousParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 viscous reference case NACA 0012, Re=1e6, alpha=5.
+    // Difference from legacy: The managed test checks convergence/iteration metadata on a typed result object. Decision: Keep the managed parity regression because it codifies this reference case directly.
     public void Naca0012_Re1e6_Alpha5_Converges()
     {
         var result = RunNaca0012(alpha: 5.0, re: 1_000_000);
@@ -179,6 +201,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CL for NACA 0012, Re=1e6, alpha=5.
+    // Difference from legacy: The managed suite compares typed output against an embedded reference instead of a saved polar line. Decision: Keep the managed parity regression because it directly tracks lift fidelity for this operating point.
     public void Naca0012_Re1e6_Alpha5_CL_MatchesXFoil()
     {
         var result = RunNaca0012(alpha: 5.0, re: 1_000_000);
@@ -191,6 +215,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CD for NACA 0012, Re=1e6, alpha=5.
+    // Difference from legacy: The port exposes drag through a structured decomposition object. Decision: Keep the managed parity regression because it directly tracks drag fidelity for this case.
     public void Naca0012_Re1e6_Alpha5_CD_MatchesXFoil()
     {
         var result = RunNaca0012(alpha: 5.0, re: 1_000_000);
@@ -203,6 +229,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CM for NACA 0012, Re=1e6, alpha=5.
+    // Difference from legacy: The managed test compares the explicit moment field to the embedded reference. Decision: Keep the managed parity regression because it tracks moment fidelity for this case.
     public void Naca0012_Re1e6_Alpha5_CM_WithinTolerance()
     {
         var result = RunNaca0012(alpha: 5.0, re: 1_000_000);
@@ -213,6 +241,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: drag decomposition identity for NACA 0012, Re=1e6, alpha=5.
+    // Difference from legacy: CDF/CDP are explicit managed outputs not directly reported by legacy single-value summaries. Decision: Keep the managed parity regression because it validates the richer API on a legacy case.
     public void Naca0012_Re1e6_Alpha5_DragDecomposition_Valid()
     {
         var result = RunNaca0012(alpha: 5.0, re: 1_000_000);
@@ -224,6 +254,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference upper/lower transition positions for NACA 0012, Re=1e6, alpha=5.
+    // Difference from legacy: Transition locations are compared on structured result metadata instead of transient internal arrays. Decision: Keep the managed parity regression because transition fidelity is a core part of viscous parity.
     public void Naca0012_Re1e6_Alpha5_Transition_UpperForward()
     {
         var result = RunNaca0012(alpha: 5.0, re: 1_000_000);
@@ -242,6 +274,8 @@ public class ViscousParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 viscous reference case NACA 2412, Re=3e6, alpha=3.
+    // Difference from legacy: The managed test checks convergence behavior on a typed result object. Decision: Keep the managed parity regression because it codifies this representative cambered reference case.
     public void Naca2412_Re3e6_Alpha3_Converges()
     {
         var result = RunNaca2412(alpha: 3.0, re: 3_000_000);
@@ -252,6 +286,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CL for NACA 2412, Re=3e6, alpha=3.
+    // Difference from legacy: The managed suite compares typed lift output against the embedded Fortran reference. Decision: Keep the managed parity regression because it directly tracks lift fidelity on the cambered case.
     public void Naca2412_Re3e6_Alpha3_CL_MatchesXFoil()
     {
         var result = RunNaca2412(alpha: 3.0, re: 3_000_000);
@@ -263,6 +299,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CD for NACA 2412, Re=3e6, alpha=3.
+    // Difference from legacy: Drag is validated on the structured managed decomposition output. Decision: Keep the managed parity regression because it directly tracks drag fidelity on the cambered case.
     public void Naca2412_Re3e6_Alpha3_CD_MatchesXFoil()
     {
         var result = RunNaca2412(alpha: 3.0, re: 3_000_000);
@@ -275,6 +313,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CM sign and value for NACA 2412, Re=3e6, alpha=3.
+    // Difference from legacy: The managed test uses the explicit moment field instead of polar text. Decision: Keep the managed parity regression because it tracks moment fidelity on the cambered case.
     public void Naca2412_Re3e6_Alpha3_CM_NegativeForCambered()
     {
         var result = RunNaca2412(alpha: 3.0, re: 3_000_000);
@@ -285,6 +325,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: drag decomposition identity for NACA 2412, Re=3e6, alpha=3.
+    // Difference from legacy: The richer managed drag API is validated on a legacy reference case. Decision: Keep the managed parity regression because it protects the port's decomposition contract.
     public void Naca2412_Re3e6_Alpha3_DragDecomposition_Valid()
     {
         var result = RunNaca2412(alpha: 3.0, re: 3_000_000);
@@ -296,6 +338,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference transition locations for NACA 2412, Re=3e6, alpha=3.
+    // Difference from legacy: The managed test reads structured transition metadata rather than hidden solver arrays. Decision: Keep the managed parity regression because transition fidelity matters on the cambered case as well.
     public void Naca2412_Re3e6_Alpha3_Transition_OnSurface()
     {
         var result = RunNaca2412(alpha: 3.0, re: 3_000_000);
@@ -311,6 +355,8 @@ public class ViscousParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 viscous reference case NACA 4415, Re=6e6, alpha=2.
+    // Difference from legacy: The managed test checks typed convergence metadata instead of runtime console output. Decision: Keep the managed parity regression because it codifies this higher-lift reference case.
     public void Naca4415_Re6e6_Alpha2_Converges()
     {
         var result = RunNaca4415(alpha: 2.0, re: 6_000_000);
@@ -321,6 +367,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CL for NACA 4415, Re=6e6, alpha=2.
+    // Difference from legacy: The managed suite compares explicit lift output against embedded Fortran reference values. Decision: Keep the managed parity regression because it directly tracks lift fidelity on this case.
     public void Naca4415_Re6e6_Alpha2_CL_MatchesXFoil()
     {
         var result = RunNaca4415(alpha: 2.0, re: 6_000_000);
@@ -332,6 +380,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CD for NACA 4415, Re=6e6, alpha=2.
+    // Difference from legacy: Drag is validated on the structured managed decomposition output instead of text output. Decision: Keep the managed parity regression because it directly tracks drag fidelity on this case.
     public void Naca4415_Re6e6_Alpha2_CD_MatchesXFoil()
     {
         var result = RunNaca4415(alpha: 2.0, re: 6_000_000);
@@ -344,6 +394,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference CM for NACA 4415, Re=6e6, alpha=2.
+    // Difference from legacy: The explicit managed moment field is compared against the embedded reference. Decision: Keep the managed parity regression because it tracks moment fidelity on this case.
     public void Naca4415_Re6e6_Alpha2_CM_NegativeForCambered()
     {
         var result = RunNaca4415(alpha: 2.0, re: 6_000_000);
@@ -354,6 +406,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: drag decomposition identity for NACA 4415, Re=6e6, alpha=2.
+    // Difference from legacy: The port's richer drag API is validated on a legacy reference case. Decision: Keep the managed parity regression because it protects decomposition consistency under demanding conditions.
     public void Naca4415_Re6e6_Alpha2_DragDecomposition_Valid()
     {
         var result = RunNaca4415(alpha: 2.0, re: 6_000_000);
@@ -365,6 +419,8 @@ public class ViscousParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference transition positions for NACA 4415, Re=6e6, alpha=2.
+    // Difference from legacy: Transition is checked on structured metadata rather than internal arrays. Decision: Keep the managed parity regression because it tracks transition fidelity on this case.
     public void Naca4415_Re6e6_Alpha2_Transition_OnSurface()
     {
         var result = RunNaca4415(alpha: 2.0, re: 6_000_000);
@@ -380,6 +436,8 @@ public class ViscousParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: aggregate compatibility with XFoil-like settings across all reference cases.
+    // Difference from legacy: The managed suite automates multi-case compatibility verification instead of manual repeated OPER runs. Decision: Keep the managed parity regression because it summarizes the cross-case contract clearly.
     public void AllTestCases_Converge_WithXFoilCompatibleSettings()
     {
         var r1 = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -404,6 +462,8 @@ public class ViscousParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: cross-case CL trend from the alpha=0 and alpha=5 NACA 0012 references.
+    // Difference from legacy: The managed suite compares two explicit typed results rather than separate legacy runs by inspection. Decision: Keep the managed parity regression because it captures an important relative trend.
     public void Naca0012_CL_Increases_FromAlpha0_ToAlpha5()
     {
         var r0 = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -418,6 +478,8 @@ public class ViscousParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: cross-case CD trend from the alpha=0 and alpha=5 NACA 0012 references.
+    // Difference from legacy: The managed test compares structured drag outputs between two reference cases. Decision: Keep the managed parity regression because it tracks an important relative trend in addition to absolute values.
     public void Naca0012_CD_Increases_FromAlpha0_ToAlpha5()
     {
         var r0 = RunNaca0012(alpha: 0.0, re: 1_000_000);
@@ -439,21 +501,21 @@ public class ViscousParityTests
     private static ViscousAnalysisResult RunNaca0012(double alpha, double re)
     {
         var settings = CreateXFoilParitySettings(re);
-        var geometry = BuildNacaSymmetric0012(settings.PanelCount);
+        var geometry = BuildNacaCoordinates("0012", settings.PanelCount);
         return ViscousSolverEngine.SolveViscous(geometry, settings, alpha * Math.PI / 180.0);
     }
 
     private static ViscousAnalysisResult RunNaca2412(double alpha, double re)
     {
         var settings = CreateXFoilParitySettings(re);
-        var geometry = BuildNacaCambered(0.02, 0.4, 0.12, settings.PanelCount);
+        var geometry = BuildNacaCoordinates("2412", settings.PanelCount);
         return ViscousSolverEngine.SolveViscous(geometry, settings, alpha * Math.PI / 180.0);
     }
 
     private static ViscousAnalysisResult RunNaca4415(double alpha, double re)
     {
         var settings = CreateXFoilParitySettings(re);
-        var geometry = BuildNacaCambered(0.04, 0.4, 0.15, settings.PanelCount);
+        var geometry = BuildNacaCoordinates("4415", settings.PanelCount);
         return ViscousSolverEngine.SolveViscous(geometry, settings, alpha * Math.PI / 180.0);
     }
 
@@ -478,81 +540,25 @@ public class ViscousParityTests
             useExtendedWake: false,
             maxViscousIterations: 200,
             viscousConvergenceTolerance: 1e-4,
-            criticalAmplificationFactor: 9.0);
+            criticalAmplificationFactor: 9.0,
+            useLegacyBoundaryLayerInitialization: true,
+            useLegacyWakeSourceKernelPrecision: true,
+            useLegacyStreamfunctionKernelPrecision: true,
+            useLegacyPanelingPrecision: true);
     }
 
-    private static (double[] x, double[] y) BuildNacaSymmetric0012(int n)
+    private static (double[] x, double[] y) BuildNacaCoordinates(string designation, int panelCount)
     {
-        return BuildNacaCambered(0.0, 0.0, 0.12, n);
-    }
-
-    /// <summary>
-    /// Build a general NACA 4-digit airfoil with parameters (m, p, t).
-    /// Generates (n+1) points: upper surface TE->LE then lower surface LE->TE.
-    /// Uses cosine spacing matching XFoil's NACA paneling.
-    /// </summary>
-    private static (double[] x, double[] y) BuildNacaCambered(
-        double m, double p, double t, int n)
-    {
-        int half = n / 2;
-        double[] xCoords = new double[n + 1];
-        double[] yCoords = new double[n + 1];
-
-        for (int i = 0; i <= half; i++)
+        var geometry = new NacaAirfoilGenerator().Generate4DigitClassic(designation, ClassicXFoilNacaPointCount);
+        var x = new double[geometry.Points.Count];
+        var y = new double[geometry.Points.Count];
+        for (int i = 0; i < geometry.Points.Count; i++)
         {
-            double theta = Math.PI * i / half;
-            double xc = 0.5 * (1.0 + Math.Cos(theta));
-            double yt = 5.0 * t * (0.2969 * Math.Sqrt(xc) - 0.1260 * xc
-                - 0.3516 * xc * xc + 0.2843 * xc * xc * xc - 0.1036 * xc * xc * xc * xc);
-
-            double yc = 0.0, dyc = 0.0;
-            if (m > 0 && p > 0)
-            {
-                if (xc < p)
-                {
-                    yc = m / (p * p) * (2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / (p * p) * (p - xc);
-                }
-                else
-                {
-                    yc = m / ((1.0 - p) * (1.0 - p)) * (1.0 - 2.0 * p + 2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / ((1.0 - p) * (1.0 - p)) * (p - xc);
-                }
-            }
-
-            double theta2 = Math.Atan(dyc);
-            xCoords[i] = xc - yt * Math.Sin(theta2);
-            yCoords[i] = yc + yt * Math.Cos(theta2);
+            x[i] = geometry.Points[i].X;
+            y[i] = geometry.Points[i].Y;
         }
 
-        for (int i = 1; i <= half; i++)
-        {
-            double theta = Math.PI * i / half;
-            double xc = 0.5 * (1.0 - Math.Cos(theta));
-            double yt = 5.0 * t * (0.2969 * Math.Sqrt(xc) - 0.1260 * xc
-                - 0.3516 * xc * xc + 0.2843 * xc * xc * xc - 0.1036 * xc * xc * xc * xc);
-
-            double yc = 0.0, dyc = 0.0;
-            if (m > 0 && p > 0)
-            {
-                if (xc < p)
-                {
-                    yc = m / (p * p) * (2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / (p * p) * (p - xc);
-                }
-                else
-                {
-                    yc = m / ((1.0 - p) * (1.0 - p)) * (1.0 - 2.0 * p + 2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / ((1.0 - p) * (1.0 - p)) * (p - xc);
-                }
-            }
-
-            double theta2 = Math.Atan(dyc);
-            xCoords[half + i] = xc + yt * Math.Sin(theta2);
-            yCoords[half + i] = yc - yt * Math.Cos(theta2);
-        }
-
-        return (xCoords, yCoords);
+        return (x, y);
     }
 
     /// <summary>

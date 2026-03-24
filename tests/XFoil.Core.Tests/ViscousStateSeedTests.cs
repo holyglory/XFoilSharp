@@ -2,11 +2,20 @@ using XFoil.Core.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xbl.f viscous seed/station coordinate setup
+// Secondary legacy source: f_xfoil/src/xblsys.f wake seed continuation
+// Role in port: Verifies the managed viscous seed builder that prepares the station coordinates and wake seed state before Newton assembly.
+// Differences: The managed test reads immutable seed objects instead of legacy common-block arrays.
+// Decision: Keep the managed seed representation because it preserves the same setup behavior with better observability and composition.
 namespace XFoil.Core.Tests;
 
 public sealed class ViscousStateSeedTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f branch seed coordinate construction.
+    // Difference from legacy: The monotonic xi progression is asserted through the managed seed object instead of inferred from downstream assembly success.
+    // Decision: Keep the managed invariant because it is a direct regression for the legacy seed ordering rule.
     public void ViscousStateSeed_ProducesMonotonicXiOnAllBranches()
     {
         var generator = new NacaAirfoilGenerator();
@@ -21,6 +30,9 @@ public sealed class ViscousStateSeedTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f wake seed initialization.
+    // Difference from legacy: Wake velocity and gap values are read directly from the managed seed result instead of from transient solver arrays.
+    // Decision: Keep the managed test because it protects the public pre-Newton seed contract.
     public void ViscousStateSeed_ProvidesWakeVelocityAndNonNegativeGap()
     {
         var generator = new NacaAirfoilGenerator();

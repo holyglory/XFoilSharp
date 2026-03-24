@@ -2,9 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
+using XFoil.Core.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f :: ASEQ, CL, viscous per-Re sweep workflows
+// Secondary legacy source: saved polar accumulation from Fortran XFoil 6.97
+// Role in port: Verifies managed multi-point viscous polar sweeps against authoritative Fortran XFoil reference polars.
+// Differences: The managed parity harness compares typed sweep results and decomposition metadata against frozen reference values instead of reading legacy PACC output interactively.
+// Decision: Keep the managed parity harness because it is the repository's main executable bridge between the port and legacy polar behavior.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -33,6 +40,8 @@ namespace XFoil.Core.Tests;
 /// </summary>
 public class PolarParityTests
 {
+    private const int ClassicXFoilNacaPointCount = 239;
+
     // ================================================================
     // XFoil 6.97 Reference Polars (from Fortran binary PACC output)
     // ================================================================
@@ -98,6 +107,8 @@ public class PolarParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 ASEQ reference polar for NACA 0012.
+    // Difference from legacy: The managed test checks typed sweep results instead of raw PACC output. Decision: Keep the managed parity regression because it directly protects the port-versus-reference contract.
     public void AlphaSweep_Naca0012_CorrectNumberOfPoints()
     {
         var results = RunAlphaSweep();
@@ -105,6 +116,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: ASEQ lift trend on the reference alpha sweep.
+    // Difference from legacy: Monotonicity is asserted directly on managed sweep objects. Decision: Keep the managed parity trend test because it validates physical ordering alongside exact reference tracking.
     public void AlphaSweep_Naca0012_CL_StrictlyIncreasingPreStall()
     {
         var results = RunAlphaSweep();
@@ -120,6 +133,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: ASEQ drag output on the reference alpha sweep.
+    // Difference from legacy: The managed suite checks positivity on structured drag decomposition output. Decision: Keep the managed parity regression because it constrains the same reference sweep behavior programmatically.
     public void AlphaSweep_Naca0012_CD_AllPositive()
     {
         var results = RunAlphaSweep();
@@ -132,6 +147,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: ASEQ drag bucket near zero alpha.
+    // Difference from legacy: The minimum-drag trend is asserted on managed results instead of plotted legacy polars. Decision: Keep the managed parity trend check because it complements exact reference comparisons.
     public void AlphaSweep_Naca0012_CD_MinimumNearZeroAlpha()
     {
         var results = RunAlphaSweep();
@@ -147,6 +164,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 ASEQ CL reference values.
+    // Difference from legacy: The managed test compares against embedded authoritative reference arrays instead of reading a legacy polar file at runtime. Decision: Keep the managed parity regression because it is the stable reference harness for CL.
     public void AlphaSweep_Naca0012_CL_WithinToleranceOfXFoil()
     {
         var results = RunAlphaSweep();
@@ -174,6 +193,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 ASEQ CD reference values.
+    // Difference from legacy: CD is compared on structured managed sweep results rather than on imported legacy text tables. Decision: Keep the managed parity regression because it tightly tracks reference drag behavior.
     public void AlphaSweep_Naca0012_CD_WithinToleranceOfXFoil()
     {
         var results = RunAlphaSweep();
@@ -196,6 +217,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: symmetry of the reference ASEQ sweep about alpha=0.
+    // Difference from legacy: Symmetry is checked algebraically on managed results instead of visually through a polar plot. Decision: Keep the managed parity regression because it highlights solver asymmetry drift clearly.
     public void AlphaSweep_Naca0012_Symmetry()
     {
         var results = RunAlphaSweep();
@@ -225,6 +248,8 @@ public class PolarParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 CL-sweep reference polar for NACA 2412.
+    // Difference from legacy: The managed test validates typed lift-sweep output rather than command-loop state. Decision: Keep the managed parity harness because it programmatically mirrors the CL sweep workflow.
     public void CLSweep_Naca2412_CorrectNumberOfPoints()
     {
         var results = RunCLSweep();
@@ -232,6 +257,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: CL-sweep alpha progression in the Fortran reference run.
+    // Difference from legacy: The solved-alpha trend is asserted directly on managed sweep points. Decision: Keep the managed regression because it preserves an important physical behavior of the reference sweep.
     public void CLSweep_Naca2412_AlphaIncreasingWithCL()
     {
         var results = RunCLSweep();
@@ -250,6 +277,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: CL-sweep drag output for NACA 2412.
+    // Difference from legacy: The managed test checks positivity on structured results rather than a legacy polar table. Decision: Keep the managed parity regression because it constrains reference drag behavior.
     public void CLSweep_Naca2412_CD_AllPositive()
     {
         var results = RunCLSweep();
@@ -262,6 +291,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 CL-sweep CD values.
+    // Difference from legacy: The managed suite uses embedded reference arrays instead of imported polar text. Decision: Keep the managed parity regression because it is the stable CD reference harness for the lift sweep.
     public void CLSweep_Naca2412_CD_PhysicallyReasonable()
     {
         var results = RunCLSweep();
@@ -275,6 +306,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 CL-sweep CM sign for a cambered section.
+    // Difference from legacy: The managed test asserts the sign directly on typed results. Decision: Keep the managed parity regression because it highlights moment-sign fidelity clearly.
     public void CLSweep_Naca2412_CM_NegativeForCambered()
     {
         var results = RunCLSweep();
@@ -293,6 +326,8 @@ public class PolarParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: per-Re viscous sweep reference workflow at fixed CL.
+    // Difference from legacy: The managed port returns a typed Reynolds sweep rather than accumulating points into a legacy session. Decision: Keep the managed parity harness because it programmatically reproduces the legacy workflow.
     public void ReSweep_Naca0012_CorrectNumberOfPoints()
     {
         var results = RunReSweep();
@@ -301,6 +336,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: per-Re sweep drag positivity.
+    // Difference from legacy: Drag is checked on structured managed output rather than a polar file. Decision: Keep the managed parity regression because it constrains a basic physical property of the reference sweep.
     public void ReSweep_Naca0012_CD_AllPositive()
     {
         var results = RunReSweep();
@@ -313,6 +350,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: reference drag decrease with Reynolds number.
+    // Difference from legacy: The managed test evaluates the trend algebraically instead of via plotted legacy output. Decision: Keep the managed parity regression because it captures a key aerodynamic expectation in code.
     public void ReSweep_Naca0012_CD_DecreasesWithRe()
     {
         var results = RunReSweep();
@@ -334,6 +373,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: XFoil 6.97 per-Re sweep drag magnitudes.
+    // Difference from legacy: The managed test compares against embedded reference values on typed sweep results. Decision: Keep the managed parity harness because it is the stable Reynolds-sweep reference check.
     public void ReSweep_Naca0012_CD_PhysicallyReasonable()
     {
         var results = RunReSweep();
@@ -353,6 +394,8 @@ public class PolarParityTests
     // ================================================================
 
     [Fact]
+    // Legacy mapping: drag decomposition consistency across the reference alpha sweep.
+    // Difference from legacy: The port exposes decomposition fields explicitly, allowing direct validation beyond legacy scalar output. Decision: Keep the managed parity regression because it guards a public API improvement while still tied to legacy cases.
     public void AlphaSweep_Naca0012_AllPointsHaveValidDragDecomposition()
     {
         var results = RunAlphaSweep();
@@ -367,6 +410,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: transition locations reported by the reference alpha sweep.
+    // Difference from legacy: The managed test asserts surface-bounded transition coordinates directly on typed metadata. Decision: Keep the managed parity regression because it validates a structured output absent from legacy polars.
     public void AlphaSweep_Naca0012_TransitionOnSurface()
     {
         var results = RunAlphaSweep();
@@ -385,6 +430,8 @@ public class PolarParityTests
     }
 
     [Fact]
+    // Legacy mapping: drag decomposition consistency across the reference CL sweep.
+    // Difference from legacy: Managed typed results expose decomposition fields not directly present in legacy polar tables. Decision: Keep the managed parity regression because it ensures the richer port API stays internally consistent on legacy reference cases.
     public void CLSweep_Naca2412_AllPointsHaveValidDragDecomposition()
     {
         var results = RunCLSweep();
@@ -436,7 +483,11 @@ public class PolarParityTests
             useExtendedWake: false,
             maxViscousIterations: 200,
             viscousConvergenceTolerance: 1e-4,
-            criticalAmplificationFactor: 9.0);
+            criticalAmplificationFactor: 9.0,
+            useLegacyBoundaryLayerInitialization: true,
+            useLegacyWakeSourceKernelPrecision: true,
+            useLegacyStreamfunctionKernelPrecision: true,
+            useLegacyPanelingPrecision: true);
     }
 
     private static (double[] x, double[] y) BuildNaca0012(int n)
@@ -452,65 +503,17 @@ public class PolarParityTests
     private static (double[] x, double[] y) BuildNacaCambered(
         double m, double p, double t, int n)
     {
-        int half = n / 2;
-        double[] xCoords = new double[n + 1];
-        double[] yCoords = new double[n + 1];
-
-        for (int i = 0; i <= half; i++)
+        string designation = $"{(int)Math.Round(m * 100.0):0}{(int)Math.Round(p * 10.0):0}{(int)Math.Round(t * 100.0):00}";
+        var geometry = new NacaAirfoilGenerator().Generate4DigitClassic(designation, ClassicXFoilNacaPointCount);
+        var x = new double[geometry.Points.Count];
+        var y = new double[geometry.Points.Count];
+        for (int i = 0; i < geometry.Points.Count; i++)
         {
-            double theta = Math.PI * i / half;
-            double xc = 0.5 * (1.0 + Math.Cos(theta));
-            double yt = 5.0 * t * (0.2969 * Math.Sqrt(xc) - 0.1260 * xc
-                - 0.3516 * xc * xc + 0.2843 * xc * xc * xc - 0.1036 * xc * xc * xc * xc);
-
-            double yc = 0.0, dyc = 0.0;
-            if (m > 0 && p > 0)
-            {
-                if (xc < p)
-                {
-                    yc = m / (p * p) * (2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / (p * p) * (p - xc);
-                }
-                else
-                {
-                    yc = m / ((1.0 - p) * (1.0 - p)) * (1.0 - 2.0 * p + 2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / ((1.0 - p) * (1.0 - p)) * (p - xc);
-                }
-            }
-
-            double theta2 = Math.Atan(dyc);
-            xCoords[i] = xc - yt * Math.Sin(theta2);
-            yCoords[i] = yc + yt * Math.Cos(theta2);
+            x[i] = geometry.Points[i].X;
+            y[i] = geometry.Points[i].Y;
         }
 
-        for (int i = 1; i <= half; i++)
-        {
-            double theta = Math.PI * i / half;
-            double xc = 0.5 * (1.0 - Math.Cos(theta));
-            double yt = 5.0 * t * (0.2969 * Math.Sqrt(xc) - 0.1260 * xc
-                - 0.3516 * xc * xc + 0.2843 * xc * xc * xc - 0.1036 * xc * xc * xc * xc);
-
-            double yc = 0.0, dyc = 0.0;
-            if (m > 0 && p > 0)
-            {
-                if (xc < p)
-                {
-                    yc = m / (p * p) * (2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / (p * p) * (p - xc);
-                }
-                else
-                {
-                    yc = m / ((1.0 - p) * (1.0 - p)) * (1.0 - 2.0 * p + 2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / ((1.0 - p) * (1.0 - p)) * (p - xc);
-                }
-            }
-
-            double theta2 = Math.Atan(dyc);
-            xCoords[half + i] = xc + yt * Math.Sin(theta2);
-            yCoords[half + i] = yc - yt * Math.Cos(theta2);
-        }
-
-        return (xCoords, yCoords);
+        return (x, y);
     }
 
     private static void AssertWithinFactor(double actual, double reference, double factor, string label)

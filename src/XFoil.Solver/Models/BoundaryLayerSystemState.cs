@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/XFOIL.INC :: UEDG/THET/DSTR/CTAU/MASS/XSSI/IPAN/VTI/ITRAN/IBLTE/NBL
+// Secondary legacy source: f_xfoil/src/xbl.f :: BL system workspace usage
+// Role in port: Managed mutable workspace mirroring the core boundary-layer state arrays for both surfaces and the wake.
+// Differences: The array layout follows the legacy workspace, but the managed port names the fields, uses 0-based arrays, and adds explicit parity-only snapshots for pre-accept secondary states.
+// Decision: Keep the managed workspace because it makes the legacy array state explicit while preserving the data layout required by the solver.
 namespace XFoil.Solver.Models;
 
 /// <summary>
@@ -12,6 +18,9 @@ public sealed class BoundaryLayerSystemState
     /// </summary>
     /// <param name="maxStations">Maximum number of BL stations per surface (IVX in Fortran).</param>
     /// <param name="maxWakeStations">Maximum number of wake stations.</param>
+    // Legacy mapping: f_xfoil/src/XFOIL.INC :: BL state array allocation/initial workspace layout.
+    // Difference from legacy: The constructor allocates named managed arrays and parity snapshot slots instead of relying on static COMMON storage.
+    // Decision: Keep the managed constructor because explicit workspace ownership is safer and easier to audit.
     public BoundaryLayerSystemState(int maxStations, int maxWakeStations)
     {
         MaxStations = maxStations;
@@ -63,6 +72,16 @@ public sealed class BoundaryLayerSystemState
 
         // Interpolated transition xi location, per side.
         TINDEX = new double[2];
+
+        // Parity-only snapshot of the last pre-accept BLKIN state at each station.
+        // Classic XFoil carries BLVAR/BLMID data derived from this snapshot forward,
+        // so parity mode must not silently rebuild station-1 secondary variables
+        // from the later accepted primary state.
+        LegacyPrimary = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState?[maxStations, 2];
+        LegacyKinematic = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult?[maxStations, 2];
+        LegacySecondary = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult?[maxStations, 2];
+        LegacyAmplificationCarry = new double[maxStations, 2];
+        LegacySetblLaminarShearCarry = 0.0;
     }
 
     /// <summary>Maximum stations per surface.</summary>
@@ -107,6 +126,39 @@ public sealed class BoundaryLayerSystemState
     /// <summary>Interpolated transition xi location, per side.</summary>
     public double[] TINDEX { get; }
 
+    /// <summary>
+    /// Parity-only carried COM2 primary packets, indexed [station, side].
+    /// Legacy transition replay consumes these live U/T/D values directly.
+    /// </summary>
+    public XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState?[,] LegacyPrimary { get; }
+
+    /// <summary>
+    /// Parity-only pre-accept BLKIN snapshots, indexed [station, side].
+    /// The default managed path does not use these.
+    /// </summary>
+    public XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult?[,] LegacyKinematic { get; }
+
+    /// <summary>
+    /// Parity-only pre-accept BLVAR/BLMID secondary snapshots, indexed [station, side].
+    /// Classic XFoil carries these COM1 values into the next BLSYS interval.
+    /// </summary>
+    public XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult?[,] LegacySecondary { get; }
+
+    /// <summary>
+    /// Parity-only live amplification carry, indexed [station, side].
+    /// Classic XFoil keeps AMI alive across the transition boundary even when
+    /// CTAU has already switched to CTI storage for the accepted station.
+    /// </summary>
+    public double[,] LegacyAmplificationCarry { get; }
+
+    /// <summary>
+    /// Parity-only live CTI scratch carried by SETBL across Newton assemblies.
+    /// Classic XFoil leaves this local variable live instead of reseeding it to
+    /// 0.03 at each laminar station, so the parity path must preserve it
+    /// explicitly.
+    /// </summary>
+    public double LegacySetblLaminarShearCarry { get; set; }
+
     /// <summary>Whether the viscous solution has converged.</summary>
     public bool Converged { get; set; }
 
@@ -126,6 +178,9 @@ public sealed class BoundaryLayerSystemState
     /// <param name="side1">Number of BL stations on side 1 (upper surface, stagnation to TE).</param>
     /// <param name="side2">Number of BL stations on side 2 (lower surface, stagnation to TE).</param>
     /// <param name="wake">Number of wake stations (appended after side 2 TE).</param>
+    // Legacy mapping: f_xfoil/src/xbl.f :: IBLSYS/SETBL station-count initialization lineage.
+    // Difference from legacy: Station and wake counts are set through one explicit helper instead of being spread across setup routines.
+    // Decision: Keep the helper because it makes the boundary-layer topology contract explicit.
     public void InitializeForStationCounts(int side1, int side2, int wake)
     {
         // Side 1: stations 0..side1-1, TE at station side1-1

@@ -1,6 +1,12 @@
 using XFoil.Core.Models;
 using XFoil.Design.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xgdes.f :: FLAP
+// Secondary legacy source: f_xfoil/src/xgeom.f :: LEFIND/NORM, f_xfoil/src/spline.f :: SCALC/SINVRT
+// Role in port: Applies the legacy flap-deflection geometry edit with managed spline helpers and immutable geometry output.
+// Differences: The managed path decomposes the legacy flap routine into explicit surface sampling, break solving, and cleanup helpers instead of mutating shared X/Y work arrays in command scope.
+// Decision: Keep the managed improvement because it preserves the legacy geometric operation while making the break-selection logic auditable and testable.
 namespace XFoil.Design.Services;
 
 public sealed class FlapDeflectionService
@@ -8,6 +14,9 @@ public sealed class FlapDeflectionService
     private const double SurfaceBreakSpacingFraction = 0.33333d;
     private const double MicroSegmentTolerance = 0.2d;
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP.
+    // Difference from legacy: C# splits the flap edit into explicit upper/lower surface workflows and hinge classification instead of running the edit through one in-place command routine.
+    // Decision: Keep the managed improvement because it preserves the same geometric intent with clearer state transitions.
     public FlapDeflectionResult DeflectTrailingEdge(
         AirfoilGeometry geometry,
         AirfoilPoint hingePoint,
@@ -71,6 +80,9 @@ public sealed class FlapDeflectionService
         var editedUpper = EditSurface(upperData, hingePoint, hingeChord.X, rotationRadians, topAngle);
         var editedLower = EditSurface(lowerData, hingePoint, hingeChord.X, rotationRadians, bottomAngle);
 
+        // Legacy block: FLAP surface recombination after the flap-side and fixed-side edits are applied.
+        // Difference: The managed port rebuilds the full airfoil from immutable per-surface results instead of overwriting the original coordinate buffers in place.
+        // Decision: Keep the managed refactor because it makes the edit boundary explicit.
         var combinedPoints = editedUpper.Points
             .Reverse<AirfoilPoint>()
             .Concat(editedLower.Points.Skip(1))
@@ -92,6 +104,9 @@ public sealed class FlapDeflectionService
             Math.Max(0, geometry.Points.Count - renamedGeometry.Points.Count));
     }
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP surface-edit section.
+    // Difference from legacy: The managed routine expresses the flap-side/fixed-side splice as an immutable point list with explicit cleanup samples rather than as indexed array surgery.
+    // Decision: Keep the managed refactor because it is easier to verify against the legacy geometry.
     private static SurfaceEditResult EditSurface(
         SurfaceData surface,
         AirfoilPoint hingePoint,
@@ -148,6 +163,9 @@ public sealed class FlapDeflectionService
             }
         }
 
+        // Legacy block: FLAP flap-side point rotation after the splice points are fixed.
+        // Difference: The managed port rotates the surviving tail points with a LINQ projection instead of through a shared temporary buffer.
+        // Decision: Keep the managed refactor because the resulting point selection is easier to inspect.
         var afterPoints = surface.Points
             .Where((_, index) => surface.ArcLengths[index] > flapBreak.ArcLength + 1e-9d)
             .Select(point => RotateAroundHinge(point, hingePoint, rotationRadians))
@@ -157,6 +175,9 @@ public sealed class FlapDeflectionService
         return new SurfaceEditResult(result, afterPoints.Length + (closingAngle <= 1e-12d ? 1 : 2));
     }
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP break-point solve.
+    // Difference from legacy: C# uses an explicit residual/Jacobian helper pair on sampled surface data instead of relying on the monolithic command routine’s temporary arrays.
+    // Decision: Keep the managed improvement because it preserves the legacy nonlinear solve while isolating the break-condition logic.
     private static (SurfaceSample FixedBreak, SurfaceSample FlapBreak) SolveSurfaceBreaks(
         SurfaceData surface,
         AirfoilPoint hingePoint,
@@ -183,6 +204,9 @@ public sealed class FlapDeflectionService
         var s2 = Math.Min(surface.TotalArcLength, hingeSample.ArcLength + initialOffset);
         var epsilon = Math.Max(1e-5d, surface.TotalArcLength * 1e-5d);
 
+        // Legacy block: FLAP two-point Newton relaxation for the closing-break constraints.
+        // Difference: The managed port estimates the Jacobian by centered finite differences over the sampled surface abstraction instead of by direct work-array perturbations.
+        // Decision: Keep the managed refactor because the residual terms remain traceable.
         for (var iteration = 0; iteration < 12; iteration++)
         {
             var residual = ComputeClosingBreakResiduals(surface, hingePoint, s1, s2, sinHalfAngle);
@@ -243,6 +267,9 @@ public sealed class FlapDeflectionService
         return (fixedBreak, flapBreak);
     }
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP perpendicular break solve.
+    // Difference from legacy: The managed port solves the tangent-orthogonality condition through sampled tangents and finite-difference derivatives instead of direct array indexing.
+    // Decision: Keep the managed refactor because it retains the same constraint with clearer intermediate state.
     private static SurfaceSample SolvePerpendicularBreak(
         SurfaceData surface,
         AirfoilPoint hingePoint,
@@ -251,6 +278,9 @@ public sealed class FlapDeflectionService
         var arcLength = Math.Clamp(initialArcLength, 0d, surface.TotalArcLength);
         var epsilon = Math.Max(1e-5d, surface.TotalArcLength * 1e-5d);
 
+        // Legacy block: FLAP Newton iteration for the perpendicular splice point.
+        // Difference: The managed implementation derives the residual derivative numerically from sampled points and tangents instead of from direct neighboring-array formulas.
+        // Decision: Keep the managed refactor because it is stable and localizes the solve.
         for (var iteration = 0; iteration < 12; iteration++)
         {
             var sample = surface.SampleByArcLength(arcLength);
@@ -287,6 +317,9 @@ public sealed class FlapDeflectionService
         return surface.SampleByArcLength(arcLength);
     }
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP closing-gap residual equations.
+    // Difference from legacy: The C# helper names the radius and chord residual terms explicitly instead of assembling them inline inside the command routine.
+    // Decision: Keep the managed refactor because it exposes the governing equations without changing them.
     private static ClosingBreakResidual ComputeClosingBreakResiduals(
         SurfaceData surface,
         AirfoilPoint hingePoint,
@@ -304,6 +337,9 @@ public sealed class FlapDeflectionService
             chordDistance - ((fixedRadius + flapRadius) * sinHalfAngle));
     }
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP point rotation formula.
+    // Difference from legacy: The managed port isolates the rigid-body rotation kernel as a helper rather than repeating the algebra inline.
+    // Decision: Keep the equivalent helper because it makes the flap rotation sites consistent.
     private static AirfoilPoint RotateAroundHinge(AirfoilPoint point, AirfoilPoint hingePoint, double rotationRadians)
     {
         var cosine = Math.Cos(rotationRadians);
@@ -315,9 +351,15 @@ public sealed class FlapDeflectionService
             hingePoint.Y - (xRelative * sine) + (yRelative * cosine));
     }
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP hinge-side classification.
+    // Difference from legacy: The managed port uses an explicit winding-style inclusion test because the original command path relied on interactive geometry context and side-specific branches.
+    // Decision: Keep the managed improvement because it makes the hinge classification deterministic for library use.
     private static bool IsInside(IReadOnlyList<AirfoilPoint> points, AirfoilPoint hingePoint)
     {
         var angleSum = 0d;
+        // Legacy block: FLAP polygon traversal to determine whether the hinge lies inside the profile.
+        // Difference: The managed code computes the aggregate signed-angle proxy directly from the closed point loop.
+        // Decision: Keep the managed-only helper because there is no standalone legacy subroutine for this reusable test.
         for (var index = 0; index < points.Count; index++)
         {
             var nextIndex = index == points.Count - 1 ? 0 : index + 1;
@@ -337,6 +379,9 @@ public sealed class FlapDeflectionService
         return Math.Abs(angleSum) > 1d;
     }
 
+    // Legacy mapping: none; managed-only post-edit cleanup supporting FLAP.
+    // Difference from legacy: The original command path implicitly tolerated or removed tiny segments through in-place panel cleanup, while the C# port makes that stabilization step explicit.
+    // Decision: Keep the managed improvement because it protects downstream geometry consumers from near-duplicate points.
     private static void RemoveMicroSegments(List<AirfoilPoint> points, double tolerance)
     {
         if (points.Count < 4)
@@ -345,6 +390,9 @@ public sealed class FlapDeflectionService
         }
 
         var changed = true;
+        // Legacy block: Managed-only micro-segment collapse after flap recombination.
+        // Difference: This loop has no dedicated legacy subroutine; it is a defensive cleanup added for immutable library output.
+        // Decision: Keep the managed-only helper because it prevents pathological tiny segments after the edit.
         while (changed && points.Count >= 4)
         {
             changed = false;
@@ -371,6 +419,9 @@ public sealed class FlapDeflectionService
         }
     }
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP local distance calculations.
+    // Difference from legacy: The algebra is unchanged; the port isolates it in a reusable helper.
+    // Decision: Keep the equivalent helper for readability.
     private static double Distance(AirfoilPoint first, AirfoilPoint second)
     {
         var dx = first.X - second.X;
@@ -387,6 +438,9 @@ public sealed class FlapDeflectionService
         private readonly NaturalCubicSpline xSpline;
         private readonly NaturalCubicSpline ySpline;
 
+        // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP local spline-work initialization.
+        // Difference from legacy: The managed port stores sampled surface state in a dedicated immutable helper instead of in routine-scoped COMMON-style buffers.
+        // Decision: Keep the managed refactor because it makes the local surface state explicit.
         private SurfaceData(
             IReadOnlyList<AirfoilPoint> points,
             IReadOnlyList<AirfoilPoint> chordPoints,
@@ -410,12 +464,18 @@ public sealed class FlapDeflectionService
 
         public double TotalArcLength { get; }
 
+        // Legacy mapping: f_xfoil/src/spline.f :: SCALC and f_xfoil/src/xgdes.f :: FLAP surface setup.
+        // Difference from legacy: The port packages the arc-length and spline setup into a reusable helper instead of rebuilding these arrays inline at each call site.
+        // Decision: Keep the managed refactor because it centralizes the legacy setup steps.
         public static SurfaceData Create(IReadOnlyList<AirfoilPoint> points, GeometryTransformUtilities.ChordFrame frame)
         {
             var chordPoints = points
                 .Select(point => GeometryTransformUtilities.ToChordFrame(point, frame))
                 .ToArray();
             var arcLengths = new double[points.Count];
+            // Legacy block: SCALC-style cumulative arc-length construction for one surface branch.
+            // Difference: The managed code computes the same cumulative distances in a local array rather than reusing global work storage.
+            // Decision: Keep the equivalent managed loop.
             for (var index = 1; index < points.Count; index++)
             {
                 arcLengths[index] = arcLengths[index - 1] + Distance(points[index - 1], points[index]);
@@ -429,6 +489,9 @@ public sealed class FlapDeflectionService
                 new NaturalCubicSpline(arcLengths, points.Select(point => point.Y).ToArray()));
         }
 
+        // Legacy mapping: f_xfoil/src/spline.f :: SINVRT/SEVAL lineage used by FLAP.
+        // Difference from legacy: The port performs an explicit x-root refinement over chord-frame splines instead of calling the legacy spline inversion helpers directly.
+        // Decision: Keep the managed refactor because it reproduces the same sampling intent with simpler dependencies.
         public SurfaceSample SampleByX(double x)
         {
             if (x <= ChordPoints[0].X)
@@ -442,6 +505,9 @@ public sealed class FlapDeflectionService
             }
 
             var seedArcLength = ArcLengths[^1];
+            // Legacy block: FLAP/SINVRT-style seed selection before spline inversion.
+            // Difference: The managed port seeds the inverse solve from the enclosing chord segment instead of from the original work-array bracketing logic.
+            // Decision: Keep the managed refactor because the bracket remains explicit.
             for (var index = 1; index < ChordPoints.Count; index++)
             {
                 var left = ChordPoints[index - 1];
@@ -458,6 +524,9 @@ public sealed class FlapDeflectionService
             }
 
             var arcLength = Math.Clamp(seedArcLength, 0d, TotalArcLength);
+            // Legacy block: SINVRT-style Newton refinement of the local spline inverse.
+            // Difference: The managed implementation uses sampled chord derivatives instead of the original spline derivative arrays.
+            // Decision: Keep the managed refactor because it remains numerically local and auditable.
             for (var iteration = 0; iteration < 12; iteration++)
             {
                 var chordPoint = EvaluateChordPoint(arcLength);
@@ -480,6 +549,9 @@ public sealed class FlapDeflectionService
             return new SurfaceSample(EvaluateWorldPoint(arcLength), EvaluateChordPoint(arcLength), arcLength);
         }
 
+        // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP point evaluation along a surface branch.
+        // Difference from legacy: The port exposes the arc-length sampling directly through the helper instead of repeating the lookup inline.
+        // Decision: Keep the equivalent helper for clarity.
         public SurfaceSample SampleByArcLength(double arcLength)
         {
             if (arcLength <= 0d)
@@ -495,6 +567,9 @@ public sealed class FlapDeflectionService
             return new SurfaceSample(EvaluateWorldPoint(arcLength), EvaluateChordPoint(arcLength), arcLength);
         }
 
+        // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP local tangent evaluation.
+        // Difference from legacy: The managed port normalizes the derivative in a named helper instead of embedding the normalization at each call site.
+        // Decision: Keep the equivalent helper for readability.
         public AirfoilPoint EstimateTangent(double arcLength)
         {
             var derivative = EvaluateWorldDerivative(arcLength);
@@ -509,6 +584,9 @@ public sealed class FlapDeflectionService
             return new AirfoilPoint(dx / magnitude, dy / magnitude);
         }
 
+        // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP curvature-sensitive sampling support.
+        // Difference from legacy: The second-derivative lookup is exposed explicitly as a helper, while the original routine folded it into local formulas.
+        // Decision: Keep the managed refactor because it makes the curvature data source explicit.
         public AirfoilPoint EstimateCurvatureDerivative(double arcLength)
         {
             return new AirfoilPoint(
@@ -516,6 +594,9 @@ public sealed class FlapDeflectionService
                 EvaluateWorldSecondDerivativeComponent(ySpline, arcLength));
         }
 
+        // Legacy mapping: f_xfoil/src/spline.f :: SEVAL lineage.
+        // Difference from legacy: The port uses a dedicated helper around the local spline instances instead of direct array calls.
+        // Decision: Keep the equivalent helper for reuse.
         private AirfoilPoint EvaluateWorldPoint(double arcLength)
         {
             return new AirfoilPoint(
@@ -523,6 +604,9 @@ public sealed class FlapDeflectionService
                 ySpline.Evaluate(arcLength));
         }
 
+        // Legacy mapping: f_xfoil/src/spline.f :: DEVAL-style derivative access used by FLAP.
+        // Difference from legacy: The derivative is approximated from repeated spline evaluations rather than stored derivative arrays.
+        // Decision: Keep the managed improvement because it avoids extra mutable derivative buffers in the design path.
         private AirfoilPoint EvaluateWorldDerivative(double arcLength)
         {
             return new AirfoilPoint(
@@ -530,6 +614,9 @@ public sealed class FlapDeflectionService
                 EvaluateFirstDerivativeComponent(ySpline, arcLength));
         }
 
+        // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP chord-space projection of sampled surface points.
+        // Difference from legacy: The managed port reconstructs the local chord-frame point from nearby sampled data instead of carrying a parallel legacy work array through the routine.
+        // Decision: Keep the managed refactor because it removes hidden coupling between coordinate frames.
         private AirfoilPoint EvaluateChordPoint(double arcLength)
         {
             var worldPoint = EvaluateWorldPoint(arcLength);
@@ -549,6 +636,9 @@ public sealed class FlapDeflectionService
                 chordLeft.Y + (t * (chordRight.Y - chordLeft.Y)));
         }
 
+        // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP local inverse-solve derivative support.
+        // Difference from legacy: The derivative is estimated by centered differences on the chord-point helper instead of through stored analytic spline derivatives.
+        // Decision: Keep the managed improvement because it keeps the helper self-contained.
         private AirfoilPoint EvaluateChordDerivative(double arcLength)
         {
             var step = Math.Max(1e-5d, TotalArcLength * 1e-4d);
@@ -557,6 +647,9 @@ public sealed class FlapDeflectionService
             return new AirfoilPoint((right.X - left.X) / (2d * step), (right.Y - left.Y) / (2d * step));
         }
 
+        // Legacy mapping: f_xfoil/src/xgdes.f :: FLAP local bracketing support.
+        // Difference from legacy: The managed helper returns the first enclosing arc-length segment directly instead of depending on implicit loop indices from the caller.
+        // Decision: Keep the managed refactor because it localizes the bracketing logic.
         private int FindNearestIndex(double arcLength)
         {
             for (var index = 1; index < ArcLengths.Count; index++)
@@ -570,6 +663,9 @@ public sealed class FlapDeflectionService
             return ArcLengths.Count - 1;
         }
 
+        // Legacy mapping: f_xfoil/src/spline.f :: derivative evaluation support used by FLAP.
+        // Difference from legacy: The managed design path uses finite differences on the cubic interpolant instead of persisting the legacy derivative work arrays.
+        // Decision: Keep the managed improvement because it reduces state while preserving the sampled quantity.
         private static double EvaluateFirstDerivativeComponent(NaturalCubicSpline spline, double parameter)
         {
             var step = Math.Max(1e-6d, (spline.Parameters[^1] - spline.Parameters[0]) * 1e-5d);
@@ -583,6 +679,9 @@ public sealed class FlapDeflectionService
             return (spline.Evaluate(upper) - spline.Evaluate(lower)) / (upper - lower);
         }
 
+        // Legacy mapping: f_xfoil/src/spline.f :: second-derivative support used by FLAP.
+        // Difference from legacy: The managed path reconstructs the second derivative numerically from repeated spline evaluation instead of storing legacy spline coefficients separately.
+        // Decision: Keep the managed improvement because it is adequate for the design-tool workflow.
         private static double EvaluateWorldSecondDerivativeComponent(NaturalCubicSpline spline, double parameter)
         {
             var step = Math.Max(1e-5d, (spline.Parameters[^1] - spline.Parameters[0]) * 1e-4d);
@@ -614,6 +713,9 @@ public sealed class FlapDeflectionService
         private readonly double[] values;
         private readonly double[] slopes;
 
+        // Legacy mapping: f_xfoil/src/spline.f :: SPLIND/SPLINA spline setup lineage.
+        // Difference from legacy: The port carries only the nodal parameters, values, and solved slopes instead of the original procedural workspace.
+        // Decision: Keep the managed refactor because it makes the interpolant reusable for design helpers.
         public NaturalCubicSpline(IReadOnlyList<double> parameters, IReadOnlyList<double> values)
         {
             if (parameters.Count != values.Count)
@@ -633,6 +735,9 @@ public sealed class FlapDeflectionService
 
         public IReadOnlyList<double> Parameters => parameters;
 
+        // Legacy mapping: f_xfoil/src/spline.f :: SEVAL.
+        // Difference from legacy: The cubic Hermite form is written directly in C# instead of delegated to the legacy spline evaluator.
+        // Decision: Keep the managed refactor because it preserves the interpolation formula while staying dependency-local.
         public double Evaluate(double parameter)
         {
             if (parameter <= parameters[0])
@@ -657,6 +762,9 @@ public sealed class FlapDeflectionService
                  + ((t - (t * t)) * (((1d - t) * cx1) - (t * cx2)));
         }
 
+        // Legacy mapping: f_xfoil/src/spline.f :: interval search before spline evaluation.
+        // Difference from legacy: The managed code uses an explicit binary search helper instead of reusing caller-managed index state.
+        // Decision: Keep the managed refactor because it isolates the lookup logic.
         private int FindUpperIndex(double parameter)
         {
             var lower = 0;
@@ -678,6 +786,9 @@ public sealed class FlapDeflectionService
             return upper;
         }
 
+        // Legacy mapping: f_xfoil/src/spline.f :: SPLIND slope solve.
+        // Difference from legacy: The tridiagonal slope system is formed in a dedicated helper with local arrays instead of through COMMON-backed work vectors.
+        // Decision: Keep the managed refactor because it mirrors the legacy spline construction while remaining self-contained.
         private static double[] ComputeNaturalSlopes(IReadOnlyList<double> parameters, IReadOnlyList<double> values)
         {
             var count = parameters.Count;
@@ -686,6 +797,9 @@ public sealed class FlapDeflectionService
             var c = new double[count];
             var d = new double[count];
 
+            // Legacy block: SPLIND tridiagonal assembly for natural cubic slopes.
+            // Difference: The algebra is unchanged, but the C# port names the system arrays explicitly and keeps them local to the helper.
+            // Decision: Keep the equivalent managed assembly.
             for (var index = 1; index < count - 1; index++)
             {
                 var deltaMinus = parameters[index] - parameters[index - 1];
@@ -707,6 +821,9 @@ public sealed class FlapDeflectionService
             return SolveTriDiagonal(a, b, c, d);
         }
 
+        // Legacy mapping: f_xfoil/src/xqdes.f :: TRISOL and spline-system backsolve lineage.
+        // Difference from legacy: The managed solver is an in-file Thomas sweep instead of a shared Fortran utility call.
+        // Decision: Keep the managed refactor because it is the same algorithm expressed locally.
         private static double[] SolveTriDiagonal(double[] a, double[] b, double[] c, double[] d)
         {
             var size = a.Length;

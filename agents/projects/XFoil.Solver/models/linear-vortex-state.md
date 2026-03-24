@@ -31,6 +31,11 @@ Corresponds to XFoil output variables: CL, CM, CDP, CL_ALF, CL_MSQ, CPV, ALFA.
 
 These are additive -- they do not modify or replace `Panel.cs`, `PanelMesh.cs`, or `InviscidAnalysisResult.cs`. The linear-vorticity solver uses a fundamentally different data layout (node-based vs panel-midpoint-based) and requires separate state containers.
 
+Today these containers are used in two places:
+
+- direct single-point linear-vortex inviscid analysis
+- the primary front end for `ViscousSolverEngine` and `PolarSweepRunner`
+
 ## Parity
 
 - Data layout matches XFoil's COMMON block structure with clean C# naming and 0-based indexing.
@@ -38,4 +43,4 @@ These are additive -- they do not modify or replace `Panel.cs`, `PanelMesh.cs`, 
 
 ## TODO
 
-- Downstream solver components will populate these containers in plans 02-02 through 02-04.
+- Either enrich the public `InviscidAnalysisResult` adapter with wake and `Cp` data or keep linear-vortex consumers on the dedicated result type.

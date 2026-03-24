@@ -1,25 +1,34 @@
 # AirfoilAnalysisService
 
 - File: `src/XFoil.Solver/Services/AirfoilAnalysisService.cs`
-- Role: high-level façade for all solver workflows.
+- Role: high-level façade for public inviscid analysis, diagnostic boundary-layer prep, and the current Newton-coupled viscous APIs.
 
-## Public methods
+## Active public methods
 
 - `AnalyzeInviscid`
 - `AnalyzeBoundaryLayerTopology`
 - `AnalyzeViscousStateSeed`
 - `AnalyzeViscousInitialState`
+- `AnalyzeViscous`
+- `SweepViscousAlpha`
+- `SweepViscousCL`
+- `SweepViscousRe`
+- `SweepInviscidAlpha`
+- `SweepInviscidLiftCoefficient`
+- `AnalyzeInviscidForLiftCoefficient`
+
+## Compatibility-only methods
+
 - `AnalyzeViscousIntervalSystem`
 - `AnalyzeViscousLaminarCorrection`
 - `AnalyzeViscousLaminarSolve`
 - `AnalyzeViscousInteraction`
 - `AnalyzeDisplacementCoupledViscous`
-- `SweepInviscidAlpha`
 - `SweepDisplacementCoupledAlpha`
 - `SweepDisplacementCoupledLiftCoefficient`
-- `SweepInviscidLiftCoefficient`
-- `AnalyzeInviscidForLiftCoefficient`
 - `AnalyzeDisplacementCoupledForLiftCoefficient`
+
+These members are `[Obsolete]` and throw `NotSupportedException`. They remain only to keep older callers from silently compiling against changed behavior.
 
 ## Important helpers
 
@@ -28,30 +37,36 @@
 - `ToPolarPoint`
 - `NormalizeStep`
 - `ShouldContinue`
-- `ComputeAdaptiveDisplacementRelaxation`
-- `ComputeHybridSeedCouplingFactor`
+- `ExtractCoordinates`
 
 ## Solver dispatch
 
-`AnalyzeInviscid` checks `settings.InviscidSolverType`:
-- `HessSmith` (default): existing Hess-Smith path via `this.inviscidSolver`
-- `LinearVortex`: routes to `LinearVortexInviscidSolver.AnalyzeInviscid` via the private adapter
+- `AnalyzeInviscid` checks `settings.InviscidSolverType`.
+  - `HessSmith` uses the prepared Hess-Smith path.
+  - `LinearVortex` uses the private adapter around `LinearVortexInviscidSolver`.
+- `AnalyzeViscous` and the public viscous sweep methods always use the linear-vortex plus Newton path in `ViscousSolverEngine` and `PolarSweepRunner`.
+- `SweepInviscidAlpha`, `SweepInviscidLiftCoefficient`, and `AnalyzeInviscidForLiftCoefficient` still use the prepared Hess-Smith path.
 
 The adapter maps `LinearVortexInviscidResult` fields into `InviscidAnalysisResult`:
-- `Circulation`, `SourceStrengths`, `VortexStrength` set to zero/empty (Hess-Smith concepts)
-- `PressureSamples` left empty (Cp mapping deferred to Phase 3)
-- `WakeGeometry` empty (not produced by linear-vortex path)
-- Mesh generated via `PanelMeshGenerator` for downstream consumers
-
-Sweep methods (`SweepInviscidAlpha`, etc.) still use Hess-Smith only. Wiring sweep methods through the dispatch is a Phase 3 task.
+- `Circulation`, `SourceStrengths`, and `VortexStrength` are Hess-Smith-centric placeholders.
+- `PressureSamples` are still left empty.
+- `WakeGeometry` is still empty on the adapted linear-vortex result.
+- `PanelMeshGenerator` is still used to populate the public mesh-facing result shape.
 
 ## Parity
 
-- Best single entry point for current managed workflow coverage.
-- Also where many surrogate choices become visible.
-- Both Hess-Smith and linear-vorticity solvers are now selectable through the `AnalyzeInviscid` method.
+- This is the best single entry point for understanding what is actually supported today.
+- It also exposes the main API discrepancy in the solver layer:
+  - single-point inviscid analysis can select the linear-vortex solver
+  - public inviscid sweeps cannot
+  - viscous analysis always uses the linear-vortex front end
+
+## Notes
+
+- `BoundaryLayerTopologyBuilder`, `ViscousStateSeedBuilder`, and `ViscousStateEstimator` still back the diagnostic CLI commands.
+- `ViscousLaminarCorrector` is still constructed here, but it is no longer part of the primary viscous operating-point solve.
 
 ## TODO
 
-- Wire sweep methods through the dispatch for LinearVortex selection (Phase 3).
-- Break into smaller orchestrators once the CLI no longer needs a single façade.
+- Either add linear-vortex routing to the public inviscid sweep APIs or keep the Hess-Smith-only behavior explicit.
+- Remove the obsolete surrogate API surface once compatibility no longer matters.

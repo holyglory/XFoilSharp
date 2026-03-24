@@ -1,10 +1,19 @@
 using System.Globalization;
 using XFoil.Core.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/aread.f :: AREAD
+// Secondary legacy source: f_xfoil/src/userio.f :: GETFLT
+// Role in port: Parses airfoil coordinate files into managed geometry objects and format metadata.
+// Differences: The managed parser is non-interactive, returns structured format/domain information, and always materializes the first element instead of reproducing the legacy prompt-driven element-selection workflow.
+// Decision: Keep the managed parser because it is a clearer IO layer for the port; no parity-only branch is needed here.
 namespace XFoil.Core.Services;
 
 public sealed class AirfoilParser
 {
+    // Legacy mapping: f_xfoil/src/aread.f :: AREAD file-open wrapper.
+    // Difference from legacy: The managed port delegates the file read to .NET APIs and then reuses the line parser instead of reading through a Fortran logical unit.
+    // Decision: Keep the wrapper because it cleanly separates filesystem access from format parsing.
     public AirfoilGeometry ParseFile(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -15,6 +24,9 @@ public sealed class AirfoilParser
         return ParseLines(File.ReadAllLines(path), Path.GetFileNameWithoutExtension(path));
     }
 
+    // Legacy mapping: f_xfoil/src/aread.f :: AREAD.
+    // Difference from legacy: This method mirrors the same plain/labeled/ISES/MSES detection rules and `999 999` element splitting, but it does so without interactive prompts and returns managed metadata.
+    // Decision: Keep the managed refactor because it preserves the important file semantics while fitting the .NET API surface.
     public AirfoilGeometry ParseLines(IEnumerable<string> lines, string fallbackName = "UNNAMED")
     {
         if (lines is null)
@@ -69,11 +81,17 @@ public sealed class AirfoilParser
         return new AirfoilGeometry(name, points, format, domainParameters);
     }
 
+    // Legacy mapping: f_xfoil/src/aread.f :: per-element read loop.
+    // Difference from legacy: The managed code groups element lines up front rather than streaming through a logical unit and prompting for the requested element.
+    // Decision: Keep the eager grouping because the managed API always returns the first parsed element deterministically.
     private static IReadOnlyList<List<string>> SplitElements(IEnumerable<string> lines)
     {
         var elements = new List<List<string>>();
         var current = new List<string>();
 
+        // Legacy block: AREAD multi-element scan with `999.0 999.0` sentinels.
+        // Difference: The managed parser accumulates the groups in memory instead of jumping between loop labels and requested-element state.
+        // Decision: Keep the managed grouping because it is simpler and non-interactive.
         foreach (var line in lines)
         {
             var tokens = Tokenize(line);
@@ -99,6 +117,9 @@ public sealed class AirfoilParser
         return elements;
     }
 
+    // Legacy mapping: f_xfoil/src/aread.f :: `999.0 999.0` separator test.
+    // Difference from legacy: The managed helper uses tolerant double parsing and comparison rather than direct REAL equality on already-read values.
+    // Decision: Keep the managed predicate because it is the right adaptation for text parsing in .NET.
     private static bool IsElementSeparator(IReadOnlyList<string> tokens)
     {
         if (tokens.Count < 2)
@@ -112,6 +133,9 @@ public sealed class AirfoilParser
             && Math.Abs(y - 999d) < 1e-9;
     }
 
+    // Legacy mapping: f_xfoil/src/aread.f :: coordinate record decode.
+    // Difference from legacy: Invalid records become managed exceptions instead of a global load-failure branch.
+    // Decision: Keep the explicit exception because it gives callers actionable parser errors.
     private static AirfoilPoint ParsePoint(string line)
     {
         var tokens = Tokenize(line);
@@ -123,6 +147,9 @@ public sealed class AirfoilParser
         return point;
     }
 
+    // Legacy mapping: f_xfoil/src/aread.f :: GETFLT-backed point parse.
+    // Difference from legacy: This helper returns a typed success/failure result instead of mutating an output buffer and error flag.
+    // Decision: Keep the managed helper because it composes cleanly with the parser pipeline.
     private static bool TryParsePoint(IReadOnlyList<string> tokens, out AirfoilPoint point)
     {
         point = default;
@@ -140,6 +167,9 @@ public sealed class AirfoilParser
         return true;
     }
 
+    // Legacy mapping: f_xfoil/src/userio.f :: GETFLT.
+    // Difference from legacy: The managed helper collects doubles into a list instead of filling a caller-provided REAL array and count.
+    // Decision: Keep the managed list-based helper because it matches the parser's higher-level structure.
     private static List<double> ParseNumericTokens(IReadOnlyList<string> tokens)
     {
         var values = new List<double>(tokens.Count);
@@ -156,6 +186,9 @@ public sealed class AirfoilParser
         return values;
     }
 
+    // Legacy mapping: f_xfoil/src/userio.f :: GETFLT numeric conversion.
+    // Difference from legacy: The port uses invariant-culture `double.TryParse` instead of list-directed Fortran reads on a temporary record buffer.
+    // Decision: Keep the managed conversion helper because it is the correct .NET equivalent for non-interactive parsing.
     private static bool TryParseDouble(string token, out double value)
     {
         return double.TryParse(
@@ -165,6 +198,9 @@ public sealed class AirfoilParser
             out value);
     }
 
+    // Legacy mapping: f_xfoil/src/userio.f :: GETFLT token splitting.
+    // Difference from legacy: The managed port delegates tokenization to `string.Split` rather than manually scanning a mutable record buffer for delimiters.
+    // Decision: Keep the managed tokenization because it is concise and preserves the same whitespace/comma semantics needed by the parser.
     private static string[] Tokenize(string line)
     {
         return line

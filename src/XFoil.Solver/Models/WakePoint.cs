@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xpanel.f :: wake-point coordinate and tangent arrays
+// Role in port: Managed DTO for one wake point with position, tangent, distance, and velocity magnitude.
+// Differences: The managed port packages wake geometry into explicit point objects instead of parallel arrays.
+// Decision: Keep the managed DTO because it improves diagnostics and downstream use.
 using XFoil.Core.Models;
 
 namespace XFoil.Solver.Models;

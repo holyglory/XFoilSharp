@@ -1,11 +1,20 @@
 using XFoil.Core.Models;
 using XFoil.Design.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xgdes.f contour spline modification workflow
+// Secondary legacy source: f_xfoil/src/spline.f
+// Role in port: Verifies the managed contour-modification service derived from legacy local contour editing operations.
+// Differences: The managed port exposes control-point driven edits as a pure function instead of mutating the active airfoil inside the legacy editor.
+// Decision: Keep the managed service interface because it preserves the geometric behavior while simplifying composition and testing.
 namespace XFoil.Core.Tests;
 
 public sealed class ContourModificationServiceTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f local contour modification path.
+    // Difference from legacy: The test checks immutable output geometry and interval bookkeeping rather than legacy in-place edit state.
+    // Decision: Keep the managed result-based test because it is the intended surface of the refactored editor.
     public void ModifyContour_ChangesOnlySelectedInterval()
     {
         var service = new ContourModificationService();
@@ -29,6 +38,9 @@ public sealed class ContourModificationServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f contour modification interpolation path.
+    // Difference from legacy: Reversed control-point equivalence is asserted explicitly in the managed harness instead of being implicit in the legacy interaction.
+    // Decision: Keep the managed equivalence test because it documents a stability property expected from the refactored API.
     public void ModifyContour_ReversedControlPointsProduceSameResult()
     {
         var service = new ContourModificationService();
@@ -53,6 +65,9 @@ public sealed class ContourModificationServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f endpoint slope matching option.
+    // Difference from legacy: The slope-match switch is a direct managed parameter instead of a command-state toggle.
+    // Decision: Keep the managed parameterized test because it makes the legacy option easier to reason about and preserve.
     public void ModifyContour_DisablingSlopeMatchAllowsLeadingEndpointOverride()
     {
         var service = new ContourModificationService();
@@ -73,6 +88,9 @@ public sealed class ContourModificationServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f contour-edit precondition checks.
+    // Difference from legacy: Invalid control geometry is surfaced as a managed exception instead of an interactive command failure.
+    // Decision: Keep the managed exception contract because it is clearer for callers and preserves the same validation rule.
     public void ModifyContour_RequiresDistinctEndpoints()
     {
         var service = new ContourModificationService();

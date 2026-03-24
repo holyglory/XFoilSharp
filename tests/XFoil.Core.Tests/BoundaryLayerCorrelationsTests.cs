@@ -1,6 +1,12 @@
 using System;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xblsys.f correlation routines HKIN, HSL, HST, CFL, CFT, DIL, DI, HCT, CTEQ
+// Secondary legacy source: supporting boundary-layer formulas embedded in xblsys.f
+// Role in port: Verifies the managed boundary-layer correlation helpers and their analytical Jacobians against the legacy formulas.
+// Differences: The managed port exposes each correlation as a direct helper with derivative outputs, enabling denser unit coverage than the original runtime.
+// Decision: Keep the managed helper decomposition while preserving parity-sensitive legacy evaluation order inside the implementations where needed.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -21,6 +27,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys HKIN incompressible branch.
+    // Difference from legacy: The managed helper returns value and derivatives directly. Decision: Keep the managed unit test because it isolates the preserved formula clearly.
     public void KinematicShapeParameter_IncompressibleCase_ReturnsCorrectValue()
     {
         // H=2.5, Msq=0 -> Hk = (2.5 - 0) / (1.0) = 2.5
@@ -33,6 +41,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys HKIN compressible branch.
+    // Difference from legacy: The managed test compares directly against the closed-form legacy formula. Decision: Keep the managed regression because it tightly constrains the ported helper.
     public void KinematicShapeParameter_CompressibleCase_MatchesFortran()
     {
         // H=2.5, Msq=0.04
@@ -47,6 +57,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys HKIN derivatives.
+    // Difference from legacy: The port surfaces analytical derivatives for direct central-difference checks. Decision: Keep the managed derivative regression because this is parity-sensitive math.
     public void KinematicShapeParameter_JacobianMatchesCentralDifference()
     {
         double h = 2.5, msq = 0.04;
@@ -68,11 +80,41 @@ public class BoundaryLayerCorrelationsTests
             $"Hk_Msq: analytical={hk_msq}, numerical={numHk_msq}, diff={Math.Abs(hk_msq - numHk_msq)}");
     }
 
+    [Fact]
+    // Legacy mapping: xblsys HKIN derivative numerator in the alpha-10 laminar-seed replay.
+    // Difference from legacy: The managed parity overload must preserve the mixed-width literal/product staging seen in the native REAL build. Decision: Keep this focused regression because it pins the first proved HK2_MS boundary from the Fortran trace.
+    public void KinematicShapeParameter_LegacyPrecision_Alpha10BoundaryPoint_MatchesFortran()
+    {
+        const double h = 2.2294490337371826;
+        const double msq = 0.0;
+        const double expectedHkMsq = -0.5419277548789978;
+
+        var (_, _, hkMsq) = BoundaryLayerCorrelations.KinematicShapeParameter(h, msq, useLegacyPrecision: true);
+
+        Assert.Equal(expectedHkMsq, hkMsq, 10);
+    }
+
+    [Fact]
+    // Legacy mapping: xblsys HKIN incompressible seed replay at the first alpha-10 BLKIN point.
+    // Difference from legacy: The parity overload must keep the same mixed-width numerator form across the whole seed march instead of overfitting one later point. Decision: Keep this paired regression because it guards both sides of the one-ULP staging boundary.
+    public void KinematicShapeParameter_LegacyPrecision_FirstAlpha10SeedPoint_MatchesFortran()
+    {
+        const double h = 2.200000047683716;
+        const double msq = 0.0;
+        const double expectedHkMsq = -0.538599967956543;
+
+        var (_, _, hkMsq) = BoundaryLayerCorrelations.KinematicShapeParameter(h, msq, useLegacyPrecision: true);
+
+        Assert.Equal(expectedHkMsq, hkMsq, 10);
+    }
+
     // =====================================================================
     // HSL: Laminar shape parameter
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys HSL below-threshold branch.
+    // Difference from legacy: The piecewise laminar shape parameter is tested directly on the helper. Decision: Keep the managed regression because it isolates a branchy legacy formula.
     public void LaminarShapeParameter_BelowThreshold_ReturnsCorrectValue()
     {
         // HK=2.5 < 4.35
@@ -92,6 +134,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys HSL above-threshold branch.
+    // Difference from legacy: The managed helper is validated directly on the alternate piecewise branch. Decision: Keep the managed regression because it documents the branch transition clearly.
     public void LaminarShapeParameter_AboveThreshold_ReturnsCorrectValue()
     {
         // HK=5.0 > 4.35
@@ -103,6 +147,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys HSL derivative with respect to Hk.
+    // Difference from legacy: The analytical derivative is checked explicitly against finite differences. Decision: Keep the managed derivative regression because this path feeds parity-critical Jacobians.
     public void LaminarShapeParameter_JacobianMatchesCentralDifference()
     {
         double hk = 2.5;
@@ -121,6 +167,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys HST attached turbulent branch.
+    // Difference from legacy: The managed helper isolates the attached branch directly. Decision: Keep the managed regression because it constrains the ported turbulent shape formula.
     public void TurbulentShapeParameter_AttachedBranch_ReturnsCorrectValue()
     {
         // HK=1.4, RT=5000, MSQ=0.0 -> attached (HK < HO)
@@ -131,6 +179,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys HST separated turbulent branch.
+    // Difference from legacy: The piecewise separated behavior is tested directly instead of only via full viscous solves. Decision: Keep the managed regression because it isolates a critical branch.
     public void TurbulentShapeParameter_SeparatedBranch_ReturnsCorrectValue()
     {
         // HK=5.0, RT=5000, MSQ=0.0 -> separated (HK > HO ≈ 3.08)
@@ -140,6 +190,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys HST derivatives.
+    // Difference from legacy: The port exposes derivatives for direct numerical verification. Decision: Keep the managed derivative test because it protects a parity-sensitive correlation.
     public void TurbulentShapeParameter_JacobianMatchesCentralDifference()
     {
         double hk = 1.4, rt = 5000.0, msq = 0.0;
@@ -173,6 +225,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys CFL nominal laminar skin-friction formula.
+    // Difference from legacy: The helper is tested directly on a representative nominal point. Decision: Keep the managed regression because it isolates the skin-friction formula.
     public void LaminarSkinFriction_NominalCase_ReturnsCorrectValue()
     {
         // HK=2.5, RT=500, MSQ=0.0
@@ -188,6 +242,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys CFL high-Hk behavior.
+    // Difference from legacy: The managed test targets a sensitive region of the formula directly. Decision: Keep the managed regression because it documents an important edge case.
     public void LaminarSkinFriction_HighHk_ReturnsCorrectValue()
     {
         // HK=6.0 > 5.5, uses alternate branch
@@ -200,6 +256,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys CFL clamp behavior.
+    // Difference from legacy: Numerical safety under clamped Hk is asserted explicitly in the managed suite. Decision: Keep the managed regression because it protects runtime robustness.
     public void LaminarSkinFriction_ClampedHk_NoNaNOrInf()
     {
         // HK=1.0 -- dangerous for some correlations, should clamp safely
@@ -212,6 +270,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys CFL derivatives.
+    // Difference from legacy: Analytical derivatives are checked directly against central differences. Decision: Keep the managed derivative regression because this feeds parity-critical assembly code.
     public void LaminarSkinFriction_JacobianMatchesCentralDifference()
     {
         double hk = 2.5, rt = 500.0, msq = 0.0;
@@ -238,6 +298,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys CFT nominal turbulent skin-friction formula.
+    // Difference from legacy: The managed helper is tested directly instead of through assembled viscous states. Decision: Keep the managed unit test because it isolates the turbulent Cf formula.
     public void TurbulentSkinFriction_NominalCase_ReturnsPositiveValue()
     {
         // HK=1.4, RT=5000, MSQ=0.0
@@ -248,6 +310,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys CFT derivatives.
+    // Difference from legacy: The port surfaces analytical derivatives for direct numerical verification. Decision: Keep the managed derivative regression because it protects a parity-sensitive helper.
     public void TurbulentSkinFriction_JacobianMatchesCentralDifference()
     {
         double hk = 1.4, rt = 5000.0, msq = 0.0;
@@ -283,6 +347,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys DIL below-threshold branch.
+    // Difference from legacy: The laminar dissipation branch is exercised directly on the helper. Decision: Keep the managed regression because it isolates a piecewise formula family.
     public void LaminarDissipation_BelowThreshold_ReturnsCorrectValue()
     {
         // HK=2.5, RT=500
@@ -294,6 +360,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys DIL above-threshold branch.
+    // Difference from legacy: The alternate dissipation branch is tested directly on the managed helper. Decision: Keep the managed regression because it documents the branch transition clearly.
     public void LaminarDissipation_AboveThreshold_ReturnsCorrectValue()
     {
         // HK=5.0 > 4.0
@@ -307,6 +375,24 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys DIL hk>=4 branch at the alpha-10 parity boundary.
+    // Difference from legacy: The native reference build keeps this rational hk>=4 block wider than the surrounding REAL replay, so the managed parity branch must pin the observed output bits rather than assume every temp rounds eagerly to float.
+    // Decision: Keep the explicit scalar checkpoint because it is cheaper and more reliable than rediscovering the same ULP drift through a full viscous solve.
+    public void LaminarDissipation_LegacyPrecision_Alpha10BoundaryPoint_MatchesFortran()
+    {
+        const double hk = 7.0463047027587891;
+        const double rt = 195.62724304199219;
+
+        var (di, di_hk, di_rt) = BoundaryLayerCorrelations.LaminarDissipation(hk, rt, useLegacyPrecision: true);
+
+        Assert.Equal(9.9411723203957081e-04, di, 15);
+        Assert.Equal(-3.5450142604531720e-05, di_hk, 15);
+        Assert.Equal(-5.0816911425499710e-06, di_rt, 15);
+    }
+
+    [Fact]
+    // Legacy mapping: xblsys DIL derivatives.
+    // Difference from legacy: The port exposes analytical derivatives for direct finite-difference checks. Decision: Keep the managed derivative regression because this path feeds parity-sensitive residual assembly.
     public void LaminarDissipation_JacobianMatchesCentralDifference()
     {
         double hk = 2.5, rt = 500.0;
@@ -333,6 +419,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys wake dissipation formula.
+    // Difference from legacy: The managed helper is tested directly on a nominal wake case. Decision: Keep the managed regression because it isolates wake-specific dissipation behavior.
     public void WakeDissipation_NominalCase_ReturnsPositiveValue()
     {
         var (di, di_hk, di_rt) = BoundaryLayerCorrelations.WakeDissipation(2.0, 10000.0);
@@ -341,6 +429,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys wake dissipation derivatives.
+    // Difference from legacy: The analytical derivatives are checked explicitly in the managed suite. Decision: Keep the managed derivative regression because it protects a parity-sensitive helper.
     public void WakeDissipation_JacobianMatchesCentralDifference()
     {
         double hk = 2.0, rt = 10000.0;
@@ -367,6 +457,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys density-thickness shape parameter formula.
+    // Difference from legacy: The helper is tested directly on a nominal compressible case. Decision: Keep the managed regression because it isolates this supporting correlation.
     public void DensityThicknessShapeParameter_NominalCase_ReturnsCorrectValue()
     {
         // HK=1.4, MSQ=0.04
@@ -378,6 +470,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys density-thickness zero-Msq branch.
+    // Difference from legacy: The managed helper exposes the neutral branch explicitly. Decision: Keep the managed regression because it documents the zero-compressibility behavior directly.
     public void DensityThicknessShapeParameter_ZeroMsq_ReturnsZero()
     {
         var (hc, _, _) = BoundaryLayerCorrelations.DensityThicknessShapeParameter(1.4, 0.0);
@@ -385,6 +479,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys density-thickness derivatives.
+    // Difference from legacy: The port surfaces analytical derivatives for direct numerical verification. Decision: Keep the managed derivative regression because it protects a supporting parity-sensitive formula.
     public void DensityThicknessShapeParameter_JacobianMatchesCentralDifference()
     {
         double hk = 1.4, msq = 0.04;
@@ -411,6 +507,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys equilibrium shear coefficient formula.
+    // Difference from legacy: The managed helper is tested directly rather than only through turbulent station assembly. Decision: Keep the managed unit regression because it isolates this correlation clearly.
     public void EquilibriumShearCoefficient_NominalCase_ReturnsPositiveValue()
     {
         // Typical turbulent BL conditions
@@ -421,6 +519,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys equilibrium shear coefficient derivatives.
+    // Difference from legacy: The analytical derivatives are checked explicitly in the managed suite. Decision: Keep the managed derivative regression because it protects a parity-sensitive helper.
     public void EquilibriumShearCoefficient_JacobianMatchesCentralDifference()
     {
         double hk = 1.4, hs = 1.8, us = 0.5, h = 2.5;
@@ -462,6 +562,8 @@ public class BoundaryLayerCorrelationsTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsys turbulent dissipation formula.
+    // Difference from legacy: The managed helper is tested directly on a nominal turbulent case. Decision: Keep the managed regression because it isolates this formula outside full viscous assembly.
     public void TurbulentDissipation_NominalCase_ReturnsPositiveValue()
     {
         var (di, di_hs, di_us, di_cf, di_st) =
@@ -471,6 +573,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys turbulent dissipation formula validation against Fortran.
+    // Difference from legacy: The port embeds the reference formula directly in the unit test instead of relying on runtime prints. Decision: Keep the managed parity regression because it tightly constrains the helper.
     public void TurbulentDissipation_MatchesFortranFormula()
     {
         double hs = 1.8, us = 0.5, cf = 0.003, st = 0.1;
@@ -483,6 +587,8 @@ public class BoundaryLayerCorrelationsTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys turbulent dissipation derivatives.
+    // Difference from legacy: The port exposes analytical derivatives for direct central-difference validation. Decision: Keep the managed derivative regression because this path is parity-sensitive.
     public void TurbulentDissipation_JacobianMatchesCentralDifference()
     {
         double hs = 1.8, us = 0.5, cf = 0.003, st = 0.1;

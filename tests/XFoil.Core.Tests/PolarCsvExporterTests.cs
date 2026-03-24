@@ -3,11 +3,20 @@ using XFoil.IO.Models;
 using XFoil.IO.Services;
 using XFoil.Solver.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f polar reporting conventions
+// Secondary legacy source: saved-polar file formats and legacy import/export workflows
+// Role in port: Verifies the managed CSV exporter that serializes inviscid, viscous, lift-sweep, and legacy-polar results.
+// Differences: The legacy program wrote text through interactive/reporting routines, while the managed port provides deterministic CSV formatting and filesystem helpers.
+// Decision: Keep the managed exporter because it is a .NET-specific reporting layer over legacy-derived analysis results.
 namespace XFoil.Core.Tests;
 
 public sealed class PolarCsvExporterTests
 {
     [Fact]
+    // Legacy mapping: legacy polar-report output conventions for inviscid alpha sweeps.
+    // Difference from legacy: The managed test checks deterministic CSV metadata and row formatting instead of free-form legacy text output.
+    // Decision: Keep the managed serialization test because deterministic export is a port-specific contract.
     public void Format_InviscidSweep_IncludesMetadataAndDataRows()
     {
         var exporter = new PolarCsvExporter();
@@ -37,6 +46,9 @@ public sealed class PolarCsvExporterTests
     }
 
     [Fact]
+    // Legacy mapping: legacy viscous polar reporting fields.
+    // Difference from legacy: The port emits explicit lowercase boolean CSV fields that have no direct textual legacy analogue.
+    // Decision: Keep the managed CSV schema because it is a deliberate reporting improvement over the legacy output.
     public void Format_ViscousSweep_IncludesViscousColumnsAndLowerCaseBooleans()
     {
         var exporter = new PolarCsvExporter();
@@ -73,6 +85,9 @@ public sealed class PolarCsvExporterTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Parent-directory creation and file writing semantics are managed filesystem concerns rather than legacy solver behavior.
+    // Decision: Keep the managed-only export test because it protects the convenience contract of the .NET exporter.
     public void Export_CreatesParentDirectoryAndWritesCsvFile()
     {
         var exporter = new PolarCsvExporter();
@@ -115,6 +130,9 @@ public sealed class PolarCsvExporterTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f target-lift sweep reporting.
+    // Difference from legacy: The managed exporter emits an explicit target-lift CSV column rather than legacy console-style output.
+    // Decision: Keep the managed schema because the port exposes lift sweeps as structured data products.
     public void Format_InviscidLiftSweep_IncludesTargetLiftColumn()
     {
         var exporter = new PolarCsvExporter();
@@ -150,6 +168,9 @@ public sealed class PolarCsvExporterTests
     }
 
     [Fact]
+    // Legacy mapping: legacy saved-polar file columns and metadata.
+    // Difference from legacy: The managed exporter normalizes imported legacy polar data into the same deterministic CSV framework as native port results.
+    // Decision: Keep the managed compatibility export because it unifies reporting across legacy and native sources.
     public void Format_LegacyPolar_IncludesLegacyMetadataAndColumns()
     {
         var exporter = new PolarCsvExporter();

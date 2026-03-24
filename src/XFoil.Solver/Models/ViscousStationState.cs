@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xbl.f :: THET/DSTR/H/CF/Re_theta per-station state arrays
+// Role in port: Managed DTO for one solved viscous station and its primary state variables.
+// Differences: The managed port uses an immutable object per station instead of parallel arrays and side-index conventions.
+// Decision: Keep the managed DTO because it improves readability and result transport.
 using XFoil.Core.Models;
 
 namespace XFoil.Solver.Models;

@@ -2,11 +2,20 @@ using XFoil.Core.Models;
 using XFoil.Design.Models;
 using XFoil.Design.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xgdes.f :: ADDP, MOVP, DELP, CADD
+// Secondary legacy source: f_xfoil/src/xgdes.f corner-refinement edits
+// Role in port: Verifies the managed contour-edit services that refactor the legacy geometry-edit commands into composable methods.
+// Differences: The tests call deterministic service operations instead of stepping through the legacy GDES command loop, while preserving the same edit semantics.
+// Decision: Keep the managed service surface because it is a direct API refactor of legacy geometry editing rather than a behavioral rewrite.
 namespace XFoil.Core.Tests;
 
 public sealed class ContourEditServiceTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f :: ADDP.
+    // Difference from legacy: The point insertion is verified through a managed return object instead of the mutable legacy geometry buffer.
+    // Decision: Keep the managed regression because it captures the same edit intent with clearer output semantics.
     public void AddPoint_InsertsExactPointAtRequestedIndex()
     {
         var service = new ContourEditService();
@@ -22,6 +31,9 @@ public sealed class ContourEditServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f :: MOVP.
+    // Difference from legacy: This test checks the explicit service result rather than side effects in the interactive editor state.
+    // Decision: Keep the managed contract because it is the intended replacement for the legacy command behavior.
     public void MovePoint_ReplacesOnlySelectedPoint()
     {
         var service = new ContourEditService();
@@ -38,6 +50,9 @@ public sealed class ContourEditServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f :: DELP.
+    // Difference from legacy: The managed test asserts removed-point accounting and immutable output geometry instead of in-place legacy edits.
+    // Decision: Keep the managed result-focused test because it protects the refactored API surface.
     public void DeletePoint_RemovesRequestedPoint()
     {
         var service = new ContourEditService();
@@ -52,6 +67,9 @@ public sealed class ContourEditServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f :: DUPL/double-point editing behavior.
+    // Difference from legacy: The service throws managed exceptions for invalid TE selection rather than signaling through the command interface.
+    // Decision: Keep the managed error contract because it is clearer and still enforces the same geometric restriction.
     public void DoublePoint_DuplicatesInteriorPointAndRejectsTrailingEdge()
     {
         var service = new ContourEditService();
@@ -66,6 +84,9 @@ public sealed class ContourEditServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f corner-refinement workflow.
+    // Difference from legacy: The test evaluates inserted-point geometry explicitly instead of relying on visual legacy edit inspection.
+    // Decision: Keep the managed geometric assertions because they are the strongest regression for the same refinement behavior.
     public void RefineCorners_AddsPointsAroundSharpCorners()
     {
         var service = new ContourEditService();
@@ -82,6 +103,9 @@ public sealed class ContourEditServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xgdes.f corner-refinement parameterization variants.
+    // Difference from legacy: The managed API exposes parameter-mode selection directly rather than through command-state options.
+    // Decision: Keep the managed option coverage because it documents the deliberate API refactor over the same refinement logic.
     public void RefineCorners_RespectsXRangeAndParameterMode()
     {
         var service = new ContourEditService();

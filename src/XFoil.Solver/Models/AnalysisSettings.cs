@@ -1,7 +1,18 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/XFOIL.INC :: operating-point and solver control state, f_xfoil/src/xbl.f :: NCrit/viscous iteration control lineage
+// Role in port: Managed analysis-settings object that gathers inviscid, viscous, paneling, and parity flags into one immutable API boundary.
+// Differences: Classic XFoil distributes these knobs across COMMON blocks and command state, while the managed port validates them once and passes them explicitly.
+// Decision: Keep the managed settings object because it is the correct public API boundary for the port.
 namespace XFoil.Solver.Models;
 
 public sealed class AnalysisSettings
 {
+    public const int MinimumSupportedPanelCount = 8;
+
+    // Legacy mapping: none; this constructor consolidates solver/session controls that were historically spread across interactive state and COMMON blocks.
+    // Difference from legacy: Validation and defaulting are explicit and one-shot instead of being applied incrementally by commands.
+    // Decision: Keep the managed constructor because explicit validation is safer and clearer than implicit session-state mutation.
     public AnalysisSettings(
         int panelCount = 120,
         double freestreamVelocity = 1d,
@@ -20,11 +31,17 @@ public sealed class AnalysisSettings
         double viscousConvergenceTolerance = 1e-6,
         double? nCritUpper = null,
         double? nCritLower = null,
-        bool usePostStallExtrapolation = false)
+        bool usePostStallExtrapolation = false,
+        bool useLegacyBoundaryLayerInitialization = false,
+        bool useLegacyWakeSourceKernelPrecision = false,
+        bool useLegacyStreamfunctionKernelPrecision = false,
+        bool useLegacyPanelingPrecision = false)
     {
-        if (panelCount < 16)
+        if (panelCount < MinimumSupportedPanelCount)
         {
-            throw new ArgumentOutOfRangeException(nameof(panelCount), "Panel count must be at least 16.");
+            throw new ArgumentOutOfRangeException(
+                nameof(panelCount),
+                $"Panel count must be at least {MinimumSupportedPanelCount}.");
         }
 
         if (freestreamVelocity <= 0d)
@@ -80,6 +97,10 @@ public sealed class AnalysisSettings
         NCritUpper = nCritUpper;
         NCritLower = nCritLower;
         UsePostStallExtrapolation = usePostStallExtrapolation;
+        UseLegacyBoundaryLayerInitialization = useLegacyBoundaryLayerInitialization;
+        UseLegacyWakeSourceKernelPrecision = useLegacyWakeSourceKernelPrecision;
+        UseLegacyStreamfunctionKernelPrecision = useLegacyStreamfunctionKernelPrecision;
+        UseLegacyPanelingPrecision = useLegacyPanelingPrecision;
     }
 
     public int PanelCount { get; }
@@ -164,11 +185,43 @@ public sealed class AnalysisSettings
     public bool UsePostStallExtrapolation { get; }
 
     /// <summary>
+    /// When true, remarches the aft boundary layer and wake with a legacy-style
+    /// direct local Newton march before the first global viscous solve. This is
+    /// parity-only behavior for classic XFoil comparisons; the default remains the
+    /// modern managed seed path because it is simpler and more robust for runtime use.
+    /// </summary>
+    public bool UseLegacyBoundaryLayerInitialization { get; }
+
+    /// <summary>
+    /// When true, evaluates the wake-source PSWLIN/QDCALC kernel in legacy single precision
+    /// for parity work with classic XFoil. Default is false so the double-precision managed
+    /// implementation remains the runtime default.
+    /// </summary>
+    public bool UseLegacyWakeSourceKernelPrecision { get; }
+
+    /// <summary>
+    /// When true, assembles and evaluates the airfoil streamfunction kernel in legacy
+    /// single precision for parity work with classic XFoil. Default is false so the
+    /// double-precision managed implementation remains the runtime default.
+    /// </summary>
+    public bool UseLegacyStreamfunctionKernelPrecision { get; }
+
+    /// <summary>
+    /// When true, runs the XFoil-style panel redistribution in legacy single precision
+    /// for parity work with classic XFoil. Default is false so the double-precision
+    /// managed paneling remains the runtime default.
+    /// </summary>
+    public bool UseLegacyPanelingPrecision { get; }
+
+    /// <summary>
     /// Returns the effective NCrit for the given side.
     /// Uses per-surface override if set, otherwise falls back to the global CriticalAmplificationFactor.
     /// </summary>
     /// <param name="side">0 for upper surface, 1 for lower surface.</param>
     /// <returns>The effective NCrit value.</returns>
+    // Legacy mapping: f_xfoil/src/xblsys.f :: TRCHEK2 NCrit usage lineage.
+    // Difference from legacy: Per-side NCrit overrides are resolved through one managed helper instead of ad hoc reads from global state.
+    // Decision: Keep the helper because it makes side-specific transition settings explicit.
     public double GetEffectiveNCrit(int side)
     {
         return side switch

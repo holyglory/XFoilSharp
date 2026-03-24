@@ -1,9 +1,18 @@
 using XFoil.Core.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xgeom.f :: LEFIND/GEOPAR
+// Secondary legacy source: f_xfoil/src/spline.f :: SCALC
+// Role in port: Computes coarse airfoil geometry metrics for parsed or generated shapes before paneling.
+// Differences: The managed code works directly on discrete points with polyline and x-sampled estimates, while legacy XFoil uses spline derivatives and exact geometry-property routines.
+// Decision: Keep the simpler managed helper because it is used for validation and diagnostics rather than solver parity; no parity-only branch is needed here.
 namespace XFoil.Core.Services;
 
 public sealed class AirfoilMetricsCalculator
 {
+    // Legacy mapping: f_xfoil/src/xgeom.f :: LEFIND/GEOPAR, f_xfoil/src/spline.f :: SCALC.
+    // Difference from legacy: This method estimates leading edge, arc length, thickness, and camber from discrete points and uniform x sampling instead of spline-based geometry properties.
+    // Decision: Keep the simpler managed metric calculation because it is adequate for preprocessing and tests and is not part of the binary parity path.
     public AirfoilMetrics Calculate(AirfoilGeometry geometry)
     {
         if (geometry is null)
@@ -20,6 +29,9 @@ public sealed class AirfoilMetricsCalculator
 
         var chord = Distance(leadingEdge, trailingEdgeMidpoint);
         var totalArcLength = 0d;
+        // Legacy block: SCALC cumulative arc-length sweep.
+        // Difference: The managed code uses straight-segment distances between supplied points instead of first building a spline parameterization.
+        // Decision: Keep the polyline sweep because this helper is intentionally lightweight.
         for (var index = 1; index < points.Length; index++)
         {
             totalArcLength += Distance(points[index - 1], points[index]);
@@ -38,6 +50,9 @@ public sealed class AirfoilMetricsCalculator
         var maxThickness = 0d;
         var maxCamber = 0d;
 
+        // Legacy block: managed-only thickness/camber sampling inspired by GEOPAR-style geometry summaries.
+        // Difference: Legacy XFoil derives geometry properties from spline-based quantities; this helper samples upper and lower surfaces uniformly in x.
+        // Decision: Keep the uniform sampling approach because it is stable, readable, and not a parity-critical solver kernel.
         for (var sampleIndex = 0; sampleIndex <= sampleCount; sampleIndex++)
         {
             var x = sampleIndex / (double)sampleCount;
@@ -58,6 +73,9 @@ public sealed class AirfoilMetricsCalculator
             maxCamber);
     }
 
+    // Legacy mapping: f_xfoil/src/xgeom.f :: XLFIND/LEFIND first-guess scan.
+    // Difference from legacy: This helper simply picks the minimum-x node instead of refining the leading edge on a spline.
+    // Decision: Keep the discrete scan because the surrounding metrics path is intentionally approximate.
     private static int FindLeadingEdgeIndex(IReadOnlyList<AirfoilPoint> points)
     {
         var bestIndex = 0;
@@ -72,6 +90,9 @@ public sealed class AirfoilMetricsCalculator
         return bestIndex;
     }
 
+    // Legacy mapping: none; this is a managed support routine used for the sampled thickness/camber estimate.
+    // Difference from legacy: XFoil evaluates geometry on splines rather than linearly interpolating sorted surface points.
+    // Decision: Keep the linear interpolation helper because it matches the coarse managed metric strategy.
     private static double InterpolateY(IReadOnlyList<AirfoilPoint> points, double x)
     {
         if (x <= points[0].X)
@@ -106,6 +127,9 @@ public sealed class AirfoilMetricsCalculator
         return points[^1].Y;
     }
 
+    // Legacy mapping: f_xfoil/src/spline.f :: SCALC segment-length accumulation.
+    // Difference from legacy: The helper returns a single Euclidean segment length instead of feeding a spline arc-length array.
+    // Decision: Keep the scalar helper because it is the clearest building block for this simplified metrics path.
     private static double Distance(AirfoilPoint a, AirfoilPoint b)
     {
         var dx = b.X - a.X;

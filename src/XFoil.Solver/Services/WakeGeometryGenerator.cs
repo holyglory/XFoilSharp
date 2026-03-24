@@ -1,12 +1,21 @@
 using XFoil.Core.Models;
 using XFoil.Solver.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xpanel.f :: XYWAKE
+// Secondary legacy source: f_xfoil/src/xutils.f :: SETEXP
+// Role in port: Generates the managed wake geometry used by the Hess-Smith and diagnostic paths.
+// Differences: The wake march is derived from XYWAKE, but the managed version evaluates wake direction from explicit panel velocity influence summation and stores the result as immutable WakePoint records instead of mutating the legacy wake arrays in place.
+// Decision: Keep the managed wake builder because it is easier to inspect and test. Preserve the SETEXP-derived spacing law and the legacy wake-gap behavior where parity-sensitive seed construction depends on them.
 namespace XFoil.Solver.Services;
 
 public sealed class WakeGeometryGenerator
 {
     private const double TwoPi = 2d * Math.PI;
 
+    // Legacy mapping: f_xfoil/src/xpanel.f :: XYWAKE (managed-derived wake march).
+    // Difference from legacy: The method consumes an already-solved panel mesh and influence strengths, then constructs a managed WakeGeometry object through explicit stepping instead of updating XFoil COMMON arrays.
+    // Decision: Keep the managed object-building flow because it matches the public solver API, while the spacing and tangent-march ideas remain aligned with XYWAKE.
     public WakeGeometry Generate(
         PanelMesh mesh,
         IReadOnlyList<double> sourceStrengths,
@@ -68,7 +77,7 @@ public sealed class WakeGeometryGenerator
         }
 
         var firstSpacing = 0.5d * (firstPanel.Length + lastPanel.Length);
-        var stretchedDistances = BuildStretchedDistances(firstSpacing, totalWakeLength, count);
+        var stretchedDistances = WakeSpacing.BuildStretchedDistances(firstSpacing, totalWakeLength, count);
         var points = new List<WakePoint>(count);
         var seedOffset = Math.Max(1e-4, 0.1d * firstSpacing);
         var seedPoint = new AirfoilPoint(
@@ -89,6 +98,9 @@ public sealed class WakeGeometryGenerator
 
         points.Add(new WakePoint(trailingEdge, tangentX, tangentY, 0d, initialWakeState.Speed));
 
+        // Legacy block: XYWAKE downstream wake march.
+        // Difference: The managed code advances WakePoint records explicitly and samples the midpoint flow state for the next tangent, rather than updating the legacy wake arrays in-place.
+        // Decision: Keep the explicit march because it is easier to debug while retaining the same high-level wake continuation behavior.
         for (var index = 1; index < count; index++)
         {
             var step = stretchedDistances[index] - stretchedDistances[index - 1];
@@ -119,6 +131,9 @@ public sealed class WakeGeometryGenerator
         return new WakeGeometry(points);
     }
 
+    // Legacy mapping: f_xfoil/src/xpanel.f :: XYWAKE local wake-direction update.
+    // Difference from legacy: The managed port sums source and vortex point-velocity influences explicitly rather than calling through the original panel solver workspace.
+    // Decision: Keep the explicit influence sum because it matches the managed Hess-Smith data flow.
     private static WakeState EvaluateWakeState(
         PanelMesh mesh,
         IReadOnlyList<double> sourceStrengths,
@@ -167,6 +182,9 @@ public sealed class WakeGeometryGenerator
         return new WakeState(tangentX, tangentY, magnitude);
     }
 
+    // Legacy mapping: managed-only fallback normalization helper with no standalone Fortran analogue.
+    // Difference from legacy: XFoil folds this safeguard into surrounding wake logic; the port factors it out to keep the wake-state update readable.
+    // Decision: Keep the helper because it makes the managed wake march easier to reason about.
     private static AirfoilPoint NormalizeFallback(double tangentX, double tangentY)
     {
         var magnitude = Math.Sqrt((tangentX * tangentX) + (tangentY * tangentY));
@@ -178,6 +196,9 @@ public sealed class WakeGeometryGenerator
         return new AirfoilPoint(tangentX / magnitude, tangentY / magnitude);
     }
 
+    // Legacy mapping: f_xfoil/src/xpanel.f :: XYWAKE / induced-velocity evaluation lineage.
+    // Difference from legacy: The underlying source/vortex influence formulas are classical panel-method relations evaluated directly here instead of through the full XFoil influence workspace and wake/source coupling tables.
+    // Decision: Keep the local helper because it matches the managed Hess-Smith solver architecture, while the comment records that it is a managed derivation rather than a literal workspace port.
     private static PanelVelocityInfluence ComputePointVelocityInfluence(AirfoilPoint point, Panel panel)
     {
         var dx = point.X - panel.Start.X;
@@ -200,71 +221,6 @@ public sealed class WakeGeometryGenerator
             (uSource * panel.TangentY) + (vSource * panel.NormalY),
             (uVortex * panel.TangentX) + (vVortex * panel.NormalX),
             (uVortex * panel.TangentY) + (vVortex * panel.NormalY));
-    }
-
-    private static double[] BuildStretchedDistances(double firstSpacing, double maxDistance, int pointCount)
-    {
-        if (pointCount < 2)
-        {
-            throw new ArgumentOutOfRangeException(nameof(pointCount), "Wake point count must be at least 2.");
-        }
-
-        var result = new double[pointCount];
-        result[0] = 0d;
-        if (pointCount == 2)
-        {
-            result[1] = maxDistance;
-            return result;
-        }
-
-        var segmentCount = pointCount - 1;
-        var ratio = SolveGeometricRatio(firstSpacing, maxDistance, segmentCount);
-        var step = firstSpacing;
-        for (var index = 1; index < pointCount; index++)
-        {
-            result[index] = result[index - 1] + step;
-            step *= ratio;
-        }
-
-        result[^1] = maxDistance;
-        return result;
-    }
-
-    private static double SolveGeometricRatio(double firstSpacing, double maxDistance, int segmentCount)
-    {
-        if (segmentCount <= 1)
-        {
-            return 1d;
-        }
-
-        var sigma = maxDistance / Math.Max(firstSpacing, 1e-9);
-        var ratio = 1.05d;
-
-        for (var iteration = 0; iteration < 100; iteration++)
-        {
-            if (Math.Abs(ratio - 1d) < 1e-9)
-            {
-                ratio = 1.0001d;
-            }
-
-            var numerator = Math.Pow(ratio, segmentCount) - 1d;
-            var denominator = ratio - 1d;
-            var geometricSum = numerator / denominator;
-            var residual = geometricSum - sigma;
-            if (Math.Abs(residual) < 1e-8)
-            {
-                return ratio;
-            }
-
-            var derivative =
-                ((segmentCount * Math.Pow(ratio, segmentCount - 1d)) * denominator - numerator)
-                / (denominator * denominator);
-
-            ratio -= residual / derivative;
-            ratio = Math.Max(1.00001d, ratio);
-        }
-
-        return ratio;
     }
 
     private readonly record struct PanelVelocityInfluence(

@@ -1,7 +1,15 @@
+// Legacy audit:
+// Primary legacy source: none
+// Role in port: Managed DTO describing one named column in a legacy polar table.
+// Differences: No direct Fortran analogue exists because the legacy code emitted column labels procedurally during formatted file I/O instead of constructing a named object.
+// Decision: Keep the managed DTO because it makes parsed polar tables explicit and reusable.
 namespace XFoil.IO.Models;
 
 public sealed class LegacyPolarColumn
 {
+    // Legacy mapping: none; managed-only validation wrapper for one legacy polar column descriptor.
+    // Difference from legacy: The Fortran writer printed column names directly, while the port validates and stores them in a constructor.
+    // Decision: Keep the managed constructor because it catches malformed parsed data early.
     public LegacyPolarColumn(string key, string label, int position)
     {
         if (string.IsNullOrWhiteSpace(key))

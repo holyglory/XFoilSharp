@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xoper.f :: COMSET/MRCHUE seed lineage
+// Role in port: Managed container for the full upper, lower, and wake seed state plus trailing-edge gap metadata.
+// Differences: Legacy XFoil stores these quantities in several arrays and gap scalars, while the managed port packages them into one explicit seed object.
+// Decision: Keep the managed DTO because it makes seed transport and inspection straightforward.
 namespace XFoil.Solver.Models;
 
 public sealed class ViscousStateSeed

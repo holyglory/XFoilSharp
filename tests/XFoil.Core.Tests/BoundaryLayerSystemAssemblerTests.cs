@@ -1,6 +1,12 @@
 using Xunit;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xblsys.f :: BLPRV, BLKIN, BLVAR, BLMID, BLDIF, TESYS, BLSYS
+// Secondary legacy source: f_xfoil/src/xbl.f
+// Role in port: Verifies the managed boundary-layer system assembler that ports the core viscous residual and Jacobian assembly routines.
+// Differences: The managed port exposes composable helpers and typed tuples instead of legacy common-block updates inside a monolithic routine.
+// Decision: Keep the managed decomposition while preserving parity-sensitive legacy-order branches where required.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -14,6 +20,8 @@ public class BoundaryLayerSystemAssemblerTests
     // ========== BLPRV / ConvertToCompressible ==========
 
     [Fact]
+    // Legacy mapping: xblsys BLPRV / compressibility conversion at M=0.
+    // Difference from legacy: The helper is tested directly on a managed tuple-returning API. Decision: Keep the managed unit test because it isolates the preserved conversion formula.
     public void ConvertToCompressible_AtMachZero_ReturnsIdentity()
     {
         // At M=0, TKBL=0, so U2 = UEI*(1-0)/(1-0) = UEI
@@ -27,6 +35,8 @@ public class BoundaryLayerSystemAssemblerTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys BLPRV Karman-Tsien conversion.
+    // Difference from legacy: The managed test checks the formula explicitly instead of relying on downstream viscous assembly. Decision: Keep the direct formula regression because it tightly constrains the ported helper.
     public void ConvertToCompressible_AtMach05_AppliesKarmanTsien()
     {
         // At nonzero Mach, TKBL != 0, Karman-Tsien correction applies
@@ -49,6 +59,8 @@ public class BoundaryLayerSystemAssemblerTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys BLPRV sensitivities.
+    // Difference from legacy: The port exposes derivatives directly, allowing explicit numerical cross-checks. Decision: Keep the managed derivative test because it protects a parity-sensitive Jacobian path.
     public void ConvertToCompressible_Sensitivities_MatchNumerical()
     {
         double uei = 0.3;
@@ -73,6 +85,8 @@ public class BoundaryLayerSystemAssemblerTests
     // ========== BLVAR / ComputeStationVariables ==========
 
     [Fact]
+    // Legacy mapping: xblsys BLVAR laminar dispatch.
+    // Difference from legacy: The managed assembler exposes station-variable computation as a direct helper. Decision: Keep the managed unit test because it documents the laminar branch explicitly.
     public void ComputeStationVariables_Laminar_DispatchesCorrectly()
     {
         // For laminar (ITYP=1), Cf should come from LaminarSkinFriction
@@ -87,6 +101,8 @@ public class BoundaryLayerSystemAssemblerTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys BLVAR turbulent dispatch.
+    // Difference from legacy: Turbulent correlation outputs are checked directly on a managed helper. Decision: Keep the managed regression because it isolates the turbulent branch behavior.
     public void ComputeStationVariables_Turbulent_DispatchesCorrectly()
     {
         var vars = BoundaryLayerSystemAssembler.ComputeStationVariables(
@@ -99,6 +115,8 @@ public class BoundaryLayerSystemAssemblerTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys BLVAR wake dispatch.
+    // Difference from legacy: Wake-specific zero-Cf handling is asserted directly instead of through full system assembly. Decision: Keep the managed test because it documents the special wake branch clearly.
     public void ComputeStationVariables_Wake_HasZeroCf()
     {
         var vars = BoundaryLayerSystemAssembler.ComputeStationVariables(
@@ -113,6 +131,8 @@ public class BoundaryLayerSystemAssemblerTests
     // ========== BLMID / ComputeMidpointCorrelations ==========
 
     [Fact]
+    // Legacy mapping: xblsys BLMID midpoint correlations.
+    // Difference from legacy: Midpoint correlation assembly is validated through a dedicated helper rather than only in end-to-end residuals. Decision: Keep the managed unit test because it isolates the midpoint logic.
     public void ComputeMidpointCorrelations_ProducesAverageValues()
     {
         double hk1 = 2.0, hk2 = 2.5;
@@ -131,6 +151,8 @@ public class BoundaryLayerSystemAssemblerTests
     // ========== BLDIF / ComputeFiniteDifferences ==========
 
     [Fact]
+    // Legacy mapping: xblsys BLDIF laminar momentum residual.
+    // Difference from legacy: The residual is checked directly on the managed finite-difference helper. Decision: Keep the managed regression because it isolates Equation-1 assembly behavior.
     public void ComputeFiniteDifferences_Laminar_MomentumResidualCorrect()
     {
         // For a laminar interval with known station values, the momentum
@@ -156,6 +178,8 @@ public class BoundaryLayerSystemAssemblerTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys BLDIF turbulent residual system.
+    // Difference from legacy: All three residuals are asserted through the managed helper instead of through the full Newton solve. Decision: Keep the managed regression because it exposes the assembled equations directly.
     public void ComputeFiniteDifferences_Turbulent_AllThreeResidualsCorrect()
     {
         var result = BoundaryLayerSystemAssembler.ComputeFiniteDifferences(
@@ -182,6 +206,8 @@ public class BoundaryLayerSystemAssemblerTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys BLDIF Jacobian terms.
+    // Difference from legacy: The managed port exposes analytical Jacobians directly for central-difference verification. Decision: Keep the managed derivative test because this path is central to parity debugging.
     public void ComputeFiniteDifferences_JacobianMatchesNumerical()
     {
         double eps = 1e-6;
@@ -214,6 +240,8 @@ public class BoundaryLayerSystemAssemblerTests
     // ========== TESYS / AssembleTESystem ==========
 
     [Fact]
+    // Legacy mapping: xblsys TESYS trailing-edge coupling.
+    // Difference from legacy: The TE coupling block is asserted directly on managed assembled structures. Decision: Keep the managed regression because it isolates a subtle assembly path.
     public void AssembleTESystem_CouplesCorrectly()
     {
         // TE system: theta_wake = theta_TE, dstar_wake = dstar_TE + DW
@@ -238,6 +266,8 @@ public class BoundaryLayerSystemAssemblerTests
     // ========== BLSYS / AssembleStationSystem ==========
 
     [Fact]
+    // Legacy mapping: xblsys BLSYS station assembly.
+    // Difference from legacy: The managed test exercises a single assembled station block rather than only full viscous iterations. Decision: Keep the managed unit regression because it documents the station-system contract explicitly.
     public void AssembleStationSystem_LaminarInterval_ProducesValidBlocks()
     {
         var result = BoundaryLayerSystemAssembler.AssembleStationSystem(

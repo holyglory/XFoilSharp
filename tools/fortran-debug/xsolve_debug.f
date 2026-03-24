@@ -36,6 +36,19 @@ C     *                              Mark Drela  1984       *
 C     *******************************************************
 C
       DIMENSION Z(NSIZ,NSIZ), R(NSIZ,NRHS)
+      LOGICAL TRACEGAUSS
+      CHARACTER*16 GPHASE
+C
+      TRACEGAUSS = NN.EQ.4 .AND. NRHS.EQ.1
+      IF(TRACEGAUSS) THEN
+       GPHASE = 'initial'
+       CALL TRACE_GAUSS_STATE('GAUSS', GPHASE, 0, 0,
+     &      Z(1,1), Z(1,2), Z(1,3), Z(1,4),
+     &      Z(2,1), Z(2,2), Z(2,3), Z(2,4),
+     &      Z(3,1), Z(3,2), Z(3,3), Z(3,4),
+     &      Z(4,1), Z(4,2), Z(4,3), Z(4,4),
+     &      R(1,1), R(2,1), R(3,1), R(4,1))
+      ENDIF
 C
       DO 1 NP=1, NN-1
         NP1 = NP+1
@@ -65,6 +78,16 @@ C
           R(NP,L) = TEMP
    13   CONTINUE
 C
+        IF(TRACEGAUSS) THEN
+         GPHASE = 'normalized'
+         CALL TRACE_GAUSS_STATE('GAUSS', GPHASE, NP, NX,
+     &        Z(1,1), Z(1,2), Z(1,3), Z(1,4),
+     &        Z(2,1), Z(2,2), Z(2,3), Z(2,4),
+     &        Z(3,1), Z(3,2), Z(3,3), Z(3,4),
+     &        Z(4,1), Z(4,2), Z(4,3), Z(4,4),
+     &        R(1,1), R(2,1), R(3,1), R(4,1))
+        ENDIF
+C
 C------ forward eliminate everything
         DO 15 K=NP1, NN
           ZTMP = Z(K,NP)
@@ -77,6 +100,15 @@ C
           DO 152 L=1, NRHS
             R(K,L) = R(K,L) - ZTMP*R(NP,L)
   152     CONTINUE
+          IF(TRACEGAUSS) THEN
+           GPHASE = 'eliminate'
+           CALL TRACE_GAUSS_STATE('GAUSS', GPHASE, NP, K,
+     &          Z(1,1), Z(1,2), Z(1,3), Z(1,4),
+     &          Z(2,1), Z(2,2), Z(2,3), Z(2,4),
+     &          Z(3,1), Z(3,2), Z(3,3), Z(3,4),
+     &          Z(4,1), Z(4,2), Z(4,3), Z(4,4),
+     &          R(1,1), R(2,1), R(3,1), R(4,1))
+          ENDIF
    15   CONTINUE
 C
     1 CONTINUE
@@ -85,6 +117,15 @@ C---- solve for last row
       DO 2 L=1, NRHS
         R(NN,L) = R(NN,L)/Z(NN,NN)
     2 CONTINUE
+      IF(TRACEGAUSS) THEN
+       GPHASE = 'last'
+       CALL TRACE_GAUSS_STATE('GAUSS', GPHASE, NN, NN,
+     &      Z(1,1), Z(1,2), Z(1,3), Z(1,4),
+     &      Z(2,1), Z(2,2), Z(2,3), Z(2,4),
+     &      Z(3,1), Z(3,2), Z(3,3), Z(3,4),
+     &      Z(4,1), Z(4,2), Z(4,3), Z(4,4),
+     &      R(1,1), R(2,1), R(3,1), R(4,1))
+      ENDIF
 C
 C---- back substitute everything
       DO 3 NP=NN-1, 1, -1
@@ -94,6 +135,15 @@ C---- back substitute everything
             R(NP,L) = R(NP,L) - Z(NP,K)*R(K,L)
   310     CONTINUE
    31   CONTINUE
+        IF(TRACEGAUSS) THEN
+         GPHASE = 'backsub'
+         CALL TRACE_GAUSS_STATE('GAUSS', GPHASE, NP, 0,
+     &        Z(1,1), Z(1,2), Z(1,3), Z(1,4),
+     &        Z(2,1), Z(2,2), Z(2,3), Z(2,4),
+     &        Z(3,1), Z(3,2), Z(3,3), Z(3,4),
+     &        Z(4,1), Z(4,2), Z(4,3), Z(4,4),
+     &        R(1,1), R(2,1), R(3,1), R(4,1))
+        ENDIF
     3 CONTINUE
 C
       RETURN
@@ -186,6 +236,8 @@ C     *                              Mark Drela  1988       *
 C     *******************************************************
 C
       DIMENSION A(NSIZ,NSIZ), INDX(NSIZ)
+      CHARACTER*64 LU_TRACE_CONTEXT
+      COMMON /TRACE_LU_CTX/ LU_TRACE_CONTEXT
 C
       PARAMETER (NVX=500)
       DIMENSION VV(NVX)
@@ -204,7 +256,16 @@ C
         DO 14 I=1, J-1
           SUM = A(I,J)
           DO 13 K=1, I-1
-            SUM = SUM - A(I,K)*A(K,J)
+            PRODUCT = A(I,K)*A(K,J)
+            SUMBEFORE = SUM
+            SUM = SUM - PRODUCT
+            IF(LU_TRACE_CONTEXT.NE.' ') THEN
+             CALL TRACE_LU_DECOMPOSE_TERM('ScaledPivotLuSolver',
+     &                                   LU_TRACE_CONTEXT,
+     &                                   'upper', I, J, K,
+     &                                   A(I,K), A(K,J), PRODUCT,
+     &                                   SUMBEFORE, SUM)
+            ENDIF
    13     CONTINUE
           A(I,J) = SUM
    14   CONTINUE
@@ -213,7 +274,16 @@ C
         DO 16 I=J, N
           SUM = A(I,J)
           DO 15 K=1, J-1
-            SUM = SUM - A(I,K)*A(K,J)
+            PRODUCT = A(I,K)*A(K,J)
+            SUMBEFORE = SUM
+            SUM = SUM - PRODUCT
+            IF(LU_TRACE_CONTEXT.NE.' ') THEN
+             CALL TRACE_LU_DECOMPOSE_TERM('ScaledPivotLuSolver',
+     &                                   LU_TRACE_CONTEXT,
+     &                                   'lower', I, J, K,
+     &                                   A(I,K), A(K,J), PRODUCT,
+     &                                   SUMBEFORE, SUM)
+            ENDIF
    15     CONTINUE
           A(I,J) = SUM
 C
@@ -234,6 +304,10 @@ C
         ENDIF
 C
         INDX(J) = IMAX
+        IF(LU_TRACE_CONTEXT.NE.' ') THEN
+         CALL TRACE_LU_PIVOT('ScaledPivotLuSolver', LU_TRACE_CONTEXT,
+     &                       J, IMAX, A(J,J), AAMAX)
+        ENDIF
         IF(J.NE.N) THEN
          DUM = 1.0/A(J,J)
          DO 18 I=J+1, N
@@ -243,36 +317,81 @@ C
 C
    19 CONTINUE
 C
+      IF(LU_TRACE_CONTEXT.EQ.'basis_aij_single') THEN
+       DO 21 I=1, N
+        DO 22 J=1, N
+          CALL TRACE_MATRIX_ENTRY(
+     &        'LinearVortexInviscidSolver.AssembleAndFactorSystem',
+     &        'basis_lu_aij',
+     &        I, J, A(I,J))
+   22   CONTINUE
+   21  CONTINUE
+      ENDIF
+C
       RETURN
       END ! LUDCMP
 
 
       SUBROUTINE BAKSUB(NSIZ,N,A,INDX,B)
       DIMENSION A(NSIZ,NSIZ), B(NSIZ), INDX(NSIZ)
+      CHARACTER*64 BAKSUB_TRACE_CONTEXT
+      COMMON /TRACE_BAKSUB_CTX/ BAKSUB_TRACE_CONTEXT
 C
       II = 0
       DO 12 I=1, N
         LL = INDX(I)
         SUM = B(LL)
+        SUMSWAP = SUM
         B(LL) = B(I)
         IF(II.NE.0) THEN
          DO 11 J=II, I-1
-           SUM = SUM - A(I,J)*B(J)
+           PRODUCT = A(I,J)*B(J)
+           SUMBEFORE = SUM
+           SUM = SUM - PRODUCT
+           IF(BAKSUB_TRACE_CONTEXT.NE.' ') THEN
+            CALL TRACE_LU_BACKSUB_TERM('ScaledPivotLuSolver',
+     &                                 BAKSUB_TRACE_CONTEXT,
+     &                                 'forward', I, J, LL, II,
+     &                                 A(I,J), B(J), PRODUCT,
+     &                                 SUMBEFORE, SUM)
+           ENDIF
    11    CONTINUE
         ELSE IF(SUM.NE.0.0) THEN
          II = I
         ENDIF
         B(I) = SUM
+        IF(BAKSUB_TRACE_CONTEXT.NE.' ') THEN
+         CALL TRACE_LU_BACKSUB_ROW('ScaledPivotLuSolver',
+     &                             BAKSUB_TRACE_CONTEXT,
+     &                             'forward', I, LL, II,
+     &                             SUMSWAP, SUM, 0.0, B(I))
+        ENDIF
    12 CONTINUE
 C
       DO 14 I=N, 1, -1
         SUM = B(I)
+        SUMSTART = SUM
         IF(I.LT.N) THEN
          DO 13 J=I+1, N
-           SUM = SUM - A(I,J)*B(J)
+           PRODUCT = A(I,J)*B(J)
+           SUMBEFORE = SUM
+           SUM = SUM - PRODUCT
+           IF(BAKSUB_TRACE_CONTEXT.NE.' ') THEN
+            CALL TRACE_LU_BACKSUB_TERM('ScaledPivotLuSolver',
+     &                                 BAKSUB_TRACE_CONTEXT,
+     &                                 'backward', I, J, INDX(I), II,
+     &                                 A(I,J), B(J), PRODUCT,
+     &                                 SUMBEFORE, SUM)
+           ENDIF
    13    CONTINUE
         ENDIF
         B(I) = SUM/A(I,I)
+        IF(BAKSUB_TRACE_CONTEXT.NE.' ') THEN
+         CALL TRACE_LU_BACKSUB_ROW('ScaledPivotLuSolver',
+     &                             BAKSUB_TRACE_CONTEXT,
+     &                             'backward', I, INDX(I), II,
+     &                             SUMSTART, SUM, A(I,I), B(I))
+        ENDIF
    14 CONTINUE
 C
       RETURN
@@ -301,7 +420,9 @@ C       R        3x1  residual vectors
 C       S        3x1  Re influence vectors
 C-----------------------------------------------------------------
       INCLUDE 'XFOIL.INC'
+      CHARACTER*256 TRLINE
 C
+      CALL TRACE_ENTER('BLSOLV')
       IVTE1 = ISYS(IBLTE(1),1)
 C
       VACC1 = VACCEL
@@ -465,9 +586,16 @@ C
 C
 C---- DEBUG: log post-forward-sweep VDEL values
       WRITE(50,*) 'BLSOLV_POST_FORWARD NSYS=', NSYS
+      WRITE(TRLINE,'(A,I6)') 'NSYS=', NSYS
+      CALL TRACE_TEXT('BLSOLV', 'post_forward', TRLINE)
       DO 8000 IV=1, MIN(NSYS,5)
         WRITE(50,9906) 'VDEL_FWD', IV,
      &                 VDEL(1,1,IV), VDEL(2,1,IV), VDEL(3,1,IV)
+        WRITE(TRLINE,9908) IV, VDEL(1,1,IV), VDEL(2,1,IV), VDEL(3,1,IV)
+        CALL TRACE_TEXT('BLSOLV', 'vdel_fwd', TRLINE)
+        CALL TRACE_ARRAY3_INDEX('BLSOLV', 'vdel_fwd',
+     &                          IV, VDEL(1,1,IV), VDEL(2,1,IV),
+     &                          VDEL(3,1,IV))
  8000 CONTINUE
  9906 FORMAT(A,' IV=',I4,3E15.8)
 C
@@ -495,8 +623,15 @@ C---- DEBUG: log post-back-substitution VDEL values
       DO 8001 IV=1, MIN(NSYS,5)
         WRITE(50,9907) 'VDEL_SOL', IV,
      &                 VDEL(1,1,IV), VDEL(2,1,IV), VDEL(3,1,IV)
+        WRITE(TRLINE,9908) IV, VDEL(1,1,IV), VDEL(2,1,IV), VDEL(3,1,IV)
+        CALL TRACE_TEXT('BLSOLV', 'vdel_sol', TRLINE)
+        CALL TRACE_ARRAY3_INDEX('BLSOLV', 'vdel_sol',
+     &                          IV, VDEL(1,1,IV), VDEL(2,1,IV),
+     &                          VDEL(3,1,IV))
  8001 CONTINUE
  9907 FORMAT(A,' IV=',I4,3E15.8)
+ 9908 FORMAT('IV=',I4,' ',1PE15.8,' ',1PE15.8,' ',1PE15.8)
 C
+      CALL TRACE_EXIT('BLSOLV')
       RETURN
       END

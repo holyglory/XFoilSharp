@@ -22,7 +22,7 @@ C
       INCLUDE 'XFOIL.INC'
       CHARACTER*1 ANS
       CHARACTER*4 COMAND, COMOLD
-      LOGICAL LRECALC, LCPX
+      LOGICAL LRECALC, LCPX, LDEBUG50, LTRACE51
 C
       CHARACTER*128 COMARG, ARGOLD, LINE
 C
@@ -203,6 +203,14 @@ C
        LVISC = .NOT. LVISC
 C
        IF(LVISC) THEN
+         INQUIRE(UNIT=50, OPENED=LDEBUG50)
+         INQUIRE(UNIT=51, OPENED=LTRACE51)
+         IF(.NOT.LDEBUG50) THEN
+          OPEN(50, FILE='debug_dump.txt', STATUS='REPLACE')
+          WRITE(50,*) '=== OPER DEBUG START ==='
+          IF(.NOT.LTRACE51) CALL TRACE_OPEN('debug_trace.jsonl')
+          CALL TRACE_TEXT('OPER', 'mode_toggle', 'LVISC enabled')
+         ENDIF
          IF(NINPUT.GE.1) THEN
            REINF1 = RINPUT(1)
          ELSE IF(REINF1 .EQ. 0.0) THEN
@@ -2585,16 +2593,30 @@ C----------------------------------------
 C     Converges viscous operating point
 C----------------------------------------
       INCLUDE 'XFOIL.INC'
+      LOGICAL LDEBUG50, LTRACE51
+      CHARACTER*256 TRLINE
 C
 C---- convergence tolerance
       DATA EPS1 / 1.0E-4 /
 C
       NITER = NITER1
+      CALL TRACE_ENTER('VISCAL')
 C
-C---- DEBUG: open dump file
-      OPEN(50, FILE='debug_dump.txt', STATUS='REPLACE')
+C---- DEBUG: open dump file if the OPER-level hook did not already do it
+      INQUIRE(UNIT=50, OPENED=LDEBUG50)
+      INQUIRE(UNIT=51, OPENED=LTRACE51)
+      IF(.NOT.LDEBUG50) THEN
+       OPEN(50, FILE='debug_dump.txt', STATUS='REPLACE')
+       IF(.NOT.LTRACE51) CALL TRACE_OPEN('debug_trace.jsonl')
+      ENDIF
       WRITE(50,*) '=== VISCAL START ==='
       WRITE(50,*) 'NITER=', NITER
+      CALL TRACE_CONFIG('VISCAL', NITER)
+C
+      CALL SCALC(XB,YB,SB,NB)
+      DO I = 1, NB
+       CALL TRACE_BUFFER_NODE('VISCAL', I, XB(I), YB(I), SB(I))
+      ENDDO
 C
 C---- calculate wake trajectory from current inviscid solution if necessary
       IF(.NOT.LWAKE) THEN
@@ -2667,6 +2689,7 @@ C---- Newton iteration for entire BL solution
 C
 C------ fill Newton system for BL variables
         WRITE(50,*) '=== ITER', ITER, '==='
+        CALL TRACE_ITERATION_START('VISCAL', ITER)
         CALL SETBL
 C
 C------ solve Newton system with custom solver
@@ -2678,6 +2701,7 @@ C
 C------ DEBUG: log post-UPDATE residuals
         WRITE(50,*) 'POST_UPDATE RMSBL=', RMSBL,
      &              ' RMXBL=', RMXBL, ' RLX=', RLX
+        CALL TRACE_POST_UPDATE('VISCAL', ITER, RMSBL, RMXBL, RLX)
 C
         IF(LALFA) THEN
 C------- set new freestream Mach, Re from new CL
@@ -2706,6 +2730,7 @@ C
 C------ DEBUG: log post-calc aerodynamic coefficients
         WRITE(50,*) 'POST_CALC CL=', CL, ' CD=', CD,
      &              ' CM=', CM, ' CDF=', CDF
+        CALL TRACE_POST_CALC('VISCAL', ITER, CL, CD, CM, CDF)
 C
 C------ display changes and test for convergence
         IF(RLX.LT.1.0) 
@@ -2717,6 +2742,7 @@ C------ display changes and test for convergence
 C
         IF(RMSBL .LT. EPS1) THEN
          WRITE(50,*) 'CONVERGED iter=', ITER
+         CALL TRACE_CONVERGED('VISCAL', ITER)
          LVCONV = .TRUE.
          AVISC = ALFA
          MVISC = MINF
@@ -2729,11 +2755,16 @@ C
    90 CONTINUE
       WRITE(50,*) '=== VISCAL END ==='
       CLOSE(50)
+      CALL TRACE_EXIT('VISCAL')
+      CALL TRACE_CLOSE
       CALL CPCALC(N+NW,QINV,QINF,MINF,CPI)
       CALL CPCALC(N+NW,QVIS,QINF,MINF,CPV)
       IF(LFLAP) CALL MHINGE
       RETURN
 C....................................................................
+ 9901 FORMAT('RMSBL=',1PE15.8,' RMXBL=',1PE15.8,' RLX=',1PE15.8)
+ 9902 FORMAT('CL=',1PE15.8,' CD=',1PE15.8,' CM=',1PE15.8,
+     &       ' CDF=',1PE15.8)
  2000   FORMAT
      &   (/1X,I3,'   rms: ',E10.4,'   max: ',E10.4,3X,A1,' at ',I4,I3,
      &     '   RLX:',F6.3)

@@ -5,11 +5,20 @@ using XFoil.Design.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xmapgen.f :: MAPGEN
+// Secondary legacy source: f_xfoil/src/xqdes.f and inverse-design support routines
+// Role in port: Verifies the managed conformal map generation service derived from the legacy MAPGEN workflow.
+// Differences: The managed API returns structured convergence diagnostics, coefficient vectors, and explicit TE targets instead of driving the legacy inverse-design command environment.
+// Decision: Keep the managed service shape because it preserves the legacy algorithm while making its inputs and diagnostics explicit.
 namespace XFoil.Core.Tests;
 
 public sealed class ConformalMapgenServiceTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xmapgen.f :: MAPGEN baseline execution.
+    // Difference from legacy: The test inspects managed result objects rather than the mutable inverse-design workspace used by the legacy routine.
+    // Decision: Keep the managed result-based test because it directly validates the ported algorithm outputs.
     public void Execute_ReturnsConformalGeometryAndCoefficients()
     {
         var mapgenService = new ConformalMapgenService();
@@ -41,6 +50,9 @@ public sealed class ConformalMapgenServiceTests
     }
 
     [Fact]
+    // Legacy mapping: MAPGEN circle discretization precondition.
+    // Difference from legacy: Invalid circle counts are surfaced as managed argument validation instead of runtime command failure.
+    // Decision: Keep the managed exception contract because it is clearer while preserving the same prerequisite.
     public void Execute_RequiresOddCirclePointCount()
     {
         var service = new ConformalMapgenService();
@@ -50,6 +62,9 @@ public sealed class ConformalMapgenServiceTests
     }
 
     [Fact]
+    // Legacy mapping: MAPGEN larger-circle discretization path.
+    // Difference from legacy: The managed test asserts finite geometry directly instead of relying on successful downstream plotting/design usage.
+    // Decision: Keep the managed finite-output regression because it is the strongest portability check.
     public void Execute_LargerCirclePointCountStillReturnsFiniteGeometry()
     {
         var service = new ConformalMapgenService();
@@ -67,13 +82,16 @@ public sealed class ConformalMapgenServiceTests
     }
 
     [Fact]
+    // Legacy mapping: MAPGEN execution on legacy airfoil inputs.
+    // Difference from legacy: The test composes managed parser, analysis, QSPEC, and mapgen services instead of stepping through the legacy design shell.
+    // Decision: Keep the managed integration flow because it preserves the same algorithmic lineage through the ported service boundaries.
     public void Execute_FileBasedAirfoilCaseConverges()
     {
         var parser = new AirfoilParser();
         var analysisService = new AirfoilAnalysisService();
         var qSpecDesignService = new QSpecDesignService();
         var conformalMapgenService = new ConformalMapgenService();
-        var geometry = parser.ParseFile(GetFixturePath("dae11.dat"));
+        var geometry = parser.ParseFile(TestDataPaths.GetRunsFixturePath("dae11.dat"));
         var analysis = analysisService.AnalyzeInviscid(geometry, 2d, new AnalysisSettings(120));
         var baselineProfile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
         var targetProfile = qSpecDesignService.Modify(
@@ -94,6 +112,9 @@ public sealed class ConformalMapgenServiceTests
     }
 
     [Fact]
+    // Legacy mapping: MAPGEN trailing-edge gap target option.
+    // Difference from legacy: The managed API exposes TE gap target coordinates explicitly in the call signature and result object.
+    // Decision: Keep this managed clarity improvement because it preserves the same control with a stronger API contract.
     public void Execute_AllowsExplicitTrailingEdgeGapTarget()
     {
         var service = new ConformalMapgenService();
@@ -110,6 +131,9 @@ public sealed class ConformalMapgenServiceTests
     }
 
     [Fact]
+    // Legacy mapping: MAPGEN trailing-edge angle target option.
+    // Difference from legacy: The target and achieved angle are surfaced explicitly in managed results instead of remaining implicit in the design session.
+    // Decision: Keep the managed diagnostics because they improve observability over the legacy interaction.
     public void Execute_AllowsExplicitTrailingEdgeAngleTarget()
     {
         var service = new ConformalMapgenService();
@@ -123,6 +147,9 @@ public sealed class ConformalMapgenServiceTests
     }
 
     [Fact]
+    // Legacy mapping: MAPGEN harmonic filtering behavior.
+    // Difference from legacy: The managed test measures coefficient attenuation numerically rather than relying on visual assessment of mapped geometry.
+    // Decision: Keep the managed numerical regression because it is the clearest proof of the preserved filter behavior.
     public void Execute_FilterExponentAttenuatesUpperHarmonics()
     {
         var service = new ConformalMapgenService();
@@ -152,6 +179,9 @@ public sealed class ConformalMapgenServiceTests
     }
 
     [Fact]
+    // Legacy mapping: MAPGEN representative NACA inverse-design workflow with explicit TE angle control.
+    // Difference from legacy: The test asserts explicit angle-tracking diagnostics exposed only by the managed result object.
+    // Decision: Keep the managed diagnostic regression because it documents an important observable contract of the port.
     public void Execute_TracksExplicitTrailingEdgeAngleTargetForRepresentativeNacaCase()
     {
         var generator = new NacaAirfoilGenerator();
@@ -184,6 +214,9 @@ public sealed class ConformalMapgenServiceTests
     [InlineData("0012", 4d)]
     [InlineData("2412", 0d)]
     [InlineData("2412", 3d)]
+    // Legacy mapping: f_xfoil/src/xmapgen.f representative NACA MAPGEN convergence behavior.
+    // Difference from legacy: The test parameterizes several managed cases explicitly instead of using manual exploratory runs in the legacy UI.
+    // Decision: Keep the managed parameterized regression because it broadens stable coverage of the same algorithmic lineage.
     public void Execute_ConvergesForRepresentativeNacaCases(string designation, double alphaDegrees)
     {
         var generator = new NacaAirfoilGenerator();
@@ -224,13 +257,16 @@ public sealed class ConformalMapgenServiceTests
     [InlineData("dae51.dat", 2d)]
     [InlineData("e387.dat", 3d)]
     [InlineData("la203.dat", 2d)]
+    // Legacy mapping: MAPGEN convergence on representative legacy airfoil files.
+    // Difference from legacy: The managed test automates a compatibility matrix that would have required repeated manual MAPGEN sessions historically.
+    // Decision: Keep the managed parameterized compatibility test because it is a stronger regression than the original manual workflow.
     public void Execute_ConvergesForRepresentativeLegacyAirfoilFiles(string fileName, double alphaDegrees)
     {
         var parser = new AirfoilParser();
         var analysisService = new AirfoilAnalysisService();
         var qSpecDesignService = new QSpecDesignService();
         var conformalMapgenService = new ConformalMapgenService();
-        var geometry = parser.ParseFile(GetFixturePath(fileName));
+        var geometry = parser.ParseFile(TestDataPaths.GetRunsFixturePath(fileName));
         var analysis = analysisService.AnalyzeInviscid(geometry, alphaDegrees, new AnalysisSettings(140));
         var baselineProfile = qSpecDesignService.CreateFromInviscidAnalysis(geometry.Name, analysis);
         var targetProfile = BuildModeratelyEditedProfile(qSpecDesignService, baselineProfile);
@@ -256,12 +292,6 @@ public sealed class ConformalMapgenServiceTests
             profile.Points.Select(point => point.Location).ToArray(),
             AirfoilFormat.PlainCoordinates);
     }
-
-    private static string GetFixturePath(string fileName)
-    {
-        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "runs", fileName));
-    }
-
     private static QSpecProfile CreateProfile()
     {
         return new QSpecProfile(

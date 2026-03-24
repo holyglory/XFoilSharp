@@ -2,11 +2,19 @@ using System.Globalization;
 using XFoil.Core.Models;
 using XFoil.IO.Services;
 
+// Legacy audit:
+// Primary legacy source: none
+// Role in port: Verifies the managed DAT exporter that serializes airfoil geometry for .NET workflows and fixture generation.
+// Differences: The legacy code wrote geometry through interactive file commands, while this port exposes deterministic formatting and filesystem helpers as managed services.
+// Decision: Keep the managed implementation and tests because there is no single direct Fortran DAT-export analogue to replay.
 namespace XFoil.Core.Tests;
 
 public sealed class AirfoilDatExporterTests
 {
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: This test checks deterministic managed string formatting, which is a .NET-specific serialization concern rather than a legacy solver formula.
+    // Decision: Keep the managed-only test because reproducible text output is part of the port's public contract.
     public void Format_IncludesGeometryNameHeaderAndUsesDeterministicPointFormatting()
     {
         var exporter = new AirfoilDatExporter();
@@ -41,6 +49,9 @@ public sealed class AirfoilDatExporterTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Parent-directory creation is a managed filesystem behavior with no direct Fortran counterpart.
+    // Decision: Keep the managed-only test because the exporter intentionally owns this convenience behavior in the port.
     public void Export_CreatesParentDirectoryOnExport()
     {
         var exporter = new AirfoilDatExporter();

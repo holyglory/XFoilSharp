@@ -1,6 +1,13 @@
+using System.Numerics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xpanel.f :: NCALC/APCALC
+// Secondary legacy source: f_xfoil/src/xfoil.f :: TECALC/COMSET; f_xfoil/src/xutils.f :: ATANC
+// Role in port: Rebuilds the geometry-side preprocessing routines used by the panel solver and viscous setup.
+// Differences: The core routines are direct ports, but the managed version splits each routine into reusable methods, keeps explicit parity toggles, and routes legacy REAL-sensitive operations through LegacyPrecisionMath instead of implicit single-precision temporaries.
+// Decision: Keep the decomposed managed structure and preserve the parity branches where the legacy geometry preprocessing must replay exactly.
 namespace XFoil.Solver.Services;
 
 /// <summary>
@@ -28,7 +35,31 @@ public static class PanelGeometryBuilder
     /// (segment break), the normals from the two segments are averaged and renormalized.
     /// </summary>
     /// <param name="panel">Panel state with X, Y, ArcLength populated. NormalX and NormalY are written.</param>
+    // Legacy mapping: f_xfoil/src/xpanel.f :: NCALC wrapper.
+    // Difference from legacy: The managed port exposes an overload pair so callers can choose the parity replay path explicitly.
+    // Decision: Keep the overload split because it makes legacy precision intent explicit at the call site.
     public static void ComputeNormals(LinearVortexPanelState panel)
+        => ComputeNormals(panel, useLegacyPrecision: false);
+
+    // Legacy mapping: f_xfoil/src/xpanel.f :: NCALC precision-selecting wrapper.
+    // Difference from legacy: The original routine relies on REAL arithmetic implicitly, while the managed port chooses between double and parity float execution explicitly.
+    // Decision: Keep the explicit precision gate because it centralizes parity behavior cleanly.
+    public static void ComputeNormals(LinearVortexPanelState panel, bool useLegacyPrecision)
+    {
+        if (useLegacyPrecision)
+        {
+            ComputeNormalsCore<float>(panel);
+            return;
+        }
+
+        ComputeNormalsCore<double>(panel);
+    }
+
+    // Legacy mapping: f_xfoil/src/xpanel.f :: NCALC.
+    // Difference from legacy: The spline-fit and normal rotation logic are equivalent, but the managed port names the derivative arrays and uses explicit fused helpers where legacy REAL staging changes the resulting ULPs.
+    // Decision: Keep the clearer managed decomposition and preserve the fused parity operations at the normalization boundary.
+    private static void ComputeNormalsCore<T>(LinearVortexPanelState panel)
+        where T : struct, IFloatingPointIeee754<T>
     {
         int n = panel.NodeCount;
         if (n <= 1)
@@ -36,28 +67,41 @@ public static class PanelGeometryBuilder
             return;
         }
 
-        // Fit segmented splines to get dX/dS and dY/dS
-        // The derivatives are temporarily stored in NormalX/NormalY arrays,
-        // then overwritten with the actual normals below.
-        var xDerivative = new double[n];
-        var yDerivative = new double[n];
+        var x = new T[n];
+        var y = new T[n];
+        var s = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            x[i] = T.CreateChecked(panel.X[i]);
+            y[i] = T.CreateChecked(panel.Y[i]);
+            s[i] = T.CreateChecked(panel.ArcLength[i]);
+        }
 
-        ParametricSpline.FitSegmented(panel.X, xDerivative, panel.ArcLength, n);
-        ParametricSpline.FitSegmented(panel.Y, yDerivative, panel.ArcLength, n);
+        var xDerivative = new T[n];
+        var yDerivative = new T[n];
+
+        ParametricSpline.FitSegmented(x, xDerivative, s, n);
+        ParametricSpline.FitSegmented(y, yDerivative, s, n);
 
         // Store the spline derivatives back into the panel state
-        Array.Copy(xDerivative, panel.XDerivative, n);
-        Array.Copy(yDerivative, panel.YDerivative, n);
+        for (int i = 0; i < n; i++)
+        {
+            panel.XDerivative[i] = double.CreateChecked(xDerivative[i]);
+            panel.YDerivative[i] = double.CreateChecked(yDerivative[i]);
+        }
 
         // Compute outward normals from tangent rotation: normal = (dY/dS, -dX/dS) / magnitude
         for (int i = 0; i < n; i++)
         {
-            double sx = yDerivative[i];
-            double sy = -xDerivative[i];
-            double magnitude = Math.Sqrt(sx * sx + sy * sy);
+            T sx = yDerivative[i];
+            T sy = -xDerivative[i];
+            // Classic XFoil's legacy float build contracts this sum-of-squares
+            // in a way that lands on a different ULP than two independently
+            // rounded products. Keep the explicit fused form in parity mode.
+            T magnitude = T.Sqrt(LegacyPrecisionMath.FusedMultiplyAdd(sx, sx, sy * sy));
 
-            panel.NormalX[i] = sx / magnitude;
-            panel.NormalY[i] = sy / magnitude;
+            panel.NormalX[i] = double.CreateChecked(sx / magnitude);
+            panel.NormalY[i] = double.CreateChecked(sy / magnitude);
         }
 
         // Average normal vectors at corner points (where arc-length values are identical)
@@ -65,14 +109,16 @@ public static class PanelGeometryBuilder
         {
             if (panel.ArcLength[i] == panel.ArcLength[i + 1])
             {
-                double sx = 0.5 * (panel.NormalX[i] + panel.NormalX[i + 1]);
-                double sy = 0.5 * (panel.NormalY[i] + panel.NormalY[i + 1]);
-                double magnitude = Math.Sqrt(sx * sx + sy * sy);
+                T sx = T.CreateChecked(0.5) * (T.CreateChecked(panel.NormalX[i]) + T.CreateChecked(panel.NormalX[i + 1]));
+                T sy = T.CreateChecked(0.5) * (T.CreateChecked(panel.NormalY[i]) + T.CreateChecked(panel.NormalY[i + 1]));
+                T magnitude = T.Sqrt(LegacyPrecisionMath.FusedMultiplyAdd(sx, sx, sy * sy));
+                double nx = double.CreateChecked(sx / magnitude);
+                double ny = double.CreateChecked(sy / magnitude);
 
-                panel.NormalX[i] = sx / magnitude;
-                panel.NormalY[i] = sy / magnitude;
-                panel.NormalX[i + 1] = sx / magnitude;
-                panel.NormalY[i + 1] = sy / magnitude;
+                panel.NormalX[i] = nx;
+                panel.NormalY[i] = ny;
+                panel.NormalX[i + 1] = nx;
+                panel.NormalY[i + 1] = ny;
             }
         }
     }
@@ -85,24 +131,52 @@ public static class PanelGeometryBuilder
     /// </summary>
     /// <param name="panel">Panel state with X, Y populated. PanelAngle[] is written.</param>
     /// <param name="state">Inviscid solver state (IsSharpTrailingEdge is read).</param>
+    // Legacy mapping: f_xfoil/src/xpanel.f :: APCALC wrapper.
+    // Difference from legacy: The managed port exposes a non-parity convenience overload around the shared APCALC core.
+    // Decision: Keep the wrapper because it simplifies the default call sites without changing algorithmic behavior.
     public static void ComputePanelAngles(LinearVortexPanelState panel, InviscidSolverState state)
+        => ComputePanelAngles(panel, state, useLegacyPrecision: false);
+
+    // Legacy mapping: f_xfoil/src/xpanel.f :: APCALC precision-selecting wrapper.
+    // Difference from legacy: The legacy routine always executes in REAL precision, while this overload chooses managed double or parity float execution explicitly.
+    // Decision: Keep the explicit precision selection so parity replay remains local to this geometry stage.
+    public static void ComputePanelAngles(
+        LinearVortexPanelState panel,
+        InviscidSolverState state,
+        bool useLegacyPrecision)
+    {
+        if (useLegacyPrecision)
+        {
+            ComputePanelAnglesCore<float>(panel, state);
+            return;
+        }
+
+        ComputePanelAnglesCore<double>(panel, state);
+    }
+
+    // Legacy mapping: f_xfoil/src/xpanel.f :: APCALC.
+    // Difference from legacy: The tangent-angle assembly is equivalent, but the managed version isolates degenerate-panel fallback handling and sharp-TE branching in named code paths.
+    // Decision: Keep the clearer branching while preserving the same APCALC angle convention and parity precision choice.
+    private static void ComputePanelAnglesCore<T>(LinearVortexPanelState panel, InviscidSolverState state)
+        where T : struct, IFloatingPointIeee754<T>
     {
         int n = panel.NodeCount;
 
         // Interior panels: i = 0 to N-2
         for (int i = 0; i < n - 1; i++)
         {
-            double sx = panel.X[i + 1] - panel.X[i];
-            double sy = panel.Y[i + 1] - panel.Y[i];
+            T sx = T.CreateChecked(panel.X[i + 1]) - T.CreateChecked(panel.X[i]);
+            T sy = T.CreateChecked(panel.Y[i + 1]) - T.CreateChecked(panel.Y[i]);
 
-            if (sx == 0.0 && sy == 0.0)
+            if (sx == T.Zero && sy == T.Zero)
             {
                 // Degenerate panel -- use normal direction as fallback
-                panel.PanelAngle[i] = Math.Atan2(-panel.NormalY[i], -panel.NormalX[i]);
+                panel.PanelAngle[i] = double.CreateChecked(
+                    T.Atan2(-T.CreateChecked(panel.NormalY[i]), -T.CreateChecked(panel.NormalX[i])));
             }
             else
             {
-                panel.PanelAngle[i] = Math.Atan2(sx, -sy);
+                panel.PanelAngle[i] = double.CreateChecked(T.Atan2(sx, -sy));
             }
         }
 
@@ -110,13 +184,13 @@ public static class PanelGeometryBuilder
         int last = n - 1;
         if (state.IsSharpTrailingEdge)
         {
-            panel.PanelAngle[last] = Math.PI;
+            panel.PanelAngle[last] = double.CreateChecked(T.Pi);
         }
         else
         {
-            double sx = panel.X[0] - panel.X[last];
-            double sy = panel.Y[0] - panel.Y[last];
-            panel.PanelAngle[last] = Math.Atan2(-sx, sy) + Math.PI;
+            T sx = T.CreateChecked(panel.X[0]) - T.CreateChecked(panel.X[last]);
+            T sy = T.CreateChecked(panel.Y[0]) - T.CreateChecked(panel.Y[last]);
+            panel.PanelAngle[last] = double.CreateChecked(T.Atan2(-sx, sy) + T.Pi);
         }
     }
 
@@ -127,28 +201,56 @@ public static class PanelGeometryBuilder
     /// </summary>
     /// <param name="panel">Panel state with X, Y, XDerivative, YDerivative, Chord populated.</param>
     /// <param name="state">Inviscid solver state. TE properties are written.</param>
+    // Legacy mapping: f_xfoil/src/xfoil.f :: TECALC wrapper.
+    // Difference from legacy: The managed port exposes a default overload that routes into the shared TE geometry core.
+    // Decision: Keep the wrapper because it provides a cleaner API boundary around the direct legacy routine.
     public static void ComputeTrailingEdgeGeometry(LinearVortexPanelState panel, InviscidSolverState state)
+        => ComputeTrailingEdgeGeometry(panel, state, useLegacyPrecision: false);
+
+    // Legacy mapping: f_xfoil/src/xfoil.f :: TECALC precision-selecting wrapper.
+    // Difference from legacy: The original routine depends on REAL evaluation order implicitly, while the managed version makes the legacy-precision choice explicit.
+    // Decision: Keep the explicit gate because it localizes parity selection to the TE preprocessing boundary.
+    public static void ComputeTrailingEdgeGeometry(
+        LinearVortexPanelState panel,
+        InviscidSolverState state,
+        bool useLegacyPrecision)
+    {
+        if (useLegacyPrecision)
+        {
+            ComputeTrailingEdgeGeometryCore<float>(panel, state);
+            return;
+        }
+
+        ComputeTrailingEdgeGeometryCore<double>(panel, state);
+    }
+
+    // Legacy mapping: f_xfoil/src/xfoil.f :: TECALC.
+    // Difference from legacy: The vector projections and sharp-TE test are materially the same, but the managed code spells out the bisector and gap decomposition with named locals.
+    // Decision: Keep the named managed formulation and preserve the same geometric relations used by TECALC.
+    private static void ComputeTrailingEdgeGeometryCore<T>(LinearVortexPanelState panel, InviscidSolverState state)
+        where T : struct, IFloatingPointIeee754<T>
     {
         int n = panel.NodeCount;
         int last = n - 1;
 
         // TE gap base vector (from last node to first node, matching Fortran X(1)-X(N))
-        double dxTE = panel.X[0] - panel.X[last];
-        double dyTE = panel.Y[0] - panel.Y[last];
+        T dxTE = T.CreateChecked(panel.X[0]) - T.CreateChecked(panel.X[last]);
+        T dyTE = T.CreateChecked(panel.Y[0]) - T.CreateChecked(panel.Y[last]);
 
         // Bisector direction: average of negated first-node tangent and last-node tangent
         // In Fortran: DXS = 0.5*(-XP(1) + XP(N)), DYS = 0.5*(-YP(1) + YP(N))
-        double dxS = 0.5 * (-panel.XDerivative[0] + panel.XDerivative[last]);
-        double dyS = 0.5 * (-panel.YDerivative[0] + panel.YDerivative[last]);
+        T dxS = T.CreateChecked(0.5) * (-T.CreateChecked(panel.XDerivative[0]) + T.CreateChecked(panel.XDerivative[last]));
+        T dyS = T.CreateChecked(0.5) * (-T.CreateChecked(panel.YDerivative[0]) + T.CreateChecked(panel.YDerivative[last]));
 
         // Normal and streamwise projected TE gap areas
         // ANTE = DXS*DYTE - DYS*DXTE (cross product -- normal component)
         // ASTE = DXS*DXTE + DYS*DYTE (dot product -- streamwise component)
-        state.TrailingEdgeAngleNormal = dxS * dyTE - dyS * dxTE;
-        state.TrailingEdgeAngleStreamwise = dxS * dxTE + dyS * dyTE;
+        state.TrailingEdgeAngleNormal = double.CreateChecked((dxS * dyTE) - (dyS * dxTE));
+        state.TrailingEdgeAngleStreamwise = double.CreateChecked((dxS * dxTE) + (dyS * dyTE));
 
         // Total TE gap magnitude
-        state.TrailingEdgeGap = Math.Sqrt(dxTE * dxTE + dyTE * dyTE);
+        T gap = T.Sqrt((dxTE * dxTE) + (dyTE * dyTE));
+        state.TrailingEdgeGap = double.CreateChecked(gap);
 
         // Sharp TE flag
         state.IsSharpTrailingEdge = state.TrailingEdgeGap < 0.0001 * panel.Chord;
@@ -161,6 +263,9 @@ public static class PanelGeometryBuilder
     /// </summary>
     /// <param name="machNumber">Freestream Mach number (0 &lt;= M &lt; 1).</param>
     /// <returns>Compressibility parameters.</returns>
+    // Legacy mapping: f_xfoil/src/xfoil.f :: COMSET.
+    // Difference from legacy: This helper returns the compressibility scalars as a value object instead of writing them into COMMON-backed state.
+    // Decision: Keep the managed return shape because it is clearer for callers while preserving the same COMSET formula.
     public static CompressibilityParameters ComputeCompressibilityParameters(double machNumber)
     {
         double beta = Math.Sqrt(1.0 - machNumber * machNumber);
@@ -178,6 +283,9 @@ public static class PanelGeometryBuilder
     /// <param name="x">X coordinate.</param>
     /// <param name="referenceAngle">Previous/reference angle to maintain continuity with.</param>
     /// <returns>Angle in radians, continuous with respect to referenceAngle.</returns>
+    // Legacy mapping: f_xfoil/src/xutils.f :: ATANC.
+    // Difference from legacy: The branch-cut continuation is the same, but the managed port packages it as a general-purpose helper that other geometry code can call directly.
+    // Decision: Keep the helper as-is because it is a faithful ATANC port in a more reusable shape.
     public static double ContinuousAtan2(double y, double x, double referenceAngle)
     {
         const double twoPi = 2.0 * Math.PI;

@@ -1,5 +1,11 @@
 using XFoil.Solver.Numerics;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/spline.f :: SPLINA, SEGSPL, DEVAL, CURV
+// Secondary legacy source: paneling and geometry preprocessing call sites in xpanel.f
+// Role in port: Verifies the managed parametric spline routines that port the legacy interpolation, derivative, and arc-length helpers.
+// Differences: The managed numerics package exposes the spline primitives directly as reusable helpers instead of hiding them behind geometry commands.
+// Decision: Keep the managed numerics API because it preserves the spline formulas while making them independently testable.
 namespace XFoil.Core.Tests;
 
 public class ParametricSplineTests
@@ -8,6 +14,9 @@ public class ParametricSplineTests
     /// Test 1: Spline with zero-second-derivative BCs on sin(x) data matches cos(x) derivatives at interior points.
     /// </summary>
     [Fact]
+    // Legacy mapping: spline fit with natural second-derivative boundary conditions.
+    // Difference from legacy: The managed fit is tested against analytic sine/cosine data rather than only through consuming geometry code.
+    // Decision: Keep the managed analytic regression because it isolates the spline formula directly.
     public void FitWithZeroSecondDerivativeBCs_SinData_MatchesCosDerivatives()
     {
         const int n = 21;
@@ -37,6 +46,9 @@ public class ParametricSplineTests
     /// Test 2: Spline with zero-third-derivative BCs produces different endpoint slopes than zero-second-derivative.
     /// </summary>
     [Fact]
+    // Legacy mapping: alternate spline boundary-condition path.
+    // Difference from legacy: Boundary-condition variants are compared explicitly in the managed test suite.
+    // Decision: Keep the managed comparison because it broadens verification of the ported spline options.
     public void FitWithBoundaryConditions_ZeroThirdDerivative_DiffersFromZeroSecondDerivative()
     {
         const int n = 11;
@@ -67,6 +79,9 @@ public class ParametricSplineTests
     /// Test 3: Spline with specified endpoint derivatives recovers exact derivatives at endpoints.
     /// </summary>
     [Fact]
+    // Legacy mapping: spline fit with specified endpoint derivatives.
+    // Difference from legacy: The managed test asserts endpoint recovery numerically rather than only via downstream geometry smoothness.
+    // Decision: Keep the direct numerical regression because it tightly constrains the ported derivative boundary logic.
     public void FitWithBoundaryConditions_SpecifiedDerivatives_RecoveredAtEndpoints()
     {
         const int n = 11;
@@ -100,6 +115,9 @@ public class ParametricSplineTests
     /// Test 4: Segmented spline handles a corner -- derivatives are discontinuous at the junction.
     /// </summary>
     [Fact]
+    // Legacy mapping: segmented/corner-preserving spline fit.
+    // Difference from legacy: The segmented behavior is tested explicitly on a piecewise-linear corner fixture.
+    // Decision: Keep the managed corner-case regression because it isolates an important geometry-processing rule.
     public void FitSegmented_PiecewiseLinearWithCorner_DiscontinuousDerivatives()
     {
         // Two segments: [0,1,2] and [2,3,4] with a corner at index 2
@@ -124,6 +142,9 @@ public class ParametricSplineTests
     /// Test 5: Tridiagonal solver on a known 5x5 system matches exact solution.
     /// </summary>
     [Fact]
+    // Legacy mapping: tridiagonal solve support used by legacy spline fitting.
+    // Difference from legacy: The supporting linear solve is verified directly through a small analytical system.
+    // Decision: Keep the managed unit test because it isolates a critical dependency of the spline routines.
     public void TridiagonalSolver_Known5x5System_ExactSolution()
     {
         // System:
@@ -163,6 +184,9 @@ public class ParametricSplineTests
     /// Test 6: Spline evaluation between knots interpolates correctly.
     /// </summary>
     [Fact]
+    // Legacy mapping: DEVAL spline evaluation between knots.
+    // Difference from legacy: The managed evaluator is tested directly rather than only through larger geometry workflows.
+    // Decision: Keep the direct evaluation regression because it clearly constrains interpolation behavior.
     public void Evaluate_BetweenKnots_InterpolatesCorrectly()
     {
         // Use a cubic f(x) = x^3 on [0,1,2,3] -- spline should recover it exactly
@@ -187,6 +211,9 @@ public class ParametricSplineTests
     /// Test 7: Derivative evaluation at knots and between knots matches analytical derivative.
     /// </summary>
     [Fact]
+    // Legacy mapping: spline derivative evaluation.
+    // Difference from legacy: Derivatives are checked against analytic data in isolation.
+    // Decision: Keep the managed analytic test because it is the strongest regression for the ported derivative helper.
     public void EvaluateDerivative_SinData_MatchesCosAtInteriorPoints()
     {
         const int n = 41;
@@ -226,6 +253,9 @@ public class ParametricSplineTests
     /// Test 8: Arc-length computation for a unit circle quadrant returns pi/2.
     /// </summary>
     [Fact]
+    // Legacy mapping: arc-length computation used throughout legacy geometry preprocessing.
+    // Difference from legacy: Arc length is validated explicitly on a known circular segment instead of being trusted transitively.
+    // Decision: Keep the managed regression because it protects a ubiquitous geometric primitive.
     public void ComputeArcLength_UnitCircleQuadrant_ReturnsPiOverTwo()
     {
         const int n = 1001;

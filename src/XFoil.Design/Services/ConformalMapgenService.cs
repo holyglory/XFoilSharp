@@ -2,10 +2,19 @@ using System.Numerics;
 using XFoil.Core.Models;
 using XFoil.Design.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xmdes.f :: MAPGEN/CNCALC/PIQSUM/ZCCALC/ZCNORM/ZLEFIND
+// Secondary legacy source: f_xfoil/src/xgeom.f :: LEFIND, f_xfoil/src/spline.f :: SPLIND/SEVAL
+// Role in port: Replays the conformal-map inverse-design workflow behind the legacy MAPGEN command with managed data structures and convergence guards.
+// Differences: The managed path breaks the monolithic MDES/MAPGEN flow into explicit state objects, wrapper heuristics, and finite-value guards while keeping the core conformal-map algebra close to the legacy routines.
+// Decision: Keep the managed refactor around the core map algebra because it improves diagnosability; preserve the legacy formulas inside the conformal-map kernels.
 namespace XFoil.Design.Services;
 
 public sealed class ConformalMapgenService
 {
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN entry flow.
+    // Difference from legacy: This overload is a managed convenience wrapper that reuses the same profile as both baseline and target instead of relying on session-state defaults.
+    // Decision: Keep the managed-only overload because it simplifies library use without changing the core algorithm.
     public ConformalMapgenResult Execute(
         AirfoilGeometry geometry,
         QSpecProfile targetProfile,
@@ -28,6 +37,9 @@ public sealed class ConformalMapgenService
             filterExponent);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN command orchestration.
+    // Difference from legacy: The managed entry point makes the trailing-edge-angle retention and target-selection logic explicit instead of mixing it into the interactive MDES command loop.
+    // Decision: Keep the managed refactor because the control flow is clearer and the core MAPGEN algebra stays below in dedicated helpers.
     public ConformalMapgenResult Execute(
         AirfoilGeometry geometry,
         QSpecProfile baselineProfile,
@@ -112,6 +124,9 @@ public sealed class ConformalMapgenService
             targetTrailingEdgeAngleDegrees.Value);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN trailing-edge constraint iteration lineage.
+    // Difference from legacy: The managed implementation wraps MAPGEN in an explicit bracketed solve for the requested trailing-edge angle, while the original workflow handled such adjustments through the interactive command path.
+    // Decision: Keep the managed improvement because it gives the library API a deterministic target-angle solve.
     private static ConformalMapgenResult SolveForTrailingEdgeAngleTarget(
         AirfoilGeometry geometry,
         QSpecProfile baselineProfile,
@@ -175,6 +190,9 @@ public sealed class ConformalMapgenService
             ref upperResidual,
             ref upperResult);
 
+        // Legacy block: Managed-only outer solve that wraps MAPGEN in a bracketed trailing-edge-angle target search.
+        // Difference: The legacy command path did not expose this reusable library-style secant/false-position wrapper.
+        // Decision: Keep the managed improvement because it isolates the target-angle logic from the conformal-map core.
         for (var outerIteration = 0; outerIteration < 8; outerIteration++)
         {
             var nextTrial = TryFalsePosition(lowerTrial, lowerResidual, upperTrial, upperResidual)
@@ -250,6 +268,9 @@ public sealed class ConformalMapgenService
         return bestResult;
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN.
+    // Difference from legacy: The managed port first tries the direct solve and then falls back to an explicit continuation wrapper rather than relying on command-session retries.
+    // Decision: Keep the managed refactor because the fallback policy is explicit and testable.
     private static ConformalMapgenResult SolveForProfileTarget(
         AirfoilGeometry geometry,
         QSpecProfile baselineProfile,
@@ -289,6 +310,9 @@ public sealed class ConformalMapgenService
             directResult);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN convergence-management lineage.
+    // Difference from legacy: This continuation wrapper is a managed enhancement that stages the target profile and filter strength to improve robustness.
+    // Decision: Keep the managed improvement because it is clearly outside the legacy core and improves solver usability.
     private static ConformalMapgenResult ExecuteWithContinuation(
         AirfoilGeometry geometry,
         QSpecProfile baselineProfile,
@@ -311,6 +335,9 @@ public sealed class ConformalMapgenService
         var stageBaselineProfile = baselineProfile;
         var bestResult = directResult;
         var initialFilterExponent = DetermineInitialContinuationFilter(filterExponent);
+        // Legacy block: Managed-only continuation stages around repeated MAPGEN calls.
+        // Difference: The original MDES/MAPGEN workflow did not expose this stepped blend loop as a reusable abstraction.
+        // Decision: Keep the managed improvement because it reduces hard failures on large profile deltas.
         for (var stageIndex = 1; stageIndex <= stageCount; stageIndex++)
         {
             var fraction = (double)stageIndex / stageCount;
@@ -344,6 +371,9 @@ public sealed class ConformalMapgenService
         return bestResult;
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN core solve.
+    // Difference from legacy: The core conformal-map equations follow the legacy routine closely, but the managed port wraps them in explicit state objects, residual tracking, and finite-value guards.
+    // Decision: Keep the managed refactor around the legacy formulas because it makes the Newton loop diagnosable without changing the core math.
     private static ConformalMapgenResult ExecuteCore(
         AirfoilGeometry geometry,
         QSpecProfile baselineProfile,
@@ -383,6 +413,9 @@ public sealed class ConformalMapgenService
         var iterationCount = 0;
         var maxCorrection = 0d;
         var lastIndex = state.Nc - 1;
+        // Legacy block: MAPGEN Newton iteration on the geometric trailing-edge constraint.
+        // Difference: The managed port keeps the same residual/correction structure but adds snapshot-based damping retries and explicit finite-value checks.
+        // Decision: Keep the managed refactor because it preserves the legacy solve while making failure modes explicit.
         for (var iteration = 0; iteration < maxNewtonIterations; iteration++)
         {
             var residual = state.Zc[0] - state.Zc[lastIndex] - state.Dzte;
@@ -402,6 +435,9 @@ public sealed class ConformalMapgenService
             var baselineState = CaptureState(state);
             var accepted = false;
             var acceptedCorrection = Complex.Zero;
+            // Legacy block: Managed-only damping schedule around one MAPGEN correction step.
+            // Difference: The original routine applied the correction directly, while the port retries relaxed steps to avoid blowing up the conformal map.
+            // Decision: Keep the managed improvement because it increases robustness without changing accepted full steps.
             foreach (var relaxation in DampingSchedule)
             {
                 RestoreState(state, baselineState);
@@ -477,6 +513,9 @@ public sealed class ConformalMapgenService
             achievedTrailingEdgeAngleDegrees);
     }
 
+    // Legacy mapping: none; managed-only result-wrapping helper around MAPGEN outputs.
+    // Difference from legacy: The interactive code reported targets implicitly through session state, while the managed API normalizes the reported target values in a dedicated helper.
+    // Decision: Keep the managed-only wrapper because it keeps result-object construction centralized.
     private static ConformalMapgenResult RebindReportedTargets(
         ConformalMapgenResult result,
         AirfoilPoint? targetTrailingEdgeGap,
@@ -497,11 +536,17 @@ public sealed class ConformalMapgenService
             result.AchievedTrailingEdgeAngleDegrees);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN convergence acceptance lineage.
+    // Difference from legacy: The managed port makes the acceptance threshold explicit instead of relying on routine-local stop conditions only.
+    // Decision: Keep the managed refactor because it clarifies why continuation is or is not invoked.
     private static bool ShouldAcceptDirectResult(ConformalMapgenResult result, double convergenceTolerance)
     {
         return result.Converged || result.FinalTrailingEdgeResidual <= Math.Max(10d * convergenceTolerance, 1e-3d);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN retry-selection lineage.
+    // Difference from legacy: The managed wrapper compares result quality explicitly across retries instead of relying on the last session state.
+    // Decision: Keep the managed refactor because it makes retry selection deterministic.
     private static bool IsBetterResult(ConformalMapgenResult candidate, ConformalMapgenResult baseline)
     {
         if (candidate.Converged != baseline.Converged)
@@ -512,6 +557,9 @@ public sealed class ConformalMapgenService
         return candidate.FinalTrailingEdgeResidual < baseline.FinalTrailingEdgeResidual;
     }
 
+    // Legacy mapping: none directly; managed-only continuation heuristic around MAPGEN.
+    // Difference from legacy: Stage count is inferred from the requested Qspec delta rather than from user-driven retries.
+    // Decision: Keep the managed-only heuristic because it exists purely to stage the library workflow.
     private static int DetermineContinuationStageCount(QSpecProfile baselineProfile, QSpecProfile targetProfile)
     {
         var maxSpeedRatioDelta = 0d;
@@ -530,6 +578,9 @@ public sealed class ConformalMapgenService
         return Math.Clamp((int)Math.Ceiling(maxSpeedRatioDelta / 0.10d), 2, 6);
     }
 
+    // Legacy mapping: none directly; managed-only continuation heuristic.
+    // Difference from legacy: The initial filter strength is chosen automatically for staged MAPGEN retries instead of via the interactive filter controls alone.
+    // Decision: Keep the managed-only heuristic because it improves automated robustness.
     private static double DetermineInitialContinuationFilter(double requestedFilterExponent)
     {
         return requestedFilterExponent > 0d
@@ -537,10 +588,16 @@ public sealed class ConformalMapgenService
             : 1.5d;
     }
 
+    // Legacy mapping: none directly; managed-only continuation helper around MAPGEN.
+    // Difference from legacy: The blended profile is an explicit interpolant between baseline and target Qspec data, which the original session workflow did not materialize as a first-class object.
+    // Decision: Keep the managed-only helper because it enables deterministic continuation stages.
     private static QSpecProfile BlendProfiles(QSpecProfile baselineProfile, QSpecProfile targetProfile, double fraction)
     {
         var clampedFraction = Math.Clamp(fraction, 0d, 1d);
         var points = new QSpecPoint[baselineProfile.Points.Count];
+        // Legacy block: Managed-only profile interpolation used to stage MAPGEN continuation calls.
+        // Difference: This interpolation object does not exist as a standalone artifact in the legacy command flow.
+        // Decision: Keep the managed-only loop because it supports the continuation wrapper.
         for (var index = 0; index < points.Length; index++)
         {
             var baselinePoint = baselineProfile.Points[index];
@@ -562,6 +619,9 @@ public sealed class ConformalMapgenService
             points);
     }
 
+    // Legacy mapping: none; managed-only bracket housekeeping for the target-angle wrapper.
+    // Difference from legacy: The interactive code did not expose this helper because the bracketed solve itself is a managed addition.
+    // Decision: Keep the managed-only helper.
     private static void NormalizeBracket(
         ref double lowerTrial,
         ref double lowerResidual,
@@ -580,6 +640,9 @@ public sealed class ConformalMapgenService
         (lowerResult, upperResult) = (upperResult, lowerResult);
     }
 
+    // Legacy mapping: none directly; managed-only root-finding helper around MAPGEN retries.
+    // Difference from legacy: The false-position step is part of the managed trailing-edge-angle wrapper, not a standalone Fortran routine.
+    // Decision: Keep the managed-only helper.
     private static double? TryFalsePosition(double lowerTrial, double lowerResidual, double upperTrial, double upperResidual)
     {
         if (Math.Sign(lowerResidual) == Math.Sign(upperResidual))
@@ -596,6 +659,9 @@ public sealed class ConformalMapgenService
         return lowerTrial - (lowerResidual * (upperTrial - lowerTrial) / denominator);
     }
 
+    // Legacy mapping: none directly; managed-only root-finding helper around MAPGEN retries.
+    // Difference from legacy: The secant step is part of the managed target-angle wrapper rather than the original interactive workflow.
+    // Decision: Keep the managed-only helper.
     private static double? TrySecant(double firstTrial, double firstResidual, double secondTrial, double secondResidual)
     {
         var denominator = secondResidual - firstResidual;
@@ -607,11 +673,17 @@ public sealed class ConformalMapgenService
         return secondTrial - (secondResidual * (secondTrial - firstTrial) / denominator);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: CNCALC.
+    // Difference from legacy: The managed port expresses the Qspec-to-conformal-coefficient conversion through explicit spline helpers and state-object fields instead of through COMMON arrays.
+    // Decision: Keep the managed refactor because the conformal-map algebra remains the same while the data flow is clearer.
     private static void BuildCnFromQSpec(CirclePlaneState state, QSpecProfile profile, bool preserveCurrentImaginaryOffset)
     {
         var qc = profile.Points.Select(point => point.SpeedRatio).ToArray();
         var qcSpline = new GeometryTransformUtilities.NaturalCubicSpline(state.Wc, qc);
         var wcLe = Math.PI;
+        // Legacy block: CNCALC leading-edge parameter search from the sign change in Qspec.
+        // Difference: The managed helper performs the same search/refinement through a local spline wrapper instead of through the original work arrays.
+        // Decision: Keep the managed refactor because the search logic is explicit.
         for (var index = 1; index < qc.Length; index++)
         {
             if (Math.Sign(qc[index - 1]) == Math.Sign(qc[index]))
@@ -641,6 +713,9 @@ public sealed class ConformalMapgenService
         }
 
         var alphaCir = 0.5d * (wcLe - Math.PI);
+        // Legacy block: CNCALC assembly of the logarithmic `PIQ` field from the requested surface-speed distribution.
+        // Difference: The port names the intermediate trigonometric factors explicitly and stores them in the managed state object.
+        // Decision: Keep the managed refactor because the legacy formula is preserved.
         for (var index = 1; index < state.Nc - 1; index++)
         {
             var cosw = 2d * Math.Cos((0.5d * state.Wc[index]) - alphaCir);
@@ -667,8 +742,14 @@ public sealed class ConformalMapgenService
         PiqSum(state);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: CNCALC Fourier coefficient accumulation.
+    // Difference from legacy: The managed helper names the transform explicitly as a method instead of leaving it embedded in CNCALC.
+    // Decision: Keep the managed refactor because it isolates one legacy step cleanly.
     private static void FourierTransform(CirclePlaneState state)
     {
+        // Legacy block: CNCALC modal accumulation from the `PIQ` samples.
+        // Difference: The summation is unchanged, but the managed code isolates it as a dedicated transform helper.
+        // Decision: Keep the equivalent managed loop.
         for (var mode = 0; mode <= state.Mc; mode++)
         {
             var zsum = Complex.Zero;
@@ -683,8 +764,14 @@ public sealed class ConformalMapgenService
         state.Cn[0] *= 0.5d;
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: PIQSUM.
+    // Difference from legacy: The inverse summation is expressed as a dedicated method on the managed state object instead of through shared arrays and COMMON blocks.
+    // Decision: Keep the managed refactor because the algebra is unchanged and the state ownership is clearer.
     private static void PiqSum(CirclePlaneState state)
     {
+        // Legacy block: PIQSUM inverse Fourier reconstruction of `PIQ` from `Cn`.
+        // Difference: The summation is unchanged; the port simply scopes it inside the state object.
+        // Decision: Keep the equivalent managed loop.
         for (var index = 0; index < state.Nc; index++)
         {
             var zsum = Complex.Zero;
@@ -697,6 +784,9 @@ public sealed class ConformalMapgenService
         }
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: ZCCALC.
+    // Difference from legacy: The port preserves the conformal-map marching formulas but isolates them behind a state object and explicit sensitivity count.
+    // Decision: Keep the managed refactor because the geometric integration remains true to the legacy routine.
     private static void ZcCalc(CirclePlaneState state)
     {
         var sensitivityCount = state.Mct;
@@ -710,6 +800,9 @@ public sealed class ConformalMapgenService
         var sinwe = sinw > 0d ? Math.Pow(sinw, 1d - state.Agte) : 0d;
         var hwc = (0.5d * (state.Wc[0] - Math.PI) * (1d + state.Agte)) - (0.5d * Math.PI);
         var dzdw1 = sinwe * SafeExp(state.Piq[0], hwc);
+        // Legacy block: ZCCALC marching integration of the complex geometry and its sensitivities.
+        // Difference: The formulas are preserved, but the managed code stores the running geometry in an object-owned state instead of shared arrays.
+        // Decision: Keep the managed refactor because it keeps the legacy map integration intact.
         for (var index = 1; index < state.Nc; index++)
         {
             sinw = 2d * Math.Sin(0.5d * state.Wc[index]);
@@ -732,6 +825,9 @@ public sealed class ConformalMapgenService
         }
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: ZCNORM.
+    // Difference from legacy: The normalization algebra is preserved, but finite-value fallbacks are made explicit in the managed wrapper.
+    // Decision: Keep the managed refactor because it preserves the legacy normalization while making failure handling visible.
     private static void ZcNorm(CirclePlaneState state)
     {
         var zle = FindLeadingEdge(state);
@@ -772,17 +868,26 @@ public sealed class ConformalMapgenService
         var ratio = state.ChordZ / zte;
         var qimoff = IsFinite(ratio) ? -Complex.Log(ratio).Imaginary : 0d;
         state.Cn[0] -= Complex.ImaginaryOne * qimoff;
+        // Legacy block: ZCNORM restoration of the stored leading-edge origin after chord normalization.
+        // Difference: The port keeps the same final recentering step but does it through the managed state object.
+        // Decision: Keep the equivalent step.
         for (var index = 0; index < state.Nc; index++)
         {
             state.Zc[index] += state.ZleOld;
         }
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: ZLEFIND.
+    // Difference from legacy: The managed port keeps the same local-spline refinement idea but expresses it through reusable spline helpers and explicit derivative estimates.
+    // Decision: Keep the managed refactor because the leading-edge solve remains close to the legacy routine while being easier to inspect.
     private static Complex FindLeadingEdge(CirclePlaneState state)
     {
         var zte = 0.5d * (state.Zc[0] + state.Zc[state.Nc - 1]);
         var leIndex = 0;
         var maxDistance = 0d;
+        // Legacy block: ZLEFIND coarse search for the furthest point from the trailing-edge midpoint.
+        // Difference: The same scan is written directly against the managed state arrays.
+        // Decision: Keep the equivalent loop.
         for (var index = 0; index < state.Nc; index++)
         {
             var distance = Complex.Abs(state.Zc[index] - zte);
@@ -815,6 +920,9 @@ public sealed class ConformalMapgenService
         var wcLe = state.Wc[leIndex];
         var xte = zte.Real;
         var yte = zte.Imaginary;
+        // Legacy block: ZLEFIND Newton refinement of the leading-edge parameter on the local spline patch.
+        // Difference: The residual terms are named explicitly and the spline helpers are shared utilities instead of local Fortran arrays.
+        // Decision: Keep the managed refactor because the same geometric condition is solved more transparently.
         for (var iteration = 0; iteration < 10; iteration++)
         {
             var xle = xSpline.Evaluate(wcLe);
@@ -843,6 +951,9 @@ public sealed class ConformalMapgenService
         return new Complex(xSpline.Evaluate(wcLe), ySpline.Evaluate(wcLe));
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: ZCCALC differential kernel.
+    // Difference from legacy: The algebra is unchanged; it is isolated in a helper for reuse by ZCCALC and ZLEFIND.
+    // Decision: Keep the equivalent helper.
     private static Complex EvaluateDzDw(CirclePlaneState state, int index)
     {
         var sinw = 2d * Math.Sin(0.5d * state.Wc[index]);
@@ -851,6 +962,9 @@ public sealed class ConformalMapgenService
         return sinwe * SafeExp(state.Piq[index], hwc);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: complex exponential inside MAPGEN/CNCALC.
+    // Difference from legacy: The managed helper clamps the exponential real part to avoid overflow, which is a defensive addition not present in the original code.
+    // Decision: Keep the managed improvement because it only changes pathological overflow behavior.
     private static Complex SafeExp(Complex piq, double hwc)
     {
         var clampedReal = Math.Clamp(piq.Real, -50d, 50d);
@@ -858,11 +972,17 @@ public sealed class ConformalMapgenService
         return Complex.Exp(new Complex(clampedReal, imag));
     }
 
+    // Legacy mapping: none; managed-only numeric guard supporting MAPGEN.
+    // Difference from legacy: The original code assumed finite floating-point state, while the port guards intermediate complex values explicitly.
+    // Decision: Keep the managed-only helper because it makes failure handling explicit.
     private static bool IsFinite(Complex value)
     {
         return double.IsFinite(value.Real) && double.IsFinite(value.Imaginary);
     }
 
+    // Legacy mapping: none; managed-only numeric guard supporting MAPGEN.
+    // Difference from legacy: The helper scans collections for invalid complex values, which was not factored out in the original routine.
+    // Decision: Keep the managed-only helper.
     private static bool AreFinite(IReadOnlyList<Complex> values)
     {
         for (var index = 0; index < values.Count; index++)
@@ -876,6 +996,9 @@ public sealed class ConformalMapgenService
         return true;
     }
 
+    // Legacy mapping: none; managed-only Newton-step bookkeeping around MAPGEN.
+    // Difference from legacy: The original routine updated the conformal-map state in place without snapshot rollback helpers.
+    // Decision: Keep the managed-only helper because it supports the damping retries cleanly.
     private static CirclePlaneStateSnapshot CaptureState(CirclePlaneState state)
     {
         return new CirclePlaneStateSnapshot(
@@ -885,6 +1008,9 @@ public sealed class ConformalMapgenService
             (Complex[,])state.ZcCn.Clone());
     }
 
+    // Legacy mapping: none; managed-only Newton-step bookkeeping around MAPGEN.
+    // Difference from legacy: This helper restores the captured state when a damped step is rejected, which has no direct standalone Fortran analogue.
+    // Decision: Keep the managed-only helper because it is required by the managed damping wrapper.
     private static void RestoreState(CirclePlaneState state, CirclePlaneStateSnapshot snapshot)
     {
         Array.Copy(snapshot.Cn, state.Cn, snapshot.Cn.Length);
@@ -893,6 +1019,9 @@ public sealed class ConformalMapgenService
         Array.Copy(snapshot.ZcCn, state.ZcCn, snapshot.ZcCn.Length);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: ZLEFIND spline-derivative support.
+    // Difference from legacy: The managed implementation estimates derivatives numerically from the shared spline utility instead of using routine-local derivative arrays.
+    // Decision: Keep the managed improvement because it avoids additional mutable spline state.
     private static double EstimateSplineDerivative(GeometryTransformUtilities.NaturalCubicSpline spline, double parameter)
     {
         var step = Math.Max(1e-6d, (spline.Parameters[^1] - spline.Parameters[0]) * 1e-5d);
@@ -906,6 +1035,9 @@ public sealed class ConformalMapgenService
         return (spline.Evaluate(upper) - spline.Evaluate(lower)) / (upper - lower);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: ZLEFIND spline-second-derivative support.
+    // Difference from legacy: The second derivative is reconstructed numerically from the shared spline helper rather than through dedicated cubic-coefficient storage.
+    // Decision: Keep the managed improvement because it is sufficient for the leading-edge refinement.
     private static double EstimateSplineSecondDerivative(GeometryTransformUtilities.NaturalCubicSpline spline, double parameter)
     {
         var step = Math.Max(1e-5d, (spline.Parameters[^1] - spline.Parameters[0]) * 1e-4d);
@@ -923,6 +1055,9 @@ public sealed class ConformalMapgenService
         return (left - (2d * center) + right) / (halfWidth * halfWidth);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: CNCALC/MAPGEN profile resampling lineage.
+    // Difference from legacy: The managed helper materializes a uniformly parameterized Qspec profile object instead of rebuilding several parallel arrays.
+    // Decision: Keep the managed refactor because the resampled state is easier to reuse.
     private static QSpecProfile ResampleProfile(QSpecProfile profile, int pointCount)
     {
         var parameters = profile.Points.Select(point => point.SurfaceCoordinate).ToArray();
@@ -933,6 +1068,9 @@ public sealed class ConformalMapgenService
         var cpCorrectedSpline = new GeometryTransformUtilities.NaturalCubicSpline(parameters, profile.Points.Select(point => point.CorrectedPressureCoefficient).ToArray());
 
         var points = new QSpecPoint[pointCount];
+        // Legacy block: MAPGEN/CNCALC-style uniform resampling of the profile data.
+        // Difference: The managed port emits immutable `QSpecPoint` objects instead of parallel resampled arrays.
+        // Decision: Keep the managed refactor because the resampled data is explicit.
         for (var index = 0; index < pointCount; index++)
         {
             var s = (double)index / (pointCount - 1);
@@ -949,6 +1087,9 @@ public sealed class ConformalMapgenService
         return new QSpecProfile(profile.Name, profile.AngleOfAttackDegrees, profile.MachNumber, points);
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN trailing-edge angle measurement.
+    // Difference from legacy: The angle extraction is factored into a reusable helper instead of being embedded in result reporting.
+    // Decision: Keep the equivalent helper.
     private static double ComputeTrailingEdgeAngleDegrees(IReadOnlyList<AirfoilPoint> points)
     {
         var firstDerivative = new AirfoilPoint(
@@ -962,6 +1103,9 @@ public sealed class ConformalMapgenService
             * 180d;
     }
 
+    // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN filter control (`FFILT`) lineage.
+    // Difference from legacy: The managed port applies an explicit Hanning weight to the coefficients in a dedicated helper rather than inside the command routine.
+    // Decision: Keep the managed refactor because it isolates one optional conditioning step.
     private static void ApplyHanningFilter(IList<Complex> coefficients, double filterExponent)
     {
         if (filterExponent == 0d || coefficients.Count <= 1)
@@ -970,6 +1114,9 @@ public sealed class ConformalMapgenService
         }
 
         var maxMode = coefficients.Count - 1;
+        // Legacy block: MAPGEN modal filtering prior to geometry regeneration.
+        // Difference: The port names the Hanning weighting explicitly instead of letting the filter logic remain implicit in the routine body.
+        // Decision: Keep the managed refactor because the filter intent is clearer.
         for (var mode = 0; mode <= maxMode; mode++)
         {
             var frequency = (double)mode / maxMode;
@@ -983,6 +1130,9 @@ public sealed class ConformalMapgenService
         }
     }
 
+    // Legacy mapping: none directly; managed-only input guard for the target-angle wrapper.
+    // Difference from legacy: The original command workflow accepted user inputs interactively, while the library API clamps them to a safe range in one place.
+    // Decision: Keep the managed-only helper because it protects the automated solver entry point.
     private static double ClampTrailingEdgeAngle(double angleDegrees)
     {
         return Math.Clamp(angleDegrees, -25d, 25d);
@@ -990,6 +1140,9 @@ public sealed class ConformalMapgenService
 
     private sealed class CirclePlaneState
     {
+        // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN/CNCALC state allocation.
+        // Difference from legacy: The managed port groups the conformal-map state into one object instead of spreading it across COMMON arrays and local workspaces.
+        // Decision: Keep the managed refactor because it makes ownership of the conformal-map state explicit.
         private CirclePlaneState(
             int nc,
             int mc,
@@ -1054,6 +1207,9 @@ public sealed class ConformalMapgenService
 
         public double QimOld { get; set; }
 
+        // Legacy mapping: f_xfoil/src/xmdes.f :: MAPGEN/CNCALC initialization.
+        // Difference from legacy: The same initial state is assembled into a managed object with explicit geometry-derived fields instead of through the interactive MDES session variables.
+        // Decision: Keep the managed refactor because the conformal-map initialization is easier to inspect.
         public static CirclePlaneState Create(
             AirfoilGeometry geometry,
             QSpecProfile profile,
@@ -1088,6 +1244,9 @@ public sealed class ConformalMapgenService
             var dwc = (2d * Math.PI) / (nc - 1);
             var wc = new double[nc];
             var eiw = new Complex[nc, mc + 1];
+            // Legacy block: MAPGEN/CNCALC setup of the circle-plane parameter grid and modal basis.
+            // Difference: The managed code names the basis arrays explicitly and owns them inside the state object.
+            // Decision: Keep the equivalent initialization loop.
             for (var index = 0; index < nc; index++)
             {
                 wc[index] = dwc * index;
@@ -1132,6 +1291,9 @@ public sealed class ConformalMapgenService
 
     private sealed class CirclePlaneStateSnapshot
     {
+        // Legacy mapping: none; managed-only rollback snapshot for damped MAPGEN steps.
+        // Difference from legacy: The Fortran code updated state in place without a dedicated snapshot object.
+        // Decision: Keep the managed-only helper because it supports the damping wrapper cleanly.
         public CirclePlaneStateSnapshot(Complex[] cn, Complex[] piq, Complex[] zc, Complex[,] zcCn)
         {
             Cn = cn;

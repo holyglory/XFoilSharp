@@ -1,5 +1,11 @@
 using XFoil.Solver.Models;
 
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xoper.f :: MRCHUE/COMSET initialization lineage; f_xfoil/src/xblsys.f :: transition and BL correlation families
+// Role in port: Produces a managed first-pass viscous estimate for diagnostic commands from a seed state.
+// Differences: There is no direct Fortran routine matching this file; it combines Thwaites-style laminar growth, a simplified e^N transport model, and a heuristic wake continuation into a standalone managed estimator.
+// Decision: Keep the managed estimator for diagnostics only. Do not treat it as a parity reference for the operating-point viscous solve.
 namespace XFoil.Solver.Services;
 
 /// <summary>
@@ -14,6 +20,9 @@ public sealed class ViscousStateEstimator
     private const double LaminarShapeFactor = 2.59d;
     private const double WakeShapeFactor = 1.20d;
 
+    // Legacy mapping: none; managed-only diagnostic entry point informed by MRCHUE/COMSET seed initialization concepts.
+    // Difference from legacy: XFoil initializes the viscous state inside the main march and Newton workflow, while this method produces a standalone estimate object from a seed.
+    // Decision: Keep the diagnostic API because it is useful for inspection and is intentionally separate from parity-critical flow.
     public ViscousStateEstimate Estimate(ViscousStateSeed seed, AnalysisSettings settings)
     {
         if (seed is null)
@@ -41,6 +50,9 @@ public sealed class ViscousStateEstimator
         return new ViscousStateEstimate(seed, upperSurface, lowerSurface, wake);
     }
 
+    // Legacy mapping: none; managed-only laminar/turbulent surface estimate derived from classical boundary-layer correlations.
+    // Difference from legacy: The method uses simplified Thwaites-style growth and a heuristic regime switch rather than replaying the exact XFoil surface march.
+    // Decision: Keep the simplified estimator because this file exists for diagnostics, not for parity replay.
     private ViscousBranchState EstimateSurfaceBranch(
         ViscousBranchSeed seed,
         double kinematicViscosity,
@@ -126,6 +138,9 @@ public sealed class ViscousStateEstimator
         return new ViscousBranchState(seed.Branch, states);
     }
 
+    // Legacy mapping: none; managed-only wake continuation heuristic.
+    // Difference from legacy: The wake branch here is a compact estimate built from the seed and a fixed wake shape factor rather than the coupled wake march used by the main solver.
+    // Decision: Keep the helper as a diagnostic approximation only.
     private static ViscousBranchState EstimateWakeBranch(ViscousBranchSeed seed, double kinematicViscosity, double startTheta)
     {
         var states = new List<ViscousStationState>(seed.Stations.Count);
@@ -168,6 +183,9 @@ public sealed class ViscousStateEstimator
     // Inlined amplification model (was LaminarAmplificationModel)
     // ================================================================
 
+    // Legacy mapping: none; managed-only diagnostic transition-growth model informed by XFoil's transition correlations.
+    // Difference from legacy: The logic uses a simplified amplification transport and regime trigger instead of the full DAMPL/TRCHEK transition machinery used by the main parity path.
+    // Decision: Keep the helper for cheap diagnostic estimates, but do not use it as a substitute for the direct transition model port.
     private static (double AmplificationFactor, ViscousFlowRegime Regime) AdvanceAmplification(
         ViscousStationState start,
         double endXi,

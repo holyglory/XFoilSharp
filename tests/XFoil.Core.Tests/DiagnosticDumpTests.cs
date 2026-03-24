@@ -3,20 +3,28 @@ using System.Globalization;
 using System.IO;
 using Xunit;
 using Xunit.Abstractions;
+using XFoil.Core.Diagnostics;
+using XFoil.Core.Services;
+using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xbl.f and xblsys.f internal viscous diagnostic state
+// Secondary legacy source: tools/fortran-debug trace instrumentation
+// Role in port: Verifies the managed diagnostic dump used to inspect parity boundaries against legacy viscous internals.
+// Differences: The dump is a managed text/JSON artifact created specifically for port debugging, not a direct legacy runtime feature.
+// Decision: Keep this managed-only diagnostics harness because it is essential for solver-fidelity debugging across runtimes.
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// Diagnostic dump test that runs the NACA 0012 Re=1e6 alpha=0 reference case
-/// and writes structured intermediate values to tools/fortran-debug/csharp_dump.txt.
-/// The output format mirrors the Fortran reference_dump.txt so Plan 13 can compare
-/// the two files line-by-line to identify divergence points.
+/// and writes both the legacy text dump and the full JSONL trace under tools/fortran-debug/.
 /// </summary>
 [Trait("Category", "Diagnostic")]
 public class DiagnosticDumpTests
 {
+    private const int ClassicXFoilNacaPointCount = 239;
     private readonly ITestOutputHelper _output;
 
     public DiagnosticDumpTests(ITestOutputHelper output)
@@ -30,17 +38,19 @@ public class DiagnosticDumpTests
     /// comparison with the Fortran reference_dump.txt.
     /// </summary>
     [Fact]
+    // Legacy mapping: initial viscous diagnostic state traced from xbl/xblsys execution.
+    // Difference from legacy: The test validates managed diagnostic artifacts rather than a legacy text/debug print path.
+    // Decision: Keep the managed tracing test because it is the primary parity-debug artifact in the port.
     public void Naca0012_Re1e6_Alpha0_WritesDiagnosticDump()
     {
         // Find the solution root (navigate up from test bin directory)
         string dumpDir = FindSolutionRoot("tools/fortran-debug");
         Directory.CreateDirectory(dumpDir);
         string dumpPath = Path.Combine(dumpDir, "csharp_dump.txt");
+        string tracePath = Path.Combine(dumpDir, "csharp_trace.jsonl");
 
         _output.WriteLine($"Writing diagnostic dump to: {dumpPath}");
-
-        // Generate NACA 0012 geometry (same formula as ViscousParityTests)
-        var geometry = BuildNacaSymmetric0012(160);
+        _output.WriteLine($"Writing structured trace to: {tracePath}");
 
         // Settings matching Fortran reference case exactly
         var settings = new AnalysisSettings(
@@ -53,32 +63,50 @@ public class DiagnosticDumpTests
             useExtendedWake: false,
             maxViscousIterations: 20,
             viscousConvergenceTolerance: 1e-4,
-            criticalAmplificationFactor: 9.0);
+            criticalAmplificationFactor: 9.0,
+            useLegacyBoundaryLayerInitialization: true,
+            useLegacyWakeSourceKernelPrecision: true,
+            useLegacyStreamfunctionKernelPrecision: true,
+            useLegacyPanelingPrecision: true);
 
         double alphaRadians = 0.0; // alpha = 0 degrees
 
         // Run the viscous solver with diagnostic writer enabled
         ViscousAnalysisResult result;
-        using (var writer = new StreamWriter(dumpPath, false, System.Text.Encoding.UTF8))
+        using (var textWriter = new StreamWriter(dumpPath, false, System.Text.Encoding.UTF8))
+        using (var traceWriter = new JsonlTraceWriter(tracePath, runtime: "csharp", session: new
         {
-            writer.WriteLine("=== CSHARP VISCAL START ===");
-            writer.WriteLine(string.Format(CultureInfo.InvariantCulture,
+            caseName = "Naca0012_Re1e6_Alpha0",
+            panelCount = settings.PanelCount,
+            settings.ReynoldsNumber,
+            alphaRadians
+        }))
+        using (var debugWriter = new MultiplexTextWriter(textWriter, traceWriter))
+        using (SolverTrace.Begin(traceWriter))
+        using (CoreTrace.Begin((kind, scope, data) => traceWriter.WriteEvent(kind, scope, data)))
+        {
+            // Generate the raw classic NACA buffer inside the trace scope so the
+            // parity dump includes the same upstream input stage as the Fortran trace.
+            var geometry = BuildNacaSymmetric0012(160);
+
+            debugWriter.WriteLine("=== CSHARP VISCAL START ===");
+            debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
                 "NITER={0,10}", settings.MaxViscousIterations));
 
             result = ViscousSolverEngine.SolveViscous(
-                geometry, settings, alphaRadians, debugWriter: writer);
+                geometry, settings, alphaRadians, debugWriter: debugWriter);
 
-            writer.WriteLine("=== CSHARP VISCAL END ===");
-            writer.WriteLine(string.Format(CultureInfo.InvariantCulture,
+            debugWriter.WriteLine("=== CSHARP VISCAL END ===");
+            debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
                 "FINAL CL={0,15:E8} CD={1,15:E8} CM={2,15:E8}",
                 result.LiftCoefficient,
                 result.DragDecomposition.CD,
                 result.MomentCoefficient));
-            writer.WriteLine(string.Format(CultureInfo.InvariantCulture,
+            debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
                 "CONVERGED={0} ITERATIONS={1}",
                 result.Converged, result.Iterations));
 
-            writer.Flush();
+            debugWriter.Flush();
         }
 
         // Log key results to test output
@@ -90,41 +118,61 @@ public class DiagnosticDumpTests
 
         // Assertions: dump file was written and contains expected markers
         Assert.True(File.Exists(dumpPath), $"Dump file should exist at {dumpPath}");
+        Assert.True(File.Exists(tracePath), $"Trace file should exist at {tracePath}");
 
-        string dumpContent = File.ReadAllText(dumpPath);
         long fileSize = new FileInfo(dumpPath).Length;
+        long traceSize = new FileInfo(tracePath).Length;
         _output.WriteLine($"Dump file size: {fileSize} bytes");
+        _output.WriteLine($"Trace file size: {traceSize} bytes");
 
         Assert.True(fileSize > 100, $"Dump file should be non-empty, got {fileSize} bytes");
+        Assert.True(traceSize > 100, $"Trace file should be non-empty, got {traceSize} bytes");
 
         // Check for iteration markers
-        Assert.Contains("=== ITER", dumpContent);
+        Assert.True(FileContainsText(dumpPath, "=== ITER"));
 
         // Check for station markers
-        Assert.Contains("STATION IS=", dumpContent);
+        Assert.True(FileContainsText(dumpPath, "STATION IS="));
 
         // Check for BL state logging
-        Assert.Contains("BL_STATE", dumpContent);
+        Assert.True(FileContainsText(dumpPath, "BL_STATE"));
 
         // Check for VA/VB blocks
-        Assert.Contains("VA_ROW1", dumpContent);
-        Assert.Contains("VB_ROW1", dumpContent);
+        Assert.True(FileContainsText(dumpPath, "VA_ROW1"));
+        Assert.True(FileContainsText(dumpPath, "VB_ROW1"));
 
         // Check for VDEL residuals
-        Assert.Contains("VDEL_R", dumpContent);
+        Assert.True(FileContainsText(dumpPath, "VDEL_R"));
+        Assert.True(FileContainsText(dumpPath, "VDEL_S"));
 
         // Check for POST_CALC aerodynamic coefficients
-        Assert.Contains("POST_CALC CL=", dumpContent);
+        Assert.True(FileContainsText(dumpPath, "POST_CALC CL="));
 
         // Check for BLSOLV forward/solution logging
-        Assert.Contains("BLSOLV_POST_FORWARD", dumpContent);
-        Assert.Contains("VDEL_SOL", dumpContent);
+        Assert.True(FileContainsText(dumpPath, "BLSOLV_POST_FORWARD"));
+        Assert.True(FileContainsText(dumpPath, "VDEL_SOL"));
 
         // Check for UPDATE logging (may not appear if Newton update is never applied --
         // the BL march is the primary convergence driver and newtonHealthy may be false
         // for all iterations. Log presence but don't assert.)
-        bool hasUpdateLog = dumpContent.Contains("UPDATE IS=");
+        bool hasUpdateLog = FileContainsText(dumpPath, "UPDATE IS=");
         _output.WriteLine($"Newton UPDATE logging present: {hasUpdateLog}");
+
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"call_enter\""));
+        Assert.True(FileContainsText(tracePath, "\"scope\":\"ViscousSolverEngine.SolveViscous\""));
+        Assert.True(FileContainsText(tracePath, "\"scope\":\"ViscousNewtonAssembler.BuildNewtonSystem\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"iteration_start\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"array\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"buffer_node\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"wake_node\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"wake_panel_state\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"panel_node\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"psilin_panel\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"psilin_source_segment\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"matrix_entry\""));
+        Assert.True(FileContainsText(tracePath, "\"kind\":\"basis_entry\""));
+        Assert.True(FileContainsText(tracePath, "\"name\":\"buffer_geometry_x\""));
+        Assert.True(FileContainsText(tracePath, "\"name\":\"wake_geometry_x\""));
 
         // Validate result is physically reasonable
         Assert.True(double.IsFinite(result.LiftCoefficient),
@@ -141,76 +189,16 @@ public class DiagnosticDumpTests
 
     private static (double[] x, double[] y) BuildNacaSymmetric0012(int n)
     {
-        return BuildNacaCambered(0.0, 0.0, 0.12, n);
-    }
-
-    /// <summary>
-    /// Build a general NACA 4-digit airfoil with parameters (m, p, t).
-    /// Generates (n+1) points: upper surface TE->LE then lower surface LE->TE.
-    /// Uses cosine spacing matching XFoil's NACA paneling.
-    /// </summary>
-    private static (double[] x, double[] y) BuildNacaCambered(
-        double m, double p, double t, int n)
-    {
-        int half = n / 2;
-        double[] xCoords = new double[n + 1];
-        double[] yCoords = new double[n + 1];
-
-        for (int i = 0; i <= half; i++)
+        var geometry = new NacaAirfoilGenerator().Generate4DigitClassic("0012", ClassicXFoilNacaPointCount);
+        var x = new double[geometry.Points.Count];
+        var y = new double[geometry.Points.Count];
+        for (int i = 0; i < geometry.Points.Count; i++)
         {
-            double theta = Math.PI * i / half;
-            double xc = 0.5 * (1.0 + Math.Cos(theta));
-            double yt = 5.0 * t * (0.2969 * Math.Sqrt(xc) - 0.1260 * xc
-                - 0.3516 * xc * xc + 0.2843 * xc * xc * xc - 0.1036 * xc * xc * xc * xc);
-
-            double yc = 0.0, dyc = 0.0;
-            if (m > 0 && p > 0)
-            {
-                if (xc < p)
-                {
-                    yc = m / (p * p) * (2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / (p * p) * (p - xc);
-                }
-                else
-                {
-                    yc = m / ((1.0 - p) * (1.0 - p)) * (1.0 - 2.0 * p + 2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / ((1.0 - p) * (1.0 - p)) * (p - xc);
-                }
-            }
-
-            double theta2 = Math.Atan(dyc);
-            xCoords[i] = xc - yt * Math.Sin(theta2);
-            yCoords[i] = yc + yt * Math.Cos(theta2);
+            x[i] = geometry.Points[i].X;
+            y[i] = geometry.Points[i].Y;
         }
 
-        for (int i = 1; i <= half; i++)
-        {
-            double theta = Math.PI * i / half;
-            double xc = 0.5 * (1.0 - Math.Cos(theta));
-            double yt = 5.0 * t * (0.2969 * Math.Sqrt(xc) - 0.1260 * xc
-                - 0.3516 * xc * xc + 0.2843 * xc * xc * xc - 0.1036 * xc * xc * xc * xc);
-
-            double yc = 0.0, dyc = 0.0;
-            if (m > 0 && p > 0)
-            {
-                if (xc < p)
-                {
-                    yc = m / (p * p) * (2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / (p * p) * (p - xc);
-                }
-                else
-                {
-                    yc = m / ((1.0 - p) * (1.0 - p)) * (1.0 - 2.0 * p + 2.0 * p * xc - xc * xc);
-                    dyc = 2.0 * m / ((1.0 - p) * (1.0 - p)) * (p - xc);
-                }
-            }
-
-            double theta2 = Math.Atan(dyc);
-            xCoords[half + i] = xc + yt * Math.Sin(theta2);
-            yCoords[half + i] = yc - yt * Math.Cos(theta2);
-        }
-
-        return (xCoords, yCoords);
+        return (x, y);
     }
 
     /// <summary>
@@ -259,6 +247,19 @@ public class DiagnosticDumpTests
             }
             dir = Path.GetDirectoryName(dir);
         }
+        return false;
+    }
+
+    private static bool FileContainsText(string path, string text)
+    {
+        foreach (string line in File.ReadLines(path))
+        {
+            if (line.Contains(text, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 }

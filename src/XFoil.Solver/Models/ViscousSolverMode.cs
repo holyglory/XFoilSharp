@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xbl.f :: RLXBL adaptive relaxation lineage
+// Role in port: Managed enum selecting which viscous Newton step strategy to run.
+// Differences: Classic XFoil only had the adaptive under-relaxation path, while the managed port exposes both that legacy mode and a trust-region mode as first-class choices.
+// Decision: Keep the enum because strategy selection is an intentional managed capability.
 namespace XFoil.Solver.Models;
 
 /// <summary>

@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xfoil.f :: ALFA operating-point output
+// Role in port: Managed immutable operating-point result for one inviscid solve, including pressures, circulation, and wake geometry.
+// Differences: Legacy XFoil stores these outputs across solver arrays and report scalars, while the managed port packages them into one return object.
+// Decision: Keep the managed result object because it is the clean API surface for the inviscid solver.
 namespace XFoil.Solver.Models;
 
 public sealed class InviscidAnalysisResult

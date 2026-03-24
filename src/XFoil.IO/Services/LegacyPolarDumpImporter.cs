@@ -3,10 +3,18 @@ using System.Globalization;
 using System.Text;
 using XFoil.IO.Models;
 
+// Legacy audit:
+// Primary legacy source: none
+// Role in port: Managed importer for the legacy binary polar-dump file format emitted by XFoil/ISES workflows.
+// Differences: No direct Fortran analogue exists because this code reconstructs the legacy unformatted record layout into typed DTOs rather than participating in the original record-writing path.
+// Decision: Keep the managed importer because it is the right compatibility layer for existing dump files.
 namespace XFoil.IO.Services;
 
 public sealed class LegacyPolarDumpImporter
 {
+    // Legacy mapping: none; managed-only parser for the legacy binary polar-dump format.
+    // Difference from legacy: The original runtime wrote these records, while the port reads them back into immutable DTOs with explicit validation.
+    // Decision: Keep the managed importer because it is a compatibility feature, not a parity-execution path.
     public LegacyPolarDumpFile Import(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -43,6 +51,9 @@ public sealed class LegacyPolarDumpImporter
         var geometry = ReadGeometry(geometryRecord, geometryCount);
 
         var operatingPoints = new List<LegacyPolarDumpOperatingPoint>();
+        // Legacy block: Managed-only pass over the unformatted record stream to rebuild each dumped operating point and its two side records.
+        // Difference: The original runtime produced these records sequentially, while the importer validates and reconstructs them into nested DTOs.
+        // Decision: Keep the managed parser because it makes old dump files reusable.
         while (true)
         {
             var forceRecord = ReadRecord(reader);
@@ -151,6 +162,9 @@ public sealed class LegacyPolarDumpImporter
             operatingPoints);
     }
 
+    // Legacy mapping: none; managed-only geometry-record parser for the legacy dump format.
+    // Difference from legacy: The original code wrote this unformatted record; the port decodes it into typed points.
+    // Decision: Keep the managed parser helper.
     private static IReadOnlyList<LegacyPolarDumpGeometryPoint> ReadGeometry(byte[] record, int pointCount)
     {
         var floats = ReadSingles(record);
@@ -160,6 +174,9 @@ public sealed class LegacyPolarDumpImporter
         }
 
         var geometry = new List<LegacyPolarDumpGeometryPoint>(pointCount);
+        // Legacy block: Managed-only decode of one geometry record into point objects.
+        // Difference: The importer materializes the binary floats into DTOs rather than leaving them in raw arrays.
+        // Decision: Keep the managed loop because it is the intended import representation.
         for (var index = 0; index < pointCount; index++)
         {
             geometry.Add(new LegacyPolarDumpGeometryPoint(floats[2 * index], floats[(2 * index) + 1]));
@@ -168,6 +185,9 @@ public sealed class LegacyPolarDumpImporter
         return geometry;
     }
 
+    // Legacy mapping: none; managed-only side-sample parser for the legacy dump format.
+    // Difference from legacy: The original code wrote these binary side rows, while the importer decodes them into named sample objects.
+    // Decision: Keep the managed parser helper.
     private static IReadOnlyList<LegacyPolarDumpSideSample> ReadSideSamples(byte[] record, int sampleCount)
     {
         var floats = ReadSingles(record);
@@ -177,6 +197,9 @@ public sealed class LegacyPolarDumpImporter
         }
 
         var samples = new List<LegacyPolarDumpSideSample>(sampleCount);
+        // Legacy block: Managed-only decode of one side-data record into sample DTOs.
+        // Difference: The importer materializes the binary record instead of leaving it in packed float arrays.
+        // Decision: Keep the managed loop because it improves usability of imported dump data.
         for (var index = 0; index < sampleCount; index++)
         {
             var offset = index * 6;
@@ -192,6 +215,9 @@ public sealed class LegacyPolarDumpImporter
         return samples;
     }
 
+    // Legacy mapping: none; managed-only interpretation of the Mach-variation mode encoded in the dump header.
+    // Difference from legacy: The original runtime generated Mach values from current session state, while the importer reconstructs them from stored metadata.
+    // Decision: Keep the managed helper because it makes dump imports self-contained.
     private static double ResolveMach(double referenceMach, LegacyMachVariationType variationType, double cl)
     {
         var safeCl = Math.Max(cl, 0.001d);
@@ -204,6 +230,9 @@ public sealed class LegacyPolarDumpImporter
         };
     }
 
+    // Legacy mapping: none; managed-only unformatted-record decoding helper.
+    // Difference from legacy: The original runtime wrote binary floats directly, while the importer reconstructs them into a managed array.
+    // Decision: Keep the managed helper because it localizes the binary-layout logic.
     private static float[] ReadSingles(byte[] record)
     {
         if (record.Length % 4 != 0)
@@ -220,21 +249,33 @@ public sealed class LegacyPolarDumpImporter
         return values;
     }
 
+    // Legacy mapping: none; managed-only binary-layout helper.
+    // Difference from legacy: This helper decodes one `INT32` field from a record produced by the old runtime.
+    // Decision: Keep the managed helper.
     private static int ReadInt32(byte[] record, int offset)
     {
         return BinaryPrimitives.ReadInt32LittleEndian(record.AsSpan(offset, 4));
     }
 
+    // Legacy mapping: none; managed-only binary-layout helper.
+    // Difference from legacy: This helper decodes one single-precision value from the record stream.
+    // Decision: Keep the managed helper.
     private static float ReadSingle(byte[] record, int offset)
     {
         return BitConverter.Int32BitsToSingle(ReadInt32(record, offset));
     }
 
+    // Legacy mapping: none; managed-only binary-layout helper.
+    // Difference from legacy: Fixed-width strings are reconstructed explicitly during import instead of being read into legacy character buffers.
+    // Decision: Keep the managed helper because it isolates the old record-layout rules.
     private static string ReadFixedString(byte[] record, int offset, int length)
     {
         return Encoding.ASCII.GetString(record, offset, length).TrimEnd('\0', ' ');
     }
 
+    // Legacy mapping: none; managed-only Fortran-record reader.
+    // Difference from legacy: The importer must read record-length sentinels explicitly, while the original runtime wrote them implicitly through unformatted I/O.
+    // Decision: Keep the managed helper because it is the core compatibility shim for the binary format.
     private static byte[]? ReadRecord(BinaryReader reader)
     {
         if (reader.BaseStream.Position >= reader.BaseStream.Length)

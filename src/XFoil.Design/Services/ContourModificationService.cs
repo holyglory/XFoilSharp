@@ -1,10 +1,19 @@
 using XFoil.Core.Models;
 using XFoil.Design.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/modify.f :: MODIXY
+// Secondary legacy source: f_xfoil/src/xgdes.f :: GDES `MODI` command handling
+// Role in port: Applies spline-based contour grafts from external control points.
+// Differences: The managed port extracts the legacy contour-modification intent into a direct service call with immutable results and explicit spline helpers.
+// Decision: Keep the managed refactor because it preserves the useful geometry-edit behavior without the interactive command machinery.
 namespace XFoil.Design.Services;
 
 public sealed class ContourModificationService
 {
+    // Legacy mapping: f_xfoil/src/modify.f :: MODIXY.
+    // Difference from legacy: The managed implementation uses explicit spline helpers and immutable result construction instead of mutating shared geometry buffers in place.
+    // Decision: Keep the managed refactor because it makes the modification workflow scriptable and testable.
     public ContourModificationResult ModifyContour(
         AirfoilGeometry geometry,
         IReadOnlyList<AirfoilPoint> controlPoints,
@@ -88,6 +97,9 @@ public sealed class ContourModificationService
             endDerivativeY);
 
         var editedPoints = sourcePoints.ToArray();
+        // Legacy block: MODIXY spline replacement across the selected contour span.
+        // Difference: The managed port rewrites the selected segment from explicit spline evaluations over stored arc lengths instead of operating on the legacy workspace arrays directly.
+        // Decision: Keep the explicit loop because it exposes the actual contour replacement clearly.
         for (var index = modifiedStartIndex; index <= modifiedEndIndex; index++)
         {
             var arcLength = sourceCurve.ArcLengths[index];
@@ -110,6 +122,9 @@ public sealed class ContourModificationService
             matchEndpointSlope);
     }
 
+    // Legacy mapping: none; this is a managed nearest-point lookup helper.
+    // Difference from legacy: The port selects control-point anchors by explicit distance search rather than by command-local cursor state.
+    // Decision: Keep the helper because it is simple and deterministic.
     private static int FindClosestPointIndex(IReadOnlyList<AirfoilPoint> points, AirfoilPoint target)
     {
         var bestIndex = 0;
@@ -127,6 +142,9 @@ public sealed class ContourModificationService
         return bestIndex;
     }
 
+    // Legacy mapping: f_xfoil/src/spline.f :: SCALC cumulative arc-length build.
+    // Difference from legacy: The helper constructs only the local arc-length parameterization needed by the managed spline fit.
+    // Decision: Keep the helper because it localizes the parameterization logic cleanly.
     private static double[] BuildArcLengths(IReadOnlyList<AirfoilPoint> points)
     {
         var arcLengths = new double[points.Count];
@@ -140,6 +158,9 @@ public sealed class ContourModificationService
         return arcLengths;
     }
 
+    // Legacy mapping: none; this is a managed parameter-rescaling helper.
+    // Difference from legacy: The port rescales the control-point parameter domain explicitly rather than relying on shared work arrays and in-place normalization.
+    // Decision: Keep the helper because it makes the graft interval mapping obvious.
     private static void RescaleParameters(double[] parameters, double targetStart, double targetEnd)
     {
         var currentStart = parameters[0];
@@ -154,6 +175,9 @@ public sealed class ContourModificationService
         }
     }
 
+    // Legacy mapping: none; this is a managed distance helper for anchor selection.
+    // Difference from legacy: The helper computes squared distance directly instead of depending on interactive point picking.
+    // Decision: Keep the helper because it supports deterministic anchor lookup.
     private static double DistanceSquared(AirfoilPoint first, AirfoilPoint second)
     {
         var dx = first.X - second.X;

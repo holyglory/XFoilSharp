@@ -1,10 +1,19 @@
 using XFoil.Core.Models;
 using XFoil.Design.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xgdes.f :: TGAP
+// Secondary legacy source: f_xfoil/src/xgeom.f :: LEFIND/GEOPAR
+// Role in port: Adjusts the trailing-edge gap by displacing the upper and lower surfaces along a resolved gap direction.
+// Differences: The managed implementation keeps the same TGAP intent but exposes the operation as a direct immutable service call with explicit helpers for the blend and direction logic.
+// Decision: Keep the managed refactor because it preserves the legacy geometry edit purpose while fitting the .NET service layer.
 namespace XFoil.Design.Services;
 
 public sealed class TrailingEdgeGapService
 {
+    // Legacy mapping: f_xfoil/src/xgdes.f :: TGAP.
+    // Difference from legacy: The managed implementation computes the chord frame and applies the gap displacement directly to copied points instead of mutating buffer geometry arrays in the GDES command path.
+    // Decision: Keep the managed refactor because it preserves the TGAP behavior while making the operation reusable and testable.
     public TrailingEdgeGapEditResult SetTrailingEdgeGap(
         AirfoilGeometry geometry,
         double targetGap,
@@ -53,6 +62,9 @@ public sealed class TrailingEdgeGapService
         var deltaGap = targetGap - originalGap;
         var transformedPoints = new AirfoilPoint[points.Count];
 
+        // Legacy block: TGAP per-point displacement sweep.
+        // Difference: The managed port evaluates the blend factor and upper/lower direction explicitly for each point instead of using the monolithic GDES workspace update.
+        // Decision: Keep the explicit sweep because it exposes the actual geometry change clearly.
         for (var index = 0; index < points.Count; index++)
         {
             var point = points[index];
@@ -94,6 +106,9 @@ public sealed class TrailingEdgeGapService
             clampedBlendDistance);
     }
 
+    // Legacy mapping: f_xfoil/src/xgeom.f :: XLFIND/LEFIND first-guess intent.
+    // Difference from legacy: This helper uses a discrete minimum-x scan rather than a spline-refined leading-edge solve.
+    // Decision: Keep the simpler scan because this service operates directly on supplied points.
     private static int FindLeadingEdgeIndex(IReadOnlyList<AirfoilPoint> points)
     {
         var bestIndex = 0;
@@ -111,6 +126,9 @@ public sealed class TrailingEdgeGapService
         return bestIndex;
     }
 
+    // Legacy mapping: none; this is a managed helper for resolving the displacement direction when the existing TE gap is zero.
+    // Difference from legacy: The port falls back to local tangent geometry explicitly instead of relying on implicit workspace state.
+    // Decision: Keep the helper because it makes the zero-gap case deterministic.
     private static (double X, double Y) ResolveGapDirection(
         IReadOnlyList<AirfoilPoint> points,
         double gapVectorX,
@@ -135,6 +153,9 @@ public sealed class TrailingEdgeGapService
         return (0d, 1d);
     }
 
+    // Legacy mapping: none; this is a managed vector-normalization helper.
+    // Difference from legacy: The helper isolates a small geometric primitive that would be inlined in the legacy command code.
+    // Decision: Keep the helper because it improves readability.
     private static (double X, double Y) Normalize(double x, double y)
     {
         var magnitude = Math.Sqrt((x * x) + (y * y));
@@ -146,6 +167,9 @@ public sealed class TrailingEdgeGapService
         return (x / magnitude, y / magnitude);
     }
 
+    // Legacy mapping: f_xfoil/src/xgdes.f :: TGAP endpoint-gap measure.
+    // Difference from legacy: The helper computes the final endpoint distance explicitly for the managed result object.
+    // Decision: Keep the helper because it supports the immutable summary returned by the service.
     private static double ComputeEndpointGap(IReadOnlyList<AirfoilPoint> points)
     {
         var dx = points[0].X - points[^1].X;

@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xoper.f :: Type 1/2/3 polar modes
+// Role in port: Managed enum naming the classic XFoil polar sweep modes.
+// Differences: Legacy XFoil used numeric type codes and session flags, while the managed port exposes them as a typed enum.
+// Decision: Keep the enum because it makes the sweep mode explicit in the public API.
 namespace XFoil.Solver.Models;
 
 /// <summary>

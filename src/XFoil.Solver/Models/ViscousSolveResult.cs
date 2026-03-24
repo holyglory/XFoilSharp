@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xbl.f :: viscous Newton solve convergence lineage
+// Role in port: Managed result container for one solve of the older interval-based viscous system.
+// Differences: The managed port packages initial/final systems and residual summaries explicitly instead of leaving them transient in solver locals.
+// Decision: Keep the managed DTO because it preserves useful diagnostics for tests and tooling.
 namespace XFoil.Solver.Models;
 
 public sealed class ViscousSolveResult

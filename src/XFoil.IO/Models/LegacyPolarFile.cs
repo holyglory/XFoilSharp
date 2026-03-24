@@ -1,7 +1,15 @@
+// Legacy audit:
+// Primary legacy source: none
+// Role in port: Managed DTO representing one parsed legacy XFoil polar file.
+// Differences: No direct Fortran analogue exists because the legacy polar writer and reader operated through formatted I/O and shared state instead of a structured model object.
+// Decision: Keep the managed DTO because it gives the importer/exporter a stable representation of the on-disk polar format.
 namespace XFoil.IO.Models;
 
 public sealed class LegacyPolarFile
 {
+    // Legacy mapping: none; managed-only constructor for one parsed legacy polar file.
+    // Difference from legacy: The Fortran path emitted these values procedurally, while the port validates and stores them in an immutable object.
+    // Decision: Keep the managed constructor because it makes the parsed file contract explicit.
     public LegacyPolarFile(
         string sourceCode,
         double? version,

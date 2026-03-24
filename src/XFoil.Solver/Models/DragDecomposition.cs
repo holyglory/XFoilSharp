@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xfoil.f :: CDCALC
+// Role in port: Managed summary of total, friction, pressure, base, and optional wave-drag components.
+// Differences: Classic XFoil accumulates these values in local scalars and report buffers, while the managed port returns them as a structured decomposition.
+// Decision: Keep the managed record because it makes drag diagnostics and tests much clearer.
 namespace XFoil.Solver.Models;
 
 /// <summary>

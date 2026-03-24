@@ -2,6 +2,12 @@ using XFoil.Core.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xpanel.f and inviscid force-integration lineage
+// Role in port: Verifies the managed linear-vortex inviscid solver, which is a port-side extension alongside the legacy-derived Hess-Smith path.
+// Differences: This solver family has no single direct Fortran analogue because it is a managed-only backend added by the port, though it reuses legacy geometry and force conventions.
+// Decision: Keep the managed implementation and tests as a deliberate solver extension; parity branches are not required because this backend is not legacy replay.
 namespace XFoil.Core.Tests;
 
 public sealed class LinearVortexInviscidSolverTests
@@ -9,6 +15,8 @@ public sealed class LinearVortexInviscidSolverTests
     // ---- Task 1 unit tests: solver internals ----
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Basis-solution factoring for the linear-vortex backend is a managed-only solver feature. Decision: Keep the managed regression because it defines this backend's preparation contract.
     public void AssembleAndFactorSystem_SetsAreBasisSolutionsComputedFlag()
     {
         var (panel, state) = CreatePanelAndState("0012", 61, 60);
@@ -22,6 +30,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: The managed-only linear-vortex backend exposes two basis solutions explicitly. Decision: Keep the managed test because it protects the solver's intended decomposition.
     public void AssembleAndFactorSystem_ProducesTwoBasisSolutions()
     {
         var (panel, state) = CreatePanelAndState("0012", 61, 60);
@@ -43,6 +53,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Antisymmetric vortex strength for the linear-vortex backend is tested directly on the managed solver. Decision: Keep the managed aerodynamic regression because this backend is unique to the port.
     public void SolveAtAlpha0_SymmetricAirfoil_ProducesAntisymmetricVortexStrength()
     {
         var (panel, state) = CreatePanelAndState("0012", 101, 100);
@@ -78,6 +90,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Basis-speed superposition is a managed-only linear-vortex helper. Decision: Keep the managed formula test because it documents the backend's public contract.
     public void ComputeInviscidSpeed_SuperimposesBasicSpeedVectors()
     {
         var (panel, state) = CreatePanelAndState("0012", 61, 60);
@@ -99,6 +113,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: inviscid lift integration lineage shared with legacy panel methods.
+    // Difference from legacy: The test applies that force-integration convention to the managed linear-vortex backend. Decision: Keep the managed check because it validates consistency with aerodynamic expectations.
     public void IntegratePressureForces_Incompressible_ProducesCL()
     {
         // For NACA 0012 at alpha=5 deg, M=0: CL should be positive and near theory
@@ -115,6 +131,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: legacy Cp convention.
+    // Difference from legacy: The managed-only solver backend is checked against the same incompressible Cp formula used by legacy inviscid methods. Decision: Keep the managed formula regression because the convention is shared even though the backend is new.
     public void ComputePressureCoefficients_IncompressibleM0_CorrectFormula()
     {
         // At M=0, Cp = 1 - (Q/Qinf)^2 (no KT correction)
@@ -133,6 +151,8 @@ public sealed class LinearVortexInviscidSolverTests
     // ---- Task 2: End-to-end aerodynamic correctness tests ----
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: This is a managed-only backend acceptance case on NACA 0012 at alpha 0. Decision: Keep the managed regression because it defines expected behavior for the added solver.
     public void Naca0012_Alpha0_ProducesEssentiallyZeroLift()
     {
         // Symmetric airfoil at zero angle of attack: CL must be essentially zero
@@ -144,6 +164,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Positive-lift behavior is validated on the managed linear-vortex backend rather than a legacy solver path. Decision: Keep the managed aerodynamic regression because this backend is intentionally supported.
     public void Naca0012_Alpha5_ProducesPositiveLiftNearTheory()
     {
         // NACA 0012 at alpha=5 deg: CL should be close to thin-airfoil theory
@@ -160,6 +182,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Quarter-chord moment behavior is checked on a managed-only backend. Decision: Keep the managed regression because it constrains a key aerodynamic output of the added solver.
     public void Naca0012_Alpha5_ProducesNearZeroMomentAtQuarterChord()
     {
         // Symmetric airfoil: CM about quarter-chord should be near zero at any alpha
@@ -174,6 +198,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Cambered-airfoil lift at zero alpha is tested on the managed-only linear-vortex backend. Decision: Keep the managed regression because it validates a core use case of the extension.
     public void Naca2412_Alpha0_ProducesPositiveLift()
     {
         // Cambered airfoil at zero alpha: produces lift due to camber
@@ -185,6 +211,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Cambered-airfoil moment behavior is checked on a managed-only backend. Decision: Keep the managed test because it defines the expected sign convention for this solver.
     public void Naca2412_Alpha0_ProducesNegativeMoment()
     {
         // Positive camber produces nose-down moment (negative CM) about quarter-chord
@@ -196,6 +224,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: The alpha-linearity trend is checked on the managed-only linear-vortex backend. Decision: Keep the managed regression because it constrains backend consistency across angles.
     public void Naca0012_Alpha10_ProducesApproximatelyDoubleLiftOfAlpha5()
     {
         // CL linearity: alpha=10 should give approximately 2x the CL of alpha=5
@@ -209,6 +239,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: This is a managed-only mixed-sign sanity case for the added solver backend. Decision: Keep the managed regression because it broadens aerodynamic coverage of the extension.
     public void Naca4412_Alpha3_ProducesCorrectSigns()
     {
         // NACA 4412 at alpha=3 deg: positive CL and negative CM
@@ -222,6 +254,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: CL linearity near zero alpha is tested on the managed-only backend. Decision: Keep the managed regression because it constrains low-incidence behavior of the extension.
     public void Naca0012_ClLinearityNearZeroAlpha()
     {
         // CL should vary linearly with alpha near alpha=0
@@ -245,6 +279,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Panel-count sensitivity is evaluated for the managed-only linear-vortex backend. Decision: Keep the managed regression because discretization robustness is part of this solver's contract.
     public void Naca0012_PanelCountIndependence()
     {
         // CL at 100 panels vs 200 panels should agree within 1%
@@ -265,6 +301,8 @@ public sealed class LinearVortexInviscidSolverTests
     }
 
     [Fact]
+    // Legacy mapping: shared inviscid conventions, not a direct linear-vortex legacy solver.
+    // Difference from legacy: The test ensures the newer managed backend does not regress legacy Hess-Smith expectations already covered elsewhere. Decision: Keep the managed comparison because the port supports both backends.
     public void HessSmithSolver_ExistingTests_StillPass()
     {
         // Regression test: run the same checks as InviscidSolverTests to verify Hess-Smith is unaffected

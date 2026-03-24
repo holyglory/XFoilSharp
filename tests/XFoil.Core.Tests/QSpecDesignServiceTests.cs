@@ -3,11 +3,20 @@ using XFoil.Design.Models;
 using XFoil.Design.Services;
 using XFoil.Solver.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xqdes.f :: QDES/QSPEC workflows
+// Secondary legacy source: f_xfoil/src/xfoil.f inverse-design support paths
+// Role in port: Verifies the managed QSPEC design service derived from the legacy speed-distribution editing and inverse-design workflow.
+// Differences: The managed service exposes immutable profiles and explicit result objects instead of mutating the active inverse-design state inside the legacy command loop.
+// Decision: Keep the managed design API because it preserves the legacy behavior while making inverse-design operations composable and testable.
 namespace XFoil.Core.Tests;
 
 public sealed class QSpecDesignServiceTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xqdes.f baseline QSPEC profile construction.
+    // Difference from legacy: The managed test validates normalized profile coordinates through explicit DTOs instead of through the legacy design workspace.
+    // Decision: Keep the managed profile test because it documents the ported inverse-design input contract.
     public void CreateFromInviscidAnalysis_ProducesNormalizedProfileCoordinates()
     {
         var service = new QSpecDesignService();
@@ -29,6 +38,9 @@ public sealed class QSpecDesignServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xqdes.f local QSPEC modification path.
+    // Difference from legacy: The modification interval is returned explicitly by the managed service rather than being implicit in legacy state.
+    // Decision: Keep the managed result-based test because it strengthens observability without changing the design behavior.
     public void Modify_ChangesSelectedQSpecInterval()
     {
         var service = new QSpecDesignService();
@@ -50,6 +62,9 @@ public sealed class QSpecDesignServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xqdes.f QSPEC smoothing workflow.
+    // Difference from legacy: The test checks endpoint preservation and smoothing length numerically instead of relying on interactive profile inspection.
+    // Decision: Keep the managed numerical regression because it is the strongest guard for the smoothing operation.
     public void Smooth_ReducesInteriorPeakWhileKeepingEndpointsFixed()
     {
         var service = new QSpecDesignService();
@@ -71,6 +86,9 @@ public sealed class QSpecDesignServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xqdes.f symmetry enforcement support.
+    // Difference from legacy: Symmetry is asserted directly on the managed profile object instead of on the evolving legacy workspace.
+    // Decision: Keep the managed symmetry test because it documents the expected transformed profile explicitly.
     public void ForceSymmetry_MakesMirroredSpeedRatiosAntiSymmetric()
     {
         var service = new QSpecDesignService();
@@ -86,6 +104,9 @@ public sealed class QSpecDesignServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xqdes.f inverse geometry update.
+    // Difference from legacy: The managed inverse result exposes bounded displacement metrics that were not surfaced explicitly in legacy workflows.
+    // Decision: Keep the managed metrics because they are a deliberate API improvement over the same inverse-design behavior.
     public void ExecuteInverse_ProducesBoundedModifiedGeometry()
     {
         var service = new QSpecDesignService();
@@ -116,6 +137,9 @@ public sealed class QSpecDesignServiceTests
     }
 
     [Fact]
+    // Legacy mapping: legacy inverse-design precondition checks.
+    // Difference from legacy: Invalid profile sizes are surfaced as managed exceptions instead of command-loop failures.
+    // Decision: Keep the managed exception contract because it is clearer for callers while preserving the same validation rule.
     public void ExecuteInverse_RequiresMatchingPointCounts()
     {
         var service = new QSpecDesignService();

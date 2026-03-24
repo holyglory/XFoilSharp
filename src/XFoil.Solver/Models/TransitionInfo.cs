@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xblsys.f :: TRCHEK2 and forced-transition state
+// Role in port: Managed summary of transition location, trigger type, and convergence status for one surface.
+// Differences: Legacy XFoil stores this information across station indices, trip flags, and amplification arrays, while the managed port packages it into a structured result.
+// Decision: Keep the managed DTO because it makes transition reporting explicit and testable.
 namespace XFoil.Solver.Models;
 
 /// <summary>

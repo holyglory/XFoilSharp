@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xblsys.f :: BLDIF/TRDIF interval state lineage
+// Role in port: Managed immutable snapshot of one assembled viscous interval and its residual terms.
+// Differences: Legacy XFoil computes these terms transiently inside monolithic routines, while the managed port packages them into an explicit interval object.
+// Decision: Keep the managed DTO because it is valuable for diagnostics and testing.
 namespace XFoil.Solver.Models;
 
 public sealed class ViscousIntervalState

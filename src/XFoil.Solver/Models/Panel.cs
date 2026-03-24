@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xpanel.f :: panel-endpoint and normal/tangent geometry arrays
+// Role in port: Managed DTO for one geometric panel on the airfoil surface.
+// Differences: Legacy XFoil stores panel geometry in parallel arrays, while the managed port packages it into an explicit object per panel.
+// Decision: Keep the managed DTO because it improves readability and interoperability.
 using XFoil.Core.Models;
 
 namespace XFoil.Solver.Models;

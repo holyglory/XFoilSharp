@@ -2,6 +2,12 @@ using XFoil.Core.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xpanel.f :: PANGEN
+// Secondary legacy source: spline-based curvature smoothing in the paneling workflow
+// Role in port: Verifies the managed cosine-clustering panel distributor derived from the legacy panel redistribution algorithm.
+// Differences: The managed port exposes node distribution as a reusable service instead of burying it inside the panel generator command sequence.
+// Decision: Keep the managed distribution service because it preserves the algorithm while making it directly testable.
 namespace XFoil.Core.Tests;
 
 public sealed class CosineClusteringPanelDistributorTests
@@ -28,6 +34,9 @@ public sealed class CosineClusteringPanelDistributorTests
     }
 
     [Fact]
+    // Legacy mapping: PANGEN node-count preservation.
+    // Difference from legacy: The requested node count is asserted directly on the managed output instead of assumed by later panel setup.
+    // Decision: Keep the managed structural test because it protects a basic distribution contract.
     public void Distribute_Naca0012_ProducesExactlyRequestedNodeCount()
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();
@@ -39,6 +48,9 @@ public sealed class CosineClusteringPanelDistributorTests
     }
 
     [Fact]
+    // Legacy mapping: PANGEN upper-surface trailing-edge start convention.
+    // Difference from legacy: The node ordering is asserted explicitly on the managed distribution result.
+    // Decision: Keep the managed ordering test because it documents a legacy paneling convention.
     public void Distribute_Naca0012_Node0NearUpperSurfaceTE()
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();
@@ -54,6 +66,9 @@ public sealed class CosineClusteringPanelDistributorTests
     }
 
     [Fact]
+    // Legacy mapping: PANGEN lower-surface trailing-edge end convention.
+    // Difference from legacy: The final node placement is checked directly on the managed distribution output.
+    // Decision: Keep the managed regression because it preserves the same contour traversal convention.
     public void Distribute_Naca0012_NodeNMinus1NearLowerSurfaceTE()
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();
@@ -70,6 +85,9 @@ public sealed class CosineClusteringPanelDistributorTests
     }
 
     [Fact]
+    // Legacy mapping: PANGEN leading-edge placement.
+    // Difference from legacy: The minimum-x leading-edge condition is asserted explicitly rather than implied by later solver success.
+    // Decision: Keep the managed invariant because it directly captures a core paneling property.
     public void Distribute_Naca0012_LeadingEdgeAtMinimumX()
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();
@@ -95,6 +113,9 @@ public sealed class CosineClusteringPanelDistributorTests
     }
 
     [Fact]
+    // Legacy mapping: PANGEN symmetric-airfoil mirror behavior.
+    // Difference from legacy: Upper/lower symmetry is tested numerically on the managed nodes instead of visually or implicitly.
+    // Decision: Keep the managed symmetry regression because it is a strong guard for panel placement quality.
     public void Distribute_SymmetricNaca0012_UpperLowerMirrorSymmetric()
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();
@@ -132,6 +153,9 @@ public sealed class CosineClusteringPanelDistributorTests
     }
 
     [Fact]
+    // Legacy mapping: PANGEN leading-edge/trailing-edge clustering.
+    // Difference from legacy: Local panel-density trends are asserted directly on the managed output.
+    // Decision: Keep the managed distribution test because it protects the intended nonuniform clustering behavior.
     public void Distribute_Naca0012_PanelDensityHigherNearLeAndTe()
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();
@@ -173,6 +197,9 @@ public sealed class CosineClusteringPanelDistributorTests
     }
 
     [Fact]
+    // Legacy mapping: PANGEN arc-length preservation.
+    // Difference from legacy: Total arc length is cross-checked against an independent computation rather than only used internally.
+    // Decision: Keep the managed regression because it verifies redistribution respects the underlying contour geometry.
     public void Distribute_Naca0012_TotalArcLengthMatchesIndependentComputation()
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();
@@ -197,6 +224,9 @@ public sealed class CosineClusteringPanelDistributorTests
     }
 
     [Fact]
+    // Legacy mapping: PANGEN chord preservation.
+    // Difference from legacy: Chord length is asserted directly on the managed distribution result.
+    // Decision: Keep the managed test because it documents an important geometry invariant of redistribution.
     public void Distribute_Naca0012_ChordLengthCorrect()
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();
@@ -221,6 +251,9 @@ public sealed class CosineClusteringPanelDistributorTests
     [InlineData(100)]
     [InlineData(160)]
     [InlineData(200)]
+    // Legacy mapping: PANGEN across representative node counts.
+    // Difference from legacy: The managed suite parameterizes node-count cases explicitly instead of relying on ad hoc manual paneling runs.
+    // Decision: Keep the managed parameterized regression because it broadens stable coverage of the same distribution logic.
     public void Distribute_VariousNodeCounts_ProducesCorrectCount(int nodeCount)
     {
         var (inputX, inputY, inputCount) = GenerateNaca0012();

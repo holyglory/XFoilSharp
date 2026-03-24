@@ -1,11 +1,18 @@
 using XFoil.Solver.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xoper.f :: MRCHUE seed-state lineage
+// Secondary legacy source: f_xfoil/src/xfoil.f :: TECALC; f_xfoil/src/xpanel.f :: XYWAKE/WGAP
+// Role in port: Builds an explicit managed seed object for diagnostic viscous initialization flows.
+// Differences: The file is derived from the legacy seed/topology concepts, but it packages upper, lower, and wake branches plus trailing-edge gap metadata into immutable managed objects instead of mutating XFoil work arrays.
+// Decision: Keep the managed seed builder for diagnostics and setup workflows. The strict parity seed path remains inside ViscousSolverEngine.
 namespace XFoil.Solver.Services;
 
 public sealed class ViscousStateSeedBuilder
 {
-    private const double TrailingEdgeGapRatio = 2.5d;
-
+    // Legacy mapping: f_xfoil/src/xoper.f :: MRCHUE seed-state lineage.
+    // Difference from legacy: The method builds an explicit ViscousStateSeed from managed inviscid results and topology objects rather than filling the seed arrays used by the main XFoil march.
+    // Decision: Keep the object-building flow because it is clearer for diagnostics and tests.
     public ViscousStateSeed Build(InviscidAnalysisResult analysis, BoundaryLayerTopology topology)
     {
         if (analysis is null)
@@ -33,6 +40,9 @@ public sealed class ViscousStateSeedBuilder
             streamwiseGap);
     }
 
+    // Legacy mapping: managed-derived helper from the legacy surface station seed arrays.
+    // Difference from legacy: The port materializes immutable station-seed objects instead of storing branch data in several coordinated arrays.
+    // Decision: Keep the helper because it expresses branch seed construction clearly.
     private static ViscousBranchSeed BuildSurfaceSeed(IReadOnlyList<BoundaryLayerStation> stations)
     {
         var viscousStations = new List<ViscousStationSeed>(stations.Count);
@@ -50,6 +60,9 @@ public sealed class ViscousStateSeedBuilder
         return new ViscousBranchSeed(stations[0].Branch, viscousStations);
     }
 
+    // Legacy mapping: f_xfoil/src/xpanel.f :: XYWAKE/WGAP seed-wake lineage.
+    // Difference from legacy: The wake seed is built from the managed wake geometry and the isolated WakeGapProfile helper rather than from the original wake arrays inside the viscous march.
+    // Decision: Keep the helper because it makes the diagnostic wake seed explicit while preserving the legacy gap-shape law.
     private static ViscousBranchSeed BuildWakeSeed(
         IReadOnlyList<BoundaryLayerStation> stations,
         WakeGeometry wake,
@@ -59,23 +72,16 @@ public sealed class ViscousStateSeedBuilder
         var viscousStations = new List<ViscousStationSeed>(stations.Count);
         var sharpTrailingEdge = trailingEdgeGap < 1e-4;
         var wakeGapDerivative = ComputeWakeGapDerivative(wake);
-        var cubicA = 3d + (TrailingEdgeGapRatio * wakeGapDerivative);
-        var cubicB = -2d - (TrailingEdgeGapRatio * wakeGapDerivative);
 
         for (var index = 0; index < stations.Count; index++)
         {
             var station = stations[index];
             var wakePoint = wake.Points[Math.Min(index, wake.Points.Count - 1)];
-            var wakeGap = 0d;
-
-            if (!sharpTrailingEdge && normalGap > 1e-9)
-            {
-                var normalizedDistance = 1d - (wakePoint.DistanceFromTrailingEdge / (TrailingEdgeGapRatio * normalGap));
-                if (normalizedDistance >= 0d)
-                {
-                    wakeGap = normalGap * (cubicA + (cubicB * normalizedDistance)) * normalizedDistance * normalizedDistance;
-                }
-            }
+            var wakeGap = WakeGapProfile.Evaluate(
+                normalGap,
+                wakePoint.DistanceFromTrailingEdge,
+                wakeGapDerivative,
+                sharpTrailingEdge);
 
             viscousStations.Add(new ViscousStationSeed(
                 index,
@@ -88,6 +94,9 @@ public sealed class ViscousStateSeedBuilder
         return new ViscousBranchSeed(BoundaryLayerBranch.Wake, viscousStations);
     }
 
+    // Legacy mapping: f_xfoil/src/xfoil.f :: TECALC.
+    // Difference from legacy: The geometric relations are the same, but the managed port exposes them as a helper returning a tuple instead of updating shared TE state.
+    // Decision: Keep the helper because it is the cleanest way to feed the managed seed object.
     private static (double Gap, double NormalGap, double StreamwiseGap) ComputeTrailingEdgeGeometry(PanelMesh mesh)
     {
         var firstNode = mesh.Nodes[0];
@@ -105,6 +114,9 @@ public sealed class ViscousStateSeedBuilder
         return (gap, normalGap, streamwiseGap);
     }
 
+    // Legacy mapping: f_xfoil/src/xpanel.f :: XYWAKE wake-gap derivative lineage.
+    // Difference from legacy: The derivative extraction is factored into a tiny helper around WakeGapProfile instead of being embedded in the wake marching routine.
+    // Decision: Keep the helper because it keeps the managed wake-seed assembly readable.
     private static double ComputeWakeGapDerivative(WakeGeometry wake)
     {
         if (wake.Points.Count < 2)
@@ -112,8 +124,6 @@ public sealed class ViscousStateSeedBuilder
             return 0d;
         }
 
-        var firstTangent = wake.Points[1];
-        var clampedY = Math.Clamp(firstTangent.TangentY, -0.999999d, 0.999999d);
-        return clampedY / Math.Sqrt(Math.Max(1e-12, 1d - (clampedY * clampedY)));
+        return WakeGapProfile.ComputeDerivativeFromTangentY(wake.Points[1].TangentY);
     }
 }

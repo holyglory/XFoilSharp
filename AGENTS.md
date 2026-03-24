@@ -28,6 +28,12 @@ This repository is a managed C# rewrite of XFoil. Work here should push the code
 - Do not silently claim parity with original XFoil. Record approximations, surrogates, and gaps.
 - Keep changes small, testable, and scriptable.
 - Do not introduce interactive-only behavior unless the task requires it.
+- If the user explicitly says to continue until a task is finished, do not pause the work for an intermediate checkpoint or summary. Brief progress updates are fine, but stopping is allowed only when the requested work is complete or a real blocker must be reported.
+- A verified batch, successful build, partial audit count, updated ledger, or useful progress summary is not a blocker and is not completion. In that situation, continue directly into the next pending file or subtask instead of stopping.
+- For long manual audits or parity/debugging campaigns, treat progress reports as commentary only. Do not end the work loop after reporting progress if unreviewed files or unresolved requested steps still remain.
+- If the user says to continue until completion, do not treat "I should update the user" as a reason to stop. Status belongs in commentary while the work continues; a final stop is allowed only at true completion or a blocker that cannot be resolved locally.
+- Do not convert an in-progress batch into a stopping point just because the next file is known, loaded, or partially analyzed. Open it, patch it, verify it, and continue into the following pending file in the same work loop.
+- When a repeated precision, parity, or algorithmic mistake is found, search for the same pattern across the codebase and fix the family of occurrences instead of waiting to rediscover the same issue later.
 
 ## Documentation Policy
 
@@ -108,3 +114,5 @@ Before considering the task done, verify:
 - Relevant tests or smoke checks were run, or the omission was stated.
 - Relevant `agents/` docs were updated.
 - Parity/TODO notes were adjusted if the work changed the migration status.
+- If the user asked to continue until completion, do not return a final checkpoint unless the task is actually complete or blocked.
+- Do not mistake “one more verified batch” for permission to stop; the next pending batch must be started immediately unless the task is actually done or blocked.

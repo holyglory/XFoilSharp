@@ -4,6 +4,12 @@ using Xunit;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f viscous operating-point solve
+// Secondary legacy source: f_xfoil/src/xbl.f, xblsys.f, xblsolv.f
+// Role in port: Verifies the managed viscous solver engine that ports the coupled Newton iteration and exposes its convergence history as structured results.
+// Differences: The managed engine returns immutable convergence metadata and drag decomposition objects instead of updating legacy session state and printed diagnostics.
+// Decision: Keep the managed result-rich API while preserving legacy assembly and parity branches inside the solver core.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -20,6 +26,8 @@ public class ViscousSolverEngineTests
     /// Post 03-17: Solver does not achieve Converged=true with full chain-rule Jacobians.
     /// </summary>
     [Fact]
+    // Legacy mapping: full viscous operating-point solve for NACA 0012 at alpha 0.
+    // Difference from legacy: The managed test checks convergence or meaningful iteration through a structured result object. Decision: Keep the managed regression because it documents the solver-engine contract exposed by the port.
     public void SolveViscous_Naca0012_AlphaZero_Converges()
     {
         var result = RunNaca0012AlphaZero();
@@ -32,6 +40,8 @@ public class ViscousSolverEngineTests
     /// Symmetric airfoil at alpha=0: CL should be near zero.
     /// </summary>
     [Fact]
+    // Legacy mapping: viscous lift output for a symmetric section at zero incidence.
+    // Difference from legacy: CL is asserted on the managed result rather than legacy printed coefficients. Decision: Keep the managed bounded-output regression because it constrains solver behavior at the public API.
     public void SolveViscous_Naca0012_AlphaZero_CLNearZero()
     {
         var result = RunNaca0012AlphaZero();
@@ -48,6 +58,8 @@ public class ViscousSolverEngineTests
     /// Viscous CD should be positive (drag is always positive).
     /// </summary>
     [Fact]
+    // Legacy mapping: viscous total-drag output.
+    // Difference from legacy: CD is read from a managed drag decomposition instead of a scalar session value. Decision: Keep the managed regression because it protects the exposed decomposition contract.
     public void SolveViscous_Naca0012_AlphaZero_CDPositive()
     {
         var result = RunNaca0012AlphaZero();
@@ -62,6 +74,8 @@ public class ViscousSolverEngineTests
     /// Expected range: 0.005 < CD < 0.02.
     /// </summary>
     [Fact]
+    // Legacy mapping: viscous drag magnitude at the reference operating point.
+    // Difference from legacy: The managed test uses a broad bounded range on typed output instead of strict legacy console comparison. Decision: Keep the managed regression because it documents acceptable solver output behavior.
     public void SolveViscous_Naca0012_AlphaZero_CDPhysicallyReasonable()
     {
         var result = RunNaca0012AlphaZero();
@@ -79,6 +93,8 @@ public class ViscousSolverEngineTests
     /// Verifies that the iteration history is recorded.
     /// </summary>
     [Fact]
+    // Legacy mapping: Newton residual evolution in the viscous solve.
+    // Difference from legacy: Residual history is exposed explicitly by the managed result object. Decision: Keep the managed convergence-history test because it is a deliberate observability improvement over the legacy runtime.
     public void SolveViscous_Naca0012_AlphaZero_ResidualDecreases()
     {
         var result = RunNaca0012AlphaZero();
@@ -100,6 +116,8 @@ public class ViscousSolverEngineTests
     /// Convergence history should be captured for all iterations.
     /// </summary>
     [Fact]
+    // Legacy mapping: iterative viscous convergence history.
+    // Difference from legacy: Per-iteration metadata is surfaced directly by the managed API instead of only via textual diagnostics. Decision: Keep the managed regression because it protects this port-specific observability feature.
     public void SolveViscous_Naca0012_AlphaZero_IterationHistoryCaptured()
     {
         var result = RunNaca0012AlphaZero();
@@ -120,6 +138,8 @@ public class ViscousSolverEngineTests
     /// Use extremely tight tolerance that won't be met.
     /// </summary>
     [Fact]
+    // Legacy mapping: non-converged viscous solve termination behavior.
+    // Difference from legacy: The managed result keeps structured failure metadata instead of relying on interactive status messages. Decision: Keep the managed test because it documents failure-mode behavior clearly.
     public void SolveViscous_ExtremelyTightTolerance_ReturnsNonConverged()
     {
         var settings = new AnalysisSettings(
@@ -150,6 +170,8 @@ public class ViscousSolverEngineTests
     /// NACA 0012 at alpha=0: CD > 0.003 and CD &lt; 0.015 (DragCalculator integration).
     /// </summary>
     [Fact]
+    // Legacy mapping: reference-point drag magnitude check.
+    // Difference from legacy: The managed test reads the structured drag decomposition instead of a scalar log line. Decision: Keep the managed regression because it constrains public output fields directly.
     public void SolveViscous_Naca0012_AlphaZero_CDInRange()
     {
         var result = RunNaca0012AlphaZero();
@@ -165,6 +187,8 @@ public class ViscousSolverEngineTests
     /// CDF + CDP = CD within machine epsilon (exact definition).
     /// </summary>
     [Fact]
+    // Legacy mapping: drag decomposition identity in the viscous solve.
+    // Difference from legacy: The port exposes CDF and CDP explicitly, allowing direct identity checks. Decision: Keep the managed test because it documents an intentional API improvement.
     public void SolveViscous_Naca0012_AlphaZero_CDFPlusCDPEqualsCD()
     {
         var result = RunNaca0012AlphaZero();
@@ -180,6 +204,8 @@ public class ViscousSolverEngineTests
     /// NACA 2412 at Re=3e6, alpha=3: should produce positive CL and CD.
     /// </summary>
     [Fact]
+    // Legacy mapping: viscous operating point on a cambered section.
+    // Difference from legacy: Combined lift/drag sign expectations are checked on the managed result object. Decision: Keep the managed regression because it broadens solver-engine acceptance coverage.
     public void SolveViscous_Naca2412_Alpha3_CDPositiveCLPositive()
     {
         var settings = new AnalysisSettings(
@@ -206,6 +232,8 @@ public class ViscousSolverEngineTests
     /// Transition info should report valid x/c locations on both surfaces.
     /// </summary>
     [Fact]
+    // Legacy mapping: transition reporting from the viscous solve.
+    // Difference from legacy: Transition details are returned explicitly in managed result objects instead of remaining embedded in internal arrays. Decision: Keep the managed regression because it protects this exposed metadata contract.
     public void SolveViscous_Naca0012_AlphaZero_TransitionInfoReported()
     {
         var result = RunNaca0012AlphaZero();
@@ -230,6 +258,8 @@ public class ViscousSolverEngineTests
     /// should produce CL/CD (not NaN) even when Newton solver cannot converge.
     /// </summary>
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Post-stall extrapolation is a managed extension layered on top of the viscous solver output. Decision: Keep the managed-only regression because the extension is intentionally supported by the port.
     public void SolveViscous_PostStall_Alpha20_ProducesExtrapolatedCLCD()
     {
         var settings = new AnalysisSettings(

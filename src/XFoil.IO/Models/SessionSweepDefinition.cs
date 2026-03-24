@@ -1,3 +1,8 @@
+// Legacy audit:
+// Primary legacy source: none
+// Role in port: Managed-only DTO describing one requested sweep in an analysis session manifest.
+// Differences: No direct Fortran analogue exists because this batch/session abstraction is part of the .NET automation layer rather than the legacy interactive workflow.
+// Decision: Keep the managed DTO because it is the right way to represent scripted sweep inputs.
 namespace XFoil.IO.Models;
 
 public sealed class SessionSweepDefinition

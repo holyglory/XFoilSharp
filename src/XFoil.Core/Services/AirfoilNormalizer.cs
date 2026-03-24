@@ -1,9 +1,18 @@
 using XFoil.Core.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xgeom.f :: NORM
+// Secondary legacy source: f_xfoil/src/xgeom.f :: LEFIND, f_xfoil/src/spline.f :: SCALC
+// Role in port: Normalizes discrete airfoil coordinates to unit chord in a managed preprocessing step.
+// Differences: The managed implementation uses a direct point-cloud rigid transform based on discrete leading/trailing edge estimates, while legacy XFoil normalizes spline geometry and derivative arrays in place.
+// Decision: Keep the simpler managed normalization helper because it is sufficient for file preprocessing and does not need a parity-only branch.
 namespace XFoil.Core.Services;
 
 public sealed class AirfoilNormalizer
 {
+    // Legacy mapping: f_xfoil/src/xgeom.f :: NORM.
+    // Difference from legacy: This routine estimates the normalization frame from discrete points and rotates/translates the point set directly instead of updating spline state and derived geometry arrays.
+    // Decision: Keep the managed simplification because normalization here is infrastructure for imports and tests, not a solver-fidelity path.
     public AirfoilGeometry Normalize(AirfoilGeometry geometry)
     {
         if (geometry is null)
@@ -33,6 +42,9 @@ public sealed class AirfoilNormalizer
         var cosine = Math.Cos(-angle);
         var sine = Math.Sin(-angle);
 
+        // Legacy block: NORM-style rigid-body normalization.
+        // Difference: Legacy XFoil transforms coordinate and derivative arrays in place after exact leading-edge localization; this port applies the same conceptual transform only to discrete points.
+        // Decision: Keep the discrete transform because the .NET preprocessing layer does not carry spline derivatives here.
         var normalized = points
             .Select(point =>
             {

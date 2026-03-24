@@ -2,11 +2,20 @@ using XFoil.Core.Models;
 using XFoil.Design.Models;
 using XFoil.Design.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xqdes.f modal inverse-design workflow
+// Secondary legacy source: legacy QSPEC inverse-design lineage
+// Role in port: Verifies the managed modal inverse-design service layered on top of the legacy-inspired QSPEC workflow.
+// Differences: Modal spectrum construction and perturbation are exposed as explicit managed APIs rather than hidden inside a legacy design session.
+// Decision: Keep the managed modal API because it is a structured port/refactor of the inverse-design functionality.
 namespace XFoil.Core.Tests;
 
 public sealed class ModalInverseDesignServiceTests
 {
     [Fact]
+    // Legacy mapping: legacy inverse-design modal basis construction.
+    // Difference from legacy: The managed test asserts explicit spectrum metadata rather than inspecting internal design-session state.
+    // Decision: Keep the managed spectrum contract because it makes the modal workflow reusable and testable.
     public void CreateSpectrum_ProducesRequestedModeCount()
     {
         var service = new ModalInverseDesignService();
@@ -20,6 +29,9 @@ public sealed class ModalInverseDesignServiceTests
     }
 
     [Fact]
+    // Legacy mapping: legacy inverse-design geometry update path.
+    // Difference from legacy: The managed result exposes displacement metrics and preserved endpoints directly instead of leaving them implicit.
+    // Decision: Keep the managed result structure because it improves observability without changing the design intent.
     public void Execute_ModifiesGeometryAndPreservesEndpoints()
     {
         var modalService = new ModalInverseDesignService();
@@ -48,6 +60,9 @@ public sealed class ModalInverseDesignServiceTests
     }
 
     [Fact]
+    // Legacy mapping: legacy modal perturbation/design experimentation workflow.
+    // Difference from legacy: The port offers a dedicated perturbation API that has no single direct legacy command analogue, even though it uses the same modal lineage.
+    // Decision: Keep this managed improvement because it is an intentional extension of the inverse-design toolkit.
     public void PerturbMode_ChangesGeometryWithSelectedMode()
     {
         var service = new ModalInverseDesignService();

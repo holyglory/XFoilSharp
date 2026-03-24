@@ -2,6 +2,12 @@ using System;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xpanel.f influence matrix assembly
+// Secondary legacy source: wake-coupling routines in the inviscid setup
+// Role in port: Verifies the managed influence-matrix builder derived from the legacy panel influence assembly.
+// Differences: The managed builder is exposed as a reusable service and can produce analytical and numerical variants explicitly.
+// Decision: Keep the managed decomposition because it preserves the same influence logic with better test isolation.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -14,6 +20,9 @@ public class InfluenceMatrixBuilderTests
     private const double NumericalTol = 1e-6;
 
     [Fact]
+    // Legacy mapping: xpanel analytical influence assembly sizing.
+    // Difference from legacy: Matrix dimensions are asserted directly instead of being implicit in later solver usage.
+    // Decision: Keep the managed structural test because it is a simple regression for assembly sizing.
     public void BuildAnalyticalDIJ_ProducesCorrectSize()
     {
         // 10-node system should produce DIJ with dimensions covering all nodes + wake
@@ -31,6 +40,9 @@ public class InfluenceMatrixBuilderTests
     }
 
     [Fact]
+    // Legacy mapping: xpanel self-influence dominance pattern.
+    // Difference from legacy: Diagonal behavior is checked on the managed matrix directly instead of through aerodynamic results.
+    // Decision: Keep the managed matrix-level regression because it isolates the assembled operator.
     public void BuildAnalyticalDIJ_DiagonalDominance()
     {
         // The DIJ matrix should have significant diagonal elements:
@@ -50,6 +62,9 @@ public class InfluenceMatrixBuilderTests
     }
 
     [Fact]
+    // Legacy mapping: wake row copying from trailing-edge coupling in the legacy assembly.
+    // Difference from legacy: The copied wake row is asserted directly instead of staying buried in assembled arrays.
+    // Decision: Keep the managed direct assertion because it documents a subtle assembly rule.
     public void BuildAnalyticalDIJ_FirstWakeRowCopiesFromTE()
     {
         // xpanel.f line 1249: first wake row should copy from TE row
@@ -75,6 +90,9 @@ public class InfluenceMatrixBuilderTests
     }
 
     [Fact]
+    // Legacy mapping: numerical influence assembly fallback.
+    // Difference from legacy: The numerical variant is a managed refactoring exposed as a direct capability.
+    // Decision: Keep this managed comparison path because it strengthens verification of the analytical implementation.
     public void BuildNumericalDIJ_ProducesCorrectSize()
     {
         int n = 10;
@@ -89,6 +107,9 @@ public class InfluenceMatrixBuilderTests
     }
 
     [Fact]
+    // Legacy mapping: analytical-versus-numerical influence consistency.
+    // Difference from legacy: The port compares two explicit managed assembly paths, which is broader than the original runtime visibility.
+    // Decision: Keep this managed improvement because it provides stronger regression coverage of the ported formulas.
     public void BuildNumericalDIJ_MatchesAnalyticalWithinTolerance()
     {
         // Numerical (finite-difference) DIJ should agree with analytical DIJ

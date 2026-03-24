@@ -1,10 +1,19 @@
 using XFoil.Core.Models;
 using XFoil.Design.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xgdes.f :: LERAD
+// Secondary legacy source: f_xfoil/src/xgeom.f :: LEFIND/GEOPAR, f_xfoil/src/spline.f :: SCALC/SINVRT
+// Role in port: Adjusts the leading-edge radius by scaling local thickness in chord coordinates.
+// Differences: The managed implementation preserves the same geometric intent as `LERAD` but expresses it through explicit chord-frame helpers and immutable geometry output.
+// Decision: Keep the decomposed managed implementation because it makes the radius edit auditable while preserving the legacy operation’s purpose.
 namespace XFoil.Design.Services;
 
 public sealed class LeadingEdgeRadiusService
 {
+    // Legacy mapping: f_xfoil/src/xgdes.f :: LERAD.
+    // Difference from legacy: The managed implementation expresses the leading-edge-radius edit through explicit chord-frame geometry and opposite-surface queries instead of through monolithic buffer-array operations.
+    // Decision: Keep the managed refactor because it is clearer and still follows the legacy geometric intent.
     public LeadingEdgeRadiusEditResult ScaleLeadingEdgeRadius(
         AirfoilGeometry geometry,
         double radiusScaleFactor,
@@ -39,6 +48,9 @@ public sealed class LeadingEdgeRadiusService
             .ToArray();
 
         var editedPoints = new AirfoilPoint[points.Length];
+        // Legacy block: LERAD thickness rescaling along the airfoil chord.
+        // Difference: The managed port computes the local opposite-surface pair explicitly and applies the blend law in chord coordinates instead of mutating the legacy spline work arrays directly.
+        // Decision: Keep the explicit loop because it makes the local thickness adjustment understandable and testable.
         for (var index = 0; index < transformedChordPoints.Length; index++)
         {
             var point = transformedChordPoints[index];

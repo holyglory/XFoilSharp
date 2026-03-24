@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xbl.f :: UPDATE/BLSOLV convergence diagnostics
+// Role in port: Managed per-iteration snapshot of viscous Newton convergence metrics.
+// Differences: Legacy XFoil reports similar information transiently during iteration, while the managed port stores it as explicit history records.
+// Decision: Keep the managed record because it improves diagnostics and regression tests.
 namespace XFoil.Solver.Models;
 
 /// <summary>

@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: none
+// Role in port: Managed result container for the older displacement-coupled surrogate workflow retained for compatibility/documentation.
+// Differences: The legacy runtime had no matching immutable result object, and the original surrogate workflow was a managed experiment rather than a direct port.
+// Decision: Keep the DTO because it documents and transports the historical managed workflow cleanly.
 using XFoil.Core.Models;
 
 namespace XFoil.Solver.Models;

@@ -1,11 +1,20 @@
 using XFoil.Core.Services;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xbl.f :: STFIND, UICALC
+// Secondary legacy source: f_xfoil/src/xblsys.f
+// Role in port: Verifies the managed boundary-layer topology builder derived from the legacy stagnation-finding and branch-construction logic.
+// Differences: The test drives a managed analysis service rather than the legacy interactive viscous setup, but it checks the same topology invariants.
+// Decision: Keep the managed topology checks because the port exposes branch construction as an analysis result rather than internal transient state.
 namespace XFoil.Core.Tests;
 
 public sealed class BoundaryLayerTopologyTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f :: STFIND.
+    // Difference from legacy: The managed test asserts the stagnation location directly from the topology result instead of from internal legacy arrays.
+    // Decision: Keep the managed invariant because it validates the same stagnation-finding outcome at the public boundary.
     public void SymmetricAirfoilAtZeroAlpha_PlacesStagnationNearLeadingEdge()
     {
         var generator = new NacaAirfoilGenerator();
@@ -20,6 +29,9 @@ public sealed class BoundaryLayerTopologyTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f surface and wake branch station construction.
+    // Difference from legacy: Increasing branch distances are checked through immutable managed station objects instead of mutable legacy work arrays.
+    // Decision: Keep the managed representation because it makes the legacy topology rules easier to verify.
     public void BoundaryLayerTopology_ProducesIncreasingBranchDistances()
     {
         var generator = new NacaAirfoilGenerator();

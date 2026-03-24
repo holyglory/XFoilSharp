@@ -2,10 +2,19 @@ using XFoil.Core.Models;
 using XFoil.Design.Models;
 using XFoil.Solver.Models;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xqdes.f :: QDES/MODI/SMOOQ
+// Secondary legacy source: f_xfoil/src/xmdes.f :: PERT/CNCALC, f_xfoil/src/spline.f :: SPLIND/TRISOL
+// Role in port: Builds, edits, smooths, and executes managed Qspec profiles for inverse-design workflows.
+// Differences: The managed path turns the interactive QDES command flow into explicit immutable profile transforms and uses local helpers for smoothing, slope matching, and displacement reconstruction.
+// Decision: Keep the managed refactor because it preserves the legacy editing intent while exposing deterministic library APIs instead of command-session state.
 namespace XFoil.Design.Services;
 
 public sealed class QSpecDesignService
 {
+    // Legacy mapping: f_xfoil/src/xqdes.f :: QDES profile initialization lineage.
+    // Difference from legacy: The managed port derives the Qspec profile directly from inviscid pressure samples instead of initializing it through the interactive QDES session buffers.
+    // Decision: Keep the managed refactor because it produces the same design input in library form.
     public QSpecProfile CreateFromInviscidAnalysis(
         string name,
         InviscidAnalysisResult analysis)
@@ -18,6 +27,9 @@ public sealed class QSpecDesignService
         var distances = BuildSampleDistances(analysis.PressureSamples);
         var totalDistance = distances[^1] <= 0d ? 1d : distances[^1];
         var points = new QSpecPoint[analysis.PressureSamples.Count];
+        // Legacy block: QDES-style construction of the surface-coordinate/Qspec arrays from the current analysis state.
+        // Difference: The managed port rebuilds the immutable `QSpecPoint` array directly from solver samples instead of filling COMMON-backed arrays.
+        // Decision: Keep the managed refactor because the resulting profile is explicit.
         for (var index = 0; index < analysis.PressureSamples.Count; index++)
         {
             var sample = analysis.PressureSamples[index];
@@ -35,6 +47,9 @@ public sealed class QSpecDesignService
         return new QSpecProfile(name, analysis.AngleOfAttackDegrees, analysis.MachNumber, points);
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: MODI.
+    // Difference from legacy: The managed implementation performs the Qspec graft through explicit control-point splines and immutable profile rebuilding instead of through interactive endpoint selection and in-place QSPEC updates.
+    // Decision: Keep the managed refactor because it expresses the same graft operation with clearer inputs and outputs.
     public QSpecEditResult Modify(
         QSpecProfile profile,
         IReadOnlyList<AirfoilPoint> controlPoints,
@@ -102,6 +117,9 @@ public sealed class QSpecDesignService
             endDerivative);
 
         var editedSpeedRatio = yValues.ToArray();
+        // Legacy block: MODI replacement of the selected Qspec segment by the user-defined spline.
+        // Difference: The managed port writes the modified segment into a fresh speed-ratio array rather than mutating the active QDES workspace in place.
+        // Decision: Keep the managed refactor because the edit span is explicit and testable.
         for (var index = modifiedStartIndex; index <= modifiedEndIndex; index++)
         {
             editedSpeedRatio[index] = spline.Evaluate(xValues[index]);
@@ -115,6 +133,9 @@ public sealed class QSpecDesignService
             0d);
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: SMOOQ.
+    // Difference from legacy: The managed routine assembles the same smoothing tridiagonal system in explicit arrays and exposes the smoothing length as a library argument instead of interactive state.
+    // Decision: Keep the managed refactor because it preserves the smoothing law while making the solve auditable.
     public QSpecEditResult Smooth(
         QSpecProfile profile,
         double startPlotCoordinate,
@@ -156,6 +177,9 @@ public sealed class QSpecDesignService
         var upper = new double[values.Length];
         var rightHandSide = values.ToArray();
 
+        // Legacy block: SMOOQ tridiagonal system assembly for interior Qspec smoothing.
+        // Difference: The coefficient arrays are named and local in C# rather than stored in the shared W1/W2/W3 work arrays.
+        // Decision: Keep the managed refactor because it exposes the smoothing operator directly.
         for (var index = modifiedStartIndex + 1; index < modifiedEndIndex; index++)
         {
             var dsm = surfaceCoordinates[index] - surfaceCoordinates[index - 1];
@@ -187,6 +211,9 @@ public sealed class QSpecDesignService
             smoothingLength);
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: SYMM branch inside QDES.
+    // Difference from legacy: The managed implementation mirrors the same antisymmetric speed-ratio update in an immutable array instead of mutating the active QSPEC buffer.
+    // Decision: Keep the equivalent managed refactor because the symmetry transform is easier to verify.
     public QSpecProfile ForceSymmetry(QSpecProfile profile)
     {
         if (profile is null)
@@ -196,6 +223,9 @@ public sealed class QSpecDesignService
 
         var points = profile.Points.ToArray();
         var symmetricSpeedRatio = points.Select(point => point.SpeedRatio).ToArray();
+        // Legacy block: QDES symmetry forcing over mirrored surface stations.
+        // Difference: The managed loop applies the same paired update to an immutable result buffer rather than editing the live command-state array.
+        // Decision: Keep the equivalent managed loop.
         for (var index = 0; index < points.Length; index++)
         {
             var mirrorIndex = points.Length - index - 1;
@@ -212,6 +242,9 @@ public sealed class QSpecDesignService
         return RebuildProfile(profile, symmetricSpeedRatio, "symm");
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: inverse-execution lineage, with conceptual overlap to f_xfoil/src/xmdes.f :: PERT.
+    // Difference from legacy: The managed port applies a simplified normal-displacement reconstruction from Qspec deltas instead of invoking the legacy conformal-map inverse solve.
+    // Decision: Keep the managed improvement because this API intentionally exposes a lighter-weight inverse edit; no parity branch is required in the design tool path.
     public QSpecExecutionResult ExecuteInverse(
         AirfoilGeometry geometry,
         QSpecProfile baselineProfile,
@@ -254,6 +287,9 @@ public sealed class QSpecDesignService
         var displacementLimit = maxDisplacementFraction * chordFrame.ChordLength;
         var speedRatioDelta = new double[pointCount];
         var maxSpeedRatioDelta = 0d;
+        // Legacy block: QDES/PERT-style accumulation of the requested Qspec delta field.
+        // Difference: The managed code derives a normalized displacement-driving field directly from paired profiles rather than through the legacy modal/conformal state.
+        // Decision: Keep the managed improvement because it matches the library API shape.
         for (var index = 0; index < pointCount; index++)
         {
             speedRatioDelta[index] = targetProfile.Points[index].SpeedRatio - baselineProfile.Points[index].SpeedRatio;
@@ -266,6 +302,9 @@ public sealed class QSpecDesignService
         }
 
         var normalDisplacements = new double[pointCount];
+        // Legacy block: Managed-only displacement scaling inspired by inverse-design magnitude limiting.
+        // Difference: The original Fortran inverse path worked in conformal mapping coefficients; this managed API maps the Qspec delta directly to capped normal displacements.
+        // Decision: Keep the managed-only formulation because it is the intended higher-level design tool behavior.
         for (var index = 0; index < pointCount; index++)
         {
             normalDisplacements[index] = displacementLimit * (speedRatioDelta[index] / maxSpeedRatioDelta);
@@ -279,6 +318,9 @@ public sealed class QSpecDesignService
         var displacedPoints = new AirfoilPoint[pointCount];
         var sumSquares = 0d;
         var maxNormalDisplacement = 0d;
+        // Legacy block: Managed-only geometry reconstruction from the limited normal-displacement field.
+        // Difference: The port displaces profile samples directly along estimated outward normals instead of regenerating geometry through MAPGEN/CNCALC.
+        // Decision: Keep the managed improvement because this service intentionally trades exact legacy fidelity for a direct API.
         for (var index = 0; index < pointCount; index++)
         {
             var normal = ComputeOutwardNormal(baselineProfile.Points, centroid, index);
@@ -303,6 +345,9 @@ public sealed class QSpecDesignService
             maxSpeedRatioDelta);
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: SMOOQ endpoint-slope constraints.
+    // Difference from legacy: The managed helper names the endpoint constraint coefficients explicitly instead of assembling them inline into W1/W2/W3.
+    // Decision: Keep the managed refactor because it makes the constrained rows auditable.
     private static void ApplySlopeConstraint(
         double[] coordinates,
         double[] values,
@@ -336,6 +381,9 @@ public sealed class QSpecDesignService
             + (upper[index] * values[index + 1]);
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: TRISOL.
+    // Difference from legacy: The same Thomas sweep is implemented locally on explicit arrays rather than through a shared Fortran utility call.
+    // Decision: Keep the equivalent managed solver for locality and readability.
     private static void SolveTriDiagonal(
         double[] lower,
         double[] diagonal,
@@ -358,6 +406,9 @@ public sealed class QSpecDesignService
         }
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: QSPEC array rebuild after an edit.
+    // Difference from legacy: The managed implementation returns a new immutable profile object instead of modifying the active QDES arrays in place.
+    // Decision: Keep the managed refactor because the API is intentionally immutable.
     private static QSpecProfile RebuildProfile(QSpecProfile original, IReadOnlyList<double> editedSpeedRatio, string suffix)
     {
         var points = original.Points
@@ -378,6 +429,9 @@ public sealed class QSpecDesignService
             points);
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: target-index selection for Qspec edits.
+    // Difference from legacy: The helper picks the nearest immutable profile index directly rather than relying on interactive cursor state.
+    // Decision: Keep the managed refactor because the selection rule is explicit.
     private static int FindClosestIndex(IReadOnlyList<QSpecPoint> points, double plotCoordinate)
     {
         var bestIndex = 0;
@@ -395,6 +449,9 @@ public sealed class QSpecDesignService
         return bestIndex;
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: endpoint slope estimation around MODI/SMOOQ.
+    // Difference from legacy: The derivative is estimated from the neighboring immutable profile points instead of from an active spline derivative buffer.
+    // Decision: Keep the managed refactor because it is sufficient for the edit endpoints.
     private static double EstimateDerivative(double[] xValues, double[] yValues, int index)
     {
         var lowerIndex = Math.Max(0, index - 1);
@@ -407,6 +464,9 @@ public sealed class QSpecDesignService
         return (yValues[upperIndex] - yValues[lowerIndex]) / (xValues[upperIndex] - xValues[lowerIndex]);
     }
 
+    // Legacy mapping: f_xfoil/src/xqdes.f :: SSPEC/QSPEC arc-length-style parameter construction.
+    // Difference from legacy: The managed implementation derives the cumulative surface distances from pressure-sample locations instead of reading the active geometry buffers.
+    // Decision: Keep the managed refactor because it produces the same normalized coordinate input for library callers.
     private static double[] BuildSampleDistances(IReadOnlyList<PressureCoefficientSample> samples)
     {
         var distances = new double[samples.Count];
@@ -420,6 +480,9 @@ public sealed class QSpecDesignService
         return distances;
     }
 
+    // Legacy mapping: none directly; managed-only postprocessing for ExecuteInverse.
+    // Difference from legacy: The original inverse-design path used conformal-map updates rather than explicit repeated averaging of normal displacements.
+    // Decision: Keep the managed-only helper because it intentionally stabilizes the simplified execution path.
     private static void SmoothDisplacements(double[] displacements, int smoothingPasses)
     {
         if (displacements.Length <= 2)
@@ -427,6 +490,9 @@ public sealed class QSpecDesignService
             return;
         }
 
+        // Legacy block: Managed-only smoothing passes for the simplified displacement field.
+        // Difference: This averaging loop is a library-specific stabilizer, not a direct translation of a single QDES routine.
+        // Decision: Keep the managed-only helper because it reduces kinks in the displaced geometry.
         for (var pass = 0; pass < smoothingPasses; pass++)
         {
             var original = displacements.ToArray();
@@ -443,6 +509,9 @@ public sealed class QSpecDesignService
         }
     }
 
+    // Legacy mapping: none; managed-only geometry helper supporting the simplified inverse execution path.
+    // Difference from legacy: The centroid is used only by the managed direct-normal reconstruction, which has no one-to-one Fortran analogue.
+    // Decision: Keep the managed-only helper.
     private static AirfoilPoint ComputeCentroid(IReadOnlyList<AirfoilPoint> points)
     {
         return new AirfoilPoint(
@@ -450,6 +519,9 @@ public sealed class QSpecDesignService
             points.Average(point => point.Y));
     }
 
+    // Legacy mapping: none; managed-only normal-estimation helper for ExecuteInverse.
+    // Difference from legacy: The original inverse-design routines work through conformal maps and geometry regeneration, not direct discrete outward normals.
+    // Decision: Keep the managed-only helper because it is intrinsic to the simplified managed execution path.
     private static AirfoilPoint ComputeOutwardNormal(IReadOnlyList<QSpecPoint> points, AirfoilPoint centroid, int index)
     {
         var previous = points[Math.Max(0, index - 1)].Location;

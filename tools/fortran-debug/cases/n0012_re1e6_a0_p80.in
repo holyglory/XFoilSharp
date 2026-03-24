@@ -1,0 +1,9 @@
+RDEF ../cases/panel80.def
+NACA 0012
+PANE
+OPER
+VISC 1000000
+ITER 200
+ALFA 0
+
+QUIT

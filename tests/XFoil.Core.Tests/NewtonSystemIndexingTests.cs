@@ -3,6 +3,12 @@ using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xblsys.f viscous system indexing and storage layout
+// Secondary legacy source: f_xfoil/src/xblsolv.f
+// Role in port: Verifies the managed Newton-system indexing and memory layout derived from the legacy viscous block system.
+// Differences: The port exposes typed storage and explicit mappings instead of relying on implicit common-block offsets.
+// Decision: Keep the managed structural API because it preserves the same layout rules with better observability and testability.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -13,6 +19,9 @@ namespace XFoil.Core.Tests;
 public class NewtonSystemIndexingTests
 {
     [Fact]
+    // Legacy mapping: xblsys allocation sizing by global system-line count.
+    // Difference from legacy: Allocation is asserted directly on the managed object rather than only through later assembly success.
+    // Decision: Keep the managed structural test because it isolates the sizing contract.
     public void Constructor_WithNsys_AllocatesArraysByGlobalSystemLines()
     {
         // Test 1: ViscousNewtonSystem(nsys=120, maxWake=20) allocates VA[3,2,120]
@@ -41,6 +50,9 @@ public class NewtonSystemIndexingTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys side-separated storage addressing.
+    // Difference from legacy: Distinct memory locations are checked explicitly instead of relying on index arithmetic hidden in legacy arrays.
+    // Decision: Keep the managed aliasing regression because it protects a subtle but critical storage rule.
     public void DifferentSides_SameIbl_WriteToDifferentMemory()
     {
         // Test 2: Writing to VA[eq, side, iv=5] for side=0 and VA[eq, side, iv=65]
@@ -69,6 +81,9 @@ public class NewtonSystemIndexingTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xblsolv.f small block-tridiagonal solve behavior.
+    // Difference from legacy: A compact managed fixture is solved directly instead of through the full viscous iteration.
+    // Decision: Keep the managed unit test because it isolates solver/index coupling at minimal scope.
     public void BlockTridiagonalSolver_SmallTwoSideSystem_CorrectSolution()
     {
         // Test 3: BlockTridiagonalSolver.Solve on a small 6-station 2-side system (nsys=10)
@@ -129,6 +144,9 @@ public class NewtonSystemIndexingTests
     }
 
     [Fact]
+    // Legacy mapping: xblsys bidirectional ISYS mapping.
+    // Difference from legacy: The port surfaces the mapping as a directly testable contract rather than an internal bookkeeping detail.
+    // Decision: Keep the managed indexing test because it documents the same layout rule explicitly.
     public void ISYS_StoresBidirectionalMapping()
     {
         // Test 4: ViscousNewtonSystem.ISYS stores the (ibl, side) <-> iv mapping

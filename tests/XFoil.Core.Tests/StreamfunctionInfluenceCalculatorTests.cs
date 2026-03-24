@@ -2,6 +2,12 @@ using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xpanel.f :: PSILIN and related streamfunction influence formulas
+// Secondary legacy source: wake/source contribution helpers in the inviscid solver
+// Role in port: Verifies the managed streamfunction influence calculator used for parity tracing and inviscid diagnostics.
+// Differences: The managed port exposes the kernel directly and adds optional geometric/source sensitivity outputs that are easier to inspect than legacy work arrays.
+// Decision: Keep the managed helper because it preserves the kernel formulas while making them independently testable and traceable.
 namespace XFoil.Core.Tests;
 
 public class StreamfunctionInfluenceCalculatorTests
@@ -88,6 +94,8 @@ public class StreamfunctionInfluenceCalculatorTests
     /// When field point index matches a panel endpoint, G1 should be set to 0 (not log(0)).
     /// </summary>
     [Fact]
+    // Legacy mapping: PSILIN self-influence at a panel start node.
+    // Difference from legacy: The singularity-avoidance branch is asserted directly on the managed kernel output. Decision: Keep the managed regression because it isolates a subtle numerical safeguard.
     public void ComputeInfluenceAt_SelfInfluenceStartNode_AvoidsSingularity()
     {
         var (panel, state) = CreateFlatPlate();
@@ -112,6 +120,8 @@ public class StreamfunctionInfluenceCalculatorTests
     /// Test 2: Self-influence at panel's own end node avoids atan(0,0) singularity.
     /// </summary>
     [Fact]
+    // Legacy mapping: PSILIN self-influence at a panel end node.
+    // Difference from legacy: The managed test checks finite outputs directly rather than inferring safety from downstream assembly. Decision: Keep the managed regression because it constrains another singularity edge case explicitly.
     public void ComputeInfluenceAt_SelfInfluenceEndNode_AvoidsSingularity()
     {
         var (panel, state) = CreateFlatPlate();
@@ -136,6 +146,8 @@ public class StreamfunctionInfluenceCalculatorTests
     /// With uniform vortex strength, the sensitivity should follow the linear vorticity integrals.
     /// </summary>
     [Fact]
+    // Legacy mapping: PSILIN vortex sensitivity population.
+    // Difference from legacy: Sensitivity fields are asserted explicitly on the managed return value instead of remaining buried in legacy arrays. Decision: Keep the managed test because it documents an important observable output.
     public void ComputeInfluenceAt_FlatPlate_VortexSensitivitiesPopulated()
     {
         var (panel, state) = CreateFlatPlate();
@@ -170,6 +182,8 @@ public class StreamfunctionInfluenceCalculatorTests
     /// Test 4: Source contribution is computed when includeSourceTerms=true but not when false.
     /// </summary>
     [Fact]
+    // Legacy mapping: PSILIN optional source-term branch.
+    // Difference from legacy: The includeSourceTerms switch is a direct managed API flag rather than an internal call-site choice. Decision: Keep the managed regression because it protects both code paths explicitly.
     public void ComputeInfluenceAt_SourceTermsFlag_ControlsComputation()
     {
         var (panel, state) = CreateFlatPlate();
@@ -242,6 +256,8 @@ public class StreamfunctionInfluenceCalculatorTests
     /// when there is a vortex strength difference at the TE nodes.
     /// </summary>
     [Fact]
+    // Legacy mapping: trailing-edge panel contribution in the streamfunction kernel.
+    // Difference from legacy: The TE contribution is validated directly through the managed helper. Decision: Keep the managed regression because it isolates a subtle additive term in the kernel.
     public void ComputeInfluenceAt_TEPanelContribution_AddedCorrectly()
     {
         var (panel, state) = CreateFlatPlate();
@@ -272,6 +288,8 @@ public class StreamfunctionInfluenceCalculatorTests
     /// Test 6: Freestream contribution adds PSI += qInf*(cos(alpha)*y - sin(alpha)*x).
     /// </summary>
     [Fact]
+    // Legacy mapping: freestream contribution within the streamfunction field evaluation.
+    // Difference from legacy: The managed test checks the additive freestream term explicitly instead of inferring it from whole-solver outputs. Decision: Keep the managed unit test because it tightly constrains the kernel contract.
     public void ComputeInfluenceAt_Freestream_AddsCorrectly()
     {
         var (panel, state) = CreateFlatPlate();
@@ -313,6 +331,8 @@ public class StreamfunctionInfluenceCalculatorTests
     /// array has a symmetric pattern: DZDG[0]==DZDG[4], DZDG[1]==DZDG[3].
     /// </summary>
     [Fact]
+    // Legacy mapping: PSILIN symmetry properties on a symmetric body.
+    // Difference from legacy: The symmetry relation is asserted numerically on the managed kernel outputs. Decision: Keep the managed regression because it is a strong consistency check for the ported influence formulas.
     public void ComputeInfluenceAt_SymmetricDiamond_SymmetricSensitivities()
     {
         var (panel, state) = CreateDiamond();

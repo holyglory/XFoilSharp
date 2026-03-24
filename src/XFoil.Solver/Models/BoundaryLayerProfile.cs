@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xbl.f :: extracted boundary-layer station/profile arrays
+// Role in port: Managed container for one branch of boundary-layer stations and derived transition metadata.
+// Differences: Legacy XFoil leaves this information distributed across many arrays, while the managed port packages it into one immutable profile object.
+// Decision: Keep the managed container because it simplifies solver results and testing.
 namespace XFoil.Solver.Models;
 
 /// <summary>

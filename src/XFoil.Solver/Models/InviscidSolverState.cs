@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xpanel.f :: QISET/GAMQV/QVFUE workspace arrays
+// Secondary legacy source: f_xfoil/src/XFOIL.INC :: AIJ/BIJ/GAM/SIG/QINV state
+// Role in port: Managed mutable workspace for the legacy-style inviscid kernel, LU factors, sensitivities, and parity precision flags.
+// Differences: The managed port keeps the same broad data layout but exposes the arrays as named properties, resets them explicitly, and carries parity-only float factors alongside the default double path.
+// Decision: Keep the managed workspace because it preserves the solver layout while remaining inspectable and testable.
 namespace XFoil.Solver.Models;
 
 /// <summary>
@@ -12,6 +18,9 @@ public sealed class InviscidSolverState
     /// Creates a new solver state with pre-allocated arrays of the given capacity.
     /// </summary>
     /// <param name="maxNodes">Maximum number of panel nodes.</param>
+    // Legacy mapping: f_xfoil/src/xpanel.f :: inviscid workspace initialization lineage.
+    // Difference from legacy: Arrays are allocated per state object and validated on construction instead of residing in static COMMON storage.
+    // Decision: Keep the managed constructor because explicit workspace ownership improves testability and reentrancy.
     public InviscidSolverState(int maxNodes)
     {
         if (maxNodes < 2)
@@ -25,8 +34,10 @@ public sealed class InviscidSolverState
         BasisVortexStrength = new double[maxNodes + 1, 2];
         SourceStrength = new double[maxNodes];
         StreamfunctionInfluence = new double[maxNodes + 1, maxNodes + 1];
+        LegacyStreamfunctionInfluenceFactors = new float[maxNodes + 1, maxNodes + 1];
         SourceInfluence = new double[maxNodes, maxNodes];
         PivotIndices = new int[maxNodes + 1];
+        LegacyPivotIndices = new int[maxNodes + 1];
         InviscidSpeed = new double[maxNodes];
         BasisInviscidSpeed = new double[maxNodes, 2];
         InviscidSpeedAlphaDerivative = new double[maxNodes];
@@ -74,9 +85,20 @@ public sealed class InviscidSolverState
     public double[,] SourceInfluence { get; }
 
     /// <summary>
+    /// Legacy single-precision LU factors for parity-only inviscid solves.
+    /// Mirrors the classic XFoil REAL AIJ factoring path.
+    /// </summary>
+    public float[,] LegacyStreamfunctionInfluenceFactors { get; }
+
+    /// <summary>
     /// LU pivot ordering from decomposition.
     /// </summary>
     public int[] PivotIndices { get; }
+
+    /// <summary>
+    /// Legacy single-precision LU pivot ordering for parity-only inviscid solves.
+    /// </summary>
+    public int[] LegacyPivotIndices { get; }
 
     /// <summary>
     /// Inviscid surface speed (Q) at each node.
@@ -145,6 +167,18 @@ public sealed class InviscidSolverState
     public bool IsInfluenceMatrixFactored { get; set; }
 
     /// <summary>
+    /// Enables parity-only legacy single-precision kernel evaluation for streamfunction
+    /// influence computations. Default is false.
+    /// </summary>
+    public bool UseLegacyKernelPrecision { get; set; }
+
+    /// <summary>
+    /// Enables parity-only legacy single-precision panel geometry reconstruction
+    /// (normals, panel angles, TE geometry). Default is false.
+    /// </summary>
+    public bool UseLegacyPanelingPrecision { get; set; }
+
+    /// <summary>
     /// Workspace: streamfunction sensitivity to vortex strength (DZDG in XFoil).
     /// </summary>
     public double[] StreamfunctionVortexSensitivity { get; }
@@ -173,6 +207,9 @@ public sealed class InviscidSolverState
     /// Zeros all arrays and sets the active node count.
     /// </summary>
     /// <param name="nodeCount">Number of active nodes.</param>
+    // Legacy mapping: f_xfoil/src/xpanel.f :: per-case workspace reset before solving.
+    // Difference from legacy: Resetting active node count and clearing arrays is centralized in one managed helper rather than being spread across setup routines.
+    // Decision: Keep the helper because it makes state reuse explicit and auditable.
     public void InitializeForNodeCount(int nodeCount)
     {
         if (nodeCount < 2 || nodeCount > _maxNodes)
@@ -188,8 +225,10 @@ public sealed class InviscidSolverState
         Array.Clear(BasisVortexStrength);
         Array.Clear(SourceStrength);
         Array.Clear(StreamfunctionInfluence);
+        Array.Clear(LegacyStreamfunctionInfluenceFactors);
         Array.Clear(SourceInfluence);
         Array.Clear(PivotIndices);
+        Array.Clear(LegacyPivotIndices);
         Array.Clear(InviscidSpeed);
         Array.Clear(BasisInviscidSpeed);
         Array.Clear(InviscidSpeedAlphaDerivative);
@@ -209,5 +248,7 @@ public sealed class InviscidSolverState
         IsSharpTrailingEdge = false;
         AreBasisSolutionsComputed = false;
         IsInfluenceMatrixFactored = false;
+        UseLegacyKernelPrecision = false;
+        UseLegacyPanelingPrecision = false;
     }
 }

@@ -3,11 +3,20 @@ using System.Text;
 using XFoil.IO.Models;
 using XFoil.IO.Services;
 
+// Legacy audit:
+// Primary legacy source: saved XFOIL dump binary format
+// Secondary legacy source: legacy post-processing/export tooling around dump files
+// Role in port: Verifies managed import and archive export of legacy dump artifacts used for compatibility and diagnostics.
+// Differences: The managed port parses and re-emits dump files through explicit DTOs and exporters instead of ad hoc legacy utilities.
+// Decision: Keep the managed compatibility layer and test it against synthetic binary fixtures that mirror the legacy format.
 namespace XFoil.Core.Tests;
 
 public sealed class LegacyPolarDumpImporterTests
 {
     [Fact]
+    // Legacy mapping: legacy XFOIL dump-file format and post-processing workflow.
+    // Difference from legacy: The test builds a synthetic binary fixture and validates structured managed export artifacts instead of relying on external legacy utilities.
+    // Decision: Keep the managed integration test because it is the clearest compatibility check for this binary format.
     public void Import_ParsesSyntheticXFoilDump_AndArchiveWriterEmitsArtifacts()
     {
         var importer = new LegacyPolarDumpImporter();

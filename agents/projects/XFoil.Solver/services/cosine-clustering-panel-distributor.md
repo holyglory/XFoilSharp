@@ -48,6 +48,8 @@
 - Direct port of PANGEN from xfoil.f (lines 1613-2115).
 - Matches XFoil's curvature smoothing, LE detection, Newton iteration, TE density control.
 - Refinement region bunching (XSREF/XPREF) disabled by default (matching XFoil's initial defaults of 1.0/1.0 which means no refinement).
+- Fresh focused 12-panel alpha-0 traces proved one parity-only producer bug in the Newton main diagonal `ww2`: the legacy REAL build rounds `fp + fm` first, then carries `cc * ((dsp * cavpS2) + (dsm * cavmS2))` wider before the final cast back to REAL. `AddRoundedBaseWithWideScaledCurvatureTerms(...)` now replays that staging locally for the parity path while the default managed branch keeps the readable direct expression.
+- The current focused regression pair is `pangen_snew_node stage=final` plus `pangen_panel_node` on case `n0012_re1e6_a0_p12_n9_pangen`. Use those before reopening larger paneling traces.
 
 ## Known differences from existing PanelMeshGenerator
 

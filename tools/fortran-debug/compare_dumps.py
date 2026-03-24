@@ -7,11 +7,14 @@ and shows RMSBL convergence trajectories.
 
 Usage:
     python3 compare_dumps.py reference_dump.txt csharp_dump.txt
+    python3 compare_dumps.py reference_trace.jsonl csharp_trace.jsonl
 """
 
 import sys
 import re
 import math
+import json
+from pathlib import Path
 from collections import defaultdict
 
 
@@ -29,6 +32,113 @@ def parse_csharp_floats(text):
     """Parse C# scientific notation floats."""
     vals = re.findall(r'[+-]?[\d]+\.[\d]+(?:[Ee][+-]?\d+)?', text)
     return [float(v) for v in vals]
+
+
+def extract_trace_message(record):
+    """Return the text payload carried by a JSONL trace record, if any."""
+    data = record.get('data')
+    if isinstance(data, dict):
+        message = data.get('message')
+        if isinstance(message, str):
+            return message
+
+    message = record.get('message')
+    if isinstance(message, str):
+        return message
+
+    return None
+
+
+def extract_trace_data(record):
+    """Return the structured data payload carried by a JSONL trace record."""
+    data = record.get('data')
+    return data if isinstance(data, dict) else {}
+
+
+def trace_record_to_dump_line(record):
+    """Project a JSONL trace record back to the legacy dump line shape."""
+    runtime = str(record.get('runtime') or '').lower()
+    kind = str(record.get('kind') or '').lower()
+    message = extract_trace_message(record)
+    data = extract_trace_data(record)
+
+    if runtime == 'csharp':
+        if kind != 'legacy_line' or not message:
+            return None
+        return message
+
+    if runtime == 'fortran':
+        if kind in {'session_start', 'session_end', 'call_enter', 'call_exit', 'mode_toggle'}:
+            return None
+
+        if kind == 'iteration_start':
+            iter_value = data.get('iteration')
+            if iter_value is not None:
+                return f"=== ITER {int(iter_value)} ==="
+            match = re.search(r'ITER=\s*(\d+)', message or '')
+            if match:
+                return f"=== ITER {int(match.group(1))} ==="
+            return None
+
+        if kind == 'post_update':
+            if {'rmsbl', 'rmxbl', 'rlx'} <= data.keys():
+                return ("POST_UPDATE RMSBL="
+                        f"{data['rmsbl']:.8E} RMXBL={data['rmxbl']:.8E} "
+                        f"RLX={data['rlx']:.8E}")
+            if message:
+                return f"POST_UPDATE {message}"
+            return None
+
+        if kind == 'post_calc':
+            if {'cl', 'cd', 'cm'} <= data.keys():
+                line = (f"POST_CALC CL={data['cl']:.8E} CD={data['cd']:.8E} "
+                        f"CM={data['cm']:.8E}")
+                if 'cdf' in data:
+                    line += f" CDF={data['cdf']:.8E}"
+                return line
+            if message:
+                return f"POST_CALC {message}"
+            return None
+
+        if kind == 'converged':
+            iter_value = data.get('iteration')
+            if iter_value is not None:
+                return f"CONVERGED iter={int(iter_value)}"
+            match = re.search(r'ITER=\s*(\d+)', message or '')
+            if match:
+                return f"CONVERGED iter={int(match.group(1))}"
+            return "CONVERGED"
+
+        if message and message.strip():
+            return message.rstrip()
+
+    return None
+
+
+def load_input_lines(filepath):
+    """Load either the legacy text dump or the JSONL trace as comparable lines."""
+    path = Path(filepath)
+    if path.suffix.lower() != '.jsonl':
+        with path.open('r', encoding='utf-8', errors='replace') as handle:
+            return [line.rstrip('\n') for line in handle]
+
+    lines = []
+    with path.open('r', encoding='utf-8', errors='replace') as handle:
+        for raw_line in handle:
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
+
+            try:
+                record = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+
+            projected = trace_record_to_dump_line(record)
+            if projected:
+                lines.append(projected)
+
+    return lines
 
 
 class Station:
@@ -65,8 +175,7 @@ class Iteration:
 
 def parse_dump(filepath, is_fortran=True):
     """Parse a dump file into a list of Iteration objects."""
-    with open(filepath, 'r') as f:
-        lines = f.readlines()
+    lines = load_input_lines(filepath)
 
     iterations = []
     current_iter = None

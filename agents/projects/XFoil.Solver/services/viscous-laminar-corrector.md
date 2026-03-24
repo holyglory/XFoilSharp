@@ -1,7 +1,7 @@
 # ViscousLaminarCorrector
 
 - File: `src/XFoil.Solver/Services/ViscousLaminarCorrector.cs`
-- Role: relaxed viscous correction sweep.
+- Role: retained correction helper from the older staged viscous pipeline.
 
 ## Public methods
 
@@ -13,6 +13,11 @@
 - `RebuildWakeBranch`
 - `ComputeNormalizedAmplificationResidual`
 
+## Notes
+
+- This class is no longer part of the primary viscous operating-point path.
+- The current `AnalyzeViscous` flow goes through `ViscousSolverEngine` instead.
+
 ## TODO
 
-- Clarify long-term place of this corrector once a stronger coupled solve exists.
+- Decide whether this helper still earns its keep as a diagnostic tool.

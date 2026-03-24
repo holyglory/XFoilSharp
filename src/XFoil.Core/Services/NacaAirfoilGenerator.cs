@@ -1,12 +1,57 @@
 using System.Globalization;
+using System.Numerics;
+using XFoil.Core.Numerics;
 using XFoil.Core.Models;
+using XFoil.Core.Diagnostics;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/naca.f :: NACA4
+// Secondary legacy source: f_xfoil/src/xfoil.f :: NACA command wrapper
+// Role in port: Generates managed NACA airfoil geometry, including a classic XFoil-compatible replay mode for parity work.
+// Differences: The managed port exposes explicit classic versus improved geometry modes, uses generic floating-point helpers and trace hooks, and isolates the legacy single-precision staging instead of relying on one monolithic REAL routine.
+// Decision: Keep both paths: the clearer managed generator for default use and the classic legacy-replay path for parity-sensitive comparisons.
 namespace XFoil.Core.Services;
 
 public sealed class NacaAirfoilGenerator
 {
+    private const double TrailingEdgeBunchingExponent = 1.5;
+    private const double FiniteTrailingEdgeThicknessCoefficient = -0.10150;
+
+    // Legacy mapping: f_xfoil/src/naca.f :: NACA4 entry path.
+    // Difference from legacy: The default managed entry deliberately uses the improved normal-offset geometry rather than the classic ordinate-only construction.
+    // Decision: Keep the improved default because it produces the better modern geometry while the classic path remains available separately.
     public AirfoilGeometry Generate4Digit(string designation, int pointCount = 161)
+        => Generate4DigitCore<double>(designation, pointCount, useClassicXFoilGeometry: false);
+
+    // Legacy mapping: f_xfoil/src/naca.f :: NACA4.
+    // Difference from legacy: This entry point exposes the classic XFoil-compatible construction and optional legacy single-precision replay explicitly to the caller.
+    // Decision: Keep this dedicated classic entry because it is the right parity reference surface for geometry debugging.
+    public AirfoilGeometry Generate4DigitClassic(
+        string designation,
+        int pointCount = 161,
+        bool useLegacyPrecision = true)
+        => useLegacyPrecision
+            ? Generate4DigitCore<float>(designation, pointCount, useClassicXFoilGeometry: true)
+            : Generate4DigitCore<double>(designation, pointCount, useClassicXFoilGeometry: true);
+
+    private static AirfoilGeometry Generate4DigitCore<T>(
+        string designation,
+        int pointCount,
+        bool useClassicXFoilGeometry)
+        where T : struct, IFloatingPointIeee754<T>
     {
+        string traceScope = CoreTrace.ScopeName(typeof(NacaAirfoilGenerator));
+        string precision = typeof(T) == typeof(float) ? "Single" : "Double";
+        using var trace = CoreTrace.Scope(
+            traceScope,
+            new
+            {
+                designation,
+                pointCount,
+                useClassicXFoilGeometry = useClassicXFoilGeometry ? 1 : 0,
+                precision
+            });
+
         if (string.IsNullOrWhiteSpace(designation))
         {
             throw new ArgumentException("A NACA designation is required.", nameof(designation));
@@ -22,64 +67,285 @@ public sealed class NacaAirfoilGenerator
             throw new ArgumentException("Point count must be an odd number greater than or equal to 21.", nameof(pointCount));
         }
 
-        var maxCamber = (designation[0] - '0') / 100.0;
-        var maxCamberPosition = (designation[1] - '0') / 10.0;
-        var thickness = int.Parse(designation[2..], CultureInfo.InvariantCulture) / 100.0;
+        T maxCamber = T.CreateChecked(designation[0] - '0') / T.CreateChecked(100.0);
+        T maxCamberPosition = T.CreateChecked(designation[1] - '0') / T.CreateChecked(10.0);
+        T thickness = T.CreateChecked(int.Parse(designation[2..], CultureInfo.InvariantCulture)) / T.CreateChecked(100.0);
         var surfacePointCount = (pointCount + 1) / 2;
 
         var upper = new List<AirfoilPoint>(surfacePointCount);
         var lower = new List<AirfoilPoint>(surfacePointCount);
 
+        T exponent = T.CreateChecked(TrailingEdgeBunchingExponent);
+        T exponentPlusOne = exponent + T.One;
+        T pointTwo = T.CreateChecked(0.20);
+        T two = T.CreateChecked(2.0);
+        T oneMinusP = T.One - maxCamberPosition;
+        T oneMinusPSquared = oneMinusP * oneMinusP;
+
+        CoreTrace.Event(
+            "naca4_config",
+            traceScope,
+            new
+            {
+                designation,
+                pointCount,
+                surfacePointCount,
+                maxCamber = double.CreateChecked(maxCamber),
+                maxCamberPosition = double.CreateChecked(maxCamberPosition),
+                thickness = double.CreateChecked(thickness),
+                exponent = double.CreateChecked(exponent),
+                exponentPlusOne = double.CreateChecked(exponentPlusOne),
+                useClassicXFoilGeometry = useClassicXFoilGeometry ? 1 : 0,
+                precision
+            });
+
+        // Legacy block: NACA4 surface-node generation loop.
+        // Difference: The classic branch preserves the legacy bunching, thickness, and camber formulas, while the default managed branch replaces the final ordinate construction with a normal-offset formulation and adds explicit trace state.
+        // Decision: Keep both within one audited core so the managed improvement and the parity replay stay aligned.
         for (var index = 0; index < surfacePointCount; index++)
         {
-            var beta = Math.PI * index / (surfacePointCount - 1);
-            var x = 0.5 * (1.0 - Math.Cos(beta));
+            T fraction = T.CreateChecked(index) / T.CreateChecked(surfacePointCount - 1);
+            T oneMinusFraction = T.One - fraction;
+            T sqrtOneMinusFraction = T.Zero;
+            T oneMinusFractionPowAn = T.Zero;
+            T oneMinusFractionPowAnp = T.Zero;
+            T xLeadingTerm = T.Zero;
+            T xTrailingTerm = T.Zero;
+            T x;
+            if (index == surfacePointCount - 1)
+            {
+                x = T.One;
+            }
+            else
+            {
+                (sqrtOneMinusFraction, oneMinusFractionPowAn, oneMinusFractionPowAnp, xLeadingTerm, xTrailingTerm, x) =
+                    ComputeTrailingEdgeBunchedCoordinate(fraction, oneMinusFraction, exponent, exponentPlusOne);
+            }
 
-            var yt = 5.0 * thickness *
-                     (0.2969 * Math.Sqrt(x)
-                      - 0.1260 * x
-                      - 0.3516 * x * x
-                      + 0.2843 * x * x * x
-                      - 0.1036 * x * x * x * x);
+            (T x2, T x3, T x4) = ComputeThicknessPowers(x);
+            T yt = ((T.CreateChecked(0.29690) * T.Sqrt(x))
+                    - (T.CreateChecked(0.12600) * x)
+                    - (T.CreateChecked(0.35160) * x2)
+                    + (T.CreateChecked(0.28430) * x3)
+                    + (T.CreateChecked(FiniteTrailingEdgeThicknessCoefficient) * x4)) * thickness / pointTwo;
 
-            var (yc, dycDx) = MeanCamber(maxCamber, maxCamberPosition, x);
-            var theta = Math.Atan(dycDx);
+            T yc;
+            T dycDx;
+            if (useClassicXFoilGeometry)
+            {
+                if (x < maxCamberPosition)
+                {
+                    T pSquared = maxCamberPosition * maxCamberPosition;
+                    yc = maxCamber / pSquared * ((two * maxCamberPosition * x) - x2);
+                    dycDx = two * maxCamber / pSquared * (maxCamberPosition - x);
+                }
+                else
+                {
+                    yc = maxCamber / oneMinusPSquared * ((T.One - (two * maxCamberPosition)) + (two * maxCamberPosition * x) - x2);
+                    dycDx = two * maxCamber / oneMinusPSquared * (maxCamberPosition - x);
+                }
+            }
+            else
+            {
+                (yc, dycDx) = MeanCamber(maxCamber, maxCamberPosition, x);
+            }
 
-            upper.Add(new AirfoilPoint(
-                x - (yt * Math.Sin(theta)),
-                yc + (yt * Math.Cos(theta))));
+            if (useClassicXFoilGeometry)
+            {
+                upper.Add(new AirfoilPoint(
+                    double.CreateChecked(x),
+                    double.CreateChecked(yc + yt)));
 
-            lower.Add(new AirfoilPoint(
-                x + (yt * Math.Sin(theta)),
-                yc - (yt * Math.Cos(theta))));
+                lower.Add(new AirfoilPoint(
+                    double.CreateChecked(x),
+                    double.CreateChecked(yc - yt)));
+            }
+            else
+            {
+                T theta = T.Atan(dycDx);
+                upper.Add(new AirfoilPoint(
+                    double.CreateChecked(x - (yt * T.Sin(theta))),
+                    double.CreateChecked(yc + (yt * T.Cos(theta)))));
+
+                lower.Add(new AirfoilPoint(
+                    double.CreateChecked(x + (yt * T.Sin(theta))),
+                    double.CreateChecked(yc - (yt * T.Cos(theta)))));
+            }
+
+            if (CoreTrace.IsEnabled)
+            {
+                // Keep the trace values explicit so parity work can compare the
+                // actual raw generator inputs before paneling starts.
+                T sqrtX = T.Sqrt(x);
+                T ytScale = thickness / pointTwo;
+                T ytTermSqrt = T.CreateChecked(0.29690) * sqrtX;
+                T ytTermX = -(T.CreateChecked(0.12600) * x);
+                T ytTermX2 = -(T.CreateChecked(0.35160) * x2);
+                T ytTermX3 = T.CreateChecked(0.28430) * x3;
+                T ytTermX4 = T.CreateChecked(FiniteTrailingEdgeThicknessCoefficient) * x4;
+                T ytPartial1 = ytTermSqrt + ytTermX;
+                T ytPartial2 = ytPartial1 + ytTermX2;
+                T ytPartial3 = ytPartial2 + ytTermX3;
+                T ytPolynomial = ytPartial3 + ytTermX4;
+
+                CoreTrace.Event(
+                    "naca4_node",
+                    traceScope,
+                    new
+                    {
+                        index = index + 1,
+                        fraction = double.CreateChecked(fraction),
+                        oneMinusFraction = double.CreateChecked(oneMinusFraction),
+                        usedTrailingEdgeOverride = index == surfacePointCount - 1 ? 1 : 0,
+                        sqrtOneMinusFraction = double.CreateChecked(sqrtOneMinusFraction),
+                        xPowerAn = double.CreateChecked(oneMinusFractionPowAn),
+                        xPowerAnp = double.CreateChecked(oneMinusFractionPowAnp),
+                        xLeadingTerm = double.CreateChecked(xLeadingTerm),
+                        xTrailingTerm = double.CreateChecked(xTrailingTerm),
+                        x = double.CreateChecked(x),
+                        x2 = double.CreateChecked(x2),
+                        x3 = double.CreateChecked(x3),
+                        x4 = double.CreateChecked(x4),
+                        sqrtX = double.CreateChecked(sqrtX),
+                        ytScale = double.CreateChecked(ytScale),
+                        ytTermSqrt = double.CreateChecked(ytTermSqrt),
+                        ytTermX = double.CreateChecked(ytTermX),
+                        ytTermX2 = double.CreateChecked(ytTermX2),
+                        ytTermX3 = double.CreateChecked(ytTermX3),
+                        ytTermX4 = double.CreateChecked(ytTermX4),
+                        ytPartial1 = double.CreateChecked(ytPartial1),
+                        ytPartial2 = double.CreateChecked(ytPartial2),
+                        ytPartial3 = double.CreateChecked(ytPartial3),
+                        ytPolynomial = double.CreateChecked(ytPolynomial),
+                        yt = double.CreateChecked(yt),
+                        camberBranch = x < maxCamberPosition ? 1 : 2,
+                        yc = double.CreateChecked(yc),
+                        dycDx = double.CreateChecked(dycDx),
+                        useClassicXFoilGeometry = useClassicXFoilGeometry ? 1 : 0,
+                        precision
+                    });
+            }
         }
 
+        // Legacy block: NACA4 upper/lower surface assembly into the final airfoil contour.
+        // Difference: The managed code uses LINQ to compose the final contour instead of the legacy indexed `XB/YB` fill loops, but the resulting ordering is the same.
+        // Decision: Keep the managed assembly because it is clearer and not itself a parity-risk boundary.
         var points = upper
             .AsEnumerable()
             .Reverse()
             .Concat(lower.Skip(1))
             .ToArray();
 
+        if (CoreTrace.IsEnabled)
+        {
+            for (int i = 0; i < points.Length; i++)
+            {
+                CoreTrace.Event(
+                    "naca_geometry_point",
+                    traceScope,
+                    new
+                    {
+                        index = i + 1,
+                        x = points[i].X,
+                        y = points[i].Y
+                    });
+            }
+        }
+
         return new AirfoilGeometry($"NACA {designation}", points, AirfoilFormat.PlainCoordinates);
     }
 
-    private static (double Camber, double Slope) MeanCamber(double m, double p, double x)
+    // Legacy mapping: f_xfoil/src/naca.f :: NACA4 trailing-edge bunching coordinate law.
+    // Difference from legacy: The method factors the law into a reusable helper and adds an explicit float replay branch so parity mode preserves `powf`-style staging and multiply order.
+    // Decision: Keep the helper split because it isolates the real parity-sensitive part of the coordinate generation cleanly.
+    private static (T SqrtOneMinusFraction, T PowerAn, T PowerAnp, T LeadingTerm, T TrailingTerm, T X)
+        ComputeTrailingEdgeBunchedCoordinate<T>(T fraction, T oneMinusFraction, T exponent, T exponentPlusOne)
+        where T : struct, IFloatingPointIeee754<T>
     {
-        if (m <= 0 || p <= 0)
+        if (typeof(T) == typeof(float))
         {
-            return (0d, 0d);
+            float fractionSingle = float.CreateChecked(fraction);
+            float oneMinusFractionSingle = float.CreateChecked(oneMinusFraction);
+            float exponentSingle = float.CreateChecked(exponent);
+            float exponentPlusOneSingle = float.CreateChecked(exponentPlusOne);
+
+            // Classic XFoil evaluates the bunching law in single precision via
+            // powf-like exponentiation. The algebraically equivalent sqrt-based
+            // rewrite drifts by one or more ULPs, which becomes the first raw
+            // geometry mismatch in parity mode.
+            float sqrtOneMinusFractionSingle = MathF.Sqrt(oneMinusFractionSingle);
+            float powerAnSingle = LegacyLibm.Pow(oneMinusFractionSingle, exponentSingle);
+            float powerAnpSingle = LegacyLibm.Pow(oneMinusFractionSingle, exponentPlusOneSingle);
+
+            // Keep the original multiplication order as well. Classic XFoil's
+            // left-associated multiply lands on a different ULP than
+            // exponentPlusOne * (fraction * powerAn).
+            float leadingTermSingle = (exponentPlusOneSingle * fractionSingle) * powerAnSingle;
+            float xSingle = (1.0f - leadingTermSingle) - powerAnpSingle;
+
+            return (
+                T.CreateChecked(sqrtOneMinusFractionSingle),
+                T.CreateChecked(powerAnSingle),
+                T.CreateChecked(powerAnpSingle),
+                T.CreateChecked(leadingTermSingle),
+                T.CreateChecked(powerAnpSingle),
+                T.CreateChecked(xSingle));
+        }
+
+        T sqrtOneMinusFraction = T.Sqrt(oneMinusFraction);
+        T powerAn = oneMinusFraction * sqrtOneMinusFraction;
+        T powerAnp = oneMinusFraction * powerAn;
+        T leadingTerm = exponentPlusOne * fraction * powerAn;
+        T x = T.One - leadingTerm - powerAnp;
+        return (sqrtOneMinusFraction, powerAn, powerAnp, leadingTerm, powerAnp, x);
+    }
+
+    // Legacy mapping: f_xfoil/src/naca.f :: NACA4 thickness-polynomial powers.
+    // Difference from legacy: The helper makes the repeated powers explicit and preserves the single-precision `x^4` staging needed by the legacy replay path.
+    // Decision: Keep the helper because it documents and localizes the parity-sensitive power chain.
+    private static (T X2, T X3, T X4) ComputeThicknessPowers<T>(T x)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(float))
+        {
+            float xSingle = float.CreateChecked(x);
+            float x2Single = xSingle * xSingle;
+            float x3Single = x2Single * xSingle;
+
+            // The classic single-precision path behaves like a squared x^2 term
+            // for x^4. Using x^3 * x shifts the TE-adjacent thickness by one ULP.
+            float x4Single = x2Single * x2Single;
+            return (T.CreateChecked(x2Single), T.CreateChecked(x3Single), T.CreateChecked(x4Single));
+        }
+
+        T x2 = x * x;
+        T x3 = x2 * x;
+        T x4 = x3 * x;
+        return (x2, x3, x4);
+    }
+
+    // Legacy mapping: f_xfoil/src/naca.f :: NACA4 camber-line formula.
+    // Difference from legacy: The default managed path factors the fore/aft camber equations into a reusable helper so the improved normal-offset geometry can share them.
+    // Decision: Keep the helper because it improves structure without changing the classic camber equations it evaluates.
+    private static (T Camber, T Slope) MeanCamber<T>(T m, T p, T x)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (m <= T.Zero || p <= T.Zero)
+        {
+            return (T.Zero, T.Zero);
         }
 
         if (x < p)
         {
-            var camber = (m / (p * p)) * ((2 * p * x) - (x * x));
-            var slope = (2 * m / (p * p)) * (p - x);
+            T camber = (m / (p * p)) * ((T.CreateChecked(2.0) * p * x) - (x * x));
+            T slope = (T.CreateChecked(2.0) * m / (p * p)) * (p - x);
             return (camber, slope);
         }
 
-        var denominator = Math.Pow(1 - p, 2);
-        var aftCamber = (m / denominator) * ((1 - (2 * p)) + (2 * p * x) - (x * x));
-        var aftSlope = (2 * m / denominator) * (p - x);
+        T oneMinusP = T.One - p;
+        T denominator = oneMinusP * oneMinusP;
+        T aftCamber = (m / denominator) * ((T.One - (T.CreateChecked(2.0) * p)) + (T.CreateChecked(2.0) * p * x) - (x * x));
+        T aftSlope = (T.CreateChecked(2.0) * m / denominator) * (p - x);
         return (aftCamber, aftSlope);
     }
 }

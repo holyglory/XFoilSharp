@@ -1,3 +1,0 @@
-[submodule "f_xfoil"]
-	path = f_xfoil
-	url = https://github.com/RobotLocomotion/xfoil.git

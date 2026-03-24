@@ -1,141 +1,483 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Numerics;
+using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
+
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xsolve.f :: BLSOLV
+// Secondary legacy source(s): none
+// Role in port: Coupled block-tridiagonal Newton solve for the viscous system.
+// Differences: The C# version splits the legacy monolith into a generic core, debug-trace hooks, and a parity-only float workspace; the Fortran routine is a single REAL kernel.
+// Decision: Keep the managed structure and diagnostics, but preserve the float workspace path when parity mode needs the legacy REAL solve.
 
 namespace XFoil.Solver.Numerics;
 
 /// <summary>
-/// Block-tridiagonal solver for the viscous Newton system.
+/// Custom block solver for the coupled viscous/inviscid Newton system.
 /// Port of BLSOLV from xsolve.f.
-/// Solves the 3-equation block-tridiagonal system with mass defect coupling column.
-/// Iterates by global system line iv (0..NSYS-1) directly.
 /// </summary>
 public static class BlockTridiagonalSolver
 {
+    private const string LegacyTraceScope = "BLSOLV";
+    private const double PivotFloor = 1e-30;
+
     /// <summary>
-    /// Solves the block-tridiagonal Newton system in-place.
-    /// Input: ViscousNewtonSystem with VA (diagonal blocks), VB (sub-diagonal blocks),
-    ///        VM (mass defect coupling), VDEL (RHS), VZ (TE coupling), ISYS (mapping).
-    /// Output: VDEL is modified in-place to contain the solution delta vector.
-    /// After the re-indexing, arrays are indexed directly by iv (global system line).
+    /// Solves the coupled Newton system in place. The factored solution overwrites
+    /// <see cref="ViscousNewtonSystem.VDEL"/>.
     /// </summary>
-    /// <param name="system">The Newton system to solve. VDEL is overwritten with the solution.</param>
-    /// <param name="vaccel">VACCEL acceleration parameter. Small VM coefficients below
-    /// VACCEL * |diagonal| are dropped for speed. Default 0.01.</param>
-    public static void Solve(ViscousNewtonSystem system, double vaccel = 0.01, TextWriter? debugWriter = null)
+    // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV
+    // Difference from legacy: The top-level entry point is managed-only structure around the same elimination algorithm, with an explicit parity switch that chooses a float workspace instead of mutating one shared REAL array set.
+    // Decision: Keep the managed split so default execution stays readable while parity mode can still replay the legacy kernel.
+    public static void Solve(
+        ViscousNewtonSystem system,
+        double vaccel = 0.01,
+        TextWriter? debugWriter = null,
+        bool useLegacyPrecision = false)
     {
+        using var scope = SolverTrace.Scope(
+            SolverTrace.ScopeName(typeof(BlockTridiagonalSolver)),
+            new
+            {
+                nsys = system.NSYS,
+                vaccel,
+                upperTe = system.UpperTeLine + 1,
+                firstWake = system.FirstWakeLine + 1,
+                useLegacyPrecision
+            });
         int nsys = system.NSYS;
-        if (nsys <= 0) return;
-
-        var va = system.VA;
-        var vb = system.VB;
-        var vm = system.VM;
-        var vdel = system.VDEL;
-        var vz = system.VZ;
-
-        // The system consists of 3 independent tridiagonal systems (one per equation).
-        // For each equation eq:
-        //   iv=0:     VA[eq,0,0]*x[0] + VA[eq,1,0]*x[1] = VDEL[eq,0,0]
-        //   iv=i:     VB[eq,0,i]*x[i-1] + VA[eq,0,i]*x[i] + VA[eq,1,i]*x[i+1] = VDEL[eq,0,i]
-        //   iv=N-1:   VB[eq,0,N-1]*x[N-2] + VA[eq,0,N-1]*x[N-1] = VDEL[eq,0,N-1]
-        //
-        // All arrays are now indexed by iv directly (global system line).
-        // RHS is in VDEL[eq, 0, iv] (slot 0).
-
-        for (int eq = 0; eq < 3; eq++)
+        if (nsys <= 0)
         {
-            // Extract tridiagonal coefficients directly by iv
-            double[] diag = new double[nsys];
-            double[] sub = new double[nsys];   // sub-diagonal (VB)
-            double[] sup = new double[nsys];   // super-diagonal (VA[,1,])
-            double[] rhs = new double[nsys];
+            return;
+        }
 
-            for (int iv = 0; iv < nsys; iv++)
+        // Legacy block: xsolve.f BLSOLV REAL workspace path.
+        // Difference from legacy: The Fortran routine always runs in REAL; the managed solver keeps double as the default and enters this branch only for parity replay.
+        // Decision: Keep the explicit parity branch because it isolates the legacy arithmetic without degrading the default solver.
+        if (useLegacyPrecision)
+        {
+            // Classic XFoil's BLSOLV runs in REAL. Keep the parity path on a
+            // dedicated float workspace so the control flow stays identical to
+            // the default solver while the arithmetic matches the legacy kernel.
+            float[,,] va = CopyToSingle(system.VA, nsys);
+            float[,,] vb = CopyToSingle(system.VB, nsys);
+            float[,,] vm = CopyToSingle(system.VM, nsys);
+            float[,,] vdel = CopyToSingle(system.VDEL, nsys);
+            float[,] vz = CopyToSingle(system.VZ);
+
+            SolveCore(
+                va,
+                vb,
+                vm,
+                vdel,
+                vz,
+                nsys,
+                system.UpperTeLine,
+                system.FirstWakeLine,
+                system.ArcLengthSpan,
+                (float)vaccel,
+                debugWriter);
+
+            CopySolutionToDouble(vdel, system.VDEL, nsys);
+        }
+        else
+        {
+            SolveCore(
+                system.VA,
+                system.VB,
+                system.VM,
+                system.VDEL,
+                system.VZ,
+                nsys,
+                system.UpperTeLine,
+                system.FirstWakeLine,
+                system.ArcLengthSpan,
+                vaccel,
+                debugWriter);
+        }
+
+        SolverTrace.Array(
+            SolverTrace.ScopeName(typeof(BlockTridiagonalSolver)),
+            "vdel_solution_row1",
+            Enumerable.Range(0, nsys).Select(iv => system.VDEL[0, 0, iv]).ToArray(),
+            new { nsys, precision = useLegacyPrecision ? "Single" : "Double" });
+    }
+
+    // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV
+    // Difference from legacy: This is the same elimination and back-substitution algorithm expressed as a generic core so the managed solver can share control flow across double and parity-float execution.
+    // Decision: Keep the generic core and audit parity through the arithmetic type and helper selection rather than duplicating the whole solver.
+    private static void SolveCore<T>(
+        T[,,] va,
+        T[,,] vb,
+        T[,,] vm,
+        T[,,] vdel,
+        T[,] vz,
+        int nsys,
+        int ivte1,
+        int ivz,
+        double arcLengthSpan,
+        T vaccel,
+        TextWriter? debugWriter)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        T span = T.Max(T.CreateChecked(arcLengthSpan), T.CreateChecked(1e-12));
+        T vacc1 = vaccel;
+        T vacc2 = (vaccel * T.CreateChecked(2.0)) / span;
+        T vacc3 = (vaccel * T.CreateChecked(2.0)) / span;
+
+        // Legacy block: xsolve.f BLSOLV forward elimination sweep.
+        // Difference from legacy: Same elimination order, but the managed port names the sweep stages and routes sensitive reductions through helper calls so parity issues can be localized.
+        // Decision: Keep the staged managed form and preserve the forward sweep order exactly.
+        for (int iv = 0; iv < nsys; iv++)
+        {
+            int ivp = iv + 1;
+            SolverTrace.Event(
+                "forward_elimination",
+                SolverTrace.ScopeName(typeof(BlockTridiagonalSolver)),
+                new { iv = iv + 1, ivp = ivp + 1, precision = GetPrecisionLabel<T>() });
+
+            T pivot = SafeReciprocal(va[0, 0, iv], "VA11", iv, debugWriter);
+            va[0, 1, iv] *= pivot;
+            for (int l = iv; l < nsys; l++)
             {
-                diag[iv] = va[eq, 0, iv];
-                sup[iv] = va[eq, 1, iv];
-                sub[iv] = vb[eq, 0, iv];
-                rhs[iv] = vdel[eq, 0, iv];
+                vm[0, l, iv] *= pivot;
+            }
 
-                // Apply VACCEL: drop small mass coupling coefficients
-                int maxWakeIdx = Math.Min(system.MaxWake, vm.GetLength(1));
-                for (int j = 0; j < maxWakeIdx; j++)
+            vdel[0, 0, iv] *= pivot;
+            vdel[0, 1, iv] *= pivot;
+
+            for (int k = 1; k < 3; k++)
+            {
+                T vtmp = va[k, 0, iv];
+                va[k, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, va[0, 1, iv], va[k, 1, iv]);
+                for (int l = iv; l < nsys; l++)
                 {
-                    if (Math.Abs(vm[eq, j, iv]) < vaccel * Math.Abs(diag[iv]))
+                    vm[k, l, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vm[0, l, iv], vm[k, l, iv]);
+                }
+
+                vdel[k, 0, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vdel[0, 0, iv], vdel[k, 0, iv]);
+                vdel[k, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vdel[0, 1, iv], vdel[k, 1, iv]);
+            }
+
+            pivot = SafeReciprocal(va[1, 1, iv], "VA22", iv, debugWriter);
+            for (int l = iv; l < nsys; l++)
+            {
+                vm[1, l, iv] *= pivot;
+            }
+
+            vdel[1, 0, iv] *= pivot;
+            vdel[1, 1, iv] *= pivot;
+
+            {
+                T vtmp = va[2, 1, iv];
+                for (int l = iv; l < nsys; l++)
+                {
+                    vm[2, l, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vm[1, l, iv], vm[2, l, iv]);
+                }
+
+                vdel[2, 0, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vdel[1, 0, iv], vdel[2, 0, iv]);
+                vdel[2, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vdel[1, 1, iv], vdel[2, 1, iv]);
+            }
+
+            pivot = SafeReciprocal(vm[2, iv, iv], "VM33", iv, debugWriter);
+            for (int l = ivp; l < nsys; l++)
+            {
+                vm[2, l, iv] *= pivot;
+            }
+
+            vdel[2, 0, iv] *= pivot;
+            vdel[2, 1, iv] *= pivot;
+
+            {
+                T vtmp1 = vm[0, iv, iv];
+                T vtmp2 = vm[1, iv, iv];
+                for (int l = ivp; l < nsys; l++)
+                {
+                    vm[0, l, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp1, vm[2, l, iv], vm[0, l, iv]);
+                    vm[1, l, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp2, vm[2, l, iv], vm[1, l, iv]);
+                }
+
+                vdel[0, 0, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp1, vdel[2, 0, iv], vdel[0, 0, iv]);
+                vdel[1, 0, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp2, vdel[2, 0, iv], vdel[1, 0, iv]);
+                vdel[0, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp1, vdel[2, 1, iv], vdel[0, 1, iv]);
+                vdel[1, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp2, vdel[2, 1, iv], vdel[1, 1, iv]);
+            }
+
+            {
+                T vtmp = va[0, 1, iv];
+                for (int l = ivp; l < nsys; l++)
+                {
+                    vm[0, l, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vm[1, l, iv], vm[0, l, iv]);
+                }
+
+                vdel[0, 0, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vdel[1, 0, iv], vdel[0, 0, iv]);
+                vdel[0, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vdel[1, 1, iv], vdel[0, 1, iv]);
+            }
+
+            if (iv == nsys - 1)
+            {
+                continue;
+            }
+
+            for (int k = 0; k < 3; k++)
+            {
+                T vtmp1 = vb[k, 0, ivp];
+                T vtmp2 = vb[k, 1, ivp];
+                T vtmp3 = vm[k, iv, ivp];
+                for (int l = ivp; l < nsys; l++)
+                {
+                    T reduction = LegacyPrecisionMath.SeparateSumOfProducts(
+                        vtmp1, vm[0, l, iv],
+                        vtmp2, vm[1, l, iv],
+                        vtmp3, vm[2, l, iv]);
+                    vm[k, l, ivp] -= reduction;
+                }
+
+                T delta0 = LegacyPrecisionMath.SeparateSumOfProducts(
+                    vtmp1, vdel[0, 0, iv],
+                    vtmp2, vdel[1, 0, iv],
+                    vtmp3, vdel[2, 0, iv]);
+                T delta1 = LegacyPrecisionMath.SeparateSumOfProducts(
+                    vtmp1, vdel[0, 1, iv],
+                    vtmp2, vdel[1, 1, iv],
+                    vtmp3, vdel[2, 1, iv]);
+                vdel[k, 0, ivp] -= delta0;
+                vdel[k, 1, ivp] -= delta1;
+            }
+
+            if (iv == ivte1 && ivz >= 0 && ivz < nsys)
+            {
+                for (int k = 0; k < 3; k++)
+                {
+                    T vtmp1 = vz[k, 0];
+                    T vtmp2 = vz[k, 1];
+                    for (int l = ivp; l < nsys; l++)
                     {
-                        vm[eq, j, iv] = 0.0;
+                        T reduction = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vm[0, l, iv], vtmp2, vm[1, l, iv]);
+                        vm[k, l, ivz] -= reduction;
                     }
+
+                    T delta0 = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vdel[0, 0, iv], vtmp2, vdel[1, 0, iv]);
+                    T delta1 = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vdel[0, 1, iv], vtmp2, vdel[1, 1, iv]);
+                    vdel[k, 0, ivz] -= delta0;
+                    vdel[k, 1, ivz] -= delta1;
                 }
             }
 
-            // Thomas algorithm for tridiagonal solve
-            // Forward sweep
-            double[] c = new double[nsys]; // modified super-diagonal
-            double[] d = new double[nsys]; // modified RHS
-
-            if (Math.Abs(diag[0]) < 1e-30)
+            if (ivp >= nsys - 1)
             {
-                c[0] = 0.0;
-                d[0] = 0.0;
-            }
-            else
-            {
-                c[0] = sup[0] / diag[0];
-                d[0] = rhs[0] / diag[0];
+                continue;
             }
 
-            for (int iv = 1; iv < nsys; iv++)
+            for (int kv = iv + 2; kv < nsys; kv++)
             {
-                double denom = diag[iv] - sub[iv] * c[iv - 1];
-                if (Math.Abs(denom) < 1e-30)
+                T vtmp1 = vm[0, iv, kv];
+                T vtmp2 = vm[1, iv, kv];
+                T vtmp3 = vm[2, iv, kv];
+
+                if (T.Abs(vtmp1) > vacc1)
                 {
-                    c[iv] = 0.0;
-                    d[iv] = 0.0;
+                    for (int l = ivp; l < nsys; l++)
+                    {
+                        vm[0, l, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp1, vm[2, l, iv], vm[0, l, kv]);
+                    }
+
+                    vdel[0, 0, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp1, vdel[2, 0, iv], vdel[0, 0, kv]);
+                    vdel[0, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp1, vdel[2, 1, iv], vdel[0, 1, kv]);
                 }
-                else
+
+                if (T.Abs(vtmp2) > vacc2)
                 {
-                    c[iv] = sup[iv] / denom;
-                    d[iv] = (rhs[iv] - sub[iv] * d[iv - 1]) / denom;
-                }
-            }
+                    for (int l = ivp; l < nsys; l++)
+                    {
+                        vm[1, l, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp2, vm[2, l, iv], vm[1, l, kv]);
+                    }
 
-            // Diagnostic: log VDEL after forward sweep for first 5 entries
-            if (debugWriter != null)
-            {
-                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                    "BLSOLV_POST_FORWARD EQ={0}", eq));
-                int logCount = Math.Min(5, nsys);
-                for (int j = 0; j < logCount; j++)
+                    vdel[1, 0, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp2, vdel[2, 0, iv], vdel[1, 0, kv]);
+                    vdel[1, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp2, vdel[2, 1, iv], vdel[1, 1, kv]);
+                }
+
+                if (T.Abs(vtmp3) > vacc3)
                 {
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VDEL_FWD IV={0,4}{1,15:E8}", j + 1, d[j]));
+                    for (int l = ivp; l < nsys; l++)
+                    {
+                        vm[2, l, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp3, vm[2, l, iv], vm[2, l, kv]);
+                    }
+
+                    vdel[2, 0, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp3, vdel[2, 0, iv], vdel[2, 0, kv]);
+                    vdel[2, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp3, vdel[2, 1, iv], vdel[2, 1, kv]);
                 }
             }
+        }
 
-            // Back substitution
-            double[] x = new double[nsys];
-            x[nsys - 1] = d[nsys - 1];
-            for (int iv = nsys - 2; iv >= 0; iv--)
+        WriteDebugRows(debugWriter, "BLSOLV_POST_FORWARD", "VDEL_FWD", "vdel_fwd", vdel, nsys);
+
+        // Legacy block: xsolve.f BLSOLV back substitution.
+        // Difference from legacy: Same reverse sweep, with explicit trace events and helper-based multiply-subtract updates instead of inlined REAL statements.
+        // Decision: Keep the reverse sweep structure and helper calls because they make parity mismatches auditable without changing the algorithm.
+        for (int iv = nsys - 1; iv >= 1; iv--)
+        {
+            SolverTrace.Event(
+                "back_substitution",
+                SolverTrace.ScopeName(typeof(BlockTridiagonalSolver)),
+                new { iv = iv + 1, precision = GetPrecisionLabel<T>() });
+            T vtmp = vdel[2, 0, iv];
+            for (int kv = iv - 1; kv >= 0; kv--)
             {
-                x[iv] = d[iv] - c[iv] * x[iv + 1];
+                vdel[0, 0, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vm[0, iv, kv], vtmp, vdel[0, 0, kv]);
+                vdel[1, 0, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vm[1, iv, kv], vtmp, vdel[1, 0, kv]);
+                vdel[2, 0, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vm[2, iv, kv], vtmp, vdel[2, 0, kv]);
             }
 
-            // Diagnostic: log VDEL solution for first 5 entries
-            if (debugWriter != null)
+            vtmp = vdel[2, 1, iv];
+            for (int kv = iv - 1; kv >= 0; kv--)
             {
-                int logCount = Math.Min(5, nsys);
-                for (int j = 0; j < logCount; j++)
+                vdel[0, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vm[0, iv, kv], vtmp, vdel[0, 1, kv]);
+                vdel[1, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vm[1, iv, kv], vtmp, vdel[1, 1, kv]);
+                vdel[2, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vm[2, iv, kv], vtmp, vdel[2, 1, kv]);
+            }
+        }
+
+        WriteDebugRows(debugWriter, null, "VDEL_SOL", "vdel_sol", vdel, nsys);
+    }
+
+    // Legacy mapping: none
+    // Difference from legacy: Managed-only debug formatting helper used to inspect intermediate solver rows; the legacy routine does not have a separate reusable writer like this.
+    // Decision: Keep the helper because it supports parity debugging without changing the solver math.
+    private static void WriteDebugRows<T>(
+        TextWriter? debugWriter,
+        string? header,
+        string label,
+        string traceName,
+        T[,,] vdel,
+        int nsys)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        for (int iv = 0; iv < nsys; iv++)
+        {
+            SolverTrace.Array(
+                LegacyTraceScope,
+                traceName,
+                new[]
                 {
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VDEL_SOL IV={0,4}{1,15:E8}", j + 1, x[j]));
+                    double.CreateChecked(vdel[0, 0, iv]),
+                    double.CreateChecked(vdel[1, 0, iv]),
+                    double.CreateChecked(vdel[2, 0, iv])
+                },
+                new { iv = iv + 1 });
+        }
+
+        if (debugWriter is null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(header))
+        {
+            debugWriter.WriteLine(header);
+        }
+
+        int logCount = Math.Min(5, nsys);
+        for (int iv = 0; iv < logCount; iv++)
+        {
+            debugWriter.WriteLine(string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} IV={1,4}{2,15:E8} {3,15:E8} {4,15:E8}",
+                label,
+                iv + 1,
+                double.CreateChecked(vdel[0, 0, iv]),
+                double.CreateChecked(vdel[1, 0, iv]),
+                double.CreateChecked(vdel[2, 0, iv])));
+        }
+    }
+
+    // Legacy mapping: none
+    // Difference from legacy: Managed-only trace helper that labels whether the generic solver is running in the default double path or the parity float path.
+    // Decision: Keep the helper because it is diagnostic-only.
+    private static string GetPrecisionLabel<T>()
+        where T : struct, IFloatingPointIeee754<T>
+        => typeof(T) == typeof(float) ? "Single" : "Double";
+
+    // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV pivot handling
+    // Difference from legacy: The managed solver makes the pivot clamp explicit and traceable instead of relying on raw reciprocal behavior when a pivot approaches zero.
+    // Decision: Keep the explicit guard because it improves diagnosability without changing valid-pivot behavior.
+    private static T SafeReciprocal<T>(
+        T value,
+        string label,
+        int iv,
+        TextWriter? debugWriter)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        T pivotFloor = T.CreateChecked(PivotFloor);
+        if (T.IsFinite(value) && T.Abs(value) >= pivotFloor)
+        {
+            return T.One / value;
+        }
+
+        T signValue = value == T.Zero || T.IsNaN(value) ? T.One : value;
+        T safeValue = T.CopySign(pivotFloor, signValue);
+        debugWriter?.WriteLine(string.Format(
+            CultureInfo.InvariantCulture,
+            "BLSOLV_PIVOT_CLAMP IV={0,4} LABEL={1} RAW={2,15:E8} SAFE={3,15:E8}",
+            iv + 1,
+            label,
+            double.CreateChecked(value),
+            double.CreateChecked(safeValue)));
+        return T.One / safeValue;
+    }
+
+    // Legacy mapping: none
+    // Difference from legacy: Managed-only marshaling helper that constructs the parity float workspace from the default double system arrays before entering the legacy-style solve path.
+    // Decision: Keep the helper because it cleanly isolates parity replay storage from the default solver storage.
+    private static float[,,] CopyToSingle(double[,,] source, int nsys)
+    {
+        var result = new float[source.GetLength(0), source.GetLength(1), source.GetLength(2)];
+        for (int i = 0; i < source.GetLength(0); i++)
+        {
+            for (int j = 0; j < source.GetLength(1); j++)
+            {
+                for (int k = 0; k < nsys; k++)
+                {
+                    result[i, j, k] = (float)source[i, j, k];
                 }
             }
+        }
 
-            // Write solution back to VDEL[eq, 0, iv]
-            for (int iv = 0; iv < nsys; iv++)
+        return result;
+    }
+
+    // Legacy mapping: none
+    // Difference from legacy: Managed-only marshaling helper for the TE/wake coupling matrix in the parity workspace.
+    // Decision: Keep the helper because it exists only to support the parity branch.
+    private static float[,] CopyToSingle(double[,] source)
+    {
+        var result = new float[source.GetLength(0), source.GetLength(1)];
+        for (int i = 0; i < source.GetLength(0); i++)
+        {
+            for (int j = 0; j < source.GetLength(1); j++)
             {
-                vdel[eq, 0, iv] = x[iv];
+                result[i, j] = (float)source[i, j];
+            }
+        }
+
+        return result;
+    }
+
+    // Legacy mapping: none
+    // Difference from legacy: Managed-only copy-back helper that writes the parity float solution into the default double storage expected by the rest of the managed solver.
+    // Decision: Keep the helper because it keeps the parity path isolated while leaving the public solver state in double precision.
+    private static void CopySolutionToDouble(float[,,] source, double[,,] destination, int nsys)
+    {
+        for (int eq = 0; eq < source.GetLength(0); eq++)
+        {
+            for (int slot = 0; slot < source.GetLength(1); slot++)
+            {
+                for (int iv = 0; iv < nsys; iv++)
+                {
+                    destination[eq, slot, iv] = source[eq, slot, iv];
+                }
             }
         }
     }

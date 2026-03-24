@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/orrs/src :: linear-vorticity geometry workspace lineage, f_xfoil/src/xpanel.f :: surface geometry arrays
+// Role in port: Managed mutable geometry workspace for the alternative linear-vorticity solver.
+// Differences: The managed port names and owns the geometry arrays explicitly, whereas legacy implementations relied on shared arrays and solver-local conventions.
+// Decision: Keep the managed workspace because it is the cleanest way to expose the alternative solver's geometry state.
 namespace XFoil.Solver.Models;
 
 /// <summary>
@@ -11,6 +17,9 @@ public sealed class LinearVortexPanelState
     /// Creates a new panel state with pre-allocated arrays of the given capacity.
     /// </summary>
     /// <param name="maxNodes">Maximum number of panel nodes. Default is 360.</param>
+    // Legacy mapping: f_xfoil/orrs/src :: panel-geometry workspace setup lineage.
+    // Difference from legacy: Array ownership and validation are explicit at construction time instead of implicit in shared work arrays.
+    // Decision: Keep the managed constructor because it makes the workspace reusable and testable.
     public LinearVortexPanelState(int maxNodes = 360)
     {
         if (maxNodes < 2)
@@ -113,6 +122,9 @@ public sealed class LinearVortexPanelState
     /// Sets the active node count and validates it against <see cref="MaxNodes"/>.
     /// </summary>
     /// <param name="nodeCount">Number of active nodes.</param>
+    // Legacy mapping: f_xfoil/orrs/src :: active-node resize/reset lineage.
+    // Difference from legacy: The active node count is validated and stored through one managed helper instead of being assigned directly.
+    // Decision: Keep the helper because it protects the workspace contract.
     public void Resize(int nodeCount)
     {
         if (nodeCount < 2 || nodeCount > MaxNodes)

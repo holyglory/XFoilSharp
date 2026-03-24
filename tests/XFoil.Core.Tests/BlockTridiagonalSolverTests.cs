@@ -2,6 +2,12 @@ using System;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xblsolv.f :: BLSOLV
+// Secondary legacy source: f_xfoil/src/xblsys.f block system structure
+// Role in port: Verifies the managed block-tridiagonal solver and related banded variant derived from the legacy viscous linear solve.
+// Differences: The managed port exposes reusable numeric components instead of hiding the solve inside the viscous runtime.
+// Decision: Keep the managed numerics surface while preserving legacy-compatible behavior in parity-sensitive branches.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -13,6 +19,9 @@ public class BlockTridiagonalSolverTests
     private const double Tol = 1e-10;
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xblsolv.f generic block-tridiagonal elimination.
+    // Difference from legacy: A compact analytical fixture is used instead of solving through the full viscous system.
+    // Decision: Keep the managed unit test because it isolates the algebraic core clearly.
     public void Solve_FourStationSystem_ProducesCorrectSolution()
     {
         // Set up a known 4-station block-tridiagonal system
@@ -41,6 +50,9 @@ public class BlockTridiagonalSolverTests
     }
 
     [Fact]
+    // Legacy mapping: xblsolv identity-block degenerate case.
+    // Difference from legacy: The identity path is asserted explicitly rather than emerging incidentally during solver use.
+    // Decision: Keep the managed regression because it protects a simple but important sanity condition.
     public void Solve_IdentityBlocks_ReturnsRHS()
     {
         // With identity diagonal blocks and zero sub-diagonals,
@@ -87,6 +99,9 @@ public class BlockTridiagonalSolverTests
     }
 
     [Fact]
+    // Legacy mapping: xblsolv VACCEL small-mass suppression behavior.
+    // Difference from legacy: The managed test targets the optional small-mass handling directly instead of only through full viscous convergence.
+    // Decision: Keep the focused regression because it protects a legacy-specific solver branch.
     public void Solve_WithVACCEL_DropsSmallMassCoefficients()
     {
         // With VACCEL > 0, small mass coupling coefficients should be dropped
@@ -117,6 +132,9 @@ public class BlockTridiagonalSolverTests
     }
 
     [Fact]
+    // Legacy mapping: xblsolv VZ-coupling preservation.
+    // Difference from legacy: The coupling block is asserted numerically in isolation instead of being inferred from final viscous results.
+    // Decision: Keep the managed unit test because it directly guards this structural property.
     public void Solve_PreservesVZCouplingBlock()
     {
         // The VZ block couples side 1 and side 2 at TE
@@ -149,6 +167,9 @@ public class BlockTridiagonalSolverTests
     // =====================================================================
 
     [Fact]
+    // Legacy mapping: xblsolv equivalence with banded factorization.
+    // Difference from legacy: The port cross-checks two managed solver implementations, which the original runtime did not expose separately.
+    // Decision: Keep this managed improvement because it strengthens confidence in the ported linear algebra.
     public void BandMatrixSolver_ProducesSameResultAsBlockTridiagonal()
     {
         // Both solvers should produce equivalent results on the same system
@@ -173,6 +194,9 @@ public class BlockTridiagonalSolverTests
     }
 
     [Fact]
+    // Legacy mapping: identity-case behavior mirrored in the managed band solver.
+    // Difference from legacy: The banded solver is a managed companion implementation rather than a separate legacy routine.
+    // Decision: Keep this managed-only comparison because it protects consistency across the port's solver backends.
     public void BandMatrixSolver_IdentityBlocks_ReturnsRHS()
     {
         var system = new ViscousNewtonSystem(8, 4);

@@ -2,11 +2,20 @@ using XFoil.Core.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f :: OPER, ALFA, CLI
+// Secondary legacy source: f_xfoil/src/xpanel.f :: PANGEN
+// Role in port: Verifies the managed analysis facade that orchestrates the inviscid sweep and target-lift workflows derived from legacy operating-point routines.
+// Differences: The test harness drives .NET service entry points instead of the interactive legacy command loop, while still checking the same lift-trend and solver-selection behavior.
+// Decision: Keep the managed test structure because it validates the public orchestration layer rather than replaying the legacy UI flow.
 namespace XFoil.Core.Tests;
 
 public sealed class AirfoilAnalysisServiceTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f :: ASEQ.
+    // Difference from legacy: This test exercises the managed sweep facade rather than the legacy command interpreter, but it checks the same alpha-sequence point generation contract.
+    // Decision: Keep this managed coverage because the port exposes sweep execution through AirfoilAnalysisService instead of the legacy REPL.
     public void SweepInviscidAlpha_ReturnsExpectedPointCount()
     {
         var generator = new NacaAirfoilGenerator();
@@ -26,6 +35,9 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f :: ASEQ.
+    // Difference from legacy: The assertion is phrased as a monotonic managed regression check instead of comparing console output from the legacy alpha sweep.
+    // Decision: Keep the managed trend check because it guards the same lift-ordering behavior with clearer test diagnostics.
     public void SweepInviscidAlpha_ForSymmetricAirfoil_ShowsIncreasingLiftTrend()
     {
         var generator = new NacaAirfoilGenerator();
@@ -45,6 +57,9 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f :: ALFA / OPER.
+    // Difference from legacy: The test cross-checks the managed sweep against repeated managed single-point solves instead of probing the legacy state machine.
+    // Decision: Keep this managed equivalence check because it validates the refactored orchestration boundary directly.
     public void SweepInviscidAlpha_MatchesSinglePointAnalyses()
     {
         var generator = new NacaAirfoilGenerator();
@@ -69,6 +84,9 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f :: CLI.
+    // Difference from legacy: The target-lift solve is asserted through the managed API and bounded tolerances instead of the interactive CLI workflow.
+    // Decision: Keep the managed assertion because it verifies the same positive-alpha solution behavior with less harness coupling.
     public void AnalyzeInviscidForLiftCoefficient_ForSymmetricAirfoil_FindsPositiveAlphaForPositiveLift()
     {
         var generator = new NacaAirfoilGenerator();
@@ -85,6 +103,9 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f :: CLI.
+    // Difference from legacy: This managed regression reduces the legacy trim solve to a near-zero target-lift invariant.
+    // Decision: Keep the managed invariant because it is the clearest public-surface check for the same legacy behavior.
     public void AnalyzeInviscidForLiftCoefficient_ForSymmetricAirfoil_FindsNearZeroAlphaForZeroLift()
     {
         var generator = new NacaAirfoilGenerator();
@@ -101,6 +122,9 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f :: CSEQ / CLI.
+    // Difference from legacy: The test checks the managed lift-sweep wrapper rather than the legacy command sequence, but it preserves the expected solved-alpha ordering.
+    // Decision: Keep the managed wrapper test because the production entry point is intentionally higher level than the legacy UI.
     public void SweepInviscidLiftCoefficient_ForSymmetricAirfoil_ShowsIncreasingSolvedAlphaTrend()
     {
         var generator = new NacaAirfoilGenerator();
@@ -123,6 +147,9 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Linear-vortex solver selection is a managed-only extension beyond the original single inviscid legacy path.
+    // Decision: Keep this managed-only test because it validates new solver-selection functionality with no direct Fortran analogue.
     public void AnalyzeInviscid_WithLinearVortexSolverType_ProducesValidResult()
     {
         var generator = new NacaAirfoilGenerator();
@@ -141,6 +168,9 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
+    // Legacy mapping: none.
+    // Difference from legacy: Comparing Hess-Smith and linear-vortex managed backends is unique to the C# port and has no single legacy counterpart.
+    // Decision: Keep the managed comparison because it protects the intentional multi-solver design added by the port.
     public void AnalyzeInviscid_LinearVortexVsHessSmith_ProduceDifferentResults()
     {
         var generator = new NacaAirfoilGenerator();
@@ -165,6 +195,9 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xfoil.f :: OPER default inviscid operating point path.
+    // Difference from legacy: The managed default selection is asserted explicitly instead of being implied by the legacy command environment.
+    // Decision: Keep the managed default-contract test because the public API must document and preserve its default solver choice.
     public void AnalyzeInviscid_DefaultSettings_UsesHessSmith()
     {
         var generator = new NacaAirfoilGenerator();

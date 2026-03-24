@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xblsys.f :: BLVAR/BLMID derived-state correlations
+// Role in port: Managed DTO for one station's derived kinematic and compressibility quantities.
+// Differences: Legacy XFoil computes these values transiently inside the boundary-layer kernels, while the managed port packages them explicitly for diagnostics and interval assembly.
+// Decision: Keep the managed DTO because it improves solver observability.
 namespace XFoil.Solver.Models;
 
 public sealed class ViscousStationDerivedState

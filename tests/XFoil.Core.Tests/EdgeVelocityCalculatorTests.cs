@@ -2,6 +2,12 @@ using System;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xbl.f :: STFIND, UICALC, STMOVE
+// Secondary legacy source: f_xfoil/src/xwake.f wake velocity setup
+// Role in port: Verifies the managed edge-velocity and stagnation-point helpers derived from legacy boundary-layer preprocessing routines.
+// Differences: The managed port exposes reusable helper APIs and typed state instead of relying on legacy common-block mutation.
+// Decision: Keep the managed helper surface because it preserves the same formulas while making them independently testable.
 namespace XFoil.Core.Tests;
 
 /// <summary>
@@ -10,6 +16,9 @@ namespace XFoil.Core.Tests;
 public class EdgeVelocityCalculatorTests
 {
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f :: STFIND sign-change branch.
+    // Difference from legacy: The stagnation index is asserted directly on the helper result instead of being inferred from downstream state.
+    // Decision: Keep the managed unit test because it isolates the preserved search rule clearly.
     public void FindStagnationPoint_SignChange_FindsCorrectPanel()
     {
         double[] speed = { 1.0, 0.5, 0.1, -0.2, -0.8, -1.2 };
@@ -18,6 +27,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f fallback stagnation selection.
+    // Difference from legacy: Minimum-absolute-speed selection is tested directly rather than embedded in a larger setup sequence.
+    // Decision: Keep the managed regression because it documents the fallback behavior explicitly.
     public void FindStagnationPoint_MinAbsSpeed_FindsCorrectPanel()
     {
         double[] speed = { 1.5, 0.8, 0.3, 0.05, 0.2, 0.9 };
@@ -26,6 +38,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f symmetric stagnation location behavior.
+    // Difference from legacy: The test checks numerical proximity to the leading edge through the managed helper.
+    // Decision: Keep the managed invariant because it is the clearest regression for symmetric stagnation placement.
     public void FindStagnationPoint_SymmetricAirfoil_FindsLeadingEdge()
     {
         int n = 20;
@@ -37,6 +52,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f :: STMOVE.
+    // Difference from legacy: The managed test inspects typed boundary-layer state after the shift instead of legacy common arrays.
+    // Decision: Keep the managed state-based test because it makes the same relocation behavior observable.
     public void MoveStagnationPoint_ShiftsBLVariables()
     {
         var blState = new BoundaryLayerSystemState(20, 5);
@@ -60,6 +78,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f panel-to-boundary-layer station mapping.
+    // Difference from legacy: Station counts are returned explicitly from a helper instead of being implicit in initialization arrays.
+    // Decision: Keep the managed helper test because it documents the indexing contract clearly.
     public void MapPanelsToBLStations_ProducesCorrectCounts()
     {
         var (iblte, nbl) = EdgeVelocityCalculator.MapPanelsToBLStations(20, 10, 3);
@@ -70,6 +91,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f branch arc-length construction.
+    // Difference from legacy: Arc length is asserted directly on a managed return array instead of being consumed internally.
+    // Decision: Keep the managed regression because it isolates a core preprocessing invariant.
     public void ComputeBLArcLength_ZeroAtStagnation_MonotonicallyIncreasing()
     {
         double[] x = { 0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0 };
@@ -81,6 +105,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xblsys.f system-line indexing.
+    // Difference from legacy: The mapping is validated through a direct helper instead of only through assembled matrices.
+    // Decision: Keep the managed helper test because it protects a subtle indexing contract.
     public void MapStationsToSystemLines_ProducesContiguousMapping()
     {
         int[] iblte = { 5, 6 };
@@ -91,6 +118,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f inviscid edge-speed evaluation.
+    // Difference from legacy: The conversion is checked directly on the helper instead of only through full solver results.
+    // Decision: Keep the managed formula regression because it tightly constrains the ported relation.
     public void ComputeInviscidEdgeVelocity_SpeedEqualsGamma()
     {
         double[] gamma = { 1.0, 1.5, 1.2, 0.8, 0.6 };
@@ -99,6 +129,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f viscous edge-speed conversion.
+    // Difference from legacy: The test asserts the managed helper output explicitly rather than inferring it from assembled state.
+    // Decision: Keep the managed helper coverage because it makes the conversion rule explicit.
     public void ComputeViscousEdgeVelocity_ConvertsCorrectly()
     {
         double[] uedg = { 1.2, 1.0, 0.8, 0.5 };
@@ -107,14 +140,20 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f inverse vortex-from-edge-speed conversion.
+    // Difference from legacy: The inverse relation is exercised directly instead of indirectly through viscous iteration.
+    // Decision: Keep the managed regression because it protects the bidirectional conversion pair.
     public void SetVortexFromViscousSpeed_InverseOfQvfue()
     {
         double[] qvis = { 1.5, 1.2, 0.9, 0.6 };
-        double[] gamma = EdgeVelocityCalculator.SetVortexFromViscousSpeed(qvis, 4, 1.0);
+        double[] gamma = EdgeVelocityCalculator.SetVortexFromViscousSpeed(qvis, 4, 3.0);
         for (int i = 0; i < 4; i++) Assert.Equal(qvis[i], gamma[i], 10);
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xbl.f inviscid basis superposition.
+    // Difference from legacy: The port exposes basis combination as a direct helper instead of leaving it buried in solver setup.
+    // Decision: Keep the managed helper test because it isolates the same superposition behavior.
     public void SetInviscidSpeeds_CombinesBasisSolutions()
     {
         int n = 5;
@@ -130,6 +169,9 @@ public class EdgeVelocityCalculatorTests
     }
 
     [Fact]
+    // Legacy mapping: f_xfoil/src/xwake.f wake velocity initialization.
+    // Difference from legacy: Finite wake velocities are asserted directly on managed output instead of through later wake marching success.
+    // Decision: Keep the managed regression because it directly protects wake-velocity setup.
     public void ComputeWakeVelocities_ProducesFiniteValues()
     {
         double[] wakeX = { 1.01, 1.05, 1.1, 1.2 };

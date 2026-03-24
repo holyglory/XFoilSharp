@@ -1,5 +1,11 @@
 using System;
 
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: none
+// Role in port: Provides a managed Viterna-Corrigan fallback when the viscous solver does not converge past stall.
+// Differences: XFoil does not have a direct legacy analogue for this file; it is a managed reporting fallback added on top of the viscous solver.
+// Decision: Keep the fallback as a managed improvement only. It is explicitly outside the parity-critical legacy solver path.
 namespace XFoil.Solver.Services;
 
 /// <summary>
@@ -35,6 +41,9 @@ public static class PostStallExtrapolator
     /// <param name="lastConvergedCD">Last converged drag coefficient.</param>
     /// <param name="aspectRatio">Effective aspect ratio (use 2*pi for 2D airfoil analysis).</param>
     /// <returns>Tuple of (CL, CD) at the requested angle of attack.</returns>
+    // Legacy mapping: none; managed-only Viterna-Corrigan fallback.
+    // Difference from legacy: The extrapolation is an added post-processing feature and does not correspond to a legacy XFoil subroutine.
+    // Decision: Keep the fallback because it is useful for reporting failed post-stall cases, but keep it clearly outside the parity path.
     public static (double CL, double CD) ExtrapolatePostStall(
         double alpha,
         double lastConvergedAlpha,

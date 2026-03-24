@@ -1,10 +1,19 @@
 using XFoil.Core.Models;
 using XFoil.Design.Models;
 
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xgdes.f :: geometry-transform workflow
+// Role in port: Provides a managed geometry-scaling helper with explicit origin semantics.
+// Differences: Legacy XFoil does not expose this exact scaling operation as a dedicated immutable service call; the port generalizes the transform for programmatic use.
+// Decision: Keep the managed scaling helper because it is an intentional API improvement and not a parity-sensitive legacy replay path.
 namespace XFoil.Design.Services;
 
 public sealed class GeometryScalingService
 {
+    // Legacy mapping: none; this is a managed-only scaling convenience built on the shared chord-frame utilities.
+    // Difference from legacy: The port exposes origin selection and immutable output directly instead of routing through an interactive geometry-edit command.
+    // Decision: Keep the service method because it is a useful managed extension of the design toolset.
     public GeometryScalingResult Scale(
         AirfoilGeometry geometry,
         double scaleFactor,

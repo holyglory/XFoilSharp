@@ -1,7 +1,15 @@
+// Legacy audit:
+// Primary legacy source: none
+// Role in port: Managed DTO representing the contents of a legacy XFoil polar-dump file.
+// Differences: No direct Fortran analogue exists because the legacy code wrote dump contents through formatted output and COMMON state rather than a structured record type.
+// Decision: Keep the managed DTO because it gives the importer/exporter a stable in-memory representation of the legacy file format.
 namespace XFoil.IO.Models;
 
 public sealed class LegacyPolarDumpFile
 {
+    // Legacy mapping: none; managed-only constructor for one parsed legacy polar-dump file.
+    // Difference from legacy: The Fortran dump writer emitted these fields directly to disk, while the port validates and stores them in an immutable object.
+    // Decision: Keep the managed constructor because it makes parsed dump state explicit.
     public LegacyPolarDumpFile(
         string airfoilName,
         string sourceCode,

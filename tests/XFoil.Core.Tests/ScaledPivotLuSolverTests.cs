@@ -1,5 +1,11 @@
 using XFoil.Solver.Numerics;
 
+// Legacy audit:
+// Primary legacy source: legacy LU/pivoting linear solve lineage used throughout the codebase
+// Secondary legacy source: managed-only reusable dense linear algebra extraction
+// Role in port: Verifies the managed scaled-pivot LU solver used by multiple ported workflows.
+// Differences: The port factors generic dense systems through a reusable component rather than specialized legacy call sites.
+// Decision: Keep the managed numeric component because it is a refactor of standard linear algebra support, not a behavioral rewrite of consuming algorithms.
 namespace XFoil.Core.Tests;
 
 public class ScaledPivotLuSolverTests
@@ -9,6 +15,9 @@ public class ScaledPivotLuSolverTests
     /// System: [2 1 1; 4 3 3; 8 7 9] * x = [4; 10; 24] => x = [1; 1; 1]
     /// </summary>
     [Fact]
+    // Legacy mapping: legacy LU solve behavior on a small dense system.
+    // Difference from legacy: The managed solver is tested directly on a known matrix instead of through a consuming aerodynamic routine.
+    // Decision: Keep the managed unit test because it isolates the factorization logic clearly.
     public void DecomposeAndBackSubstitute_3x3KnownSolution_ExactMatch()
     {
         var matrix = new double[3, 3]
@@ -33,6 +42,9 @@ public class ScaledPivotLuSolverTests
     /// Uses a system where the natural pivot order is suboptimal.
     /// </summary>
     [Fact]
+    // Legacy mapping: scaled-pivot LU with row swaps.
+    // Difference from legacy: Pivoting is validated on an analytical fixture rather than being inferred from downstream solver robustness.
+    // Decision: Keep the managed regression because it directly protects row-swap behavior.
     public void DecomposeAndBackSubstitute_5x5RequiringRowSwaps_CorrectSolution()
     {
         // A system where row swaps are essential for stability
@@ -77,6 +89,9 @@ public class ScaledPivotLuSolverTests
     /// (not just max absolute value, but max after row scaling).
     /// </summary>
     [Fact]
+    // Legacy mapping: scaled-pivot row selection.
+    // Difference from legacy: Pivot choice is asserted explicitly, which the legacy runtime did not expose as a separate diagnostic.
+    // Decision: Keep the managed-focused test because it improves observability of the same algorithm.
     public void Decompose_ScaledPivoting_SelectsCorrectPivotRow()
     {
         // Row 0: [1000, 999] -- max element = 1000, scale = 1/1000
@@ -131,6 +146,9 @@ public class ScaledPivotLuSolverTests
     /// Test 4: Backsolve two different RHS vectors against the same LU-factored matrix.
     /// </summary>
     [Fact]
+    // Legacy mapping: back-substitution across multiple right-hand sides.
+    // Difference from legacy: Multi-RHS support is exercised directly on the reusable managed component.
+    // Decision: Keep the managed component test because it protects a generalized capability used by the port.
     public void BackSubstitute_TwoRhsVectors_BothCorrect()
     {
         var matrix = new double[3, 3]
@@ -164,6 +182,9 @@ public class ScaledPivotLuSolverTests
     /// Test 5: Near-singular matrix (condition number ~1e10) still produces reasonable solution.
     /// </summary>
     [Fact]
+    // Legacy mapping: near-singular dense solve behavior.
+    // Difference from legacy: Numerical robustness is checked directly instead of only through end-to-end solver behavior.
+    // Decision: Keep the managed numeric regression because it constrains a sensitive linear-algebra edge case.
     public void DecomposeAndBackSubstitute_NearSingularMatrix_ReasonableSolution()
     {
         // Hilbert-like matrix with high condition number

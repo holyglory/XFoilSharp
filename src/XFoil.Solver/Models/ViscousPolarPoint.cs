@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xoper.f :: saved-polar operating-point reporting lineage
+// Role in port: Managed DTO for one viscous polar point reported by the older displacement-coupled workflow.
+// Differences: The managed port packages the same headline quantities into an immutable object instead of relying on print buffers and temporary scalars.
+// Decision: Keep the managed DTO because it simplifies exports and tests.
 namespace XFoil.Solver.Models;
 
 public sealed class ViscousPolarPoint

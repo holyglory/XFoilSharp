@@ -1,3 +1,8 @@
+// Legacy audit:
+// Primary legacy source: none
+// Role in port: Managed-only DTO summarizing one completed analysis-session run.
+// Differences: No direct Fortran analogue exists because the legacy workflow reported output files procedurally instead of returning a structured run-result object.
+// Decision: Keep the managed DTO because it is a better API surface for automation and tests.
 namespace XFoil.IO.Models;
 
 public sealed class AnalysisSessionRunResult

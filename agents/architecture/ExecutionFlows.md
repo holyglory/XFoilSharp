@@ -7,44 +7,102 @@
 3. `AirfoilNormalizer.Normalize` is used where panel generation or normalized transforms require chord-based geometry.
 4. Optional metrics are computed with `AirfoilMetricsCalculator.Calculate`.
 
-## 2. Inviscid operating point
+## 2. Single-point inviscid analysis
 
 1. `AirfoilAnalysisService.AnalyzeInviscid`
-2. `PanelMeshGenerator.Generate`
-3. `HessSmithInviscidSolver.Prepare`
-   - Builds reusable geometry-dependent influence data.
-4. `HessSmithInviscidSolver.Analyze`
-   - Combines X/Y freestream basis responses for angle of attack.
-   - Computes tangential velocity and pressure samples.
-   - Applies compressibility correction if `MachNumber > 0`.
-   - Produces wake geometry through `WakeGeometryGenerator`.
-5. `InviscidAnalysisResult`
-   - Returned to CLI, design, or IO layers.
+2. Branch on `AnalysisSettings.InviscidSolverType`
 
-## 3. Inviscid sweeps and target-lift solves
+### Hess-Smith branch
+
+1. `PanelMeshGenerator.Generate`
+2. `HessSmithInviscidSolver.Prepare`
+3. `HessSmithInviscidSolver.Analyze`
+4. `WakeGeometryGenerator.Generate`
+5. Return `InviscidAnalysisResult`
+
+### Linear-vortex branch
+
+1. `CosineClusteringPanelDistributor.Distribute`
+2. `LinearVortexInviscidSolver` assembles or reuses the streamfunction system
+3. `PanelGeometryBuilder` and `StreamfunctionInfluenceCalculator` provide geometry and influence data
+4. `ScaledPivotLuSolver` solves the factored system
+5. `AirfoilAnalysisService` adapts `LinearVortexInviscidResult` back into `InviscidAnalysisResult`
+
+Current limitation:
+
+- The public adapter still leaves `PressureSamples` and `WakeGeometry` empty on the linear-vortex path.
+
+## 3. Public inviscid sweeps and target-lift solves
 
 1. `AirfoilAnalysisService.SweepInviscidAlpha`
 2. `AirfoilAnalysisService.AnalyzeInviscidForLiftCoefficient`
 3. `AirfoilAnalysisService.SweepInviscidLiftCoefficient`
 
-## 4. Viscous preparation and laminar solve
+Current behavior:
 
-1. Start from `InviscidAnalysisResult`.
+- These public sweep helpers still use the prepared Hess-Smith path only.
+- `InviscidSolverType.LinearVortex` currently affects single-point `AnalyzeInviscid`, not the sweep APIs.
+
+## 4. Single-point viscous analysis
+
+1. `AirfoilAnalysisService.AnalyzeViscous`
+2. `ViscousSolverEngine.SolveViscous`
+3. `CosineClusteringPanelDistributor.Distribute`
+4. `LinearVortexInviscidSolver.SolveAtAngleOfAttack`
+5. `EdgeVelocityCalculator.SetInviscidSpeeds`
+6. `InfluenceMatrixBuilder.BuildAnalyticalDIJ`
+7. `ViscousNewtonAssembler.BuildNewtonSystem`
+8. `BlockTridiagonalSolver.Solve`
+9. `ViscousNewtonUpdater.ApplyNewtonUpdate`
+10. `StagnationPointTracker.MoveStagnationPoint` when the stagnation panel shifts
+11. `DragCalculator.ComputeDrag`
+12. Optional `PostStallExtrapolator.ExtrapolatePostStall` if the Newton solve does not converge and post-stall fallback is enabled
+
+Notes:
+
+- The current viscous path always uses the linear-vortex inviscid front end, regardless of `InviscidSolverType`.
+- `TransitionModel.CheckTransition` is called from the Newton assembly during the BL march.
+
+## 5. Viscous polar sweeps
+
+1. `AirfoilAnalysisService.SweepViscousAlpha`
+2. `AirfoilAnalysisService.SweepViscousCL`
+3. `AirfoilAnalysisService.SweepViscousRe`
+4. All three delegate to `PolarSweepRunner`
+
+Implementation detail:
+
+- `PolarSweepRunner` reuses the panel geometry and factored inviscid system across points.
+- The current warm-start mechanism records nearby alpha history, not a full boundary-layer state snapshot.
+
+## 6. Topology and seed diagnostics
+
+1. `AirfoilAnalysisService.AnalyzeBoundaryLayerTopology`
 2. `BoundaryLayerTopologyBuilder.Build`
-3. `ViscousStateSeedBuilder.Build`
-4. `ViscousStateEstimator.Estimate`
-5. `ViscousIntervalSystemBuilder.Build`
-6. `ViscousLaminarCorrector.Correct`
-7. `ViscousLaminarSolver.Solve`
+3. `AirfoilAnalysisService.AnalyzeViscousStateSeed`
+4. `ViscousStateSeedBuilder.Build`
+5. `AirfoilAnalysisService.AnalyzeViscousInitialState`
+6. `ViscousStateEstimator.Estimate`
 
-## 5. Viscous interaction and displacement coupling
+These remain useful for inspection-oriented CLI commands, but they are not the primary operating-point viscous solver path anymore.
 
-1. `ViscousInteractionCoupler.Couple`
-2. `DisplacementSurfaceGeometryBuilder.Build`
-3. `AirfoilAnalysisService.AnalyzeDisplacementCoupledViscous`
-4. `ViscousForceEstimator.EstimateProfileDragCoefficient`
+## 7. Deprecated surrogate viscous pipeline
 
-## 6. Geometry design flow
+The old staged surrogate methods are still present on `AirfoilAnalysisService` for compatibility:
+
+- `AnalyzeViscousIntervalSystem`
+- `AnalyzeViscousLaminarCorrection`
+- `AnalyzeViscousLaminarSolve`
+- `AnalyzeViscousInteraction`
+- `AnalyzeDisplacementCoupledViscous`
+- Related displacement-coupled sweep helpers
+
+Current behavior:
+
+- These methods are marked obsolete and throw `NotSupportedException`.
+- Matching CLI verbs print deprecation messages instead of running a solver.
+
+## 8. Geometry design flow
 
 1. CLI selects a geometry-edit command.
 2. A design service transforms `AirfoilGeometry`.
@@ -58,7 +116,7 @@ Examples:
 - `ContourEditService.AddPoint/MovePoint/DeletePoint/DoublePoint/RefineCorners`
 - `ContourModificationService.ModifyContour`
 
-## 7. QDES flow
+## 9. QDES flow
 
 1. `AirfoilAnalysisService.AnalyzeInviscid`
 2. `QSpecDesignService.CreateFromInviscidAnalysis`
@@ -68,7 +126,7 @@ Examples:
    - `ForceSymmetry`
 4. Optional inverse execution through `QSpecDesignService.ExecuteInverse`
 
-## 8. MDES and direct MAPGEN flow
+## 10. MDES and direct MAPGEN flow
 
 ### Modal inverse
 
@@ -81,15 +139,10 @@ Examples:
 
 1. Build baseline and modified `QSpecProfile`.
 2. `ConformalMapgenService.Execute`
-   - Resamples profile to circle points.
-   - Builds `Cn` coefficients from `Qspec`.
-   - Optionally filters high modes.
-   - Applies TE-gap Newton loop.
-   - Optionally outer-solves TE angle.
-   - Uses continuation for harder inverse edits.
-3. Result geometry or coefficient CSV is exported.
+3. Resample, solve coefficients, optionally filter high modes, and solve TE constraints
+4. Export resulting geometry or coefficient CSV
 
-## 9. IO and batch session flow
+## 11. IO and batch session flow
 
 ### Export
 
@@ -110,7 +163,7 @@ Examples:
 3. Dispatch sweep or import job by kind.
 4. Write artifacts and summary JSON.
 
-## 10. CLI orchestration pattern
+## 12. CLI orchestration pattern
 
 `Program.cs` follows the same broad shape for most commands:
 
@@ -120,8 +173,12 @@ Examples:
 4. Print a text summary.
 5. Optionally export output artifacts.
 
+Important current discrepancy:
+
+- The viscous CLI still parses surrogate-era knobs such as coupling iterations, viscous iterations, residual tolerance, and displacement relaxation.
+- `CreateViscousSettings` currently wires only panel count, Mach, Reynolds, transition Reynolds-theta, and critical `N`, so those extra arguments are ignored.
+
 ## TODO
 
-- Add a flow document for anything that eventually replaces original interactive menus.
-- Document the exact coupling loop stopping conditions if `AirfoilAnalysisService` becomes more complex.
-- Split CLI flow documentation by command family once `Program.cs` is decomposed.
+- Remove or rewire the deprecated viscous CLI verbs once migration decisions are final.
+- Document the warm-start flow in more detail if `PolarSweepRunner` starts carrying real BL snapshots.

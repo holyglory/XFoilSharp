@@ -3,17 +3,29 @@ using XFoil.Core.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
+// Legacy audit:
+// Primary legacy source: f_xfoil/src/xfoil.f :: PANGEN
+// Secondary legacy source: f_xfoil/src/xgeom.f :: SCALC/LEFIND
+// Role in port: Builds the default managed panel mesh from normalized geometry.
+// Differences: This file is not a direct PANGEN port; it uses cubic-spline sampling and Gaussian density weights to approximate legacy panel bunching with a simpler managed mesh API.
+// Decision: Keep the managed implementation for default preprocessing. The direct legacy paneling path lives in CosineClusteringPanelDistributor for parity-sensitive work.
 namespace XFoil.Solver.Services;
 
 public sealed class PanelMeshGenerator
 {
     private readonly AirfoilNormalizer normalizer = new();
 
+    // Legacy mapping: managed-only convenience overload around the managed paneling path derived from PANGEN.
+    // Difference from legacy: XFoil does not expose this split overload; the port adds it to centralize default options.
+    // Decision: Keep the overload because it is a clean API wrapper and does not affect parity-sensitive solver math.
     public PanelMesh Generate(AirfoilGeometry geometry, int panelCount)
     {
         return Generate(geometry, panelCount, new PanelingOptions());
     }
 
+    // Legacy mapping: f_xfoil/src/xfoil.f :: PANGEN (managed-derived default mesh generation path).
+    // Difference from legacy: This method normalizes the geometry first and then builds a weighted spline distribution instead of replaying the exact PANGEN curvature-smoothing/Newton redistribution sequence.
+    // Decision: Keep the managed approximation here because it is the default mesh builder; exact legacy paneling is preserved separately in the dedicated parity-oriented distributor.
     public PanelMesh Generate(AirfoilGeometry geometry, int panelCount, PanelingOptions panelingOptions)
     {
         if (geometry is null)
@@ -21,9 +33,11 @@ public sealed class PanelMeshGenerator
             throw new ArgumentNullException(nameof(geometry));
         }
 
-        if (panelCount < 16)
+        if (panelCount < AnalysisSettings.MinimumSupportedPanelCount)
         {
-            throw new ArgumentException("Panel count must be at least 16.", nameof(panelCount));
+            throw new ArgumentException(
+                $"Panel count must be at least {AnalysisSettings.MinimumSupportedPanelCount}.",
+                nameof(panelCount));
         }
 
         if (panelingOptions is null)
@@ -37,6 +51,9 @@ public sealed class PanelMeshGenerator
         var xSpline = new CubicSpline(parameters, sourcePoints.Select(point => point.X).ToArray());
         var ySpline = new CubicSpline(parameters, sourcePoints.Select(point => point.Y).ToArray());
         var totalLength = parameters[^1];
+        // Legacy block: managed replacement for the PANGEN node-spacing stage.
+        // Difference: This block uses sampled curvature and Gaussian LE/TE weighting instead of the legacy diffusion-smoothed curvature and Newton equalization.
+        // Decision: Keep the simpler managed distribution in this file and rely on the direct PANGEN port when binary legacy behavior is needed.
         var targetParameters = BuildWeightedDistribution(
             xSpline,
             ySpline,
@@ -87,6 +104,9 @@ public sealed class PanelMeshGenerator
         return new PanelMesh(nodes, panels, isCounterClockwise);
     }
 
+    // Legacy mapping: managed-derived replacement for f_xfoil/src/xfoil.f :: PANGEN spacing redistribution.
+    // Difference from legacy: The method estimates density from sampled curvature plus LE/TE Gaussian envelopes rather than solving the legacy curvature-smoothing and equal-spacing system.
+    // Decision: Keep this managed weighting model because it is simpler and stable for the default Hess-Smith mesh path.
     private static double[] BuildWeightedDistribution(
         CubicSpline xSpline,
         CubicSpline ySpline,
@@ -161,6 +181,9 @@ public sealed class PanelMeshGenerator
         return result;
     }
 
+    // Legacy mapping: managed-only curvature estimate used by the default mesh distribution.
+    // Difference from legacy: XFoil obtains curvature from spline derivatives, while this helper uses a centered finite-difference estimate on sampled points.
+    // Decision: Keep the simpler estimate because this file is intentionally an approximate paneling path rather than the parity reference.
     private static double EstimateCurvature(AirfoilPoint previous, AirfoilPoint current, AirfoilPoint next, double spacing)
     {
         var dx = (next.X - previous.X) / (2d * spacing);
@@ -176,12 +199,18 @@ public sealed class PanelMeshGenerator
         return Math.Abs((dx * ddy) - (dy * ddx)) / denominator;
     }
 
+    // Legacy mapping: managed-only weighting helper with no direct Fortran analogue.
+    // Difference from legacy: The Gaussian envelope is a managed design choice used to emphasize LE clustering without replaying the legacy curvature diffusion model.
+    // Decision: Keep the helper because it expresses the managed bunching policy clearly.
     private static double Gaussian(double value, double mean, double sigma)
     {
         var distance = value - mean;
         return Math.Exp(-(distance * distance) / (2d * sigma * sigma));
     }
 
+    // Legacy mapping: managed-only inverse-CDF interpolation helper for the weighted mesh distribution.
+    // Difference from legacy: XFoil's direct PANGEN path does not use this binary-search interpolation because it updates node positions through Newton iterations.
+    // Decision: Keep the helper because it is the right fit for the sampled managed distribution used here.
     private static double InterpolateParameter(
         IReadOnlyList<double> parameters,
         IReadOnlyList<double> cumulative,
@@ -212,6 +241,9 @@ public sealed class PanelMeshGenerator
         return parameters[lower] + t * (parameters[upper] - parameters[lower]);
     }
 
+    // Legacy mapping: f_xfoil/src/xgeom.f :: SCALC (managed-derived arc-length accumulation).
+    // Difference from legacy: The managed path computes polyline arc length directly from normalized points instead of working from the legacy spline workspace.
+    // Decision: Keep the direct accumulation because it is sufficient for the default preprocessing mesh.
     private static double[] BuildArcLengthParameters(IReadOnlyList<AirfoilPoint> points)
     {
         var parameters = new double[points.Count];
@@ -225,6 +257,9 @@ public sealed class PanelMeshGenerator
         return parameters;
     }
 
+    // Legacy mapping: managed-only polygon orientation helper with no direct Fortran analogue.
+    // Difference from legacy: The signed-area test is a .NET-side convenience for constructing outward panel normals and is not a named XFoil routine.
+    // Decision: Keep the helper because it makes mesh orientation explicit in the managed API.
     private static double ComputeSignedArea(IReadOnlyList<AirfoilPoint> polygon)
     {
         var area = 0d;

@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xblsys.f :: HST/CFT/DIT correlation constants
+// Role in port: Managed immutable bundle of boundary-layer correlation coefficients used by older surrogate interval workflows.
+// Differences: Legacy XFoil inlines these constants inside correlation routines, while the managed port packages them as a reusable object with an explicit default set.
+// Decision: Keep the managed constants object because it makes correlation tuning and testing explicit.
 namespace XFoil.Solver.Models;
 
 public sealed class BoundaryLayerCorrelationConstants
@@ -13,6 +19,9 @@ public sealed class BoundaryLayerCorrelationConstants
         duxConstant: 1.0d,
         cfScale: 1.0d);
 
+    // Legacy mapping: f_xfoil/src/xblsys.f :: inline correlation constants and derived CT scaling.
+    // Difference from legacy: The constants and the derived `CtConstant` are computed once in a managed constructor instead of being repeated or implicit inside each correlation routine.
+    // Decision: Keep the managed constructor because it centralizes constant definition cleanly.
     public BoundaryLayerCorrelationConstants(
         double shearCoefficientConstant,
         double gaConstant,

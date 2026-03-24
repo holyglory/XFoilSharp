@@ -31,3 +31,11 @@ Whenever code is added, changed, removed, or better understood, the relevant Mar
 ## Completion rule
 
 A code change is not considered complete until the relevant `agents/` docs have been updated and any stale TODOs adjusted.
+
+## Continuation rule
+
+If the user explicitly says to continue until a task is finished, documentation updates and verified sub-batches are not stopping points.
+
+- Do not stop after a partial doc batch, partial audit count, or successful build if unreviewed files or unfinished requested steps remain.
+- Continue directly into the next pending file or subtask unless the work is actually complete or a real blocker must be reported.
+- Do not stop merely to report progress. Report progress in commentary and keep working in the same turn until the requested scope is actually complete or blocked.

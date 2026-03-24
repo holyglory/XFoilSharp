@@ -1,3 +1,9 @@
+// Legacy audit:
+// Primary legacy source: none
+// Secondary legacy source: f_xfoil/src/xbl.f :: viscous operating-point state, f_xfoil/src/xfoil.f :: CDCALC reporting lineage
+// Role in port: Managed immutable result for one converged viscous operating point, including drag, transitions, profiles, and convergence history.
+// Differences: Legacy XFoil leaves the same outputs distributed across many solver arrays and reporting scalars, while the managed port packages them into one explicit result object.
+// Decision: Keep the managed result object because it is the correct API boundary for viscous analysis output.
 using System.Collections.Generic;
 
 namespace XFoil.Solver.Models;
