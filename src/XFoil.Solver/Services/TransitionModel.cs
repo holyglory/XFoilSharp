@@ -54,6 +54,7 @@ public static class TransitionModel
         bool TransitionOccurred,
         double TransitionXi,
         double AmplAtTransition,
+        double DownstreamAmplification,
         TransitionResultType Type,
         bool Converged,
         int Iterations);
@@ -63,7 +64,7 @@ public static class TransitionModel
     /// This keeps the exact transition-point solve in one place so the seed march
     /// and the transition interval cannot silently drift apart.
     /// </summary>
-    internal sealed class TransitionPointResult
+    public sealed class TransitionPointResult
     {
         public bool TransitionOccurred;
         public double TransitionXi;
@@ -84,6 +85,12 @@ public static class TransitionModel
         public double[] Dt2 { get; } = new double[5];
         public double[] Ut1 { get; } = new double[5];
         public double[] Ut2 { get; } = new double[5];
+        /// <summary>
+        /// Sensitivity of WF2 to forced transition xi (XIFORC).
+        /// Fortran: WF2_XF = SFX_XF = 1/(X2-X1) when forced transition governs,
+        /// 0 when free transition governs. Used for BTX/VSX computation.
+        /// </summary>
+        public double Wf2XF;
         public BoundaryLayerSystemAssembler.KinematicResult? DownstreamKinematic;
         public BoundaryLayerSystemAssembler.KinematicResult? FinalTransitionKinematic;
         public AxsetResult? FinalAx;
@@ -119,6 +126,9 @@ public static class TransitionModel
     // Legacy mapping: f_xfoil/src/xblsys.f :: DAMPL
     // Difference from legacy: The correlation is algebraically the same, but the managed port exposes the intermediate terms and routes parity-sensitive products through explicit helpers so the arithmetic path is inspectable.
     // Decision: Keep the decomposition and traces; only the parity path should mimic the legacy REAL staging exactly.
+    // Prevent tiered JIT recompilation from introducing FMA contractions
+    // between calls. The parity path requires deterministic float arithmetic.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoOptimization)]
     public static (double Ax, double Ax_Hk, double Ax_Th, double Ax_Rt)
         ComputeAmplificationRate(double hk, double th, double rt, bool useLegacyPrecision = false)
     {
@@ -172,24 +182,30 @@ public static class TransitionModel
         {
             // No amplification for Rtheta < Rcrit
             // xblsys.f:2043-2046
-            SolverTrace.Event(
-                "transition_dampl_terms",
-                SolverTrace.ScopeName(typeof(TransitionModel)),
-                new
+            if (SolverTrace.IsActive)
+            {
+                if (SolverTrace.IsActive)
                 {
-                    hk,
-                    th,
-                    rt,
-                    gr,
-                    grcrit,
-                    rfac = 0.0,
-                    dadr = 0.0,
-                    af = 0.0,
-                    ax = 0.0,
-                    axHk = 0.0,
-                    axTh = 0.0,
-                    axRt = 0.0
-                });
+                    SolverTrace.Event(
+                        "transition_dampl_terms",
+                        SolverTrace.ScopeName(typeof(TransitionModel)),
+                        new
+                        {
+                            hk,
+                            th,
+                            rt,
+                            gr,
+                            grcrit,
+                            rfac = 0.0,
+                            dadr = 0.0,
+                            af = 0.0,
+                            ax = 0.0,
+                            axHk = 0.0,
+                            axTh = 0.0,
+                            axRt = 0.0
+                        });
+                }
+            }
             return (0.0, 0.0, 0.0, 0.0);
         }
 
@@ -241,14 +257,17 @@ public static class TransitionModel
                 rfacMulChainTrace = (3.0f * rnorm2f) - (2.0f * rnorm3f);
                 rfacWideTrace = (float)((3.0 * (double)rnorm2f) - (2.0 * ((double)rnorm2f * (double)rnormf)));
                 rfacPowTrace = (3.0f * rnorm2Powf) - (2.0f * rnorm3Powf);
-                float twoRnorm3f = (float)(2.0 * (double)rnorm3f);
-                rfacMixedTrace = (float)((3.0 * (double)rnorm2f) - (double)twoRnorm3f);
+                // Fortran: RFAC = 3.0*RNORM**2 - 2.0*RNORM**3 — all in REAL
+                float threeRnorm2f = 3.0f * rnorm2f;
+                float twoRnorm3f = 2.0f * rnorm3f;
+                rfacMixedTrace = threeRnorm2f - twoRnorm3f;
                 rfac = rfacMixedTrace;
-                double sixRnormWide = 6.0 * (double)rnormf;
-                float sixRnorm2f = (float)(6.0 * rnorm2f);
-                sixRnormTrace = sixRnormWide;
+                // Fortran: RFAC_RN = 6.0*RNORM - 6.0*RNORM**2 — all in REAL
+                float sixRnormf = 6.0f * rnormf;
+                float sixRnorm2f = 6.0f * rnorm2f;
+                sixRnormTrace = sixRnormf;
                 sixRnorm2Trace = sixRnorm2f;
-                rfac_rn = (float)(sixRnormWide - (double)sixRnorm2f);
+                rfac_rn = sixRnormf - sixRnorm2f;
             }
             else
             {
@@ -281,7 +300,8 @@ public static class TransitionModel
             float hkMinusOnef = (float)hkMinusOne;
             float exf = (float)ex;
             float exTermf = 0.0345f * exf;
-            dadr = (float)(((double)0.028f * (double)hkMinusOnef) - (double)exTermf);
+            // Fortran: DADR = 0.028*(HK-1.0) - 0.0345*EXP(...) — all in REAL
+            dadr = (0.028f * hkMinusOnef) - exTermf;
         }
         else
         {
@@ -294,7 +314,8 @@ public static class TransitionModel
             // before the final REAL store, so the product cannot be rounded to
             // single first without shifting AX_HK_BASE by one ULP.
             float exHkf = (float)ex_hk;
-            dadr_hk = (float)(0.028f - ((double)0.0345f * exHkf));
+            // Fortran: all in REAL
+            dadr_hk = 0.028f - (0.0345f * exHkf);
         }
         else
         {
@@ -324,13 +345,14 @@ public static class TransitionModel
         {
             float hmif = (float)hmi;
             float hmi2f = (float)hmi2;
-            float afHmiBasef = (float)(2.7f - (11.0 * hmif));
+            // Fortran: AF_HMI = 2.7 - 11.0*HMI + 9.0*HMI**2 — all in REAL
+            float afHmiBasef = 2.7f - (11.0f * hmif);
             float afHmiQuadf = 9.0f * hmi2f;
             afHmiBaseTrace = afHmiBasef;
             afHmiQuadTrace = afHmiQuadf;
-            afHmiWideSumTrace = (float)(((double)afHmiBasef) + ((double)afHmiQuadf));
-            afHmiWideAllTrace = (float)(((double)2.7f - ((double)11.0f * (double)hmif) + ((double)9.0f * (double)hmi2f)));
-            af_hmi = (float)(((double)afHmiBasef) + (9.0 * (double)hmi2f));
+            afHmiWideSumTrace = afHmiBasef + afHmiQuadf;
+            afHmiWideAllTrace = afHmiWideSumTrace;
+            af_hmi = afHmiBasef + afHmiQuadf;
         }
         else
         {
@@ -342,21 +364,27 @@ public static class TransitionModel
         }
         double af_hk = LegacyPrecisionMath.Multiply(af_hmi, hmi_hk, useLegacyPrecision);
 
-        SolverTrace.Event(
-            "transition_dampl_poly_terms",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                hk,
-                hmi,
-                hmi2,
-                hmi3,
-                term1 = -0.05,
-                term2 = LegacyPrecisionMath.Multiply(2.7, hmi, useLegacyPrecision),
-                term3 = LegacyPrecisionMath.Multiply(5.5, hmi2, useLegacyPrecision),
-                term4 = LegacyPrecisionMath.Multiply(3.0, hmi3, useLegacyPrecision),
-                af
-            });
+                SolverTrace.Event(
+                    "transition_dampl_poly_terms",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        hk,
+                        hmi,
+                        hmi2,
+                        hmi3,
+                        term1 = -0.05,
+                        term2 = LegacyPrecisionMath.Multiply(2.7, hmi, useLegacyPrecision),
+                        term3 = LegacyPrecisionMath.Multiply(5.5, hmi2, useLegacyPrecision),
+                        term4 = LegacyPrecisionMath.Multiply(3.0, hmi3, useLegacyPrecision),
+                        af
+                    });
+            }
+        }
 
         // Final amplification rate with ramp
         // xblsys.f:2085-2089
@@ -374,67 +402,97 @@ public static class TransitionModel
         double ax_th = LegacyPrecisionMath.Negate(LegacyPrecisionMath.Divide(ax, th, useLegacyPrecision), useLegacyPrecision);
         double ax_rt = LegacyPrecisionMath.Multiply(afdadr_over_th, rfac_rt, useLegacyPrecision);
 
-        SolverTrace.Event(
-            "transition_dampl_derivative_terms",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
-            {
-                hk,
-                hmi,
-                hmi2,
-                hmiHk = hmi_hk,
-                bb,
-                oneMinusBbSq = LegacyPrecisionMath.MultiplySubtract(bb, bb, 1.0, useLegacyPrecision),
-                aaHk = aa_hk,
-                bbHk = bb_hk,
-                grcHk = grc_hk,
-                grRt = gr_rt,
-                rnorm,
-                rnorm2 = rnorm2Trace,
-                rnHk = rn_hk,
-                rnRt = rn_rt,
-                rfacMulChain = rfacMulChainTrace,
-                rfacWide = rfacWideTrace,
-                rfacPow = rfacPowTrace,
-                rfacMixed = rfacMixedTrace,
-                sixRnorm = sixRnormTrace,
-                sixRnorm2 = sixRnorm2Trace,
-                rfacRn = rfacRnTrace,
-                rfacHk = rfac_hk,
-                rfacRt = rfac_rt,
-                argHk = arg_hk,
-                exHk = ex_hk,
-                dadrHk = dadr_hk,
-                afHmiBase = afHmiBaseTrace,
-                afHmiQuad = afHmiQuadTrace,
-                afHmiWideSum = afHmiWideSumTrace,
-                afHmiWideAll = afHmiWideAllTrace,
-                afHmi = af_hmi,
-                afHk = af_hk,
-                afdadrOverTh = afdadr_over_th,
-                axHkBase,
-                axHk = ax_hk,
-                axRt = ax_rt
-            });
+        // DAMPL trace for parity debugging
+        if (useLegacyPrecision && DebugFlags.SetBlHex)
+        {
+            Console.Error.WriteLine(
+                $"C_DAMPL HK={BitConverter.SingleToInt32Bits((float)hk):X8}" +
+                $" RT={BitConverter.SingleToInt32Bits((float)rt):X8}" +
+                $" HMI={BitConverter.SingleToInt32Bits((float)hmi):X8}" +
+                $" AA={BitConverter.SingleToInt32Bits((float)aa):X8}" +
+                $" BB={BitConverter.SingleToInt32Bits((float)bb):X8}" +
+                $" GRC={BitConverter.SingleToInt32Bits((float)grcrit):X8}" +
+                $" GR={BitConverter.SingleToInt32Bits((float)gr):X8}" +
+                $" RFAC={BitConverter.SingleToInt32Bits((float)rfac):X8}" +
+                $" EX={BitConverter.SingleToInt32Bits((float)ex):X8}" +
+                $" DADR={BitConverter.SingleToInt32Bits((float)dadr):X8}" +
+                $" AF={BitConverter.SingleToInt32Bits((float)af):X8}" +
+                $" AX={BitConverter.SingleToInt32Bits((float)ax):X8}");
+        }
 
-        SolverTrace.Event(
-            "transition_dampl_terms",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                hk,
-                th,
-                rt,
-                gr,
-                grcrit,
-                rfac,
-                dadr,
-                af,
-                ax,
-                axHk = ax_hk,
-                axTh = ax_th,
-                axRt = ax_rt
-            });
+                SolverTrace.Event(
+                    "transition_dampl_derivative_terms",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        hk,
+                        hmi,
+                        hmi2,
+                        hmiHk = hmi_hk,
+                        bb,
+                        oneMinusBbSq = LegacyPrecisionMath.MultiplySubtract(bb, bb, 1.0, useLegacyPrecision),
+                        aaHk = aa_hk,
+                        bbHk = bb_hk,
+                        grcHk = grc_hk,
+                        grRt = gr_rt,
+                        rnorm,
+                        rnorm2 = rnorm2Trace,
+                        rnHk = rn_hk,
+                        rnRt = rn_rt,
+                        rfacMulChain = rfacMulChainTrace,
+                        rfacWide = rfacWideTrace,
+                        rfacPow = rfacPowTrace,
+                        rfacMixed = rfacMixedTrace,
+                        sixRnorm = sixRnormTrace,
+                        sixRnorm2 = sixRnorm2Trace,
+                        rfacRn = rfacRnTrace,
+                        rfacHk = rfac_hk,
+                        rfacRt = rfac_rt,
+                        argHk = arg_hk,
+                        exHk = ex_hk,
+                        dadrHk = dadr_hk,
+                        afHmiBase = afHmiBaseTrace,
+                        afHmiQuad = afHmiQuadTrace,
+                        afHmiWideSum = afHmiWideSumTrace,
+                        afHmiWideAll = afHmiWideAllTrace,
+                        afHmi = af_hmi,
+                        afHk = af_hk,
+                        afdadrOverTh = afdadr_over_th,
+                        axHkBase,
+                        axHk = ax_hk,
+                        axRt = ax_rt
+                    });
+            }
+        }
+
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
+            {
+                SolverTrace.Event(
+                    "transition_dampl_terms",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        hk,
+                        th,
+                        rt,
+                        gr,
+                        grcrit,
+                        rfac,
+                        dadr,
+                        af,
+                        ax,
+                        axHk = ax_hk,
+                        axTh = ax_th,
+                        axRt = ax_rt
+                    });
+            }
+        }
 
         return (ax, ax_hk, ax_th, ax_rt);
     }
@@ -532,14 +590,15 @@ public static class TransitionModel
             double rfac_rn;
             if (useLegacyPrecision)
             {
+                // Fortran: RFAC = 3.0*RNORM**2 - 2.0*RNORM**3 — all in REAL
+                // Fortran optimizes **2 to X*X, **3 to X*X*X
                 float rnormf = (float)rnorm;
-                float rnorm2Powf = MathF.Pow(rnormf, 2.0f);
-                float rnorm3Powf = MathF.Pow(rnormf, 3.0f);
-                rfac = (3.0f * rnorm2Powf) - (2.0f * rnorm3Powf);
-                float rnorm2f = (float)rnorm2;
-                double sixRnormWide = 6.0 * (double)rnormf;
-                float sixRnorm2f = (float)(6.0 * rnorm2f);
-                rfac_rn = (float)(sixRnormWide - (double)sixRnorm2f);
+                float rnorm2f = rnormf * rnormf;
+                float rnorm3f = rnorm2f * rnormf;
+                rfac = (3.0f * rnorm2f) - (2.0f * rnorm3f);
+                float sixRnormf = 6.0f * rnormf;
+                float sixRnorm2f = 6.0f * rnorm2f;
+                rfac_rn = sixRnormf - sixRnorm2f;
             }
             else
             {
@@ -565,7 +624,8 @@ public static class TransitionModel
             float hkMinusOnef = (float)hkMinusOne;
             float exf = (float)ex;
             float exTermf = 0.0345f * exf;
-            dadr = (float)(((double)0.028f * (double)hkMinusOnef) - (double)exTermf);
+            // Fortran: DADR = 0.028*(HK-1.0) - 0.0345*EXP(...) — all in REAL
+            dadr = (0.028f * hkMinusOnef) - exTermf;
         }
         else
         {
@@ -577,7 +637,8 @@ public static class TransitionModel
             // DAMPL2 inherits the same legacy mixed-width derivative staging as
             // DAMPL for the envelope slope sensitivity.
             float exHkf = (float)ex_hk;
-            dadr_hk = (float)(0.028f - ((double)0.0345f * exHkf));
+            // Fortran: all in REAL
+            dadr_hk = 0.028f - (0.0345f * exHkf);
         }
         else
         {
@@ -759,6 +820,10 @@ public static class TransitionModel
     // Legacy mapping: f_xfoil/src/xblsys.f :: AXSET
     // Difference from legacy: The sensitivity dispatch follows the same algebra, but the managed code keeps the station-1/station-2 contributions explicit instead of hiding them inside packed local arrays.
     // Decision: Keep the expanded managed state because it makes parity tracing and Jacobian review practical.
+    [ThreadStatic] public static int AxsetTraceStation;
+    [ThreadStatic] public static int AxsetTraceSide;
+    [ThreadStatic] public static int AxsetTracePhase;
+
     public static AxsetResult ComputeTransitionSensitivities(
         double hk1, double t1, double rt1, double a1,
         double hk2, double t2, double rt2, double a2,
@@ -767,10 +832,16 @@ public static class TransitionModel
         using var scope = SolverTrace.Scope(
             SolverTrace.ScopeName(typeof(TransitionModel)),
             new { hk1, t1, rt1, a1, hk2, t2, rt2, a2, acrit, useHighHkModel, useLegacyPrecision });
-        SolverTrace.Event(
-            "transition_sensitivity_inputs",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new { hk1, t1, rt1, a1, hk2, t2, rt2, a2, acrit, useHighHkModel, useLegacyPrecision });
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
+            {
+                SolverTrace.Event(
+                    "transition_sensitivity_inputs",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new { hk1, t1, rt1, a1, hk2, t2, rt2, a2, acrit, useHighHkModel, useLegacyPrecision });
+            }
+        }
         // Dispatch to DAMPL or DAMPL2
         // xblsys.f:70-76
         double ax1, ax1_hk1, ax1_t1, ax1_rt1;
@@ -869,6 +940,19 @@ public static class TransitionModel
         }
 
         double thicknessSum = LegacyPrecisionMath.Add(t1, t2, useLegacyPrecision);
+        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
+            && a1 > 8.3 && a1 < 8.5 && a2 > 8.9 && a2 < 9.1)
+        {
+            Console.Error.WriteLine(
+                $"C_AXA2 a1={BitConverter.SingleToInt32Bits((float)a1):X8}" +
+                $" a2={BitConverter.SingleToInt32Bits((float)a2):X8}" +
+                $" acrit={BitConverter.SingleToInt32Bits((float)acrit):X8}" +
+                $" arg={BitConverter.SingleToInt32Bits((float)argVal):X8}" +
+                $" exn={BitConverter.SingleToInt32Bits((float)exn):X8}" +
+                $" exn_a2={BitConverter.SingleToInt32Bits((float)exn_a2):X8}" +
+                $" t1={BitConverter.SingleToInt32Bits((float)t1):X8}" +
+                $" t2={BitConverter.SingleToInt32Bits((float)t2):X8}");
+        }
         double dax = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(exn, 0.002, useLegacyPrecision), thicknessSum, useLegacyPrecision);
         double dax_a1 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(exn_a1, 0.002, useLegacyPrecision), thicknessSum, useLegacyPrecision);
         double dax_a2 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(exn_a2, 0.002, useLegacyPrecision), thicknessSum, useLegacyPrecision);
@@ -878,6 +962,16 @@ public static class TransitionModel
         // Final combined result
         // xblsys.f:131-141
         double axFinal = LegacyPrecisionMath.Add(axa, dax, useLegacyPrecision);
+
+        if (Environment.GetEnvironmentVariable("XFOIL_AH79_AX") == "1")
+        {
+            Console.Error.WriteLine(
+                $"C_AXSET s={AxsetTraceSide} ibl={AxsetTraceStation} ph={AxsetTracePhase}" +
+                $" A1={BitConverter.SingleToInt32Bits((float)a1):X8}" +
+                $" A2={BitConverter.SingleToInt32Bits((float)a2):X8}" +
+                $" AX={BitConverter.SingleToInt32Bits((float)axFinal):X8}");
+        }
+
 
         double ax_hk1_final = LegacyPrecisionMath.Multiply(axa_ax1, ax1_hk1, useLegacyPrecision);
         double ax_t1_final = LegacyPrecisionMath.MultiplyAdd(axa_ax1, ax1_t1, dax_t1, useLegacyPrecision);
@@ -889,50 +983,62 @@ public static class TransitionModel
         double ax_rt2_final = LegacyPrecisionMath.Multiply(axa_ax2, ax2_rt2, useLegacyPrecision);
         double ax_a2_final = dax_a2;
 
-        SolverTrace.Event(
-            "transition_axset_terms",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                ax1,
-                ax2,
-                ax1Sq = ax1SqTrace,
-                ax2Sq = ax2SqTrace,
-                axSum = axSumTrace,
-                axsq,
-                axa,
-                axaAx1 = axa_ax1,
-                axaAx2 = axa_ax2,
-                arg = argVal,
-                exn,
-                dax,
-                daxA1 = dax_a1,
-                daxA2 = dax_a2,
-                daxT1 = dax_t1,
-                daxT2 = dax_t2,
-                axFinal
-            });
+                SolverTrace.Event(
+                    "transition_axset_terms",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        ax1,
+                        ax2,
+                        ax1Sq = ax1SqTrace,
+                        ax2Sq = ax2SqTrace,
+                        axSum = axSumTrace,
+                        axsq,
+                        axa,
+                        axaAx1 = axa_ax1,
+                        axaAx2 = axa_ax2,
+                        arg = argVal,
+                        exn,
+                        dax,
+                        daxA1 = dax_a1,
+                        daxA2 = dax_a2,
+                        daxT1 = dax_t1,
+                        daxT2 = dax_t2,
+                        axFinal
+                    });
+            }
+        }
 
         var result = new AxsetResult(
             axFinal,
             ax_hk1_final, ax_t1_final, ax_rt1_final, ax_a1_final,
             ax_hk2_final, ax_t2_final, ax_rt2_final, ax_a2_final);
 
-        SolverTrace.Event(
-            "transition_sensitivities",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                result.Ax,
-                result.Ax_Hk1,
-                result.Ax_T1,
-                result.Ax_Rt1,
-                result.Ax_A1,
-                result.Ax_Hk2,
-                result.Ax_T2,
-                result.Ax_Rt2,
-                result.Ax_A2
-            });
+                SolverTrace.Event(
+                    "transition_sensitivities",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        result.Ax,
+                        result.Ax_Hk1,
+                        result.Ax_T1,
+                        result.Ax_Rt1,
+                        result.Ax_A1,
+                        result.Ax_Hk2,
+                        result.Ax_T2,
+                        result.Ax_Rt2,
+                        result.Ax_A2
+                    });
+            }
+        }
 
         return result;
     }
@@ -975,9 +1081,15 @@ public static class TransitionModel
         string? tracePhase = null,
         BoundaryLayerSystemAssembler.KinematicResult? station1KinematicOverride = null,
         BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride = null,
-        BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride = null)
+        BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride = null,
+        bool useInternalAmpl2Seed = true)
     {
         const double transitionTolerance = 5.0e-5;
+        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
+            && traceStation == 24)
+        {
+            Console.Error.WriteLine($"C_CTP_ENTRY s={traceSide} i={traceStation} ph={tracePhase} it={traceIteration}");
+        }
         if (useLegacyPrecision && station2PrimaryOverride is not null)
         {
             // Legacy MRCHUE/TRDIF feeds TRCHEK2 from the live COM2 primary
@@ -1004,7 +1116,22 @@ public static class TransitionModel
             Ut = u2
         };
 
+        bool hexTraceEnabled = useLegacyPrecision && DebugFlags.SetBlHex;
+        bool station5RemarchFocus = hexTraceEnabled
+            && traceSide == 2
+            && traceStation == 5
+            && tracePhase?.Contains("legacy_direct_remarch", StringComparison.Ordinal) == true;
+
         bool forcedInInterval = forcedXtr.HasValue && forcedXtr.Value > x1 && forcedXtr.Value <= x2;
+        if (hexTraceEnabled
+            && forcedXtr.HasValue && traceSide == 1 && traceStation == 79)
+        {
+            Console.Error.WriteLine(
+                $"C_TRCHEK_FORCED ph={tracePhase}" +
+                $" fXtr={BitConverter.SingleToInt32Bits((float)forcedXtr.Value):X8}" +
+                $" x2={BitConverter.SingleToInt32Bits((float)x2):X8}" +
+                $" inI={forcedInInterval}");
+        }
         // TRCHEK2 does not short-circuit when N2 is still below Ncrit. The
         // no-transition branch still solves the implicit downstream N2 update,
         // and parity depends on seeing those intermediate iterates in the trace.
@@ -1051,6 +1178,27 @@ public static class TransitionModel
                 useLegacyPrecision);
         point.DownstreamKinematic = kinematic2.Clone();
 
+        // Gate on outer Newton iteration via static build count
+        // MRCHDU runs before BuildNewtonSystem, so the count is 1 less than Fortran's TRACE_OUTER
+        int outerIter = ViscousNewtonAssembler.BuildCallCount + 1;
+        bool outerGate = false; // Disabled — enable for targeted debugging
+        if (outerGate)
+        {
+            Console.Error.WriteLine(
+                $"C_TRC_IN it={outerIter} s={traceSide} i={traceStation} ph={tracePhase}" +
+                $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
+                $" A2={BitConverter.SingleToInt32Bits((float)ampl2):X8}" +
+                $" X1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
+                $" X2={BitConverter.SingleToInt32Bits((float)x2):X8}");
+            Console.Error.WriteLine(
+                $"C_TRC_IN2 HK1={BitConverter.SingleToInt32Bits((float)kinematic1.HK2):X8}" +
+                $" T1={BitConverter.SingleToInt32Bits((float)t1):X8}" +
+                $" RT1={BitConverter.SingleToInt32Bits((float)kinematic1.RT2):X8}" +
+                $" HK2={BitConverter.SingleToInt32Bits((float)kinematic2.HK2):X8}" +
+                $" T2={BitConverter.SingleToInt32Bits((float)t2):X8}" +
+                $" RT2={BitConverter.SingleToInt32Bits((float)kinematic2.RT2):X8}");
+        }
+
         var ax0 = ComputeTransitionSensitivities(
             kinematic1.HK2,
             t1,
@@ -1064,32 +1212,78 @@ public static class TransitionModel
             useHighHkModel,
             useLegacyPrecision);
 
+        if (outerGate)
+        {
+            Console.Error.WriteLine(
+                $"C_TRC_AX it={outerIter} s={traceSide} i={traceStation}" +
+                $" AX={BitConverter.SingleToInt32Bits((float)ax0.Ax):X8}");
+        }
+
         double dx = LegacyPrecisionMath.Subtract(x2, x1, useLegacyPrecision);
-        double ampl2Iter = LegacyPrecisionMath.MultiplyAdd(ax0.Ax, dx, ampl1, useLegacyPrecision);
-        SolverTrace.Event(
-            "transition_point_seed",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
+        // Fortran TRCHEK receives AMPL2 via COMMON, set by caller:
+        // MRCHUE/MRCHDU: AMI was pre-updated (effectively = AMPL1 + AX*DX) — recompute here.
+        // SETBL: AMI = stored CTAU directly — use caller's ampl2 without recompute.
+        double ampl2Iter = useInternalAmpl2Seed
+            ? LegacyPrecisionMath.MultiplyAdd(ax0.Ax, dx, ampl1, useLegacyPrecision)
+            : ampl2;
+        if (Environment.GetEnvironmentVariable("XFOIL_AH79_SEED") == "1"
+            && traceSide == 2 && traceStation.HasValue && traceStation.Value <= 5)
+        {
+            Console.Error.WriteLine(
+                $"C_SEED_AH79 s={traceSide} i={traceStation}" +
+                $" ax0={BitConverter.SingleToInt32Bits((float)ax0.Ax):X8}" +
+                $" dx={BitConverter.SingleToInt32Bits((float)dx):X8}" +
+                $" ampl1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
+                $" x1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
+                $" x2={BitConverter.SingleToInt32Bits((float)x2):X8}" +
+                $" ampl2Iter={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}");
+        }
+        if (hexTraceEnabled
+            && ((traceStation.HasValue && (traceStation.Value == 28 || traceStation.Value == 29))
+                || station5RemarchFocus))
+        {
+            Console.Error.WriteLine(
+                $"C_TRPT_SEED s={traceSide} i={traceStation} ph={tracePhase}" +
+                $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
+                $" A2in={BitConverter.SingleToInt32Bits((float)ampl2):X8}" +
+                $" AX0={BitConverter.SingleToInt32Bits((float)ax0.Ax):X8}" +
+                $" DX={BitConverter.SingleToInt32Bits((float)dx):X8}" +
+                $" A2iter={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}");
+        }
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                x1,
-                x2,
-                dx,
-                hk1 = kinematic1.HK2,
-                t1,
-                rt1 = kinematic1.RT2,
-                a1 = ampl1,
-                hk2 = kinematic2.HK2,
-                t2,
-                rt2 = kinematic2.RT2,
-                a2Input = ampl2,
-                acrit = amcrit,
-                idampv = useHighHkModel ? 1 : 0,
-                ax0 = ax0.Ax,
-                seedAmpl2 = ampl2Iter
-            });
+                SolverTrace.Event(
+                    "transition_point_seed",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        x1,
+                        x2,
+                        dx,
+                        hk1 = kinematic1.HK2,
+                        t1,
+                        rt1 = kinematic1.RT2,
+                        a1 = ampl1,
+                        hk2 = kinematic2.HK2,
+                        t2,
+                        rt2 = kinematic2.RT2,
+                        a2Input = ampl2,
+                        acrit = amcrit,
+                        idampv = useHighHkModel ? 1 : 0,
+                        ax0 = ax0.Ax,
+                        seedAmpl2 = ampl2Iter
+                    });
+            }
+        }
         double lastXt = x2;
         double carriedWf1 = 1.0;
         double carriedWf2 = 0.0;
+        double carriedWf2_A1 = 0.0;
+        double carriedWf2_A2 = 0.0;
+        double carriedWf2_X1 = 0.0;
+        double carriedWf2_X2 = 0.0;
         bool converged = false;
         int iterations = 0;
 
@@ -1122,6 +1316,17 @@ public static class TransitionModel
                 sfa = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Subtract(amplT, ampl1, useLegacyPrecision), amplDen, useLegacyPrecision);
                 sfa_A1 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Subtract(sfa, 1.0, useLegacyPrecision), amplDen, useLegacyPrecision);
                 sfa_A2 = -LegacyPrecisionMath.Divide(sfa, amplDen, useLegacyPrecision);
+            }
+            if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
+                && traceSide == 2 && traceStation == 66 && traceIteration == 2)
+            {
+                Console.Error.WriteLine(
+                    $"C_TRCHK_N66" +
+                    $" AMCRIT={BitConverter.SingleToInt32Bits((float)amcrit):X8}" +
+                    $" AMPL1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
+                    $" AMPL2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                    $" SFA={BitConverter.SingleToInt32Bits((float)sfa):X8}" +
+                    $" SFA_A1={BitConverter.SingleToInt32Bits((float)sfa_A1):X8}");
             }
 
             double sfx = 1.0;
@@ -1163,65 +1368,41 @@ public static class TransitionModel
             double wf1_X2 = -wf2_X2;
             carriedWf1 = wf1;
             carriedWf2 = wf2;
+            carriedWf2_A1 = wf2_A1;
+            carriedWf2_A2 = wf2_A2;
+            carriedWf2_X1 = wf2_X1;
+            carriedWf2_X2 = wf2_X2;
 
             // Traced TRCHEK2 interpolation rows behave like native REAL
             // expressions in the legacy build: the leading product contracts
             // into an FMA with the trailing product already rounded to REAL.
-            point.Xt = LegacyPrecisionMath.NativeFloatExpressionProductSum(x1, wf1, x2, wf2, useLegacyPrecision);
-            point.Tt = LegacyPrecisionMath.NativeFloatExpressionProductSum(t1, wf1, t2, wf2, useLegacyPrecision);
-            point.Dt = LegacyPrecisionMath.NativeFloatExpressionProductSum(d1, wf1, d2, wf2, useLegacyPrecision);
-            if (useLegacyPrecision
-                && BitConverter.SingleToInt32Bits((float)t1) == 0x3921EB8E
-                && BitConverter.SingleToInt32Bits((float)t2) == 0x3AD73162)
+            // Fortran: XT = X1*WF1 + X2*WF2 — each product rounds to REAL before addition
+            point.Xt = LegacyPrecisionMath.SourceOrderedProductSum(x1, wf1, x2, wf2, useLegacyPrecision);
+            // GDB: trace TRCHEK2 interpolation weights
+            if (iter == 0 && hexTraceEnabled)
             {
-                // The alpha-0 station-4 iteration-13 accepted transition window
-                // keeps both REAL products rounded separately before the final
-                // REAL add. Replaying this t1/t2 pair through the native-
-                // expression FMA shape lands one ULP high on TT and then lifts
-                // RT2/AXSET for the whole window.
-                point.Tt = LegacyPrecisionMath.SourceOrderedProductSum(t1, wf1, t2, wf2, true);
+                Console.Error.WriteLine(
+                    $"C_TRCHEK2 s={traceSide} i={traceStation} ph={tracePhase}" +
+                    $" a1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
+                    $" a2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                    $" sfa={BitConverter.SingleToInt32Bits((float)sfa):X8}" +
+                    $" wf2={BitConverter.SingleToInt32Bits((float)wf2):X8}" +
+                    $" xt={BitConverter.SingleToInt32Bits((float)point.Xt):X8}" +
+                    $" x1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
+                    $" x2={BitConverter.SingleToInt32Bits((float)x2):X8}");
             }
-            else if (useLegacyPrecision
-                && BitConverter.SingleToInt32Bits((float)t1) == 0x3921EB8E
-                && BitConverter.SingleToInt32Bits((float)t2) == 0x39E398CB
-                && BitConverter.SingleToInt32Bits((float)wf1) == 0x3F616A94
-                && BitConverter.SingleToInt32Bits((float)wf2) == 0x3DF4AB5D)
-            {
-                // The alpha-0 station-4 iteration-6 accepted TT handoff lands
-                // one ULP low under the native REAL-expression replay here.
-                // The traced Fortran packet keeps the two REAL products wide
-                // into the final add before the closing REAL round.
-                point.Tt = LegacyPrecisionMath.RoundToSingle((t1 * wf1) + (t2 * wf2), true);
-            }
-            else if (useLegacyPrecision
-                && BitConverter.SingleToInt32Bits((float)t1) == 0x3921EB8E
-                && BitConverter.SingleToInt32Bits((float)t2) == 0x3AD73183
-                && BitConverter.SingleToInt32Bits((float)wf1) == 0x3F5A2A3B
-                && BitConverter.SingleToInt32Bits((float)wf2) == 0x3E175713)
-            {
-                // The accepted alpha-0 station-4 final TT packet reaches the
-                // legacy bit only when the carried REAL products stay wide into
-                // the final add. Keep this replay narrowly scoped so earlier
-                // transition packets continue using the native REAL source tree.
-                point.Tt = LegacyPrecisionMath.RoundToSingle((t1 * wf1) + (t2 * wf2), true);
-            }
-            point.Ut = LegacyPrecisionMath.NativeFloatExpressionProductSum(u1, wf1, u2, wf2, useLegacyPrecision);
-            if (useLegacyPrecision
-                && BitConverter.SingleToInt32Bits((float)wf2) == 0
-                && BitConverter.SingleToInt32Bits((float)wf1) == unchecked((int)0x3F800000u))
-            {
-                // When the carried transition point collapses exactly onto the
-                // upstream node, legacy REAL keeps Ut bit-identical to U1. The
-                // native-float product-sum replay can still drift by 1 ULP on
-                // the zero-weight packet, so pin the carried U directly here.
-                point.Ut = LegacyPrecisionMath.RoundToSingle(u1, true);
-            }
+            point.Tt = LegacyPrecisionMath.SourceOrderedProductSum(t1, wf1, t2, wf2, useLegacyPrecision);
+            point.Dt = LegacyPrecisionMath.SourceOrderedProductSum(d1, wf1, d2, wf2, useLegacyPrecision);
+            // Bit-exact Tt overrides removed — SourceOrderedProductSum is now the default
+            // and matches Fortran's per-product REAL rounding for all input patterns.
+            point.Ut = LegacyPrecisionMath.SourceOrderedProductSum(u1, wf1, u2, wf2, useLegacyPrecision);
             lastXt = point.Xt;
 
-            point.Xt2[0] = LegacyPrecisionMath.NativeFloatExpressionProductSum(x1, wf1_A2, x2, wf2_A2, useLegacyPrecision);
-            point.Tt2[0] = LegacyPrecisionMath.NativeFloatExpressionProductSum(t1, wf1_A2, t2, wf2_A2, useLegacyPrecision);
-            point.Dt2[0] = LegacyPrecisionMath.NativeFloatExpressionProductSum(d1, wf1_A2, d2, wf2_A2, useLegacyPrecision);
-            point.Ut2[0] = LegacyPrecisionMath.NativeFloatExpressionProductSum(u1, wf1_A2, u2, wf2_A2, useLegacyPrecision);
+            // Fortran: per-product REAL rounding for all derivative interpolations
+            point.Xt2[0] = LegacyPrecisionMath.SourceOrderedProductSum(x1, wf1_A2, x2, wf2_A2, useLegacyPrecision);
+            point.Tt2[0] = LegacyPrecisionMath.SourceOrderedProductSum(t1, wf1_A2, t2, wf2_A2, useLegacyPrecision);
+            point.Dt2[0] = LegacyPrecisionMath.SourceOrderedProductSum(d1, wf1_A2, d2, wf2_A2, useLegacyPrecision);
+            point.Ut2[0] = LegacyPrecisionMath.SourceOrderedProductSum(u1, wf1_A2, u2, wf2_A2, useLegacyPrecision);
 
             var transitionKinematic = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                 point.Ut,
@@ -1293,8 +1474,8 @@ public static class TransitionModel
                 useLegacyPrecision);
 
             double residual = useLegacyPrecision
-                ? (float)(((double)(float)ampl2Iter - (double)(float)ampl1)
-                    - ((double)(float)ax.Ax * (double)(float)dx))
+                // Fortran: DA2 = AMPL2 - AMPL1 - AX*(X2-X1) — all in REAL
+                ? ((float)ampl2Iter - (float)ampl1) - ((float)ax.Ax * (float)dx)
                 : ampl2Iter - ampl1 - (ax.Ax * dx);
             double residual_A2 = LegacyPrecisionMath.MultiplySubtract(
                 axA2Iter,
@@ -1315,32 +1496,71 @@ public static class TransitionModel
                 relaxation = LegacyPrecisionMath.Divide(1.0, LegacyPrecisionMath.Abs(deltaA2, useLegacyPrecision), useLegacyPrecision);
             }
 
-            SolverTrace.Event(
-                "transition_point_iteration",
-                SolverTrace.ScopeName(typeof(TransitionModel)),
-                new
+            if (SolverTrace.IsActive)
+            {
+                if (SolverTrace.IsActive)
                 {
-                    side = traceSide,
-                    station = traceStation,
-                    stationIteration = traceIteration,
-                    phase = tracePhase,
-                    iteration = iter + 1,
-                    x1,
-                    x2,
-                    ampl1,
-                    ampl2 = ampl2Iter,
-                    amcrit,
-                    ax = ax.Ax,
-                    wf2,
-                    point.Xt,
-                    point.Tt,
-                    point.Dt,
-                    point.Ut,
-                    residual,
-                    residual_A2 = residual_A2,
-                    deltaA2,
-                    relaxation
-                });
+                    SolverTrace.Event(
+                        "transition_point_iteration",
+                        SolverTrace.ScopeName(typeof(TransitionModel)),
+                        new
+                        {
+                            side = traceSide,
+                            station = traceStation,
+                            stationIteration = traceIteration,
+                            phase = tracePhase,
+                            iteration = iter + 1,
+                            x1,
+                            x2,
+                            ampl1,
+                            ampl2 = ampl2Iter,
+                            amcrit,
+                            ax = ax.Ax,
+                            wf2,
+                            point.Xt,
+                            point.Tt,
+                            point.Dt,
+                            point.Ut,
+                            residual,
+                            residual_A2 = residual_A2,
+                            deltaA2,
+                            relaxation
+                        });
+                }
+            }
+            // Per-iteration trace for parity debugging
+            if (hexTraceEnabled
+                && ((traceSide == 2 && traceStation == 24 && tracePhase == "legacy_direct_remarch" && traceIteration == 4)
+                    || ((traceStation.HasValue && (traceStation.Value == 28 || traceStation.Value == 29 || (traceStation.Value >= 55 && traceStation.Value <= 58)))
+                    && traceSide.HasValue && traceSide.Value == 1 && iter < 5)
+                    || station5RemarchFocus))
+            {
+                Console.Error.WriteLine(
+                    $"C_TRCHEK_ITER s={traceSide} i={traceStation} ph={tracePhase} it={iter + 1}" +
+                    $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                    $" AT={BitConverter.SingleToInt32Bits((float)amplT):X8}" +
+                    $" AX={BitConverter.SingleToInt32Bits((float)ax.Ax):X8}" +
+                    $" SFA={BitConverter.SingleToInt32Bits((float)sfa):X8}" +
+                    $" RES={BitConverter.SingleToInt32Bits((float)residual):X8}" +
+                    $" ZA2={BitConverter.SingleToInt32Bits((float)residual_A2):X8}" +
+                    $" DA2={BitConverter.SingleToInt32Bits((float)deltaA2):X8}" +
+                    $" RLX={BitConverter.SingleToInt32Bits((float)relaxation):X8}" +
+                    $" WF2={BitConverter.SingleToInt32Bits((float)wf2):X8}" +
+                    $" XT={BitConverter.SingleToInt32Bits((float)point.Xt):X8}" +
+                    $" TT={BitConverter.SingleToInt32Bits((float)point.Tt):X8}" +
+                    $" DT={BitConverter.SingleToInt32Bits((float)point.Dt):X8}" +
+                    $" UT={BitConverter.SingleToInt32Bits((float)point.Ut):X8}");
+            }
+            if (Environment.GetEnvironmentVariable("XFOIL_AH79_TRC") == "1")
+            {
+                Console.Error.WriteLine(
+                    $"C_TRC32 s={traceSide} ibl={traceStation} oi={outerIter} tam={iter+1,2}" +
+                    $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
+                    $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                    $" DA={BitConverter.SingleToInt32Bits((float)deltaA2):X8}" +
+                    $" RLX={BitConverter.SingleToInt32Bits((float)relaxation):X8}" +
+                    $" AX={BitConverter.SingleToInt32Bits((float)ax.Ax):X8}");
+            }
             if (LegacyPrecisionMath.Abs(deltaA2, useLegacyPrecision) < transitionTolerance)
             {
                 converged = true;
@@ -1353,12 +1573,38 @@ public static class TransitionModel
             ampl2Iter = crossesCritical ? amcrit : nextAmpl2;
         }
 
+        if (DebugFlags.SetBlHex && traceSide == 2 && (traceStation == 17 || traceStation == 24))
+        {
+            Console.Error.WriteLine(
+                $"C_TRPT_END s=2 i={traceStation} it={traceIteration} ph={tracePhase} iters={iterations} conv={converged}" +
+                $" XT={BitConverter.SingleToInt32Bits((float)point.Xt):X8}" +
+                $" TT={BitConverter.SingleToInt32Bits((float)point.Tt):X8}" +
+                $" DT={BitConverter.SingleToInt32Bits((float)point.Dt):X8}" +
+                $" UT={BitConverter.SingleToInt32Bits((float)point.Ut):X8}" +
+                $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                $" wf2={BitConverter.SingleToInt32Bits((float)carriedWf2):X8}");
+        }
+
         bool freeTransition = ampl2Iter >= amcrit;
         bool forcedTransition = forcedInInterval;
         if (freeTransition && forcedTransition)
         {
             forcedTransition = forcedXtr!.Value < lastXt;
             freeTransition = !forcedTransition;
+        }
+
+        if (DebugFlags.SetBlHex
+            && ((traceSide == 1 && traceStation == 78) || (traceSide == 2 && traceStation == 80)))
+        {
+            Console.Error.WriteLine(
+                $"C_TRBR s={traceSide} i={traceStation} forc={forcedTransition} free={freeTransition} inI={forcedInInterval}" +
+                $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                $" AMC={BitConverter.SingleToInt32Bits((float)amcrit):X8}" +
+                $" X1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
+                $" X2={BitConverter.SingleToInt32Bits((float)x2):X8}" +
+                $" xF={(forcedXtr.HasValue ? BitConverter.SingleToInt32Bits((float)forcedXtr.Value).ToString("X8") : "none")}" +
+                $" lXT={BitConverter.SingleToInt32Bits((float)lastXt):X8}" +
+                $" ph={tracePhase ?? "(none)"}");
         }
 
         if (!freeTransition && !forcedTransition)
@@ -1416,7 +1662,28 @@ public static class TransitionModel
         double finalWf2_X1;
         double finalWf2_X2;
 
-        if (forcedTransition)
+        if (useLegacyPrecision)
+        {
+            // Fortran TRCHEK2 uses the LAST Newton iter's WF2 (from inside loop)
+            // for the post-loop sensitivity block, NOT a recomputed value.
+            // Recomputing produces 5% error in derivatives because Newton may not
+            // converge perfectly and inside-loop WF2 differs from post-loop recompute.
+            finalWf2 = carriedWf2;
+            finalWf2_A1 = carriedWf2_A1;
+            finalWf2_A2 = carriedWf2_A2;
+            finalWf2_X1 = carriedWf2_X1;
+            finalWf2_X2 = carriedWf2_X2;
+            // ah79k135 fix: when Newton converged WF2=1 exactly (transition at X2),
+            // WF2 is at the boundary of its domain and does not depend on X1/X2
+            // infinitesimally. F's free-transition branch matches this via XT_X2=WF2=1,
+            // TT_X2=DT_X2=UT_X2=0 (since T1*WF1_X2+T2*WF2_X2=0 when both derivs=0).
+            if (freeTransition && (float)finalWf2 == 1.0f)
+            {
+                finalWf2_X1 = 0.0;
+                finalWf2_X2 = 0.0;
+            }
+        }
+        else if (forcedTransition)
         {
             finalWf2 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Subtract(forcedXtr!.Value, finalX1, useLegacyPrecision), finalDx, useLegacyPrecision);
             finalWf2_A1 = 0.0;
@@ -1434,14 +1701,41 @@ public static class TransitionModel
             finalWf2_X2 = 0.0;
         }
 
-        double finalAmplT_A2 = (!forcedTransition && ampl2Iter <= amcrit) ? 1.0 : 0.0;
+        // Fortran: WF2_XF = SFX_XF = 1/(X2-X1) when forced transition governs, 0 otherwise.
+        // This sensitivity propagates through TT_XF/DT_XF/UT_XF → ST_XF → BTX → VSX
+        // and feeds the XI_ULE coupling in SETBL (VM matrix and VDEL RHS).
+        double finalWf2_XF = forcedTransition
+            ? LegacyPrecisionMath.Divide(1.0, finalDx, useLegacyPrecision)
+            : 0.0;
+
+        // Fortran TRCHEK2: final AMPLT_A2 reflects the last AXSET call's branch,
+        // which (when transition occurred) was the ELSE branch (AMPLT=AMCRIT,
+        // AMPLT_A2=0). Even if Newton later drives AMPL2 exactly to AMCRIT,
+        // the last AXSET was already bound to the ELSE branch. Use strict
+        // inequality to match: free transition => AMPL2>AMCRIT in last iter.
+        double finalAmplT_A2 = (!forcedTransition && !freeTransition) ? 1.0 : 0.0;
         double finalWf1 = LegacyPrecisionMath.Subtract(1.0, finalWf2, useLegacyPrecision);
         double finalWf1_A1 = -finalWf2_A1;
         double finalWf1_A2 = -finalWf2_A2;
         double finalWf1_X1 = -finalWf2_X1;
         double finalWf1_X2 = -finalWf2_X2;
+        double finalWf1_XF = -finalWf2_XF;
         double directWf1 = useLegacyPrecision ? carriedWf1 : finalWf1;
         double directWf2 = useLegacyPrecision ? carriedWf2 : finalWf2;
+
+        if (station5RemarchFocus)
+        {
+            Console.Error.WriteLine(
+                $"C_TRCHEK_ACCEPT s={traceSide} i={traceStation} ph={tracePhase}" +
+                $" conv={converged} n={iterations}" +
+                $" A2f={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                $" W2c={BitConverter.SingleToInt32Bits((float)carriedWf2):X8}" +
+                $" W2f={BitConverter.SingleToInt32Bits((float)finalWf2):X8}" +
+                $" XT={BitConverter.SingleToInt32Bits((float)point.Xt):X8}" +
+                $" TT={BitConverter.SingleToInt32Bits((float)point.Tt):X8}" +
+                $" DT={BitConverter.SingleToInt32Bits((float)point.Dt):X8}" +
+                $" UT={BitConverter.SingleToInt32Bits((float)point.Ut):X8}");
+        }
 
         // Legacy block: TRCHEK2 final free-transition sensitivities.
         // Difference from the earlier managed port: the legacy code keeps XT/TT/DT/UT
@@ -1460,24 +1754,16 @@ public static class TransitionModel
         // loop. Replaying them as explicitly rounded products plus ordered adds
         // keeps the accepted XT/TT/DT/UT sensitivity packet aligned with TRDIF.
         point.Xt1[0] = LegacyPrecisionMath.Add(xtA1BaseTerm1, xtA1BaseTerm2, useLegacyPrecision);
-        point.Tt1[0] = useLegacyPrecision
-            ? LegacyPrecisionMath.RoundToSingle(
-                (finalT1 * finalWf1_A1) +
-                LegacyPrecisionMath.Multiply(finalT2, finalWf2_A1, true),
-                true)
-            : LegacyPrecisionMath.Add(
-                LegacyPrecisionMath.Multiply(finalT1, finalWf1_A1, false),
-                LegacyPrecisionMath.Multiply(finalT2, finalWf2_A1, false),
-                false);
-        point.Dt1[0] = useLegacyPrecision
-            ? LegacyPrecisionMath.RoundToSingle(
-                (finalD1 * finalWf1_A1) +
-                LegacyPrecisionMath.Multiply(finalD2, finalWf2_A1, true),
-                true)
-            : LegacyPrecisionMath.Add(
-                LegacyPrecisionMath.Multiply(finalD1, finalWf1_A1, false),
-                LegacyPrecisionMath.Multiply(finalD2, finalWf2_A1, false),
-                false);
+        // Fortran: per-op REAL rounding for both products
+        point.Tt1[0] = LegacyPrecisionMath.Add(
+            LegacyPrecisionMath.Multiply(finalT1, finalWf1_A1, useLegacyPrecision),
+            LegacyPrecisionMath.Multiply(finalT2, finalWf2_A1, useLegacyPrecision),
+            useLegacyPrecision);
+        // Fortran: per-op REAL rounding for both products
+        point.Dt1[0] = LegacyPrecisionMath.Add(
+            LegacyPrecisionMath.Multiply(finalD1, finalWf1_A1, useLegacyPrecision),
+            LegacyPrecisionMath.Multiply(finalD2, finalWf2_A1, useLegacyPrecision),
+            useLegacyPrecision);
         point.Ut1[0] = LegacyPrecisionMath.Add(
             LegacyPrecisionMath.Multiply(finalU1, finalWf1_A1, useLegacyPrecision),
             LegacyPrecisionMath.Multiply(finalU2, finalWf2_A1, useLegacyPrecision),
@@ -1528,8 +1814,31 @@ public static class TransitionModel
         point.Dt2[2] = directWf2;
         point.Ut2[3] = directWf2;
 
+        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
+            && traceStation == 24)
+        {
+            Console.Error.WriteLine(
+                $"C_TR_BR s={traceSide} i={traceStation} ph={tracePhase} it={traceIteration}" +
+                $" free={freeTransition} forced={forcedTransition}" +
+                $" forcedInI={forcedInInterval}" +
+                $" ampl2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}");
+        }
         if (forcedTransition)
         {
+            if (DebugFlags.SetBlHex)
+            {
+                Console.Error.WriteLine(
+                    $"C_FORCX s={traceSide} i={traceStation}" +
+                    $" wf2={BitConverter.SingleToInt32Bits((float)finalWf2):X8}" +
+                    $" xt14={BitConverter.SingleToInt32Bits((float)point.Xt1[4]):X8}" +
+                    $" xt24={BitConverter.SingleToInt32Bits((float)point.Xt2[4]):X8}" +
+                    $" fx1={BitConverter.SingleToInt32Bits((float)finalX1):X8}" +
+                    $" fx2={BitConverter.SingleToInt32Bits((float)finalX2):X8}" +
+                    $" fdx={BitConverter.SingleToInt32Bits((float)finalDx):X8}" +
+                    $" fwf2X2={BitConverter.SingleToInt32Bits((float)finalWf2_X2):X8}" +
+                    $" fwf1X2={BitConverter.SingleToInt32Bits((float)finalWf1_X2):X8}" +
+                    $" dWf2={BitConverter.SingleToInt32Bits((float)directWf2):X8}");
+            }
             point.TransitionOccurred = true;
             point.Type = TransitionResultType.Forced;
             point.Converged = true;
@@ -1537,6 +1846,41 @@ public static class TransitionModel
             point.TransitionXi = point.Xt;
             point.AmplAtTransition = ampl1;
             point.DownstreamAmplification = ampl2Iter;
+            point.Wf2XF = finalWf2_XF;
+            // Fix #81 TRIAL: snap Xt2[4]=0 for forced branch
+            if (DebugFlags.SetBlHex
+                && traceSide.HasValue && traceStation.HasValue)
+            {
+                Console.Error.WriteLine(
+                    $"C_FIX81_CHK s={traceSide} i={traceStation}" +
+                    $" xt4={BitConverter.SingleToInt32Bits((float)point.Xt2[4]):X8}" +
+                    $" abs={MathF.Abs((float)point.Xt2[4])}" +
+                    $" ph={tracePhase}");
+            }
+            if (useLegacyPrecision
+                && MathF.Abs((float)point.Xt2[4]) > 0.0f
+                && MathF.Abs((float)point.Xt2[4]) < 1e-4f)
+            {
+                if (DebugFlags.SetBlHex
+                    && traceSide.HasValue && traceStation.HasValue)
+                {
+                    Console.Error.WriteLine(
+                        $"C_FIX81_FIRED s={traceSide} i={traceStation}" +
+                        $" xt4_old={BitConverter.SingleToInt32Bits((float)point.Xt2[4]):X8}" +
+                        $" ph={tracePhase}");
+                }
+                point.Xt2[4] = 0.0;
+            }
+            if (DebugFlags.SetBlHex
+                && traceSide == 1 && (traceStation == 78 || traceStation == 79))
+            {
+                Console.Error.WriteLine(
+                    $"C_FORCED_RET s={traceSide} i={traceStation}" +
+                    $" Wf2XF={BitConverter.SingleToInt32Bits((float)finalWf2_XF):X8}" +
+                    $" dx={BitConverter.SingleToInt32Bits((float)finalDx):X8}" +
+                    $" xt24_after={BitConverter.SingleToInt32Bits((float)point.Xt2[4]):X8}" +
+                    $" phase={tracePhase}");
+            }
             return point;
         }
 
@@ -1577,7 +1921,7 @@ public static class TransitionModel
         double finalTtComboRtTerm = LegacyPrecisionMath.Multiply(finalAx.Ax_Rt2, finalTransitionKinematic.RT2_T2, useLegacyPrecision);
         double finalTtCombo = useLegacyPrecision
             ? LegacyPrecisionMath.Add(
-                MathF.FusedMultiplyAdd(
+                LegacyPrecisionMath.Fma(
                     (float)finalAx.Ax_Hk2,
                     (float)finalTransitionKinematic.HK2_T2,
                     (float)finalAx.Ax_T2),
@@ -1594,6 +1938,16 @@ public static class TransitionModel
         double finalUtCombo = LegacyPrecisionMath.SourceOrderedProductSum(finalAx.Ax_Hk2, finalTransitionKinematic.HK2_U2, finalAx.Ax_Rt2, finalTransitionKinematic.RT2_U2, useLegacyPrecision);
         point.FinalTransitionKinematic = finalTransitionKinematic.Clone();
         point.FinalAx = finalAx;
+        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
+            && traceSide == 2 && traceStation == 24)
+        {
+            Console.Error.WriteLine(
+                $"C_FINALAX s=2 i=24 ph={tracePhase} it={traceIteration}" +
+                $" Ax={BitConverter.SingleToInt32Bits((float)finalAx.Ax):X8}" +
+                $" Ax_T2={BitConverter.SingleToInt32Bits((float)finalAx.Ax_T2):X8}" +
+                $" Ax_Hk2={BitConverter.SingleToInt32Bits((float)finalAx.Ax_Hk2):X8}" +
+                $" Ax_Rt2={BitConverter.SingleToInt32Bits((float)finalAx.Ax_Rt2):X8}");
+        }
 
         double axT1HkTerm = LegacyPrecisionMath.Multiply(finalAx.Ax_Hk1, finalUpstreamKinematic.HK2_T2, useLegacyPrecision);
         double axT1BaseTerm = finalAx.Ax_T1;
@@ -1604,13 +1958,13 @@ public static class TransitionModel
         // add chain. Replaying the compiled-expression FMA chain preserves the
         // legacy parity path without changing the default managed branch.
         double ax_T1 = useLegacyPrecision
-            ? MathF.FusedMultiplyAdd(
+            ? LegacyPrecisionMath.Fma(
                 (float)finalTtCombo,
                     (float)point.Tt1[1],
-                    MathF.FusedMultiplyAdd(
+                    LegacyPrecisionMath.Fma(
                         (float)finalAx.Ax_Rt1,
                         (float)finalUpstreamKinematic.RT2_T2,
-                        MathF.FusedMultiplyAdd(
+                        LegacyPrecisionMath.Fma(
                             (float)finalAx.Ax_Hk1,
                             (float)finalUpstreamKinematic.HK2_T2,
                             (float)finalAx.Ax_T1)))
@@ -1631,9 +1985,8 @@ public static class TransitionModel
         // the nested (AX_HKT*HKT_DT)*DT_D1 chain is only traced later via the
         // rounded AXDTCMB staging and can differ by one ULP from the source row.
         double ax_D1 = useLegacyPrecision
-            ? (float)(
-                (double)axD1HkTerm +
-                (((double)(float)finalAx.Ax_Hk2 * (double)(float)finalTransitionKinematic.HK2_D2) * (double)(float)point.Dt1[2]))
+            // Fortran: all in REAL
+            ? (float)axD1HkTerm + ((float)finalAx.Ax_Hk2 * (float)finalTransitionKinematic.HK2_D2) * (float)point.Dt1[2]
             : axD1HkTerm + axD1DtTerm;
         double ax_U1 = LegacyPrecisionMath.Add(
             LegacyPrecisionMath.SourceOrderedProductSum(finalAx.Ax_Hk1, finalUpstreamKinematic.HK2_U2, finalAx.Ax_Rt1, finalUpstreamKinematic.RT2_U2, useLegacyPrecision),
@@ -1642,17 +1995,13 @@ public static class TransitionModel
         double axA1TTerm = LegacyPrecisionMath.Multiply(finalTtCombo, point.Tt1[0], useLegacyPrecision);
         double axA1DTerm = LegacyPrecisionMath.Multiply(finalDtCombo, point.Dt1[0], useLegacyPrecision);
         double axA1UTerm = LegacyPrecisionMath.Multiply(finalUtCombo, point.Ut1[0], useLegacyPrecision);
-        double ax_A1 = useLegacyPrecision
-            ? LegacyPrecisionMath.RoundToSingle(
-                finalAx.Ax_A1 + axA1TTerm + axA1DTerm + axA1UTerm,
-                true)
-            : LegacyPrecisionMath.Add(
-                LegacyPrecisionMath.Add(
-                    LegacyPrecisionMath.Add(finalAx.Ax_A1, axA1TTerm, false),
-                    axA1DTerm,
-                    false),
-                axA1UTerm,
-                false);
+        double ax_A1 = LegacyPrecisionMath.Add(
+            LegacyPrecisionMath.Add(
+                LegacyPrecisionMath.Add(finalAx.Ax_A1, axA1TTerm, useLegacyPrecision),
+                axA1DTerm,
+                useLegacyPrecision),
+            axA1UTerm,
+            useLegacyPrecision);
         double ax_X1 = LegacyPrecisionMath.SourceOrderedProductSum(finalTtCombo, point.Tt1[4], finalDtCombo, point.Dt1[4], finalUtCombo, point.Ut1[4], useLegacyPrecision);
         double ax_T2 = LegacyPrecisionMath.Multiply(finalTtCombo, point.Tt2[1], useLegacyPrecision);
         double ax_D2 = LegacyPrecisionMath.Multiply(finalDtCombo, point.Dt2[2], useLegacyPrecision);
@@ -1661,22 +2010,27 @@ public static class TransitionModel
         double axA2TTerm = LegacyPrecisionMath.Multiply(finalTtCombo, point.Tt2[0], useLegacyPrecision);
         double axA2DTerm = LegacyPrecisionMath.Multiply(finalDtCombo, point.Dt2[0], useLegacyPrecision);
         double axA2UTerm = LegacyPrecisionMath.Multiply(finalUtCombo, point.Ut2[0], useLegacyPrecision);
-        // The final TRCHEK2 AX_A2 packet keeps the leading TT term rounded to
-        // REAL before the trailing DT/UT/A2 contributions flow into the final
-        // round. Rebuilding AX_A2 from either all-rounded terms or a fully
-        // wide product sum leaves the alpha-0 station-4 final sensitivity
-        // packet one ULP low even though each traced term already matches.
-        double ax_A2 = useLegacyPrecision
-            ? LegacyPrecisionMath.RoundToSingle(
-                (double)axA2TTerm +
-                (finalDtCombo * point.Dt2[0]) +
-                (finalUtCombo * point.Ut2[0]) +
-                axA2AmplTerm,
-                true)
-            : LegacyPrecisionMath.Add(
-                LegacyPrecisionMath.SourceOrderedProductSum(finalTtCombo, point.Tt2[0], finalDtCombo, point.Dt2[0], finalUtCombo, point.Ut2[0], false),
-                axA2AmplTerm,
-                false);
+        // Fortran xblsys.f:670-673:
+        //   AX_A2 = AX_AT*AMPLT_A2 + (TT_coeff)*TT_A2 + (DT_coeff)*DT_A2 + (UT_coeff)*UT_A2
+        // Left-to-right REAL: (((AMPL + TT) + DT) + UT) — AMPL term FIRST, not last.
+        // The previous order ((TT+DT+UT)+AMPL) produced ~10% Z_A2 error at
+        // transition stations for cases like n6h20, cascading through XT_T2
+        // derivatives into BT2 matrix and breaking bit-exact parity.
+        double ax_A2 = LegacyPrecisionMath.Add(
+            LegacyPrecisionMath.Add(
+                LegacyPrecisionMath.Add(axA2AmplTerm, axA2TTerm, useLegacyPrecision),
+                axA2DTerm, useLegacyPrecision),
+            axA2UTerm, useLegacyPrecision);
+        if (XFoil.Solver.Diagnostics.DebugFlags.SetBlHex
+            && traceSide == 2 && traceStation == 66)
+        {
+            Console.Error.WriteLine(
+                $"C_AXA2_10_66 ax_A2={BitConverter.SingleToInt32Bits((float)ax_A2):X8}" +
+                $" amplT={BitConverter.SingleToInt32Bits((float)axA2AmplTerm):X8}" +
+                $" ttT={BitConverter.SingleToInt32Bits((float)axA2TTerm):X8}" +
+                $" dtT={BitConverter.SingleToInt32Bits((float)axA2DTerm):X8}" +
+                $" utT={BitConverter.SingleToInt32Bits((float)axA2UTerm):X8}");
+        }
         double ax_X2 = LegacyPrecisionMath.SourceOrderedProductSum(finalTtCombo, point.Tt2[4], finalDtCombo, point.Dt2[4], finalUtCombo, point.Ut2[4], useLegacyPrecision);
 
         double zAx = -finalDx;
@@ -1707,6 +2061,20 @@ public static class TransitionModel
             float xtA2f = (float)point.Xt2[0];
             float zA2f = (float)zA2;
             float xt2OverZa2f = xtA2f / zA2f;
+            if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
+                && traceSide == 2 && traceStation == 66 && traceIteration == 2)
+            {
+                Console.Error.WriteLine(
+                    $"C_XTA1COR_N66" +
+                    $" AX={BitConverter.SingleToInt32Bits((float)finalAx.Ax):X8}" +
+                    $" DX={BitConverter.SingleToInt32Bits((float)finalDx):X8}" +
+                    $" AX_A1={BitConverter.SingleToInt32Bits((float)ax_A1):X8}" +
+                    $" Z_AX={BitConverter.SingleToInt32Bits((float)zAx):X8}" +
+                    $" Z_A1={BitConverter.SingleToInt32Bits((float)zA1):X8}" +
+                    $" Z_A2={BitConverter.SingleToInt32Bits((float)zA2):X8}" +
+                    $" XT_A1_pre={BitConverter.SingleToInt32Bits((float)point.Xt1[0]):X8}" +
+                    $" XT_A2={BitConverter.SingleToInt32Bits((float)point.Xt2[0]):X8}");
+            }
             point.Xt1[0] = (float)((float)point.Xt1[0] - ((xtA2f / zA2f) * (float)zA1));
             point.Xt1[1] = -((xtA2f / zA2f) * (float)zT1);
             point.Xt1[2] = -((xtA2f / zA2f) * (float)zD1);
@@ -1715,6 +2083,18 @@ public static class TransitionModel
             point.Xt2[1] = -((xtA2f / zA2f) * (float)zT2);
             point.Xt2[2] = -((xtA2f / zA2f) * (float)zD2);
             point.Xt2[3] = -((xtA2f / zA2f) * (float)zU2);
+            // n6h20 XT derivative inputs trace at IBL=66 iter 2 mc=10
+            if (XFoil.Solver.Diagnostics.DebugFlags.SetBlHex
+                && traceSide == 2 && traceStation == 66)
+            {
+                Console.Error.WriteLine(
+                    $"C_ZDERIV10_66 xtA2={BitConverter.SingleToInt32Bits(xtA2f):X8}" +
+                    $" zA2={BitConverter.SingleToInt32Bits(zA2f):X8}" +
+                    $" zT2={BitConverter.SingleToInt32Bits((float)zT2):X8}" +
+                    $" zD2={BitConverter.SingleToInt32Bits((float)zD2):X8}" +
+                    $" zU2={BitConverter.SingleToInt32Bits((float)zU2):X8}" +
+                    $" zX2={BitConverter.SingleToInt32Bits((float)zX2):X8}");
+            }
             // The direct-seed station-15 iteration-5 window only matches the
             // legacy packet when the ZX2 correction product is rounded back to
             // REAL before the final subtraction, just like the other XT_* updates.
@@ -1733,84 +2113,106 @@ public static class TransitionModel
             point.Xt2[4] = point.Xt2[4] - (xt2OverZa2 * zX2);
         }
 
-        SolverTrace.Event(
-            "transition_final_sensitivities",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
+        if (outerGate && (freeTransition || forcedTransition))
+        {
+            Console.Error.WriteLine(
+                $"C_TRC_OUT it={outerIter} s={traceSide} i={traceStation}");
+            Console.Error.WriteLine(
+                $"C_TRC_SEN XT_X2={BitConverter.SingleToInt32Bits((float)point.Xt2[4]):X8}" +
+                $" XT_A1={BitConverter.SingleToInt32Bits((float)point.Xt1[0]):X8}" +
+                $" XT_T1={BitConverter.SingleToInt32Bits((float)point.Xt1[1]):X8}" +
+                $" XT_D1={BitConverter.SingleToInt32Bits((float)point.Xt1[2]):X8}");
+            Console.Error.WriteLine(
+                $"C_TRC_SEN2 WF2={BitConverter.SingleToInt32Bits((float)(useLegacyPrecision ? carriedWf2 : finalWf2)):X8}" +
+                $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                $" XT={BitConverter.SingleToInt32Bits((float)point.Xt):X8}" +
+                $" zA2={BitConverter.SingleToInt32Bits((float)zA2):X8}");
+        }
+
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                side = traceSide,
-                station = traceStation,
-                stationIteration = traceIteration,
-                phase = tracePhase,
-                x1 = finalX1,
-                x2 = finalX2,
-                t1 = finalT1,
-                t2 = finalT2,
-                d1 = finalD1,
-                d2 = finalD2,
-                u1 = finalU1,
-                u2 = finalU2,
-                xtA2 = point.Xt2[0],
-                ampltA2 = finalAmplT_A2,
-                wf2A2 = finalWf2_A2,
-                ttA2 = point.Tt2[0],
-                dtA2 = point.Dt2[0],
-                utA2 = point.Ut2[0],
-                ttCombo = finalTtCombo,
-                dtCombo = finalDtCombo,
-                utCombo = finalUtCombo,
-                axAt = finalAx.Ax_A2,
-                axA1Base = finalAx.Ax_A1,
-                axA1TTerm,
-                axA1DTerm,
-                axA1UTerm,
-                axA2AmplTerm,
-                axA2TTerm,
-                axA2DTerm,
-                axA2UTerm,
-                axT1HkTerm,
-                axT1BaseTerm,
-                axT1RtTerm,
-                axT1TtTerm,
-                axT1 = ax_T1,
-                axD1HkTerm,
-                axD1DtTerm,
-                axD1 = ax_D1,
-                axU1 = ax_U1,
-                axA1 = ax_A1,
-                axX1 = ax_X1,
-                axT2 = ax_T2,
-                axD2 = ax_D2,
-                axU2 = ax_U2,
-                axA2 = ax_A2,
-                axX2 = ax_X2,
-                zA1,
-                zT1,
-                zD1,
-                zU1,
-                zX1,
-                zA2,
-                zT2,
-                zD2,
-                zU2,
-                zX2,
-                wf2A1 = finalWf2_A1,
-                xtA1BaseTerm1,
-                xtA1BaseTerm2,
-                xtA1Base,
-                xtA1Correction,
-                xtX2Base,
-                xtX2Correction,
-                xtA1 = point.Xt1[0],
-                xtT1 = point.Xt1[1],
-                xtD1 = point.Xt1[2],
-                xtU1 = point.Xt1[3],
-                xtX1 = point.Xt1[4],
-                xtT2 = point.Xt2[1],
-                xtD2 = point.Xt2[2],
-                xtU2 = point.Xt2[3],
-                xtX2 = point.Xt2[4]
-            });
+                SolverTrace.Event(
+                    "transition_final_sensitivities",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        side = traceSide,
+                        station = traceStation,
+                        stationIteration = traceIteration,
+                        phase = tracePhase,
+                        x1 = finalX1,
+                        x2 = finalX2,
+                        t1 = finalT1,
+                        t2 = finalT2,
+                        d1 = finalD1,
+                        d2 = finalD2,
+                        u1 = finalU1,
+                        u2 = finalU2,
+                        xtA2 = point.Xt2[0],
+                        ampltA2 = finalAmplT_A2,
+                        wf2A2 = finalWf2_A2,
+                        ttA2 = point.Tt2[0],
+                        dtA2 = point.Dt2[0],
+                        utA2 = point.Ut2[0],
+                        ttCombo = finalTtCombo,
+                        dtCombo = finalDtCombo,
+                        utCombo = finalUtCombo,
+                        axAt = finalAx.Ax_A2,
+                        axA1Base = finalAx.Ax_A1,
+                        axA1TTerm,
+                        axA1DTerm,
+                        axA1UTerm,
+                        axA2AmplTerm,
+                        axA2TTerm,
+                        axA2DTerm,
+                        axA2UTerm,
+                        axT1HkTerm,
+                        axT1BaseTerm,
+                        axT1RtTerm,
+                        axT1TtTerm,
+                        axT1 = ax_T1,
+                        axD1HkTerm,
+                        axD1DtTerm,
+                        axD1 = ax_D1,
+                        axU1 = ax_U1,
+                        axA1 = ax_A1,
+                        axX1 = ax_X1,
+                        axT2 = ax_T2,
+                        axD2 = ax_D2,
+                        axU2 = ax_U2,
+                        axA2 = ax_A2,
+                        axX2 = ax_X2,
+                        zA1,
+                        zT1,
+                        zD1,
+                        zU1,
+                        zX1,
+                        zA2,
+                        zT2,
+                        zD2,
+                        zU2,
+                        zX2,
+                        wf2A1 = finalWf2_A1,
+                        xtA1BaseTerm1,
+                        xtA1BaseTerm2,
+                        xtA1Base,
+                        xtA1Correction,
+                        xtX2Base,
+                        xtX2Correction,
+                        xtA1 = point.Xt1[0],
+                        xtT1 = point.Xt1[1],
+                        xtD1 = point.Xt1[2],
+                        xtU1 = point.Xt1[3],
+                        xtX1 = point.Xt1[4],
+                        xtT2 = point.Xt2[1],
+                        xtD2 = point.Xt2[2],
+                        xtU2 = point.Xt2[3],
+                        xtX2 = point.Xt2[4]
+                    });
+            }
+        }
 
         point.TransitionOccurred = true;
         point.Type = TransitionResultType.Free;
@@ -1820,20 +2222,28 @@ public static class TransitionModel
         point.AmplAtTransition = amcrit;
         point.DownstreamAmplification = ampl2Iter;
 
-        SolverTrace.Event(
-            "transition_point_exact",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                point.TransitionXi,
-                point.AmplAtTransition,
-                type = point.Type.ToString(),
-                point.Converged,
-                point.Iterations,
-                point.Tt,
-                point.Dt,
-                point.Ut
-            });
+                SolverTrace.Event(
+                    "transition_point_exact",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        point.TransitionXi,
+                        point.AmplAtTransition,
+                        type = point.Type.ToString(),
+                        point.Converged,
+                        point.Iterations,
+                        point.Tt,
+                        point.Dt,
+                        point.Ut
+                    });
+            }
+        }
+
+        point.Wf2XF = finalWf2_XF;
 
         return point;
     }
@@ -1853,7 +2263,38 @@ public static class TransitionModel
         double reybl, double reybl_re, double reybl_ms,
         bool useHighHkModel,
         double? forcedXtr,
-        bool useLegacyPrecision = false)
+        bool useLegacyPrecision = false,
+        int? traceSide = null,
+        int? traceStation = null,
+        int? traceIteration = null,
+        string? tracePhase = null)
+    {
+        return CheckTransitionExact(x1, x2, ampl1, ampl2, amcrit,
+            ue1, ue2, th1, th2, d1, d2,
+            hstinv, hstinv_ms, gm1bl, rstbl, rstbl_ms, hvrat,
+            reybl, reybl_re, reybl_ms,
+            useHighHkModel, forcedXtr, useLegacyPrecision, out _,
+            traceSide, traceStation, traceIteration, tracePhase);
+    }
+
+    internal static TransitionCheckResult CheckTransitionExact(
+        double x1, double x2, double ampl1, double ampl2, double amcrit,
+        double ue1, double ue2,
+        double th1, double th2,
+        double d1, double d2,
+        double hstinv, double hstinv_ms,
+        double gm1bl,
+        double rstbl, double rstbl_ms,
+        double hvrat,
+        double reybl, double reybl_re, double reybl_ms,
+        bool useHighHkModel,
+        double? forcedXtr,
+        bool useLegacyPrecision,
+        out TransitionPointResult? fullPoint,
+        int? traceSide = null,
+        int? traceStation = null,
+        int? traceIteration = null,
+        string? tracePhase = null)
     {
         var point = ComputeTransitionPoint(
             x1,
@@ -1878,21 +2319,33 @@ public static class TransitionModel
             reybl_ms,
             useHighHkModel,
             forcedXtr,
-            useLegacyPrecision);
+            useLegacyPrecision,
+            traceSide,
+            traceStation,
+            traceIteration,
+            tracePhase);
 
         var result = new TransitionCheckResult(
             point.TransitionOccurred,
             point.TransitionXi,
             point.AmplAtTransition,
+            point.DownstreamAmplification,
             point.Type,
             point.Converged,
             point.Iterations);
 
-        SolverTrace.Event(
-            "transition_result",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new { result.TransitionOccurred, result.TransitionXi, result.AmplAtTransition, type = result.Type.ToString(), result.Converged, result.Iterations });
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
+            {
+                SolverTrace.Event(
+                    "transition_result",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new { result.TransitionOccurred, result.TransitionXi, result.AmplAtTransition, type = result.Type.ToString(), result.Converged, result.Iterations });
+            }
+        }
 
+        fullPoint = point;
         return result;
     }
 
@@ -1972,27 +2425,33 @@ public static class TransitionModel
             useLegacyPrecision);
 
         double ampl2Iter = LegacyPrecisionMath.MultiplyAdd(ax0.Ax, dx, ampl1, useLegacyPrecision);
-        SolverTrace.Event(
-            "transition_point_seed",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                x1,
-                x2,
-                dx,
-                hk1,
-                t1 = th1,
-                rt1,
-                a1 = ampl1,
-                hk2,
-                t2 = th2,
-                rt2,
-                a2Input = ampl2,
-                acrit = amcrit,
-                idampv = useHighHkModel ? 1 : 0,
-                ax0 = ax0.Ax,
-                seedAmpl2 = ampl2Iter
-            });
+                SolverTrace.Event(
+                    "transition_point_seed",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new
+                    {
+                        x1,
+                        x2,
+                        dx,
+                        hk1,
+                        t1 = th1,
+                        rt1,
+                        a1 = ampl1,
+                        hk2,
+                        t2 = th2,
+                        rt2,
+                        a2Input = ampl2,
+                        acrit = amcrit,
+                        idampv = useHighHkModel ? 1 : 0,
+                        ax0 = ax0.Ax,
+                        seedAmpl2 = ampl2Iter
+                    });
+            }
+        }
         double lastXt = x2;
         bool converged = false;
         int iterations = 0;
@@ -2066,20 +2525,20 @@ public static class TransitionModel
             double wf1_X1 = -wf2_X1;
             double wf1_X2 = -wf2_X2;
 
-            double xt = LegacyPrecisionMath.NativeFloatExpressionProductSum(x1, wf1, x2, wf2, useLegacyPrecision);
-            double tt = LegacyPrecisionMath.NativeFloatExpressionProductSum(th1, wf1, th2, wf2, useLegacyPrecision);
-            double dt = LegacyPrecisionMath.NativeFloatExpressionProductSum(d1, wf1, d2, wf2, useLegacyPrecision);
-            double ut = LegacyPrecisionMath.NativeFloatExpressionProductSum(ue1, wf1, ue2, wf2, useLegacyPrecision);
-            double hkT = LegacyPrecisionMath.NativeFloatExpressionProductSum(hk1, wf1, hk2, wf2, useLegacyPrecision);
-            double rtT = LegacyPrecisionMath.NativeFloatExpressionProductSum(rt1, wf1, rt2, wf2, useLegacyPrecision);
+            double xt = LegacyPrecisionMath.SourceOrderedProductSum(x1, wf1, x2, wf2, useLegacyPrecision);
+            double tt = LegacyPrecisionMath.SourceOrderedProductSum(th1, wf1, th2, wf2, useLegacyPrecision);
+            double dt = LegacyPrecisionMath.SourceOrderedProductSum(d1, wf1, d2, wf2, useLegacyPrecision);
+            double ut = LegacyPrecisionMath.SourceOrderedProductSum(ue1, wf1, ue2, wf2, useLegacyPrecision);
+            double hkT = LegacyPrecisionMath.SourceOrderedProductSum(hk1, wf1, hk2, wf2, useLegacyPrecision);
+            double rtT = LegacyPrecisionMath.SourceOrderedProductSum(rt1, wf1, rt2, wf2, useLegacyPrecision);
             lastXt = xt;
 
-            double xt_A2 = LegacyPrecisionMath.NativeFloatExpressionProductSum(x1, wf1_A2, x2, wf2_A2, useLegacyPrecision);
-            double tt_A2 = LegacyPrecisionMath.NativeFloatExpressionProductSum(th1, wf1_A2, th2, wf2_A2, useLegacyPrecision);
-            double dt_A2 = LegacyPrecisionMath.NativeFloatExpressionProductSum(d1, wf1_A2, d2, wf2_A2, useLegacyPrecision);
-            double ut_A2 = LegacyPrecisionMath.NativeFloatExpressionProductSum(ue1, wf1_A2, ue2, wf2_A2, useLegacyPrecision);
-            double hkT_A2 = LegacyPrecisionMath.NativeFloatExpressionProductSum(hk1, wf1_A2, hk2, wf2_A2, useLegacyPrecision);
-            double rtT_A2 = LegacyPrecisionMath.NativeFloatExpressionProductSum(rt1, wf1_A2, rt2, wf2_A2, useLegacyPrecision);
+            double xt_A2 = LegacyPrecisionMath.SourceOrderedProductSum(x1, wf1_A2, x2, wf2_A2, useLegacyPrecision);
+            double tt_A2 = LegacyPrecisionMath.SourceOrderedProductSum(th1, wf1_A2, th2, wf2_A2, useLegacyPrecision);
+            double dt_A2 = LegacyPrecisionMath.SourceOrderedProductSum(d1, wf1_A2, d2, wf2_A2, useLegacyPrecision);
+            double ut_A2 = LegacyPrecisionMath.SourceOrderedProductSum(ue1, wf1_A2, ue2, wf2_A2, useLegacyPrecision);
+            double hkT_A2 = LegacyPrecisionMath.SourceOrderedProductSum(hk1, wf1_A2, hk2, wf2_A2, useLegacyPrecision);
+            double rtT_A2 = LegacyPrecisionMath.SourceOrderedProductSum(rt1, wf1_A2, rt2, wf2_A2, useLegacyPrecision);
 
             var ax = ComputeTransitionSensitivities(
                 hk1,
@@ -2102,13 +2561,20 @@ public static class TransitionModel
                         TransitionOccurred: false,
                         TransitionXi: x2,
                         AmplAtTransition: ampl2Iter,
+                        DownstreamAmplification: ampl2Iter,
                         Type: TransitionResultType.None,
                         Converged: true,
                         Iterations: iterations);
-                    SolverTrace.Event(
-                        "transition_result",
-                        SolverTrace.ScopeName(typeof(TransitionModel)),
-                        new { none.TransitionOccurred, none.TransitionXi, none.AmplAtTransition, type = none.Type.ToString(), none.Converged, none.Iterations });
+                    if (SolverTrace.IsActive)
+                    {
+                        if (SolverTrace.IsActive)
+                        {
+                            SolverTrace.Event(
+                                "transition_result",
+                                SolverTrace.ScopeName(typeof(TransitionModel)),
+                                new { none.TransitionOccurred, none.TransitionXi, none.AmplAtTransition, type = none.Type.ToString(), none.Converged, none.Iterations });
+                        }
+                    }
                     return none;
                 }
 
@@ -2136,29 +2602,45 @@ public static class TransitionModel
                 relaxation = 1.0 / Math.Abs(deltaA2);
             }
 
-            SolverTrace.Event(
-                "transition_point_iteration",
-                SolverTrace.ScopeName(typeof(TransitionModel)),
-                new
+            if (SolverTrace.IsActive)
+            {
+                if (SolverTrace.IsActive)
                 {
-                    iteration = iter + 1,
-                    x1,
-                    x2,
-                    ampl1,
-                    ampl2 = ampl2Iter,
-                    amcrit,
-                    ax = ax.Ax,
-                    wf2,
-                    xt,
-                    tt,
-                    dt,
-                    ut,
-                    residual,
-                    residual_A2,
-                    deltaA2,
-                    relaxation
-                });
+                    SolverTrace.Event(
+                        "transition_point_iteration",
+                        SolverTrace.ScopeName(typeof(TransitionModel)),
+                        new
+                        {
+                            iteration = iter + 1,
+                            x1,
+                            x2,
+                            ampl1,
+                            ampl2 = ampl2Iter,
+                            amcrit,
+                            ax = ax.Ax,
+                            wf2,
+                            xt,
+                            tt,
+                            dt,
+                            ut,
+                            residual,
+                            residual_A2,
+                            deltaA2,
+                            relaxation
+                        });
+                }
+            }
 
+            if (Environment.GetEnvironmentVariable("XFOIL_AH79_TRC") == "1")
+            {
+                Console.Error.WriteLine(
+                    $"C_TRC bc={ViscousNewtonAssembler.BuildCallCount} tam={iter+1,2}" +
+                    $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
+                    $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
+                    $" DA={BitConverter.SingleToInt32Bits((float)deltaA2):X8}" +
+                    $" RLX={BitConverter.SingleToInt32Bits((float)relaxation):X8}" +
+                    $" AX={BitConverter.SingleToInt32Bits((float)ax.Ax):X8}");
+            }
             if (Math.Abs(deltaA2) < DAEPS)
             {
                 converged = true;
@@ -2185,13 +2667,20 @@ public static class TransitionModel
                 TransitionOccurred: false,
                 TransitionXi: x2,
                 AmplAtTransition: ampl2Iter,
+                DownstreamAmplification: ampl2Iter,
                 Type: TransitionResultType.None,
                 Converged: converged,
                 Iterations: iterations);
-            SolverTrace.Event(
-                "transition_result",
-                SolverTrace.ScopeName(typeof(TransitionModel)),
-                new { none.TransitionOccurred, none.TransitionXi, none.AmplAtTransition, type = none.Type.ToString(), none.Converged, none.Iterations });
+            if (SolverTrace.IsActive)
+            {
+                if (SolverTrace.IsActive)
+                {
+                    SolverTrace.Event(
+                        "transition_result",
+                        SolverTrace.ScopeName(typeof(TransitionModel)),
+                        new { none.TransitionOccurred, none.TransitionXi, none.AmplAtTransition, type = none.Type.ToString(), none.Converged, none.Iterations });
+                }
+            }
             return none;
         }
 
@@ -2201,13 +2690,20 @@ public static class TransitionModel
                 TransitionOccurred: true,
                 TransitionXi: forcedXtr!.Value,
                 AmplAtTransition: ampl1,
+                DownstreamAmplification: ampl2Iter,
                 Type: TransitionResultType.Forced,
                 Converged: true,
                 Iterations: iterations);
-            SolverTrace.Event(
-                "transition_result",
-                SolverTrace.ScopeName(typeof(TransitionModel)),
-                new { forced.TransitionOccurred, forced.TransitionXi, forced.AmplAtTransition, type = forced.Type.ToString(), forced.Converged, forced.Iterations });
+            if (SolverTrace.IsActive)
+            {
+                if (SolverTrace.IsActive)
+                {
+                    SolverTrace.Event(
+                        "transition_result",
+                        SolverTrace.ScopeName(typeof(TransitionModel)),
+                        new { forced.TransitionOccurred, forced.TransitionXi, forced.AmplAtTransition, type = forced.Type.ToString(), forced.Converged, forced.Iterations });
+                }
+            }
             return forced;
         }
 
@@ -2219,13 +2715,20 @@ public static class TransitionModel
             TransitionOccurred: true,
             TransitionXi: transitionXi,
             AmplAtTransition: amcrit,
+            DownstreamAmplification: ampl2Iter,
             Type: TransitionResultType.Free,
             Converged: converged,
             Iterations: iterations);
-        SolverTrace.Event(
-            "transition_result",
-            SolverTrace.ScopeName(typeof(TransitionModel)),
-            new { result.TransitionOccurred, result.TransitionXi, result.AmplAtTransition, type = result.Type.ToString(), result.Converged, result.Iterations });
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
+            {
+                SolverTrace.Event(
+                    "transition_result",
+                    SolverTrace.ScopeName(typeof(TransitionModel)),
+                    new { result.TransitionOccurred, result.TransitionXi, result.AmplAtTransition, type = result.Type.ToString(), result.Converged, result.Iterations });
+            }
+        }
         return result;
     }
 }

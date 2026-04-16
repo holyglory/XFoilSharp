@@ -2740,6 +2740,10 @@ C------ display changes and test for convergence
          CDP = CD - CDF
          WRITE(*,2020) ALFA/DTOR, CL, CM, CD, CDF, CDP
 C
+        WRITE(0,'(A,I3,A,Z8,A,Z8)')
+     &   'F_ITER_CDCL it=',ITER,
+     &   ' CD=',TRANSFER(CD,1),
+     &   ' CL=',TRANSFER(CL,1)
         IF(RMSBL .LT. EPS1) THEN
          WRITE(50,*) 'CONVERGED iter=', ITER
          CALL TRACE_CONVERGED('VISCAL', ITER)

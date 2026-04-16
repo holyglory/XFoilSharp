@@ -354,8 +354,19 @@ if [ "$SUMMARY_ONLY" = "1" ]; then
     export XFOIL_TRACE_KIND_ALLOW="__summary_none__"
 fi
 
-BUILD_CMD=("$DOTNET_BIN" build "$TEST_PROJECT" -v minimal)
-TEST_CMD=("$DOTNET_BIN" test "$TEST_PROJECT" --no-build --filter "$TEST_FILTER" -v minimal -l "console;verbosity=minimal")
+BUILD_CMD=(
+    "$DOTNET_BIN" build "$TEST_PROJECT" -v minimal
+    -m:1
+    -p:RestoreBuildInParallel=false
+    -p:BuildInParallel=false
+)
+TEST_CMD=(
+    "$DOTNET_BIN" test "$TEST_PROJECT" --no-build --filter "$TEST_FILTER" -v minimal
+    -l "console;verbosity=minimal"
+    -m:1
+    -p:RestoreBuildInParallel=false
+    -p:BuildInParallel=false
+)
 if [ -n "$ARTIFACTS_PATH" ]; then
     BUILD_CMD+=(--artifacts-path "$ARTIFACTS_PATH")
     TEST_CMD+=(--artifacts-path "$ARTIFACTS_PATH")

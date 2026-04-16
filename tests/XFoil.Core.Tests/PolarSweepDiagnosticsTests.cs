@@ -79,7 +79,10 @@ public sealed class PolarSweepDiagnosticsTests
         inviscidState.UseLegacyPanelingPrecision = settings.UseLegacyPanelingPrecision;
 
         LinearVortexInviscidSolver.AssembleAndFactorSystem(
-            panel, inviscidState, settings.FreestreamVelocity);
+            panel,
+            inviscidState,
+            settings.FreestreamVelocity,
+            10.0 * Math.PI / 180.0);
 
         double alphaDegrees = 10.0;
         double alphaRadians = alphaDegrees * Math.PI / 180.0;

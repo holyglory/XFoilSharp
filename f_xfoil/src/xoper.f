@@ -428,11 +428,15 @@ C------- set inviscid solution only if point is not being recalculated
          CALL SPECAL
          IF(ABS(ALFA-AWAKE) .GT. 1.0E-5) LWAKE  = .FALSE.
          IF(ABS(ALFA-AVISC) .GT. 1.0E-5) LVCONV = .FALSE.
-         IF(ABS(MINF-MVISC) .GT. 1.0E-5) LVCONV = .FALSE. 
+         IF(ABS(MINF-MVISC) .GT. 1.0E-5) LVCONV = .FALSE.
        ENDIF
 C
-       IF(LVISC) CALL VISCAL(ITMAX)
-       CALL CPX
+       CALL SET_NCRIT_FROM_ENV
+       WRITE(0,*) 'PRE_VISCAL ACRIT=', ACRIT
+       IF(LVISC) THEN
+         CALL VISCAL(ITMAX)
+       ENDIF
+ccc    CALL CPX (skipped: triggers X11)
        CALL FCPMIN
 C
 ccc    IF( LVISC .AND. LPACC .AND. LVCONV ) THEN
@@ -488,8 +492,10 @@ C--------------------------------------------------------
         IF(ABS(MINF-MVISC) .GT. 1.0E-5) LVCONV = .FALSE.
        ENDIF
 C
-       IF(LVISC) CALL VISCAL(ITMAX)
-       CALL CPX
+       IF(LVISC) THEN
+         CALL VISCAL(ITMAX)
+       ENDIF
+ccc    CALL CPX (skipped: triggers X11)
        CALL FCPMIN
 C
 ccc    IF( LVISC .AND. LPACC .AND. LVCONV ) THEN
@@ -526,7 +532,7 @@ C--------------------------------------------------------
        IF(LVISC) CALL VISCAL(ITMAX)
        CALL FCPMIN
 C
-       CALL CPX
+ccc    CALL CPX (skipped: triggers X11)
 ccc    IF( LVISC .AND. LPACC .AND. LVCONV ) THEN
        IF( LPACC .AND. (LVCONV .OR. .NOT.LVISC)) THEN
         CALL PLRADD(LUPLR,IPACT)
@@ -1470,7 +1476,7 @@ C
 C--------------------------------------------------------
       ELSEIF(COMAND.EQ.'CPX ' .OR.
      &       COMAND.EQ.'CP  '      ) THEN
-       CALL CPX
+ccc    CALL CPX (skipped: triggers X11)
 C
 C--------------------------------------------------------
       ELSEIF(COMAND.EQ.'UEX ' .OR.
@@ -1515,7 +1521,7 @@ C------ set NPR points along surface, offset slightly for the locating logic
         ENDDO
        ENDIF
 C
-       CALL CPX
+ccc    CALL CPX (skipped: triggers X11)
        CALL DPLOT(NPR,XPR,YPR)
 C
 C--------------------------------------------------------
@@ -1526,7 +1532,7 @@ C--------------------------------------------------------
        ENDIF
 C
        NPR = 0
-       CALL CPX
+ccc    CALL CPX (skipped: triggers X11)
        CALL DPLOT(NPR,XPR,YPR)
 C
 C--------------------------------------------------------
@@ -1596,7 +1602,7 @@ C--------------------------------------------------------
         CALL ASKR('Enter new plot weight^',UPRWT)
        ENDIF
 C
-       CALL CPX
+ccc    CALL CPX (skipped: triggers X11)
 C
 C--------------------------------------------------------
       ELSEIF(COMAND.EQ.'FMOM') THEN
@@ -2500,6 +2506,11 @@ C---- set final Mach, CL, Cp distributions, and hinge moment
       CALL COMSET
       CALL CLCALC(N,X,Y,GAM,GAM_A,ALFA,MINF,QINF, XCMREF,YCMREF,
      &            CL,CM,CDP, CL_ALF,CL_MSQ)
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_SPECAL CL=',TRANSFER(CL,1),
+     & ' GAM1=',TRANSFER(GAM(1),1),
+     & ' GAM40=',TRANSFER(GAM(40),1),
+     & ' GAM80=',TRANSFER(GAM(80),1)
       CALL CPCALC(N,QINV,QINF,MINF,CPI)
       IF(LVISC) THEN
        CALL CPCALC(N+NW,QVIS,QINF,MINF,CPV)
@@ -2538,6 +2549,11 @@ C
 C---- get corresponding CL, CL_alpha, CL_Mach
       CALL CLCALC(N,X,Y,GAM,GAM_A,ALFA,MINF,QINF, XCMREF,YCMREF,
      &            CL,CM,CDP, CL_ALF,CL_MSQ)
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_SPECAL_CL CL=',TRANSFER(CL,1),
+     & ' GAM1=',TRANSFER(GAM(1),1),
+     & ' GAM40=',TRANSFER(GAM(40),1),
+     & ' GAM80=',TRANSFER(GAM(80),1)
 C
 C---- Newton loop for alpha to get specified inviscid CL
       DO 100 ITAL=1, 20
@@ -2585,6 +2601,7 @@ C----------------------------------------
 C     Converges viscous operating point
 C----------------------------------------
       INCLUDE 'XFOIL.INC'
+      INCLUDE 'XBL.INC'
 C
 C---- convergence tolerance
       DATA EPS1 / 1.0E-4 /
@@ -2608,6 +2625,21 @@ C
 C
 C----- locate stagnation point arc length position and panel index
        CALL STFIND
+       WRITE(0,'(A,I4,A,Z8,A,Z8,A,I4)')
+     &  'F_ISP isp=',IST,
+     &  ' sst=',TRANSFER(SST,1),
+     &  ' qinv_isp=',TRANSFER(QINV(IST),1),
+     &  ' n=',N
+       WRITE(0,'(A,I4,A,Z8,A,Z8)')
+     &  'F_GAMU isp=',IST,
+     &  ' G0=',TRANSFER(QINVU(IST,1),1),
+     &  ' G1=',TRANSFER(QINVU(IST,2),1)
+       DO 9191 JJGAM=1, N
+         WRITE(0,'(A,I4,A,Z8,A,Z8)')
+     &    'F_G I=',JJGAM,
+     &    ' G0=',TRANSFER(QINVU(JJGAM,1),1),
+     &    ' G1=',TRANSFER(QINVU(JJGAM,2),1)
+ 9191  CONTINUE
 C
 C----- set  BL position -> panel position  pointers
        CALL IBLPAN
@@ -2635,6 +2667,12 @@ C
        ENDDO
 C
       ENDIF
+C---- GDB: dump UEDG at key stations before first SETBL
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_UEDG s1_57=',TRANSFER(UEDG(57,1),1),
+     &  ' s1_58=',TRANSFER(UEDG(58,1),1),
+     &  ' s1_96=',TRANSFER(UEDG(96,1),1),
+     &  ' s1_97=',TRANSFER(UEDG(97,1),1)
 C
       IF(LVCONV) THEN
 C----- set correct CL if converged point exists
@@ -2648,26 +2686,514 @@ C----- set correct CL if converged point exists
        CALL GAMQV
        CALL CLCALC(N,X,Y,GAM,GAM_A,ALFA,MINF,QINF, XCMREF,YCMREF,
      &             CL,CM,CDP, CL_ALF,CL_MSQ)
+       WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_CLCALC CL=',TRANSFER(CL,1),
+     &  ' GAM1=',TRANSFER(GAM(1),1),
+     &  ' GAM40=',TRANSFER(GAM(40),1),
+     &  ' GAM80=',TRANSFER(GAM(80),1)
+       WRITE(0,'(A,I4,A,Z8,A,Z8)')
+     &  'F_WAKE_END NBL2=',NBL(2),
+     &  ' THW=',TRANSFER(THET(NBL(2),2),1),
+     &  ' DSW=',TRANSFER(DSTR(NBL(2),2),1)
        CALL CDCALC
       ENDIF
 C
 C---- set up source influence matrix if it doesn't exist
+      IBIJH = 0
+      DO 8811 IBIJR=1, N
+        DO 8812 IBIJC=1, N
+          IBIJH = IEOR(IBIJH, TRANSFER(BIJ(IBIJR,IBIJC),1))
+ 8812   CONTINUE
+ 8811 CONTINUE
+      ILUH = 0
+      DO 8821 ILUR=1, N+1
+        DO 8822 ILUC=1, N+1
+          ILUH = IEOR(ILUH, TRANSFER(AIJ(ILUR,ILUC),1))
+ 8822   CONTINUE
+ 8821 CONTINUE
+      WRITE(0,'(A,Z8,A,Z8)') 'F_BIJ hash=',IBIJH,
+     & ' LU=',ILUH
       IF(.NOT.LWDIJ .OR. .NOT.LADIJ) CALL QDCALC
+C---- Hash first column of DIJ after QDCALC
+      ICOL0 = 0
+      DO 8831 IC0=1, N
+        ICOL0 = IEOR(ICOL0, TRANSFER(DIJ(IC0,1),1))
+ 8831 CONTINUE
+      WRITE(0,'(A,Z8)') 'F_DIJ col0=',ICOL0
+      IDIJH = 0
+      DO 8801 IDIJR=1, N+NW
+        IDIJRH = 0
+        DO 8802 IDIJC=1, N+NW
+          IDIJH = IEOR(IDIJH, TRANSFER(DIJ(IDIJR,IDIJC),1))
+          IDIJRH = IEOR(IDIJRH, TRANSFER(DIJ(IDIJR,IDIJC),1))
+ 8802   CONTINUE
+        IF(IDIJR.LE.5 .OR. (IDIJR.GE.161.AND.IDIJR.LE.165)) THEN
+         WRITE(0,'(A,I3,A,Z8)') 'F_DIJ_ROW r=',IDIJR-1,
+     &    ' hash=',IDIJRH
+        ENDIF
+ 8801 CONTINUE
+      IDIJAH = 0
+      DO 8841 IDIJA=1, N
+        DO 8842 IDIJB=1, N
+          IDIJAH = IEOR(IDIJAH, TRANSFER(DIJ(IDIJA,IDIJB),1))
+ 8842   CONTINUE
+ 8841 CONTINUE
+      WRITE(0,'(A,Z8,A,Z8)')
+     & 'F_DIJ hash=',IDIJH,' airfoil=',IDIJAH
 C
 C---- Newton iteration for entire BL solution
       IF(NITER.EQ.0) CALL ASKI('Enter number of iterations^',NITER)
       WRITE(*,*)
       WRITE(*,*) 'Solving BL system ...'
+      TRACE_OUTER = 0
       DO 1000 ITER=1, NITER
 C
+C------ Dump initial UEDG/THET/DSTR for first 8 stations both sides
+        IF (ITER.EQ.1) THEN
+          DO 7997 ISP_=1, 2
+            DO 7996 IBP=1, 8
+              IF (IBP.LE.NBL(ISP_)) THEN
+                WRITE(0,'(A,I1,A,I2,3(A,Z8))') 'F_INIT s=',ISP_,
+     &           ' ibl=',IBP,
+     &           ' UEDG=',TRANSFER(UEDG(IBP,ISP_),1),
+     &           ' THET=',TRANSFER(THET(IBP,ISP_),1),
+     &           ' DSTR=',TRANSFER(DSTR(IBP,ISP_),1)
+              ENDIF
+ 7996       CONTINUE
+ 7997     CONTINUE
+        ENDIF
+C------ BL state hash before SETBL
+        IBLH = 0
+        DO 7998 ISH=1, 2
+          DO 7999 IBH=1, NBL(ISH)
+            IBLH = IBLH +
+     &        IAND(TRANSFER(THET(IBH,ISH),1), 2147483647)
+            IBLH = IBLH +
+     &        IAND(TRANSFER(DSTR(IBH,ISH),1), 2147483647)
+            IBLH = IBLH +
+     &        IAND(TRANSFER(UEDG(IBH,ISH),1), 2147483647)
+ 7999     CONTINUE
+ 7998   CONTINUE
+        WRITE(0,'(A,I2,A,Z8)') 'F_BLS',ITER,' H=',IBLH
+C------ set outer iteration for TRCHEK2 traces
+        TRACE_OUTER = ITER
 C------ fill Newton system for BL variables
         CALL SETBL
+        IF (ITER.EQ.1) THEN
+          DO 7891 ISP_=1, 2
+            DO 7890 IBP=1, 8
+              IF (IBP.LE.NBL(ISP_)) THEN
+                WRITE(0,'(A,I1,A,I2,3(A,Z8))') 'F_POSTSETBL s=',ISP_,
+     &           ' ibl=',IBP,
+     &           ' UEDG=',TRANSFER(UEDG(IBP,ISP_),1),
+     &           ' THET=',TRANSFER(THET(IBP,ISP_),1),
+     &           ' DSTR=',TRANSFER(DSTR(IBP,ISP_),1)
+                WRITE(0,'(A,I1,A,I2,2(A,Z8))') 'F_UM s=',ISP_,
+     &           ' ibl=',IBP,
+     &           ' UINV=',TRANSFER(UINV(IBP,ISP_),1),
+     &           ' MASS=',TRANSFER(MASS(IBP,ISP_),1)
+              ENDIF
+ 7890       CONTINUE
+ 7891     CONTINUE
+C--- Wake station dump (side 2 around first wake = JBL=65)
+          DO 7892 IBPW=63, 67
+            IF (IBPW.LE.NBL(2)) THEN
+              WRITE(0,'(A,I2,4(A,Z8))') 'F_WAKE2 ibl=',IBPW,
+     &         ' UEDG=',TRANSFER(UEDG(IBPW,2),1),
+     &         ' THET=',TRANSFER(THET(IBPW,2),1),
+     &         ' DSTR=',TRANSFER(DSTR(IBPW,2),1),
+     &         ' MASS=',TRANSFER(MASS(IBPW,2),1)
+            ENDIF
+ 7892     CONTINUE
+        ENDIF
+        WRITE(0,'(A,I2,A,I4,A,I4,A,Z8,A,Z8)')
+     &   'F_ITRAN it=',ITER,
+     &   ' s1=',ITRAN(1),
+     &   ' s2=',ITRAN(2),
+     &   ' xtr1=',TRANSFER(XOCTR(1),1),
+     &   ' xtr2=',TRANSFER(XOCTR(2),1)
+C------ dump VDEL RHS at system lines 3-4 BEFORE BLSOLV
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_RHS3  ',
+     & TRANSFER(VDEL(1,1,3),1),TRANSFER(VDEL(2,1,3),1),
+     & TRANSFER(VDEL(3,1,3),1),
+     & TRANSFER(VDEL(1,2,3),1),TRANSFER(VDEL(2,2,3),1),
+     & TRANSFER(VDEL(3,2,3),1)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_RHS4  ',
+     & TRANSFER(VDEL(1,1,4),1),TRANSFER(VDEL(2,1,4),1),
+     & TRANSFER(VDEL(3,1,4),1),
+     & TRANSFER(VDEL(1,2,4),1),TRANSFER(VDEL(2,2,4),1),
+     & TRANSFER(VDEL(3,2,4),1)
+C------ Per-station full PRE-BLSOLV VDEL dump (iter 1 only)
+        IF(ITER.EQ.1) THEN
+          DO 7919 JVV=1, NSYS
+            WRITE(0,'(A,I3,1X,Z8,1X,Z8,1X,Z8)')
+     &       'F_PREVDEL it=1 jv=',JVV,
+     &       TRANSFER(VDEL(1,1,JVV),1),
+     &       TRANSFER(VDEL(2,1,JVV),1),
+     &       TRANSFER(VDEL(3,1,JVV),1)
+            WRITE(0,'(A,I3,1X,Z8,1X,Z8,1X,Z8)')
+     &       'F_PREVDEL2 it=1 jv=',JVV,
+     &       TRANSFER(VDEL(1,2,JVV),1),
+     &       TRANSFER(VDEL(2,2,JVV),1),
+     &       TRANSFER(VDEL(3,2,JVV),1)
+ 7919     CONTINUE
+        ENDIF
+C------ VM checksum (XOR hash) for parity check - ALL iterations
+          WRITE(0,'(A,I3,A,I4)') 'F_NSYS_AT_ITER it=',ITER,
+     &     ' NSYS=', NSYS
+          IVMH = 0
+          IVAH = 0
+          IVBH = 0
+          IVDH = 0
+          DO 7902 IVV=1, NSYS
+            DO 7903 JVV=1, NSYS
+              DO 7904 KK=1, 3
+                IVMH = IEOR(IVMH, TRANSFER(VM(KK,JVV,IVV),1))
+ 7904         CONTINUE
+ 7903       CONTINUE
+            DO 7905 KK=1, 3
+              IVAH = IEOR(IVAH, TRANSFER(VA(KK,1,IVV),1))
+              IVAH = IEOR(IVAH, TRANSFER(VA(KK,2,IVV),1))
+              IVBH = IEOR(IVBH, TRANSFER(VB(KK,1,IVV),1))
+              IVBH = IEOR(IVBH, TRANSFER(VB(KK,2,IVV),1))
+              IVDH = IEOR(IVDH, TRANSFER(VDEL(KK,1,IVV),1))
+              IVDH = IEOR(IVDH, TRANSFER(VDEL(KK,2,IVV),1))
+ 7905       CONTINUE
+ 7902     CONTINUE
+C------ Additive checksums (immune to sign-of-zero)
+          IVMS = 0
+          IVDS = 0
+          IVD1S = 0
+          IVD2S = 0
+          DO 7912 IVV=1, NSYS
+            DO 7913 JVV=1, NSYS
+              DO 7914 KK=1, 3
+                IVMS = IVMS + IAND(TRANSFER(VM(KK,JVV,IVV),1),
+     &                              2147483647)
+ 7914         CONTINUE
+ 7913       CONTINUE
+            DO 7915 KK=1, 3
+              IVD1S = IVD1S + IAND(TRANSFER(VDEL(KK,1,IVV),1),
+     &                              2147483647)
+              IVD2S = IVD2S + IAND(TRANSFER(VDEL(KK,2,IVV),1),
+     &                              2147483647)
+ 7915       CONTINUE
+ 7912     CONTINUE
+          IVDS = IVD1S + IVD2S
+          WRITE(0,'(A,I2,A,Z8,A,Z8,A,Z8,A,Z8,
+     &     A,Z12.12,A,Z12.12,A,Z12.12,A,Z12.12)')
+     &     'F_MHASH ',ITER,
+     &     ' VM=',IVMH,' VA=',IVAH,' VB=',IVBH,
+     &     ' VD=',IVDH,
+     &     ' VMs=',IVMS,' VDs=',IVDS,
+     &     ' VD1s=',IVD1S,' VD2s=',IVD2S
+        IF(ITER.EQ.3) THEN
+          WRITE(0,'(A,I4)') 'F_VB3_LOOP_START NSYS=',NSYS
+          DO 7909 IVV=1, NSYS
+            WRITE(0,'(A,I4,6(1X,Z8))')
+     &       'F_VB3 ',IVV,
+     &       TRANSFER(VB(1,1,IVV),1),TRANSFER(VB(1,2,IVV),1),
+     &       TRANSFER(VB(2,1,IVV),1),TRANSFER(VB(2,2,IVV),1),
+     &       TRANSFER(VB(3,1,IVV),1),TRANSFER(VB(3,2,IVV),1)
+ 7909     CONTINUE
+          WRITE(0,'(A)') 'F_VB3_LOOP_END'
+        ENDIF
+C------ Per-station VM hash at iter 1 (find divergent station in first step)
+        IF(ITER.EQ.1) THEN
+          DO 8918 IVV=1, NSYS
+            IVMX = 0
+            IVMS = 0
+            DO 8925 JVV=1, NSYS
+              DO 8935 KK=1, 3
+                ITMP = TRANSFER(REAL(VM(KK,JVV,IVV)),1)
+                IVMX = IEOR(IVMX, ITMP)
+                IVMS = IVMS + IAND(ITMP, 2147483647)
+ 8935         CONTINUE
+ 8925       CONTINUE
+            WRITE(0,'(A,I4,A,Z8,A,Z8)')
+     &       'F_VMS1 iv=',IVV,' xor=',IVMX,' sum=',IVMS
+ 8918     CONTINUE
+        ENDIF
+C------ Per-station VM hash at iter 5 (find divergent station)
+        IF(ITER.EQ.5) THEN
+          DO 8919 IVV=1, NSYS
+            IVMX = 0
+            IVMS = 0
+            DO 8920 JVV=1, NSYS
+              DO 8930 KK=1, 3
+                ITMP = TRANSFER(REAL(VM(KK,JVV,IVV)),1)
+                IVMX = IEOR(IVMX, ITMP)
+                IVMS = IVMS + IAND(ITMP, 2147483647)
+ 8930         CONTINUE
+ 8920       CONTINUE
+            WRITE(0,'(A,I4,A,Z8,A,Z8)')
+     &       'F_VMS5 iv=',IVV,' xor=',IVMX,' sum=',IVMS
+ 8919     CONTINUE
+C-------- Dump VM[*,*,77] per-jv for divergence localization
+          DO 8921 JVV=1, NSYS
+            IB0 = TRANSFER(REAL(VM(1,JVV,77)),1)
+            IB1 = TRANSFER(REAL(VM(2,JVV,77)),1)
+            IB2 = TRANSFER(REAL(VM(3,JVV,77)),1)
+            IF(IB0.NE.0 .OR. IB1.NE.0 .OR. IB2.NE.0) THEN
+              WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8)')
+     &         'F_VM77 jv=',JVV,' r1=',IB0,' r2=',IB1,' r3=',IB2
+            ENDIF
+ 8921     CONTINUE
+          WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,
+     &             A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_VABD77',
+     &     ' VA11=',TRANSFER(REAL(VA(1,1,77)),1),
+     &     ' VA12=',TRANSFER(REAL(VA(1,2,77)),1),
+     &     ' VA21=',TRANSFER(REAL(VA(2,1,77)),1),
+     &     ' VA22=',TRANSFER(REAL(VA(2,2,77)),1),
+     &     ' VA31=',TRANSFER(REAL(VA(3,1,77)),1),
+     &     ' VA32=',TRANSFER(REAL(VA(3,2,77)),1),
+     &     ' VB11=',TRANSFER(REAL(VB(1,1,77)),1),
+     &     ' VB12=',TRANSFER(REAL(VB(1,2,77)),1),
+     &     ' VB21=',TRANSFER(REAL(VB(2,1,77)),1),
+     &     ' VB22=',TRANSFER(REAL(VB(2,2,77)),1),
+     &     ' VB31=',TRANSFER(REAL(VB(3,1,77)),1),
+     &     ' VB32=',TRANSFER(REAL(VB(3,2,77)),1),
+     &     ' VD11=',TRANSFER(REAL(VDEL(1,1,77)),1),
+     &     ' VD21=',TRANSFER(REAL(VDEL(2,1,77)),1),
+     &     ' VD31=',TRANSFER(REAL(VDEL(3,1,77)),1)
+        ENDIF
+        IF(ITER.EQ.1) THEN
+          WRITE(*,'(A,Z8,A,Z8,A,Z8)')
+     &     'F_MATRIX_HASH VM=',IVMH,' VA=',IVAH,' VB=',IVBH
+C-------- VB region hashes: surface (1..77), TE (78..80), wake (81+)
+          IVBSURF = 0
+          IVBTE = 0
+          IVBWAKE = 0
+          DO 7906 IVV=1, NSYS
+            IHH = 0
+            DO 7907 KK=1, 3
+              IHH = IEOR(IHH, TRANSFER(VB(KK,1,IVV),1))
+              IHH = IEOR(IHH, TRANSFER(VB(KK,2,IVV),1))
+ 7907       CONTINUE
+            IF(IVV.LE.77) THEN
+              IVBSURF = IEOR(IVBSURF, IHH)
+            ELSE IF(IVV.LE.80) THEN
+              IVBTE = IEOR(IVBTE, IHH)
+            ELSE
+              IVBWAKE = IEOR(IVBWAKE, IHH)
+            ENDIF
+ 7906     CONTINUE
+          WRITE(*,'(A,Z8,A,Z8,A,Z8)')
+     &     'F_VB_REGION surf=',IVBSURF,' te=',IVBTE,
+     &     ' wake=',IVBWAKE
+        ENDIF
+C------ dump ALL post-BLSOLV VDEL (first iteration only)
+        IF(ITER.EQ.1) THEN
+          DO 7901 JVV=1, NSYS
+            WRITE(0,'(A,I4,1X,Z8,1X,Z8,1X,Z8)')
+     &       'F_SOLVED jv=',JVV,
+     &       TRANSFER(VDEL(1,1,JVV),1),
+     &       TRANSFER(VDEL(2,1,JVV),1),
+     &       TRANSFER(VDEL(3,1,JVV),1)
+ 7901     CONTINUE
+        ENDIF
+C------ dump VM at system lines 3-4 BEFORE BLSOLV (2x2 diag block)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_VM3   ',
+     & TRANSFER(VM(1,1,3),1),TRANSFER(VM(1,2,3),1),
+     & TRANSFER(VM(2,1,3),1),TRANSFER(VM(2,2,3),1)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_VM4   ',
+     & TRANSFER(VM(1,1,4),1),TRANSFER(VM(1,2,4),1),
+     & TRANSFER(VM(2,1,4),1),TRANSFER(VM(2,2,4),1)
+C------ dump VA at system lines 3-4 BEFORE BLSOLV (2x2 sub-diag block)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_VA3   ',
+     & TRANSFER(VA(1,1,3),1),TRANSFER(VA(1,2,3),1),
+     & TRANSFER(VA(2,1,3),1),TRANSFER(VA(2,2,3),1)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_VA4   ',
+     & TRANSFER(VA(1,1,4),1),TRANSFER(VA(1,2,4),1),
+     & TRANSFER(VA(2,1,4),1),TRANSFER(VA(2,2,4),1)
+C------ dump VB at system lines 3-4 BEFORE BLSOLV (2x2 super-diag block)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_VB3   ',
+     & TRANSFER(VB(1,1,3),1),TRANSFER(VB(1,2,3),1),
+     & TRANSFER(VB(2,1,3),1),TRANSFER(VB(2,2,3),1)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_VB4   ',
+     & TRANSFER(VB(1,1,4),1),TRANSFER(VB(1,2,4),1),
+     & TRANSFER(VB(2,1,4),1),TRANSFER(VB(2,2,4),1)
 C
+C------ detect negative zero in VDEL (all iterations)
+         DO 7931 IVD=1, NSYS
+           DO 7932 IKK=1, 3
+             DO 7933 ICC=1, 2
+               IF(VDEL(IKK,ICC,IVD).EQ.0.0 .AND.
+     &            TRANSFER(VDEL(IKK,ICC,IVD),1).NE.0) THEN
+                WRITE(0,'(A,I2,A,I4,A,I1,A,I1,A,Z8)')
+     &           'F_NEG0 it=',ITER,' iv=',IVD,
+     &           ' k=',IKK,' c=',ICC,
+     &           ' bits=',TRANSFER(VDEL(IKK,ICC,IVD),1)
+               ENDIF
+ 7933        CONTINUE
+ 7932      CONTINUE
+ 7931    CONTINUE
+C------ Per-station VM additive checksum at iteration 14
+        IF(ITER.EQ.14) THEN
+         DO 7971 IVCK1=1, NSYS
+           ISCK = 0
+           DO 7972 IVCK2=1, NSYS
+             DO 7973 IVCK3=1, 3
+               ISCK = ISCK + TRANSFER(VM(IVCK3,IVCK2,IVCK1),1)
+ 7973        CONTINUE
+ 7972      CONTINUE
+           WRITE(0,'(A,I4,A,Z8)')
+     &      'F_VMS13 iv=',IVCK1,' sum=',ISCK
+ 7971    CONTINUE
+        ENDIF
+C------ pre-BLSOLV VDEL column 1 at iteration 14 ALL stations
+        IF(ITER.EQ.14) THEN
+         DO 7961 IVD14=1, NSYS
+           WRITE(0,'(A,I4,3(1X,Z8))')
+     &      'F_VD13 jv=',IVD14,
+     &      TRANSFER(VDEL(1,1,IVD14),1),
+     &      TRANSFER(VDEL(2,1,IVD14),1),
+     &      TRANSFER(VDEL(3,1,IVD14),1)
+ 7961    CONTINUE
+        ENDIF
+C------ pre-BLSOLV VDEL trace (ALL entries, iter 1 only)
+        IF(ITER.EQ.1) THEN
+         DO 7921 IVD=1, NSYS
+           WRITE(0,'(A,I4,3(1X,Z8))') 'F_VDEL jv=',IVD,
+     &      TRANSFER(VDEL(1,1,IVD),1),
+     &      TRANSFER(VDEL(2,1,IVD),1),
+     &      TRANSFER(VDEL(3,1,IVD),1)
+ 7921    CONTINUE
+        ENDIF
+C------ pre-BLSOLV aggregate checksum
+        IVMAGG = 0
+        IVDAGG = 0
+        DO 7991 IVAG=1, NSYS
+          DO 7992 KKAG=1, 3
+            DO 7993 JVAG=1, NSYS
+              IVMAGG = IVMAGG +
+     &          IAND(TRANSFER(VM(KKAG,JVAG,IVAG),1), 2147483647)
+ 7993       CONTINUE
+            IVDAGG = IVDAGG +
+     &        IAND(TRANSFER(VDEL(KKAG,1,IVAG),1), 2147483647)
+ 7992     CONTINUE
+ 7991   CONTINUE
+        WRITE(0,'(A,I2,A,Z8,A,Z8)')
+     &   'F_PRE_BL',ITER,' VM=',IVMAGG,' VD=',IVDAGG
+C------ dump all RHS VDEL BEFORE BLSOLV for ah79 debug
+        IF(ITER.EQ.33) THEN
+         DO 9801 KAH=1, NSYS
+           WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &      'F_VDEL_PRE jv=',KAH,
+     &      ' V11=',TRANSFER(VDEL(1,1,KAH),1),
+     &      ' V21=',TRANSFER(VDEL(2,1,KAH),1),
+     &      ' V31=',TRANSFER(VDEL(3,1,KAH),1),
+     &      ' V12=',TRANSFER(VDEL(1,2,KAH),1),
+     &      ' V22=',TRANSFER(VDEL(2,2,KAH),1),
+     &      ' V32=',TRANSFER(VDEL(3,2,KAH),1)
+ 9801    CONTINUE
+        ENDIF
 C------ solve Newton system with custom solver
         CALL BLSOLV
+C------ post-BLSOLV additive checksum
+        ISOL1 = 0
+        ISOL2 = 0
+        DO 7940 IVV=1, NSYS
+          DO 7941 KK=1, 3
+            ISOL1 = ISOL1 + IAND(TRANSFER(VDEL(KK,1,IVV),1),
+     &                            2147483647)
+            ISOL2 = ISOL2 + IAND(TRANSFER(VDEL(KK,2,IVV),1),
+     &                            2147483647)
+ 7941     CONTINUE
+ 7940   CONTINUE
+        WRITE(0,'(A,I2,A,Z8,A,Z8)')
+     &   'F_BLSOLV',ITER,' SOL1=',ISOL1,' SOL2=',ISOL2
+C------ dump post-BLSOLV VDEL solution (ALL stations, iters 1-2)
+        IF(ITER.LE.2) THEN
+          DO 7908 JVV=1, NSYS
+            WRITE(0,781) ITER,JVV,
+     &       TRANSFER(VDEL(1,1,JVV),1),
+     &       TRANSFER(VDEL(2,1,JVV),1),
+     &       TRANSFER(VDEL(3,1,JVV),1)
+ 781        FORMAT('F_VDSOL it=',I1,' jv=',I3,3(1X,Z8.8))
+            WRITE(0,782) ITER,JVV,
+     &       TRANSFER(VDEL(1,2,JVV),1),
+     &       TRANSFER(VDEL(2,2,JVV),1),
+     &       TRANSFER(VDEL(3,2,JVV),1)
+ 782        FORMAT('F_VDSOL2 it=',I1,' jv=',I3,3(1X,Z8.8))
+ 7908     CONTINUE
+        ENDIF
+C------ GDB: dump VM at first system line BEFORE BLSOLV
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_VM_PRE VM110=',TRANSFER(VM(1,1,1),1),
+     &   ' VM120=',TRANSFER(VM(1,2,1),1),
+     &   ' VM210=',TRANSFER(VM(2,1,1),1),
+     &   ' VM220=',TRANSFER(VM(2,2,1),1)
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_VA_PRE VA110=',TRANSFER(VA(1,1,1),1),
+     &   ' VA120=',TRANSFER(VA(1,2,1),1),
+     &   ' VB110=',TRANSFER(VB(1,1,1),1),
+     &   ' VB120=',TRANSFER(VB(1,2,1),1)
+C------ dump VDEL at system lines 3-4 after BLSOLV (both columns)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_VDEL3 ',
+     & TRANSFER(VDEL(1,1,3),1),TRANSFER(VDEL(2,1,3),1),
+     & TRANSFER(VDEL(3,1,3),1),
+     & TRANSFER(VDEL(1,2,3),1),TRANSFER(VDEL(2,2,3),1),
+     & TRANSFER(VDEL(3,2,3),1)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     & 'F_VDEL4 ',
+     & TRANSFER(VDEL(1,1,4),1),TRANSFER(VDEL(2,1,4),1),
+     & TRANSFER(VDEL(3,1,4),1),
+     & TRANSFER(VDEL(1,2,4),1),TRANSFER(VDEL(2,2,4),1),
+     & TRANSFER(VDEL(3,2,4),1)
 C
+C------ dump all VDEL for iter 32/33 pre-UPDATE
+        IF(ITER.EQ.32 .OR. ITER.EQ.33) THEN
+         DO 9701 KAH=1, NSYS
+           WRITE(0,'(A,I3,A,I4,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &      'F_VDEL_ALL it=',ITER,' jv=',KAH,
+     &      ' V11=',TRANSFER(VDEL(1,1,KAH),1),
+     &      ' V21=',TRANSFER(VDEL(2,1,KAH),1),
+     &      ' V31=',TRANSFER(VDEL(3,1,KAH),1),
+     &      ' V12=',TRANSFER(VDEL(1,2,KAH),1),
+     &      ' V22=',TRANSFER(VDEL(2,2,KAH),1),
+     &      ' V32=',TRANSFER(VDEL(3,2,KAH),1)
+ 9701    CONTINUE
+        ENDIF
 C------ update BL variables
         CALL UPDATE
+        IF(ITER.EQ.32 .OR. ITER.EQ.33) THEN
+         DO 9601 IAH=1, 2
+          DO 9602 IAHB=2, NBL(IAH)
+           WRITE(0,'(A,I3,A,I1,A,I4,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &      'F_POSTUPD_FULL it=',ITER,
+     &      ' s=',IAH,' i=',IAHB,
+     &      ' T=',TRANSFER(THET(IAHB,IAH),1),
+     &      ' D=',TRANSFER(DSTR(IAHB,IAH),1),
+     &      ' U=',TRANSFER(UEDG(IAHB,IAH),1),
+     &      ' C=',TRANSFER(CTAU(IAHB,IAH),1)
+ 9602     CONTINUE
+ 9601    CONTINUE
+        ENDIF
+        IF(ITER.GE.20 .AND. ITER.LE.23) THEN
+         DO 7854 ISNS=1, 2
+          DO 7855 INS=2, NBL(ISNS)
+           IF(INS.LE.5 .OR. (ISNS.EQ.2 .AND. INS.GE.89)) THEN
+            WRITE(0,'(A,I2,A,I1,A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &       'F_POSTUPDATE it=',ITER,' s=',ISNS,' i=',INS,
+     &       ' C=',TRANSFER(CTAU(INS,ISNS),1),
+     &       ' T=',TRANSFER(THET(INS,ISNS),1),
+     &       ' D=',TRANSFER(DSTR(INS,ISNS),1),
+     &       ' U=',TRANSFER(UEDG(INS,ISNS),1)
+           ENDIF
+ 7855     CONTINUE
+ 7854    CONTINUE
+        ENDIF
 C
         IF(LALFA) THEN
 C------- set new freestream Mach, Re from new CL
@@ -2681,23 +3207,105 @@ C------- set new inviscid speeds QINV and UINV for new alpha
 C
 C------ calculate edge velocities QVIS(.) from UEDG(..)
         CALL QVFUE
+C------ GDB: trace QVIS post-QVFUE for iter 1
+        IF(ITER.EQ.1) THEN
+         WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_QVIS q1=',TRANSFER(QVIS(1),1),
+     &   ' q2=',TRANSFER(QVIS(2),1),
+     &   ' q40=',TRANSFER(QVIS(40),1),
+     &   ' q80=',TRANSFER(QVIS(80),1)
+        ENDIF
 C
 C------ set GAM distribution from QVIS
         CALL GAMQV
 C
 C------ relocate stagnation point
+        ISTOLD = IST
         CALL STMOVE
+        IF(IST.NE.ISTOLD) THEN
+         WRITE(0,'(A,I2,A,I4,A,I4)')
+     &    'F_STMOVE it=',ITER,' old=',ISTOLD,' new=',IST
+        ENDIF
+C------ post-STMOVE trace for iter 11 at wake stations 64-70 side 2
+        IF(ITER.EQ.11) THEN
+         DO 7795 IBLPS=64, 70
+          WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_POST_STMOVE11 IBL=',IBLPS,
+     &     ' T=',TRANSFER(THET(IBLPS,2),1),
+     &     ' D=',TRANSFER(DSTR(IBLPS,2),1),
+     &     ' U=',TRANSFER(UEDG(IBLPS,2),1),
+     &     ' M=',TRANSFER(MASS(IBLPS,2),1)
+ 7795    CONTINUE
+        ENDIF
 C
 C------ set updated CL,CD
         CALL CLCALC(N,X,Y,GAM,GAM_A,ALFA,MINF,QINF, XCMREF,YCMREF,
      &              CL,CM,CDP,CL_ALF,CL_MSQ)
+        WRITE(0,'(A,I2,A,Z8)') 'F_CLCALC it=',ITER,
+     &   ' CL=',TRANSFER(CL,1)
         CALL CDCALC
+        WRITE(0,'(A,I2,A,Z8,A,Z8)') 'F_ITER_CDCL it=',ITER,
+     &   ' CD=',TRANSFER(CD,1),' CL=',TRANSFER(CL,1)
+        WRITE(0,'(A,I2,A,Z8,A,Z8)') 'F_RMSBL it=',ITER,
+     &   ' rmsbl=',TRANSFER(RMSBL,1),' eps1=',TRANSFER(EPS1,1)
+C------ trace wake end state to find where BL state divergence enters
+        WRITE(0,'(A,I2,A,Z8,A,Z8,A,Z8)') 'F_WAKEEND it=',ITER,
+     &   ' T=',TRANSFER(THET(NBL(2),2),1),
+     &   ' D=',TRANSFER(DSTR(NBL(2),2),1),
+     &   ' U=',TRANSFER(UEDG(NBL(2),2),1)
+C------ trace stations 2-5 (near stagnation) for both sides
+        DO 7851 ISTNS=1, 2
+          DO 7852 IBLNS=2, 5
+           IF(IBLNS.LE.NBL(ISTNS)) THEN
+            WRITE(0,'(A,I2,A,I1,A,I2,A,Z8,A,Z8,A,Z8)')
+     &       'F_NEARSST it=',ITER,' s=',ISTNS,' i=',IBLNS,
+     &       ' T=',TRANSFER(THET(IBLNS,ISTNS),1),
+     &       ' D=',TRANSFER(DSTR(IBLNS,ISTNS),1),
+     &       ' U=',TRANSFER(UEDG(IBLNS,ISTNS),1)
+           ENDIF
+ 7852     CONTINUE
+ 7851   CONTINUE
 C
 C------ display changes and test for convergence
-        IF(RLX.LT.1.0) 
+        IF(RLX.LT.1.0)
      &   WRITE(*,2000) ITER, RMSBL, RMXBL, VMXBL,IMXBL,ISMXBL,RLX
-        IF(RLX.EQ.1.0) 
+        IF(RLX.EQ.1.0)
      &   WRITE(*,2010) ITER, RMSBL, RMXBL, VMXBL,IMXBL,ISMXBL
+C---- parity trace: per-iter station 67,68,69 side 2 BL state
+        WRITE(0,'(A,I3,A,Z8.8,A,Z8.8,A,Z8.8,A,Z8.8)')
+     &   'F_STN67S2 it=',ITER,
+     &   ' T=',TRANSFER(THET(67,2),1),
+     &   ' D=',TRANSFER(DSTR(67,2),1),
+     &   ' U=',TRANSFER(UEDG(67,2),1),
+     &   ' C=',TRANSFER(CTAU(67,2),1)
+        WRITE(0,'(A,I3,A,Z8.8,A,Z8.8,A,Z8.8,A,Z8.8)')
+     &   'F_STN68S2 it=',ITER,
+     &   ' T=',TRANSFER(THET(68,2),1),
+     &   ' D=',TRANSFER(DSTR(68,2),1),
+     &   ' U=',TRANSFER(UEDG(68,2),1),
+     &   ' C=',TRANSFER(CTAU(68,2),1)
+        WRITE(0,'(A,I3,A,Z8.8,A,Z8.8,A,Z8.8,A,Z8.8)')
+     &   'F_STN69S2 it=',ITER,
+     &   ' T=',TRANSFER(THET(69,2),1),
+     &   ' D=',TRANSFER(DSTR(69,2),1),
+     &   ' U=',TRANSFER(UEDG(69,2),1),
+     &   ' C=',TRANSFER(CTAU(69,2),1)
+        WRITE(0,'(A,I3,A,Z8.8)')
+     &   'F_RLX_ITER it=',ITER,' rlx=',TRANSFER(RLX,1)
+C---- dump ALL stations both sides at iter 32 to find state-divergence origin
+        IF(ITER.EQ.32 .OR. ITER.EQ.33) THEN
+          DO 7877 ISD=1,2
+          DO 7878 IBD=2,NBL(ISD)
+            WRITE(0,'(A,I3,A,I1,A,I4,A,Z8.8,A,Z8.8,A,Z8.8,A,Z8.8,A,Z8.8)')
+     &        'F_FULLBL it=',ITER,' s=',ISD,' i=',IBD,
+     &        ' T=',TRANSFER(THET(IBD,ISD),1),
+     &        ' D=',TRANSFER(DSTR(IBD,ISD),1),
+     &        ' U=',TRANSFER(UEDG(IBD,ISD),1),
+     &        ' C=',TRANSFER(CTAU(IBD,ISD),1),
+     &        ' M=',TRANSFER(MASS(IBD,ISD),1)
+ 7878     CONTINUE
+ 7877     CONTINUE
+        ENDIF
          CDP = CD - CDF
          WRITE(*,2020) ALFA/DTOR, CL, CM, CD, CDF, CDP
 C
@@ -2712,6 +3320,9 @@ C
       WRITE(*,*) 'VISCAL:  Convergence failed'
 C
    90 CONTINUE
+C---- emit hex CL/CD for reference generation
+      WRITE(*,'(A,Z8.8,A,Z8.8)')
+     & 'CDCALC_HEX CL=',TRANSFER(CL,1),' CD=',TRANSFER(CD,1)
       CALL CPCALC(N+NW,QINV,QINF,MINF,CPI)
       CALL CPCALC(N+NW,QVIS,QINF,MINF,CPV)
       IF(LFLAP) CALL MHINGE

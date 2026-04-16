@@ -1305,7 +1305,7 @@ public sealed class WakeColumnFortranParityTests
             BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("AssembleSystem method not found.");
 
-        return (int)method.Invoke(null, new object[] { panel, state, FreestreamSpeed })!;
+        return (int)method.Invoke(null, new object[] { panel, state, FreestreamSpeed, 0.0 })!;
     }
 
     private static (double normalX, double normalY) InvokeComputeTrailingEdgeWakeNormal(LinearVortexPanelState panel)

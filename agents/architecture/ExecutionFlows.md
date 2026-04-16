@@ -178,6 +178,14 @@ Important current discrepancy:
 - The viscous CLI still parses surrogate-era knobs such as coupling iterations, viscous iterations, residual tolerance, and displacement relaxation.
 - `CreateViscousSettings` currently wires only panel count, Mach, Reynolds, transition Reynolds-theta, and critical `N`, so those extra arguments are ignored.
 
+## 13. Repo automation flow
+
+1. Machine bootstrap installs `autonomous-loop` and writes `~/.codex/` machine config plus global hooks and skill.
+2. Repo-local `.codex/autoloop.project.json` declares the build and test gates for this checkout.
+3. Repo-local `.codex/hooks.json` points Codex session hooks at the machine-installed CLI path.
+4. Repo-local `.agents/skills/autonomous-loop/SKILL.md` tells agents how to enable and operate the loop when the user requests it.
+5. `autonomous-loop doctor --cwd <repo>` validates the combined machine-plus-repo setup.
+
 ## TODO
 
 - Remove or rewire the deprecated viscous CLI verbs once migration decisions are final.

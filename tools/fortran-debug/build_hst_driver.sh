@@ -18,5 +18,10 @@ fi
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-gfortran -std=legacy -O2 -ffixed-line-length-none "$DRIVER_SRC" -o "$OUTPUT_BIN"
+# When XFOIL_DISABLE_FMA=1, compile with -O0 -ffp-contract=off to eliminate FMA artifacts.
+if [[ "${XFOIL_DISABLE_FMA:-0}" == "1" ]]; then
+    gfortran -std=legacy -O0 -ffp-contract=off -march=x86-64 -ffixed-line-length-none "$DRIVER_SRC" -o "$OUTPUT_BIN"
+else
+    gfortran -std=legacy -O2 -march=native -ffixed-line-length-none "$DRIVER_SRC" -o "$OUTPUT_BIN"
+fi
 echo "$OUTPUT_BIN"

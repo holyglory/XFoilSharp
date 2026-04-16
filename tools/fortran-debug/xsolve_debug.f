@@ -38,6 +38,9 @@ C
       DIMENSION Z(NSIZ,NSIZ), R(NSIZ,NRHS)
       LOGICAL TRACEGAUSS
       CHARACTER*16 GPHASE
+      REAL NEGZTMP
+      REAL FMAF_REAL
+      EXTERNAL FMAF_REAL
 C
       TRACEGAUSS = NN.EQ.4 .AND. NRHS.EQ.1
       IF(TRACEGAUSS) THEN
@@ -94,11 +97,14 @@ C------ forward eliminate everything
 C
 C          IF(ZTMP.EQ.0.0) GO TO 15
 C
+C-------- Use explicit FMA to guarantee contraction even when
+C         trace calls force register spills on x86-64.
+          NEGZTMP = -ZTMP
           DO 151 L=NP1, NN
-            Z(K,L) = Z(K,L) - ZTMP*Z(NP,L)
+            Z(K,L) = FMAF_REAL(NEGZTMP, Z(NP,L), Z(K,L))
   151     CONTINUE
           DO 152 L=1, NRHS
-            R(K,L) = R(K,L) - ZTMP*R(NP,L)
+            R(K,L) = FMAF_REAL(NEGZTMP, R(NP,L), R(K,L))
   152     CONTINUE
           IF(TRACEGAUSS) THEN
            GPHASE = 'eliminate'
@@ -132,7 +138,7 @@ C---- back substitute everything
         NP1 = NP+1
         DO 31 L=1, NRHS
           DO 310 K=NP1, NN
-            R(NP,L) = R(NP,L) - Z(NP,K)*R(K,L)
+            R(NP,L) = FMAF_REAL(-Z(NP,K), R(K,L), R(NP,L))
   310     CONTINUE
    31   CONTINUE
         IF(TRACEGAUSS) THEN

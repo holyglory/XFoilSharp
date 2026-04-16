@@ -10,7 +10,9 @@ bootstrap_xfoilsharp_env
 BUILD_DIR="${XFOIL_BUILD_DIR:-$SCRIPT_DIR/build}"
 BINARY="$BUILD_DIR/xfoil_debug"
 CASES_DIR="$SCRIPT_DIR/cases"
-TRACE_COUNTER_PATH="${XFOIL_TRACE_COUNTER_PATH:-$SCRIPT_DIR/trace_counter.txt}"
+# Default to a per-output-directory counter so parallel runs for different
+# cases never conflict.  The env override still works for shared counters.
+TRACE_COUNTER_PATH="${XFOIL_TRACE_COUNTER_PATH:-}"
 CASE_ID="n0012_re1e6_a0"
 OUTPUT_DIR=""
 TRACE_FILTER_PID=""
@@ -82,6 +84,24 @@ has_trace_focus_env() {
     local var
     for var in "${vars[@]}"; do
         if [ -n "${!var:-}" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+reference_binary_is_stale() {
+    local binary_path="$1"
+    shift
+
+    if [ ! -f "$binary_path" ]; then
+        return 0
+    fi
+
+    local input_path=""
+    for input_path in "$@"; do
+        if [ -f "$input_path" ] && [ "$input_path" -nt "$binary_path" ]; then
             return 0
         fi
     done
@@ -368,7 +388,9 @@ fi
 
 BUILD_DIR="$(resolve_path "$BUILD_DIR")"
 BINARY="$BUILD_DIR/xfoil_debug"
-TRACE_COUNTER_PATH="$(resolve_path "$TRACE_COUNTER_PATH")"
+if [[ -n "$TRACE_COUNTER_PATH" ]]; then
+    TRACE_COUNTER_PATH="$(resolve_path "$TRACE_COUNTER_PATH")"
+fi
 
 if [ -n "$OUTPUT_DIR" ]; then
     OUTPUT_DIR="$(resolve_path "$OUTPUT_DIR")"
@@ -402,9 +424,21 @@ echo "Binary: $BINARY"
 echo "Trace counter: $TRACE_COUNTER_PATH"
 echo "Summary only: $SUMMARY_ONLY"
 
-if [ ! -f "$BINARY" ]; then
+REBUILD_INPUTS=(
+    "$SCRIPT_DIR/build_debug.sh"
+    "$SCRIPT_DIR/xbl_debug.f"
+    "$SCRIPT_DIR/xoper_debug.f"
+    "$SCRIPT_DIR/xsolve_debug.f"
+    "$SCRIPT_DIR/json_trace.f"
+    "$BUILD_DIR/xbl.f"
+    "$BUILD_DIR/xoper.f"
+    "$BUILD_DIR/xsolve.f"
+    "$BUILD_DIR/json_trace.f"
+)
+
+if reference_binary_is_stale "$BINARY" "${REBUILD_INPUTS[@]}"; then
     if [ "$BUILD_DIR" = "$SCRIPT_DIR/build" ]; then
-        echo "Reference debug binary missing; rebuilding with build_debug.sh"
+        echo "Reference debug binary missing or stale; rebuilding with build_debug.sh"
         "$SCRIPT_DIR/build_debug.sh"
     fi
 fi
@@ -437,20 +471,28 @@ if [ ! -f "$INPUT_FILE" ]; then
 fi
 
 mkdir -p "$OUTPUT_DIR"
+# Resolve default counter path now that OUTPUT_DIR is known.
+if [[ -z "$TRACE_COUNTER_PATH" ]]; then
+    TRACE_COUNTER_PATH="$OUTPUT_DIR/trace_counter.txt"
+fi
 mkdir -p "$(dirname "$TRACE_COUNTER_PATH")"
 
 TRACE_COUNTER="$(python3 - <<'PY' "$TRACE_COUNTER_PATH"
 from pathlib import Path
-import sys
+import sys, fcntl
 
 path = Path(sys.argv[1])
-current = 0
-if path.exists():
-    text = path.read_text(encoding='utf-8').strip()
-    if text:
-        current = int(text)
-next_value = current + 1
-path.write_text(f"{next_value}\n", encoding='utf-8')
+path.parent.mkdir(parents=True, exist_ok=True)
+path.touch(exist_ok=True)
+with open(path, 'r+', encoding='utf-8') as f:
+    fcntl.flock(f, fcntl.LOCK_EX)
+    text = f.read().strip()
+    current = int(text) if text else 0
+    next_value = current + 1
+    f.seek(0)
+    f.write(f"{next_value}\n")
+    f.truncate()
+    fcntl.flock(f, fcntl.LOCK_UN)
 print(next_value)
 PY
 )"

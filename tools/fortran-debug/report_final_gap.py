@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def parse_reference(path: pathlib.Path) -> tuple[float, float, float]:
-    matches = REFERENCE_POST_CALC.findall(path.read_text(encoding="utf-8"))
+    matches = REFERENCE_POST_CALC.findall(path.read_text(encoding="utf-8", errors="replace"))
     if not matches:
         raise SystemExit(f"Could not find POST_CALC summary in reference dump: {path}")
 
@@ -42,7 +42,7 @@ def parse_reference(path: pathlib.Path) -> tuple[float, float, float]:
 
 
 def parse_managed(path: pathlib.Path) -> tuple[float, float, float, str, int]:
-    text = path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8", errors="replace")
     final_match = MANAGED_FINAL.search(text)
     if final_match:
         cl, cd, cm, converged, iterations = final_match.groups()

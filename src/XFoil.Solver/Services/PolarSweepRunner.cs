@@ -61,18 +61,29 @@ public static class PolarSweepRunner
         inviscidState.UseLegacyKernelPrecision = settings.UseLegacyStreamfunctionKernelPrecision;
         inviscidState.UseLegacyPanelingPrecision = settings.UseLegacyPanelingPrecision;
 
+        // Use float DTOR for legacy parity (matching Fortran ALFA = ADEG * DTOR
+        // where DTOR = ACOS(-1.0)/180.0 in REAL).
+        float dtorF = MathF.Acos(-1.0f) / 180.0f;
+        double assembleAlpha = settings.UseLegacyBoundaryLayerInitialization
+            ? (double)((float)alphaStartDeg * dtorF)
+            : alphaStartDeg * Math.PI / 180.0;
+
         // Assemble and factor the influence matrix once
         LinearVortexInviscidSolver.AssembleAndFactorSystem(
-            panel, inviscidState, settings.FreestreamVelocity);
+            panel,
+            inviscidState,
+            settings.FreestreamVelocity,
+            assembleAlpha);
 
         // Track converged BL states for warm-start
         // Key: index in results list; Value: BL state snapshot
         var convergedSnapshots = new List<BLSnapshot>();
         int lastConvergedIndex = -1;
-
         for (double alpha = alphaStartDeg; ShouldContinue(alpha, alphaEndDeg, step); alpha += step)
         {
-            double alphaRad = alpha * Math.PI / 180.0;
+            double alphaRad = settings.UseLegacyBoundaryLayerInitialization
+                ? (double)((float)alpha * dtorF)
+                : alpha * Math.PI / 180.0;
 
             // Solve inviscid at this alpha
             var inviscidResult = LinearVortexInviscidSolver.SolveAtAngleOfAttack(
@@ -147,11 +158,13 @@ public static class PolarSweepRunner
         inviscidState.UseLegacyPanelingPrecision = settings.UseLegacyPanelingPrecision;
 
         LinearVortexInviscidSolver.AssembleAndFactorSystem(
-            panel, inviscidState, settings.FreestreamVelocity);
+            panel,
+            inviscidState,
+            settings.FreestreamVelocity,
+            0.0);
 
         var convergedSnapshots = new List<BLSnapshot>();
         int lastConvergedIndex = -1;
-        double lastAlpha = 0.0; // Track alpha for warm-starting the CL search
 
         for (double targetCL = clStart; ShouldContinue(targetCL, clEnd, step); targetCL += step)
         {
@@ -178,7 +191,6 @@ public static class PolarSweepRunner
                 var snapshot = CaptureBLSnapshot(panel, inviscidState, settings, alphaRad);
                 convergedSnapshots.Add(snapshot);
                 lastConvergedIndex = convergedSnapshots.Count - 1;
-                lastAlpha = alphaRad;
             }
 
             results.Add(result);
@@ -232,7 +244,10 @@ public static class PolarSweepRunner
         inviscidState.UseLegacyPanelingPrecision = baseSettings.UseLegacyPanelingPrecision;
 
         LinearVortexInviscidSolver.AssembleAndFactorSystem(
-            panel, inviscidState, baseSettings.FreestreamVelocity);
+            panel,
+            inviscidState,
+            baseSettings.FreestreamVelocity,
+            0.0);
 
         var convergedSnapshots = new List<BLSnapshot>();
         int lastConvergedIndex = -1;

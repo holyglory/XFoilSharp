@@ -54,9 +54,19 @@ C
 C
 C---- set up stretched array using converged geometric ratio
    11 S(1) = 0.0
+      WRITE(0,'(A,Z8,A,Z8,A,I3,A,Z8)')
+     &  'F_SETEXP_R ratio=',TRANSFER(RATIO,1),
+     &  ' ds1=',TRANSFER(DS1,1),' nn=',NN,
+     &  ' smax=',TRANSFER(SMAX,1)
       DS = DS1
       DO 2 N=2, NN
         S(N) = S(N-1) + DS
+        IF(N.LE.8) THEN
+          WRITE(0,'(A,I3,A,Z8,A,Z8)')
+     &      'F_SETEXP n=',N,
+     &      ' s=',TRANSFER(S(N),1),
+     &      ' ds=',TRANSFER(DS,1)
+        ENDIF
         DS = DS*RATIO
     2 CONTINUE
 C

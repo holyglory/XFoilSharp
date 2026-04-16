@@ -28,11 +28,44 @@ internal static class WakeGapProfile
         double normalGap,
         double distanceFromTrailingEdge,
         double wakeGapDerivative,
-        bool sharpTrailingEdge)
+        bool sharpTrailingEdge,
+        bool useLegacyPrecision = false)
     {
         if (sharpTrailingEdge || normalGap <= 1e-9d)
         {
             return 0d;
+        }
+
+        if (useLegacyPrecision)
+        {
+            // Fortran xpanel.f:2492-2506 — XYWAKE computes the wake-gap cubic in
+            // REAL*4:
+            //   AA = 3.0 + TELRAT*DWDXTE
+            //   BB = -2.0 - TELRAT*DWDXTE
+            //   ZN = 1.0 - (XSSI-XSSI_TE) / (TELRAT*ANTE)
+            //   WGAP = ANTE * (AA + BB*ZN)*ZN**2
+            // Matching with double drifts 1 ULP per wake station and shifts
+            // WGAP(IW) vs the Fortran value that the later BLPRV/BLKIN feeds
+            // through `D2 = DSI - DSWAKI`.
+            float anteF = (float)normalGap;
+            float telratF = (float)TrailingEdgeGapRatio;
+            float dwdxF = (float)wakeGapDerivative;
+            float aaF = 3f + (telratF * dwdxF);
+            float bbF = -2f - (telratF * dwdxF);
+            float telrAnteF = telratF * anteF;
+            float distF = (float)distanceFromTrailingEdge;
+            float znF = 1f - (distF / telrAnteF);
+            if (znF < 0f)
+            {
+                return 0d;
+            }
+            // Fortran: ANTE * (AA + BB*ZN) * ZN**2
+            // ZN**2 evaluates as ZN*ZN (integer exponent → multiply).
+            // The expression parses as `ANTE * ((AA+BB*ZN) * ZN**2)` which is
+            // NOT left-to-right ((X*ZN)*ZN). Match Fortran's grouping by
+            // computing znSquared first, then multiplying in.
+            float znSqF = znF * znF;
+            return anteF * (aaF + (bbF * znF)) * znSqF;
         }
 
         double cubicA = 3d + (TrailingEdgeGapRatio * wakeGapDerivative);

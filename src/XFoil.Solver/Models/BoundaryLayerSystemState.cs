@@ -54,6 +54,10 @@ public sealed class BoundaryLayerSystemState
         // MASS(IVX,2) in Fortran.
         MASS = new double[maxStations, 2];
 
+        // Wall shear stress at each station, per side.
+        // TAU(IVX,2) in Fortran: TAU = 0.5*R2*U2*U2*CF2
+        TAU = new double[maxStations, 2];
+
         // BL arc-length coordinate at each station, per side.
         // XSSI(IVX,2) in Fortran.
         XSSI = new double[maxStations, 2];
@@ -111,6 +115,9 @@ public sealed class BoundaryLayerSystemState
     /// <summary>Mass defect (delta* x Ue), indexed [station, side].</summary>
     public double[,] MASS { get; }
 
+    /// <summary>Wall shear stress TAU(IVX,2) from SETBL.</summary>
+    public double[,] TAU { get; }
+
     /// <summary>BL arc-length coordinate, indexed [station, side].</summary>
     public double[,] XSSI { get; }
 
@@ -158,6 +165,15 @@ public sealed class BoundaryLayerSystemState
     /// explicitly.
     /// </summary>
     public double LegacySetblLaminarShearCarry { get; set; }
+
+    /// <summary>
+    /// Fortran COMMON block V_SYS carries VS1(2,1) across BLSYS calls.
+    /// BLDIF never assigns VS1(2,1) for eq2, so the value is stale from
+    /// the previous TRDIF station's BL1+BT1 combination. The C# port
+    /// creates fresh arrays per call, so this field explicitly carries
+    /// the stale value to match the Fortran parity path.
+    /// </summary>
+    public double LegacyStaleVs121Carry { get; set; }
 
     /// <summary>Whether the viscous solution has converged.</summary>
     public bool Converged { get; set; }

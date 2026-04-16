@@ -180,6 +180,29 @@ public class ParametricSplineTests
         }
     }
 
+    [Fact]
+    // Legacy mapping: f_xfoil/src/spline.f :: TRISOL back substitution REAL packet replay.
+    // Difference from legacy: The managed test injects a 2x2 witness system that reproduces the
+    // exact live parity packet discovered in the full NACA 0003 binary-parity trace.
+    // Decision: Keep the focused regression because it constrains the mixed arithmetic staging
+    // inside TRISOL without rerunning the whole solver.
+    public void TridiagonalSolver_FloatBackSubstitution_ReplaysSingleRoundLegacyPacket()
+    {
+        var lower = new float[] { 0.0f, 0.0f };
+        var diagonal = new float[] { 1.0f, 1.0f };
+        var upper = new float[] { BitConverter.Int32BitsToSingle(unchecked((int)0x3EAE51E1)), 0.0f };
+        var rhs = new float[]
+        {
+            BitConverter.Int32BitsToSingle(unchecked((int)0x3FAB796D)),
+            BitConverter.Int32BitsToSingle(unchecked((int)0x3F7FD672))
+        };
+
+        TridiagonalSolver.Solve(lower, diagonal, upper, rhs, 2);
+
+        Assert.Equal(unchecked((int)0x3F7FD80F), BitConverter.SingleToInt32Bits(rhs[0]));
+        Assert.Equal(unchecked((int)0x3F7FD672), BitConverter.SingleToInt32Bits(rhs[1]));
+    }
+
     /// <summary>
     /// Test 6: Spline evaluation between knots interpolates correctly.
     /// </summary>

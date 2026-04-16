@@ -80,6 +80,45 @@ public sealed class ParityTraceLiveComparatorTests
     }
 
     [Fact]
+    public void ObserveSerializedRecord_AllowsEquivalentSinglePayloadsWhenOnlyManagedBitsArePresent()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"xfoilsharp-livecompare-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            string referenceTracePath = Path.Combine(tempDir, "reference.jsonl");
+            File.WriteAllText(
+                referenceTracePath,
+                "{\"sequence\":1,\"runtime\":\"fortran\",\"kind\":\"pangen_newton_state\",\"scope\":\"PANGEN\",\"name\":null,\"data\":{\"iteration\":1,\"index\":293,\"rez\":-2.9802322387695312e-08},\"values\":null,\"tags\":null,\"timestampUtc\":null}\n");
+
+            var comparator = new ParityTraceLiveComparator(referenceTracePath);
+            using var managedSink = new StringWriter();
+            using var managedWriter = new JsonlTraceWriter(
+                managedSink,
+                runtime: "csharp",
+                session: new { caseId = "managed" },
+                serializedRecordObserver: comparator.ObserveSerializedRecord);
+
+            managedWriter.WriteEvent(
+                "pangen_newton_state",
+                "CosineClusteringPanelDistributor.DistributeCore",
+                new
+                {
+                    iteration = 1,
+                    index = 293,
+                    rez = BitConverter.Int32BitsToSingle(unchecked((int)0xB3000000))
+                });
+
+            Assert.Null(Record.Exception(comparator.AssertCompleted));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ObserveSerializedRecord_AllowsBooleanishNumberAndBoolPayloads()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"xfoilsharp-livecompare-{Guid.NewGuid():N}");

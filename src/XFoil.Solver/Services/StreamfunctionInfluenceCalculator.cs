@@ -21,6 +21,7 @@ namespace XFoil.Solver.Services;
 /// </summary>
 public static class StreamfunctionInfluenceCalculator
 {
+    [ThreadStatic] private static int s_psilinDumpCount;
     /// <summary>
     /// Computes the streamfunction PSI and all sensitivity arrays at a single field point
     /// due to all panels, the TE panel, and the freestream.
@@ -302,6 +303,23 @@ public static class StreamfunctionInfluenceCalculator
                 x2i,
                 yyi);
 
+            if (DebugFlags.SetBlHex
+                && io == 80
+                && jo <= 2)
+            {
+                Console.Error.WriteLine(
+                    $"C_PSIPANEL io={io} jo={jo + 1} jp={jp + 1}" +
+                    $" x1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
+                    $" x2={BitConverter.SingleToInt32Bits((float)x2):X8}" +
+                    $" yy={BitConverter.SingleToInt32Bits((float)yy):X8}" +
+                    $" rs1={BitConverter.SingleToInt32Bits((float)rs1):X8}" +
+                    $" rs2={BitConverter.SingleToInt32Bits((float)rs2):X8}" +
+                    $" g1={BitConverter.SingleToInt32Bits((float)g1):X8}" +
+                    $" g2={BitConverter.SingleToInt32Bits((float)g2):X8}" +
+                    $" t1={BitConverter.SingleToInt32Bits((float)t1):X8}" +
+                    $" t2={BitConverter.SingleToInt32Bits((float)t2):X8}");
+            }
+
             // Track last panel for TE treatment
             lastJo = jo;
             lastJp = jp;
@@ -409,12 +427,26 @@ public static class StreamfunctionInfluenceCalculator
         float seps = (float)((panel.ArcLength[n - 1] - panel.ArcLength[0]) * 1.0e-5);
         int io = fieldNodeIndex + 1;
 
+        if (fieldNodeIndex == 79 && DebugFlags.BldifDebug && s_psilinDumpCount == 0)
+        {
+            Console.Error.WriteLine($"PSILIN_ENTRY io={io} fieldX={fieldX:E15} fieldXf={(float)fieldX:E15}");
+            Console.Error.WriteLine($"PANEL_INDEX n={n} X[0]={(float)panel.X[0]:E10} X[1]={(float)panel.X[1]:E10} X[11]={(float)panel.X[11]:E10} X[12]={(float)panel.X[12]:E10} X[79]={(float)panel.X[79]:E10}");
+        }
+
         float fieldXf = (float)fieldX;
         float fieldYf = (float)fieldY;
         float fieldNormalXf = (float)fieldNormalX;
         float fieldNormalYf = (float)fieldNormalY;
         float cosa = (float)Math.Cos(angleOfAttackRadians);
         float sina = (float)Math.Sin(angleOfAttackRadians);
+        if (DebugFlags.SetBlHex
+            && io == n + 1 && fieldNormalXf > 0.5f)
+        {
+            Console.Error.WriteLine(
+                $"C_CSNI ALFA={BitConverter.SingleToInt32Bits((float)angleOfAttackRadians):X8}" +
+                $" COSA={BitConverter.SingleToInt32Bits(cosa):X8}" +
+                $" SINA={BitConverter.SingleToInt32Bits(sina):X8}");
+        }
 
         var dzdg = new float[n];
         var dzdm = new float[n];
@@ -433,8 +465,15 @@ public static class StreamfunctionInfluenceCalculator
         }
         else
         {
-            scs = (float)(state.TrailingEdgeAngleNormal / state.TrailingEdgeGap);
-            sds = (float)(state.TrailingEdgeAngleStreamwise / state.TrailingEdgeGap);
+            // Fortran: SCS = ANTE/DSTE in REAL (float) precision.
+            // C# previously did the division in double then cast to float,
+            // which can produce 1 ULP differences. Cast operands first to
+            // ensure float-precision division.
+            float anteF = (float)state.TrailingEdgeAngleNormal;
+            float asteF = (float)state.TrailingEdgeAngleStreamwise;
+            float dsteF = (float)state.TrailingEdgeGap;
+            scs = anteF / dsteF;
+            sds = asteF / dsteF;
         }
 
         float x1 = 0f;
@@ -521,17 +560,17 @@ public static class StreamfunctionInfluenceCalculator
                 ? LegacyPrecisionMath.FusedMultiplyAdd(sx, rx1, sy * ry1)
                 : LegacyPrecisionMath.SumOfProducts(sx, rx1, sy, ry1);
             x2 = (io >= 1 && io <= n)
-                ? LegacyPrecisionMath.FusedMultiplyAdd(sx, rx2, sy * ry2)
+                ? LegacyPrecisionMath.ContractedMultiplySubtract(-sx, rx2, sy * ry2)
                 : LegacyPrecisionMath.SumOfProducts(sx, rx2, sy, ry2);
             yy = (io >= 1 && io <= n)
                 ? LegacyPrecisionMath.FusedMultiplyAdd(sx, ry1, -(sy * rx1))
                 : LegacyPrecisionMath.FusedMultiplyAdd(sx, ry1, -(sy * rx1));
 
             rs1 = (io >= 1 && io <= n)
-                ? LegacyPrecisionMath.FusedMultiplyAdd(rx1, rx1, ry1 * ry1)
+                ? LegacyPrecisionMath.ContractedMultiplySubtract(-rx1, rx1, ry1 * ry1)
                 : LegacyPrecisionMath.FusedMultiplyAdd(rx1, rx1, ry1 * ry1);
             rs2 = (io >= 1 && io <= n)
-                ? LegacyPrecisionMath.FusedMultiplyAdd(rx2, rx2, ry2 * ry2)
+                ? LegacyPrecisionMath.ContractedMultiplySubtract(-rx2, rx2, ry2 * ry2)
                 : LegacyPrecisionMath.FusedMultiplyAdd(rx2, rx2, ry2 * ry2);
 
             float sgn = (io >= 1 && io <= n) ? 1f : (yy >= 0f ? 1f : -1f);
@@ -539,7 +578,7 @@ public static class StreamfunctionInfluenceCalculator
             if (fieldNodeIndex != jo && rs1 > 0f)
             {
                 g1 = LegacyLibm.Log(rs1);
-                t1 = MathF.Atan2(sgn * x1, sgn * yy) + ((0.5f - (0.5f * sgn)) * MathF.PI);
+                t1 = LegacyLibm.Atan2(sgn * x1, sgn * yy) + ((0.5f - (0.5f * sgn)) * MathF.PI);
             }
             else
             {
@@ -550,7 +589,7 @@ public static class StreamfunctionInfluenceCalculator
             if (fieldNodeIndex != jp && rs2 > 0f)
             {
                 g2 = LegacyLibm.Log(rs2);
-                t2 = MathF.Atan2(sgn * x2, sgn * yy) + ((0.5f - (0.5f * sgn)) * MathF.PI);
+                t2 = LegacyLibm.Atan2(sgn * x2, sgn * yy) + ((0.5f - (0.5f * sgn)) * MathF.PI);
             }
             else
             {
@@ -559,7 +598,7 @@ public static class StreamfunctionInfluenceCalculator
             }
 
             x1i = (io >= 1 && io <= n)
-                ? LegacyPrecisionMath.FusedMultiplyAdd(sx, fieldNormalXf, sy * fieldNormalYf)
+                ? LegacyPrecisionMath.ContractedMultiplySubtract(-sx, fieldNormalXf, sy * fieldNormalYf)
                 : LegacyPrecisionMath.SumOfProducts(sx, fieldNormalXf, sy, fieldNormalYf);
             x2i = x1i;
             yyi = (io >= 1 && io <= n)
@@ -606,6 +645,41 @@ public static class StreamfunctionInfluenceCalculator
                 x2i,
                 yyi);
 
+            if (DebugFlags.SetBlHex
+                && io == 80
+                && jo <= 2)
+            {
+                Console.Error.WriteLine(
+                    $"C_PSISTAGE io={io} jo={jo + 1} jp={jp + 1}" +
+                    $" xJo={BitConverter.SingleToInt32Bits(xJo):X8}" +
+                    $" yJo={BitConverter.SingleToInt32Bits(yJo):X8}" +
+                    $" xJp={BitConverter.SingleToInt32Bits(xJp):X8}" +
+                    $" yJp={BitConverter.SingleToInt32Bits(yJp):X8}" +
+                    $" dx={BitConverter.SingleToInt32Bits(dxPanel):X8}" +
+                    $" dy={BitConverter.SingleToInt32Bits(dyPanel):X8}" +
+                    $" dso={BitConverter.SingleToInt32Bits(dso):X8}" +
+                    $" dsio={BitConverter.SingleToInt32Bits(dsio):X8}" +
+                    $" rx1={BitConverter.SingleToInt32Bits(rx1):X8}" +
+                    $" ry1={BitConverter.SingleToInt32Bits(ry1):X8}" +
+                    $" rx2={BitConverter.SingleToInt32Bits(rx2):X8}" +
+                    $" ry2={BitConverter.SingleToInt32Bits(ry2):X8}" +
+                    $" nx={BitConverter.SingleToInt32Bits(fieldNormalXf):X8}" +
+                    $" ny={BitConverter.SingleToInt32Bits(fieldNormalYf):X8}" +
+                    $" sx={BitConverter.SingleToInt32Bits(sx):X8}" +
+                    $" sy={BitConverter.SingleToInt32Bits(sy):X8}");
+                Console.Error.WriteLine(
+                    $"C_PSIPANEL io={io} jo={jo + 1} jp={jp + 1}" +
+                    $" x1={BitConverter.SingleToInt32Bits(x1):X8}" +
+                    $" x2={BitConverter.SingleToInt32Bits(x2):X8}" +
+                    $" yy={BitConverter.SingleToInt32Bits(yy):X8}" +
+                    $" rs1={BitConverter.SingleToInt32Bits(rs1):X8}" +
+                    $" rs2={BitConverter.SingleToInt32Bits(rs2):X8}" +
+                    $" g1={BitConverter.SingleToInt32Bits(g1):X8}" +
+                    $" g2={BitConverter.SingleToInt32Bits(g2):X8}" +
+                    $" t1={BitConverter.SingleToInt32Bits(t1):X8}" +
+                    $" t2={BitConverter.SingleToInt32Bits(t2):X8}");
+            }
+
             lastJo = jo;
             lastJp = jp;
 
@@ -623,7 +697,7 @@ public static class StreamfunctionInfluenceCalculator
                 // the stale pre-O2 micro-driver build and is no longer authoritative.
                 float rs0 = LegacyPrecisionMath.FusedMultiplyAdd(x0, x0, yy * yy);
                 float g0 = LegacyLibm.Log(rs0);
-                float t0 = MathF.Atan2(sgn * x0, sgn * yy) + ((0.5f - (0.5f * sgn)) * MathF.PI);
+                float t0 = LegacyLibm.Atan2(sgn * x0, sgn * yy) + ((0.5f - (0.5f * sgn)) * MathF.PI);
 
                 {
                     float dxInv = 1f / (x1 - x0);
@@ -694,8 +768,10 @@ public static class StreamfunctionInfluenceCalculator
                     }
                     else
                     {
-                        pdyyTailLinear = 2f * (x0 - x1);
-                        pdyyTailAngular = 2f * yy * (t1 - t0);
+                        // Off-body (wake) path: also barrier intermediate values to
+                        // prevent JIT from keeping them in extended precision.
+                        pdyyTailLinear = LegacyPrecisionMath.RoundBarrier(2f * (x0 - x1));
+                        pdyyTailAngular = LegacyPrecisionMath.RoundBarrier((2f * yy) * (t1 - t0));
                         pdyyTerm2 = LegacyPrecisionMath.AddRounded(pdyyTailLinear, pdyyTailAngular);
                     }
                     float pdyy;
@@ -703,11 +779,10 @@ public static class StreamfunctionInfluenceCalculator
                     {
                         // The traced surface-source write does not consume the separately
                         // rounded PDYYTERM2/PDYYNUMERATOR variables directly. Classic XFoil
-                        // keeps the `dx + yy*dt` inner sum wide through the outer `2.0*...`
-                        // scale, then combines that rounded tail with the already-rounded
-                        // `(x1+x0)*psyy` product before the final `*dxInv` write.
-                        float pdyySourceTerm2 = (float)(2.0 * (((double)x0 - x1) + ((double)yy * (t1 - t0))));
-                        pdyy = (float)(((double)pdyyTerm1 + pdyySourceTerm2) * dxInv);
+                        // Fortran: PDYY = ((X1+X0)*PSYY + 2.0*(X0-X1+YY*(T1-T0))) * DXINV
+                        // All REAL (float) operations.
+                        float pdyySourceTerm2 = 2.0f * ((x0 - x1) + (yy * (t1 - t0)));
+                        pdyy = (pdyyTerm1 + pdyySourceTerm2) * dxInv;
                     }
                     else
                     {
@@ -718,7 +793,7 @@ public static class StreamfunctionInfluenceCalculator
                     float pdyyWriteInner = LegacyPrecisionMath.FusedMultiplyAdd(yy, pdyyWriteDt, pdyyWriteDiff);
                     float pdyyWriteHead = (x1 + x0) * psyy;
                     float pdyyWriteTail = 2f * pdyyWriteInner;
-                    float pdyyWriteSum = (float)((double)pdyyWriteHead + pdyyWriteTail);
+                    float pdyyWriteSum = pdyyWriteHead + pdyyWriteTail;
                     float pdyyWriteValue = pdyyWriteSum * dxInv;
                     pdyy = pdyyWriteValue;
                     float xJm = (float)panel.X[jm];
@@ -739,14 +814,8 @@ public static class StreamfunctionInfluenceCalculator
                     float ssum = sourceJoTerm + sourceJmTerm;
                     float sdif = sourceJoTerm - sourceJmTerm;
                     float dzJm = qopi * ((-psum * dsim) + (pdif * dsim));
-                    // Classic XFoil's single-precision source branch contracts the JO update
-                    // as one multiply-add before the outer QOPI multiply.
-                    // The traced half-1 JO source update keeps the two DSIO products split
-                    // before the outer scale; the fused inner sum lands one ULP high here.
                     float dzJoUnscaled = ((-psum) * dsio) - (pdif * dsio);
                     float dzJo = qopi * dzJoUnscaled;
-                    // The traced half-1 JP source tail keeps the two panel-length products split
-                    // before the final QOPI scale; the fused inner sum overshoots by one ULP.
                     float dzJpUnscaled = (psum * (dsio + dsim)) + (pdif * (dsio - dsim));
                     float dzJp = qopi * dzJpUnscaled;
 
@@ -774,16 +843,11 @@ public static class StreamfunctionInfluenceCalculator
                     float psiBeforeSourceHalf1 = psi;
                     float psiNiBeforeSourceHalf1 = psiNi;
                     float psiInner = psiTerm1 + psiTerm2;
-                    // Match the legacy REAL assignment shape: keep the inner source
-                    // products rounded as float terms, then perform the final QOPI
-                    // scale and add with one rounding at the destination store.
-                    psi = (float)((double)psi + ((double)qopi * psiInner));
+                    psi = psi + (qopi * psiInner);
                     dzdm[jm] += dzJm;
                     dzdm[jo] += dzJo;
                     dzdm[jp] += dzJp;
 
-                    // The half-1 normal-derivative sums also follow the visible Fortran
-                    // source tree instead of a contracted nested-FMA replay.
                     float psniTerm1 = psx1 * x1i;
                     float psniTerm2 = (psx0 * (x1i + x2i)) * 0.5f;
                     float psniTerm3 = psyy * yyi;
@@ -795,10 +859,7 @@ public static class StreamfunctionInfluenceCalculator
                     float psiNiTerm1 = psni * ssum;
                     float psiNiTerm2 = pdni * sdif;
                     float psiNiInner = psiNiTerm1 + psiNiTerm2;
-                    // Match the legacy REAL assignment shape: keep the inner source
-                    // products rounded as float terms, then perform the final QOPI
-                    // scale and add with one rounding at the destination store.
-                    psiNi = (float)((double)psiNi + ((double)qopi * psiNiInner));
+                    psiNi = psiNi + (qopi * psiNiInner);
                     TracePsilinAccumState(
                         traceScope,
                         io,
@@ -1018,7 +1079,7 @@ public static class StreamfunctionInfluenceCalculator
                     float pdyyWriteInner = LegacyPrecisionMath.FusedMultiplyAdd(yy, pdyyWriteDt, pdyyWriteDiff);
                     float pdyyWriteHead = (x0 + x2) * psyy;
                     float pdyyWriteTail = 2f * pdyyWriteInner;
-                    float pdyyWriteSum = (float)((double)pdyyWriteHead + pdyyWriteTail);
+                    float pdyyWriteSum = pdyyWriteHead + pdyyWriteTail;
                     float pdyyWriteValue = pdyyWriteSum * dxInv;
                     pdyy = pdyyWriteValue;
                     float xJq = (float)panel.X[jq];
@@ -1042,12 +1103,8 @@ public static class StreamfunctionInfluenceCalculator
                     // the fused inner sum runs one ULP high against classic XFoil here.
                     float dzJoInner = ((-psum) * (dsip + dsio)) - (pdif * (dsip - dsio));
                     float dzJo = qopi * dzJoInner;
-                    // The traced half-2 JP source update keeps the two DSIO products split
-                    // before the final QOPI scale; the fused form lands one ULP low here.
                     float dzJpUnscaled = (psum * dsio) - (pdif * dsio);
                     float dzJp = qopi * dzJpUnscaled;
-                    // The traced half-2 JQ source tail keeps the two DSIP products separately
-                    // rounded before the final QOPI scale; forcing FMA moves this term by one ULP.
                     float dzJqUnscaled = (psum * dsip) + (pdif * dsip);
                     float dzJq = qopi * dzJqUnscaled;
 
@@ -1075,10 +1132,7 @@ public static class StreamfunctionInfluenceCalculator
                     float psiBeforeSourceHalf2 = psi;
                     float psiNiBeforeSourceHalf2 = psiNi;
                     float psiInner = psiTerm1 + psiTerm2;
-                    // Match the legacy REAL assignment shape: keep the inner source
-                    // products rounded as float terms, then perform the final QOPI
-                    // scale and add with one rounding at the destination store.
-                    psi = (float)((double)psi + ((double)qopi * psiInner));
+                    psi = psi + (qopi * psiInner);
                     dzdm[jo] += dzJo;
                     dzdm[jp] += dzJp;
                     if (jq < n)
@@ -1097,10 +1151,7 @@ public static class StreamfunctionInfluenceCalculator
                     float psiNiTerm1 = psni * ssum;
                     float psiNiTerm2 = pdni * sdif;
                     float psiNiInner = psiNiTerm1 + psiNiTerm2;
-                    // Match the legacy REAL assignment shape: keep the inner source
-                    // products rounded as float terms, then perform the final QOPI
-                    // scale and add with one rounding at the destination store.
-                    psiNi = (float)((double)psiNi + ((double)qopi * psiNiInner));
+                    psiNi = psiNi + (qopi * psiNiInner);
                     TracePsilinAccumState(
                         traceScope,
                         io,
@@ -1258,7 +1309,9 @@ public static class StreamfunctionInfluenceCalculator
 
             {
                 float dxInv = 1f / (x1 - x2);
-                float psis = (0.5f * x1 * g1) - (0.5f * x2 * g2) + x2 - x1 + (yy * (t1 - t2));
+                // gfortran contracts the last term YY*(T1-T2) into FMA.
+                float psis = LegacyPrecisionMath.Fma(yy, t1 - t2,
+                    (0.5f * x1 * g1) - (0.5f * x2 * g2) + x2 - x1);
                 float psisTerm1 = 0.5f * x1 * g1;
                 float psisTerm2 = -0.5f * x2 * g2;
                 float psisTerm3 = x2 - x1;
@@ -1268,14 +1321,13 @@ public static class StreamfunctionInfluenceCalculator
                 float psidTerm3 = rs1 * g1;
                 float psidTerm4 = x1 * x1;
                 float psidTerm5 = x2 * x2;
-                // Legacy block: xpanel.f PSILIN vortex PSID numerator.
-                // Difference from legacy: The earlier managed form hid the staged sum/difference structure inside one expression; parity mode needs the separate partial sums so the vortex integral matches the classic REAL rounding path.
-                // Decision: Keep the staged half-term and outer numerator in the parity branch.
+                // Fortran evaluates left-to-right: ((T2-T3)+T4)-T5
+                // Must match evaluation order exactly for float parity.
                 float psidHalfAccum1 = psidTerm2 - psidTerm3;
                 float psidHalfAccum2 = psidHalfAccum1 + psidTerm4;
                 float psidHalfInner = psidHalfAccum2 - psidTerm5;
                 float psidHalfTerm = 0.5f * psidHalfInner;
-                float psidBase = psidTerm1 + psidHalfTerm;
+                float psidBase = (x1 + x2) * psis + psidHalfTerm;
                 float psid = psidBase * dxInv;
                 float psx1 = 0.5f * g1;
                 float psx2 = -0.5f * g2;
@@ -1289,27 +1341,27 @@ public static class StreamfunctionInfluenceCalculator
                 float pdx1Accum2 = pdx1Accum1 - pdx1PanelTerm;
                 float pdx1Numerator = pdx1Accum2 - psid;
                 float pdx1Head = LegacyPrecisionMath.FusedMultiplyAdd(pdxSum, psx1, psis);
-                float pdx1 = ((pdx1Head - pdx1PanelTerm) - psid) * dxInv;
+                // gfortran contracts: FMA(-X1, G1, pdx1Head) for the -x1*g1 step
+                float pdx1 = (LegacyPrecisionMath.Fma(-x1, g1, pdx1Head) - psid) * dxInv;
                 float pdx2Mul = pdxSum * psx2;
                 float pdx2PanelTerm = x2 * g2;
                 float pdx2Accum1 = pdx2Mul + psis;
                 float pdx2Accum2 = pdx2Accum1 + pdx2PanelTerm;
                 float pdx2Numerator = pdx2Accum2 + psid;
                 float pdx2Head = LegacyPrecisionMath.FusedMultiplyAdd(pdxSum, psx2, psis);
-                float pdx2 = ((pdx2Head + pdx2PanelTerm) + psid) * dxInv;
+                // gfortran contracts: FMA(X2, G2, pdx2Head) for the +x2*g2 step
+                float pdx2 = (LegacyPrecisionMath.Fma(x2, g2, pdx2Head) + psid) * dxInv;
                 float pdyyTerm1 = (x1 + x2) * psyy;
                 float pdyyTerm2 = yy * (g1 - g2);
-                float pdyy = LegacyPrecisionMath.FusedMultiplyAdd(pdxSum, psyy, -pdyyTerm2) * dxInv;
+                float pdyy = LegacyPrecisionMath.ContractedMultiplySubtract(-pdxSum, psyy, -pdyyTerm2) * dxInv;
 
                 float gammaJp = (float)state.VortexStrength[jp];
                 float gammaJo = (float)state.VortexStrength[jo];
-                // The authoritative wake-node PSILIN trace shows the native REAL
-                // vortex-pair sum/difference lands on the widened add/subtract path
-                // before the result stores back to single precision.
-                float gsum = (float)((double)gammaJp + (double)gammaJo);
-                float gdif = (float)((double)gammaJp - (double)gammaJo);
+                // Fortran: GSUM = GAM(JP) + GAM(JO) in REAL (float)
+                float gsum = LegacyPrecisionMath.RoundBarrier(gammaJp + gammaJo);
+                float gdif = LegacyPrecisionMath.RoundBarrier(gammaJp - gammaJo);
 
-                float psiInner = MathF.FusedMultiplyAdd(psis, gsum, psid * gdif);
+                float psiInner = LegacyPrecisionMath.Fma(psis, gsum, psid * gdif);
                 float psiDelta = qopi * psiInner;
                 float psiBefore = psi;
                 psi += psiDelta;
@@ -1318,21 +1370,98 @@ public static class StreamfunctionInfluenceCalculator
                 dzdg[jo] += dzJo;
                 dzdg[jp] += dzJp;
 
-                // Full-run surface-vortex traces show the native float kernel contracts
-                // these three-product normal-derivative sums, even when the standalone
-                // diagnostic records for the earlier subterms still match source order.
+                // GDB: trace DZDG[0] accumulation at field node 33 (1-indexed)
+                if (io == 33 && (jo == 0 || jo == n - 2) && DebugFlags.SetBlHex)
+                {
+                    Console.Error.WriteLine(
+                        $"C_DZDG0 io={io} jo={jo + 1} dzdg0={BitConverter.SingleToInt32Bits(dzdg[0]):X8}" +
+                        $" dzJo={BitConverter.SingleToInt32Bits(dzJo):X8}" +
+                        $" dzJp={BitConverter.SingleToInt32Bits(dzJp):X8}" +
+                        $" psis={BitConverter.SingleToInt32Bits(psis):X8}" +
+                        $" psid={BitConverter.SingleToInt32Bits(psid):X8}");
+                }
+
+                if (io == 80 && jp >= 12 && jp <= 13 && DebugFlags.BldifDebug)
+                {
+                    s_psilinDumpCount++;
+                    // Note: jo,jp are 0-based in C#, print as 1-based for Fortran comparison
+                    Console.Error.WriteLine($"PSI_CS #{s_psilinDumpCount} JO={jo+1} JP={jp+1} psis={BitConverter.SingleToInt32Bits(psis):X8} psid={BitConverter.SingleToInt32Bits(psid):X8} xJo={BitConverter.SingleToInt32Bits(xJo):X8} yJo={BitConverter.SingleToInt32Bits(yJo):X8} xJp={BitConverter.SingleToInt32Bits(xJp):X8} yJp={BitConverter.SingleToInt32Bits(yJp):X8}");
+                }
+
+                // Fortran PSILIN vortex line 563:
+                // PSNI = FMAF_REAL(PSYY, YYI, FMAF_REAL(PSX1, X1I, PSX2*X2I))
+                // QVOR = QOPI*(GSUM*PSNI + GDIF*PDNI)
                 float psniTerm1 = psx1 * x1i;
                 float psniTerm2 = psx2 * x2i;
                 float psniTerm3 = psyy * yyi;
-                float psni = LegacyPrecisionMath.SumOfProducts(psx1, x1i, psx2, x2i, psyy, yyi);
+                float psni = LegacyPrecisionMath.Fma(psyy, yyi,
+                    LegacyPrecisionMath.Fma(psx1, x1i, LegacyPrecisionMath.RoundBarrier(psx2 * x2i)));
                 float pdniTerm1 = pdx1 * x1i;
                 float pdniTerm2 = pdx2 * x2i;
                 float pdniTerm3 = pdyy * yyi;
-                float pdni = LegacyPrecisionMath.SumOfProducts(pdx1, x1i, pdx2, x2i, pdyy, yyi);
-                float psiNiInner = MathF.FusedMultiplyAdd(gsum, psni, gdif * pdni);
-                float psiNiDelta = qopi * psiNiInner;
+                float pdniInner = LegacyPrecisionMath.ContractedMultiplySubtract(
+                    -pdx1,
+                    x1i,
+                    LegacyPrecisionMath.RoundBarrier(pdx2 * x2i));
+                float pdni = LegacyPrecisionMath.ContractedMultiplySubtract(-pdyy, yyi, pdniInner);
+                // QVOR = QOPI*(GSUM*PSNI + GDIF*PDNI) — single Fortran REAL expression
+                // Matching Fortran: t1=GSUM*PSNI (rounded), then t1+GDIF*PDNI (GDIF*PDNI
+                // may stay in extended precision before adding), then QOPI*sum.
+                // Use Fma to match: QOPI * (GSUM*PSNI + GDIF*PDNI)
+                // = QOPI * Fma(GSUM, PSNI, GDIF*PDNI)
+                float psiNiInner = LegacyPrecisionMath.Fma(gsum, psni, gdif * pdni);
+                float psiNiDelta = LegacyPrecisionMath.RoundBarrier(qopi * psiNiInner);
                 float psiNiBefore = psiNi;
                 psiNi += psiNiDelta;
+                // Parity trace: per-panel psiNi accumulation at wake node 6
+                if (DebugFlags.SetBlHex
+                    && io == n + 6 && fieldNormalXf > 0.5f)
+                {
+                    if (jo + 1 >= 65 && jo + 1 <= 70)
+                    {
+                        Console.Error.WriteLine(
+                            $"C_PSI6D jo={jo + 1,4}" +
+                            $" ni_b={BitConverter.SingleToInt32Bits(psiNiBefore):X8}" +
+                            $" delt={BitConverter.SingleToInt32Bits(psiNiDelta):X8}" +
+                            $" ni={BitConverter.SingleToInt32Bits(psiNi):X8}" +
+                            $" inner={BitConverter.SingleToInt32Bits(psiNiInner):X8}" +
+                            $" gsum={BitConverter.SingleToInt32Bits(gsum):X8}" +
+                            $" gdif={BitConverter.SingleToInt32Bits(gdif):X8}");
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine(
+                            $"C_PSI6X jo={jo + 1,4} ni={BitConverter.SingleToInt32Bits(psiNi):X8}");
+                    }
+                }
+                if (DebugFlags.ParityTrace
+                    && io == 81)
+                {
+                    Console.Error.WriteLine(
+                        $"CS_NI jo={jo + 1} ni=0x{BitConverter.SingleToInt32Bits(psiNi):X8}");
+                    if (jo + 1 == 6)
+                        Console.Error.WriteLine(
+                            $"CS_JO6 psni=0x{BitConverter.SingleToInt32Bits(psni):X8}" +
+                            $" pdni=0x{BitConverter.SingleToInt32Bits(pdni):X8}" +
+                            $" qvor=0x{BitConverter.SingleToInt32Bits(psiNiDelta):X8}" +
+                            $" gsum=0x{BitConverter.SingleToInt32Bits(gsum):X8}" +
+                            $" gdif=0x{BitConverter.SingleToInt32Bits(gdif):X8}" +
+                            $" psx1=0x{BitConverter.SingleToInt32Bits(psx1):X8}" +
+                            $" psx2=0x{BitConverter.SingleToInt32Bits(psx2):X8}" +
+                            $" psyy=0x{BitConverter.SingleToInt32Bits(psyy):X8}" +
+                            $" x1i=0x{BitConverter.SingleToInt32Bits(x1i):X8}" +
+                            $" x2i=0x{BitConverter.SingleToInt32Bits(x2i):X8}" +
+                            $" yyi=0x{BitConverter.SingleToInt32Bits(yyi):X8}");
+                }
+                // Trace psiNi at wake node 0 psiY call (io=161)
+                // Trace psiNi at wake node 0 — psiX (NX>0.5) and psiY (NY>0.5)
+                if (DebugFlags.SetBlHex
+                    && io == 161 && fieldNormalXf > 0.5f && jo >= 140)
+                {
+                    string dir = fieldNormalXf > 0.5f ? "X" : "Y";
+                    Console.Error.WriteLine(
+                        $"C_WK0{dir} jo={jo + 1,4} ni={BitConverter.SingleToInt32Bits(psiNi):X8}");
+                }
                 TracePsilinAccumState(
                     traceScope,
                     io,
@@ -1407,6 +1536,34 @@ public static class StreamfunctionInfluenceCalculator
                     dzJp,
                     dqJo,
                     dqJp);
+
+                if (DebugFlags.SetBlHex
+                    && io == 80
+                    && jo <= 2)
+                {
+                    Console.Error.WriteLine(
+                        $"C_PSIVORTERMS io={io} jo={jo + 1} jp={jp + 1}" +
+                        $" psx1={BitConverter.SingleToInt32Bits(psx1):X8}" +
+                        $" psx2={BitConverter.SingleToInt32Bits(psx2):X8}" +
+                        $" psyy={BitConverter.SingleToInt32Bits(psyy):X8}" +
+                        $" pdx1={BitConverter.SingleToInt32Bits(pdx1):X8}" +
+                        $" pdx2={BitConverter.SingleToInt32Bits(pdx2):X8}" +
+                        $" pdyy={BitConverter.SingleToInt32Bits(pdyy):X8}" +
+                        $" x1i={BitConverter.SingleToInt32Bits(x1i):X8}" +
+                        $" x2i={BitConverter.SingleToInt32Bits(x2i):X8}" +
+                        $" yyi={BitConverter.SingleToInt32Bits(yyi):X8}");
+                    Console.Error.WriteLine(
+                        $"C_PSIVOR io={io} jo={jo + 1} jp={jp + 1}" +
+                        $" dxInv={BitConverter.SingleToInt32Bits(dxInv):X8}" +
+                        $" psis={BitConverter.SingleToInt32Bits(psis):X8}" +
+                        $" psid={BitConverter.SingleToInt32Bits(psid):X8}" +
+                        $" psni={BitConverter.SingleToInt32Bits(psni):X8}" +
+                        $" pdni={BitConverter.SingleToInt32Bits(pdni):X8}" +
+                        $" dzJo={BitConverter.SingleToInt32Bits(dzJo):X8}" +
+                        $" dzJp={BitConverter.SingleToInt32Bits(dzJp):X8}" +
+                        $" dqJo={BitConverter.SingleToInt32Bits(dqJo):X8}" +
+                        $" dqJp={BitConverter.SingleToInt32Bits(dqJp):X8}");
+                }
             }
         }
 
@@ -1421,30 +1578,38 @@ public static class StreamfunctionInfluenceCalculator
             // full-run TE correction.
             float psigHead = LegacyPrecisionMath.FusedMultiplyAdd(0.5f * yy, g1 - g2, x2 * (t2 - apan));
             float psig = LegacyPrecisionMath.FusedMultiplyAdd(-x1, t1 - apan, psigHead);
-            float pgamLeadProduct1 = 0.5f * x1 * g1;
-            float pgamLeadProduct2 = -0.5f * x2 * g2;
-            float pgamLeadPair = (0.5f * x1 * g1) - (0.5f * x2 * g2);
-            float pgamBaseSource = pgamLeadPair + x2 - x1;
-            float pgamDt = t1 - t2;
-            float pgamTail = yy * (t1 - t2);
-            float pgamLeadingProducts = (float)(((double)0.5f * (double)x1 * (double)g1)
-                                               - ((double)0.5f * (double)x2 * (double)g2));
-            float pgamBase = pgamLeadingProducts + (x2 - x1);
-            float pgam = LegacyPrecisionMath.FusedMultiplyAdd(yy, t1 - t2, pgamBase);
+            // Fortran: PGAM = 0.5*X1*G1 - 0.5*X2*G2 + X2 - X1 + YY*(T1-T2)
+            // Left-to-right: ((((0.5*X1)*G1) - ((0.5*X2)*G2)) + X2) - X1 + YY*(T1-T2)
+            float pgamHalfX1 = LegacyPrecisionMath.RoundBarrier(0.5f * x1);
+            float pgamTerm1 = LegacyPrecisionMath.RoundBarrier(pgamHalfX1 * g1);
+            float pgamHalfX2 = LegacyPrecisionMath.RoundBarrier(0.5f * x2);
+            float pgamTerm2 = LegacyPrecisionMath.RoundBarrier(pgamHalfX2 * g2);
+            float pgamDiff = LegacyPrecisionMath.RoundBarrier(pgamTerm1 - pgamTerm2);
+            float pgamPlusX2 = LegacyPrecisionMath.RoundBarrier(pgamDiff + x2);
+            float pgamBase = LegacyPrecisionMath.RoundBarrier(pgamPlusX2 - x1);
+            float pgamTailMul = LegacyPrecisionMath.RoundBarrier(yy * LegacyPrecisionMath.RoundBarrier(t1 - t2));
+            float pgam = LegacyPrecisionMath.RoundBarrier(pgamBase + pgamTailMul);
             float psigx1 = -(t1 - apan);
             float psigx2 = t2 - apan;
             float psigyy = 0.5f * (g1 - g2);
             float pgamx1 = 0.5f * g1;
             float pgamx2 = -0.5f * g2;
             float pgamyy = t1 - t2;
-            // The legacy TE derivative path contracts the three-product sums like
-            // the rest of the single-precision PSILIN kernels, so keep the parity
-            // mode on the same explicit fused chain here.
-            float psigni = LegacyPrecisionMath.SumOfProducts(psigx1, x1i, psigx2, x2i, psigyy, yyi);
-            float pgamni = LegacyPrecisionMath.SumOfProducts(pgamx1, x1i, pgamx2, x2i, pgamyy, yyi);
+            // Fortran PSILIN TE: plain REAL left-to-right
+            float psigni = LegacyPrecisionMath.RoundBarrier(
+                LegacyPrecisionMath.RoundBarrier(
+                    LegacyPrecisionMath.RoundBarrier(psigx1 * x1i)
+                    + LegacyPrecisionMath.RoundBarrier(psigx2 * x2i))
+                + LegacyPrecisionMath.RoundBarrier(psigyy * yyi));
+            float pgamni = LegacyPrecisionMath.RoundBarrier(
+                LegacyPrecisionMath.RoundBarrier(
+                    LegacyPrecisionMath.RoundBarrier(pgamx1 * x1i)
+                    + LegacyPrecisionMath.RoundBarrier(pgamx2 * x2i))
+                + LegacyPrecisionMath.RoundBarrier(pgamyy * yyi));
             float gammaLastJp = (float)state.VortexStrength[lastJp];
             float gammaLastJo = (float)state.VortexStrength[lastJo];
-            float gammaTeDelta = (float)((double)gammaLastJp - (double)gammaLastJo);
+            // Fortran: plain REAL
+            float gammaTeDelta = gammaLastJp - gammaLastJo;
             float sigte = 0.5f * scs * gammaTeDelta;
             float gamte = -0.5f * sds * gammaTeDelta;
             float dzJoTeSig = -hopi * psig * scs * 0.5f;
@@ -1469,14 +1634,35 @@ public static class StreamfunctionInfluenceCalculator
             dzdg[lastJo] += dzJoTeGam;
             dzdg[lastJp] += dzJpTeGam;
 
+            // GDB: trace DZDG[0] after TE correction at field node 33
+            if (io == 33 && DebugFlags.SetBlHex)
+            {
+                Console.Error.WriteLine(
+                    $"C_TE33 dzdg0={BitConverter.SingleToInt32Bits(dzdg[0]):X8}" +
+                    $" dzJpTeSig={BitConverter.SingleToInt32Bits(dzJpTeSig):X8}" +
+                    $" dzJpTeGam={BitConverter.SingleToInt32Bits(dzJpTeGam):X8}" +
+                    $" psig={BitConverter.SingleToInt32Bits(psig):X8}" +
+                    $" pgam={BitConverter.SingleToInt32Bits(pgam):X8}" +
+                    $" scs={BitConverter.SingleToInt32Bits(scs):X8}" +
+                    $" sds={BitConverter.SingleToInt32Bits(sds):X8}");
+            }
+
             float psiNiTeTerm1 = psigni * sigte;
             float psiNiTeTerm2 = pgamni * gamte;
             float psiNiTeInner = psiNiTeTerm1 + psiNiTeTerm2;
-            // The legacy REAL assignment rounds this TE dPsi/dn update only once at the
-            // final store, so replay it as a widened add of already-rounded float terms
-            // instead of rounding the delta to float before adding it to PSI_NI.
+            // Fortran: PSI_NI = PSI_NI + HOPI*(PSIGNI*SIGTE + PGAMNI*GAMTE)
+            // All REAL (float) operations — multiply rounds, then add rounds.
             float psiNiBeforeTe = psiNi;
-            psiNi = (float)((double)psiNi + ((double)hopi * psiNiTeInner));
+            float psiNiTeDelta = hopi * psiNiTeInner;
+            psiNi = psiNi + psiNiTeDelta;
+            if (DebugFlags.SetBlHex
+                && io == 161 && fieldNormalXf > 0.5f)
+            {
+                Console.Error.WriteLine(
+                    $"C_TE_NI_X b={BitConverter.SingleToInt32Bits(psiNiBeforeTe):X8}" +
+                    $" d={BitConverter.SingleToInt32Bits(psiNiTeDelta):X8}" +
+                    $" a={BitConverter.SingleToInt32Bits(psiNi):X8}");
+            }
             TracePsilinAccumState(
                 traceScope,
                 io,
@@ -1522,12 +1708,12 @@ public static class StreamfunctionInfluenceCalculator
                 lastJo + 1,
                 lastJp + 1,
                 "Single",
-                pgamLeadProduct1,
-                pgamLeadProduct2,
-                pgamLeadPair,
-                pgamBaseSource,
-                pgamDt,
-                pgamTail);
+                pgamTerm1,
+                pgamTerm2,
+                pgamDiff,
+                pgamBase,
+                LegacyPrecisionMath.RoundBarrier(t1 - t2),
+                pgamTailMul);
         }
 
         float psiFreestreamDelta = (float)freestreamSpeed * ((cosa * fieldYf) - (sina * fieldXf));
@@ -1571,6 +1757,7 @@ public static class StreamfunctionInfluenceCalculator
         bool includeSourceTerms,
         string precision)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_field",
             scope,
@@ -1627,6 +1814,7 @@ public static class StreamfunctionInfluenceCalculator
         double x2i,
         double yyi)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_panel",
             scope,
@@ -1679,6 +1867,7 @@ public static class StreamfunctionInfluenceCalculator
         double psiNormalDerivative,
         string precision)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_result",
             scope,
@@ -1703,6 +1892,7 @@ public static class StreamfunctionInfluenceCalculator
         double psiNormalDerivative,
         string precision)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_accum_state",
             scope,
@@ -1729,6 +1919,7 @@ public static class StreamfunctionInfluenceCalculator
         double psiNormalFreestreamDelta,
         string precision)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_result_terms",
             scope,
@@ -1822,6 +2013,7 @@ public static class StreamfunctionInfluenceCalculator
         double dqJp,
         double dqJq)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_source_segment",
             scope,
@@ -1930,6 +2122,7 @@ public static class StreamfunctionInfluenceCalculator
         double pdyyNumerator,
         double pdyy)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_source_pdyy_write",
             scope,
@@ -1978,6 +2171,7 @@ public static class StreamfunctionInfluenceCalculator
         double dqJqTerm2,
         double dqJqInner)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_source_dq_terms",
             scope,
@@ -2021,6 +2215,7 @@ public static class StreamfunctionInfluenceCalculator
         double dzJqTerm2,
         double dzJqInner)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_source_dz_terms",
             scope,
@@ -2071,6 +2266,7 @@ public static class StreamfunctionInfluenceCalculator
         double dqJoTe,
         double dqJpTe)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_te_correction",
             scope,
@@ -2115,6 +2311,7 @@ public static class StreamfunctionInfluenceCalculator
         double pgamDt,
         double pgamTail)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_te_pgam_terms",
             scope,
@@ -2154,35 +2351,39 @@ public static class StreamfunctionInfluenceCalculator
         double pdifNumerator,
         double pdif)
     {
+        if (!SolverTrace.IsActive) return;
         if (SolverTrace.Current is null)
         {
             return;
         }
 
-        SolverTrace.Event(
-            "psilin_source_half_terms",
-            scope,
-            new
-            {
-                fieldIndex,
-                panelIndex,
-                half,
-                precision,
-                x0,
-                psumTerm1,
-                psumTerm2,
-                psumTerm3,
-                psumAccum,
-                psum,
-                pdifTerm1,
-                pdifTerm2,
-                pdifTerm3,
-                pdifTerm4,
-                pdifAccum1,
-                pdifAccum2,
-                pdifNumerator,
-                pdif
-            });
+        if (SolverTrace.IsActive)
+        {
+            SolverTrace.Event(
+                "psilin_source_half_terms",
+                scope,
+                new
+                {
+                    fieldIndex,
+                    panelIndex,
+                    half,
+                    precision,
+                    x0,
+                    psumTerm1,
+                    psumTerm2,
+                    psumTerm3,
+                    psumAccum,
+                    psum,
+                    pdifTerm1,
+                    pdifTerm2,
+                    pdifTerm3,
+                    pdifTerm4,
+                    pdifAccum1,
+                    pdifAccum2,
+                    pdifNumerator,
+                    pdif
+                });
+        }
     }
 
     private static void TracePsilinVortexSegment(
@@ -2243,6 +2444,7 @@ public static class StreamfunctionInfluenceCalculator
         double dqJo,
         double dqJp)
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "psilin_vortex_segment",
             scope,

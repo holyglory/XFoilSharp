@@ -8,7 +8,8 @@ This directory maps the managed C# implementation from system architecture down 
 2. [architecture/Overview.md](architecture/Overview.md)
 3. [architecture/ExecutionFlows.md](architecture/ExecutionFlows.md)
 4. [architecture/ParityAndTodos.md](architecture/ParityAndTodos.md)
-5. Project-level documents under `projects/`
+5. [architecture/RepoAutomation.md](architecture/RepoAutomation.md)
+6. Project-level documents under `projects/`
 
 ## Tree
 
@@ -18,6 +19,8 @@ This directory maps the managed C# implementation from system architecture down 
   - Main end-to-end flows: geometry import, inviscid solve, viscous solve, design workflows, IO/session workflows, CLI orchestration.
 - `architecture/ParityAndTodos.md`
   - Managed-vs-legacy XFoil discrepancy map with prioritized TODOs.
+- `architecture/RepoAutomation.md`
+  - Repo-local Codex/autonomous-loop hook wiring and validation expectations.
 - `architecture/MicroRigMatrixHarness.md`
   - Registry-driven micro-rig parity harness, matrix outputs, and coverage backlog.
 - `projects/XFoil.Core/00-index.md`

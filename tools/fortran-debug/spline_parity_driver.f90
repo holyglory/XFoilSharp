@@ -66,14 +66,17 @@ program spline_parity_driver
 
     call splind(values, derivatives, parameters, point_count, start_bc, end_bc)
 
+    write(*, '(I0,1X,I0)') point_count, eval_count
+
     do i = 1, point_count
-      write(*, '(1PE24.16)') derivatives(i)
+      write(*, '(Z8.8,1X,1PE24.16)') transfer(derivatives(i), 0), derivatives(i)
     end do
 
     do i = 1, eval_count
       eval_value = seval(eval_points(i), values, derivatives, parameters, point_count)
       eval_derivative = deval(eval_points(i), values, derivatives, parameters, point_count)
-      write(*, '(1PE24.16,1X,1PE24.16)') eval_value, eval_derivative
+      write(*, '(Z8.8,1X,1PE24.16,1X,Z8.8,1X,1PE24.16)') &
+        transfer(eval_value, 0), eval_value, transfer(eval_derivative, 0), eval_derivative
     end do
   end do
 end program spline_parity_driver

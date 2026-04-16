@@ -69,3 +69,40 @@ end subroutine trace_matrix_entry
 
 subroutine trace_text()
 end subroutine trace_text
+
+! FMA wrapper: calls hardware fmaf() normally, or falls back to
+! separate multiply-add when XFOIL_DISABLE_FMA env var is set.
+real function fmaf_real(a, b, c) result(r)
+  use iso_c_binding, only: c_float
+  implicit none
+  real, intent(in) :: a, b, c
+  interface
+    real(c_float) function c_fmaf(x, y, z) bind(C, name='fmaf')
+      import :: c_float
+      real(c_float), value :: x, y, z
+    end function c_fmaf
+  end interface
+  logical, save :: checked = .false.
+  logical, save :: disable_fma = .false.
+  character(len=8) :: env_val
+  integer :: env_len, env_stat
+  if (.not. checked) then
+    call get_environment_variable('XFOIL_DISABLE_FMA', env_val, env_len, env_stat)
+    disable_fma = (env_stat == 0 .and. env_len > 0)
+    checked = .true.
+  end if
+  if (disable_fma) then
+    r = a * b + c
+  else
+    r = c_fmaf(a, b, c)
+  end if
+end function fmaf_real
+
+subroutine trace_curvature_eval(a, b, i1, i2, x, y, z, w)
+  character(*) :: a, b
+  integer :: i1, i2
+  real :: x, y, z, w
+end subroutine
+
+subroutine set_ncrit_from_env()
+end subroutine

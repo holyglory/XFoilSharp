@@ -1404,7 +1404,14 @@ public static class SolverTrace
 {
     private static readonly AsyncLocal<JsonlTraceWriter?> CurrentWriter = new();
 
-    public static JsonlTraceWriter? Current => CurrentWriter.Value;
+    /// <summary>
+    /// Fast-path indicator. When false, trace events are skipped without
+    /// AsyncLocal lookup or anonymous-object allocation. Set to true only
+    /// when at least one writer has been activated this process.
+    /// </summary>
+    public static volatile bool IsActive;
+
+    public static JsonlTraceWriter? Current => IsActive ? CurrentWriter.Value : null;
 
     // Legacy mapping: none; ambient managed trace lookup wraps parity-instrumented solver writes.
     // Difference from legacy: The active trace writer is discovered from a TextWriter graph instead of global file units.
@@ -1436,6 +1443,7 @@ public static class SolverTrace
 
         JsonlTraceWriter? previous = CurrentWriter.Value;
         CurrentWriter.Value = writer;
+        IsActive = true;  // process-global fast-path flag
         return new RestoreScope(previous);
     }
 
@@ -1454,6 +1462,7 @@ public static class SolverTrace
     // Decision: Keep the managed helper because it keeps solver instrumentation concise.
     public static IDisposable Scope(string scope, object? inputs = null)
     {
+        if (!IsActive) return EmptyScope.Instance;
         return Current?.Scope(scope, inputs) ?? EmptyScope.Instance;
     }
 
@@ -1467,6 +1476,7 @@ public static class SolverTrace
         string? name = null,
         IReadOnlyDictionary<string, object?>? tags = null)
     {
+        if (!IsActive) return;  // fast-path when no writer is active
         Current?.WriteEvent(kind, scope, data, name, values: null, tags);
     }
 
@@ -1480,6 +1490,7 @@ public static class SolverTrace
         object? data = null,
         IReadOnlyDictionary<string, object?>? tags = null)
     {
+        if (!IsActive) return;
         Current?.WriteArray(scope, name, values, data, tags);
     }
 
@@ -1493,6 +1504,7 @@ public static class SolverTrace
         object? data = null,
         IReadOnlyDictionary<string, object?>? tags = null)
     {
+        if (!IsActive) return;
         Current?.WriteEvent("scalar", scope, data, name, new[] { value }, tags);
     }
 

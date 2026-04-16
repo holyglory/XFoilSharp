@@ -21,7 +21,7 @@ public sealed class LinearVortexInviscidSolverTests
     {
         var (panel, state) = CreatePanelAndState("0012", 61, 60);
 
-        LinearVortexInviscidSolver.AssembleAndFactorSystem(panel, state, 1.0);
+        LinearVortexInviscidSolver.AssembleAndFactorSystem(panel, state, 1.0, 0.0);
 
         Assert.True(state.AreBasisSolutionsComputed,
             "After system assembly, AreBasisSolutionsComputed should be true.");
@@ -37,7 +37,7 @@ public sealed class LinearVortexInviscidSolverTests
         var (panel, state) = CreatePanelAndState("0012", 61, 60);
         int n = panel.NodeCount;
 
-        LinearVortexInviscidSolver.AssembleAndFactorSystem(panel, state, 1.0);
+        LinearVortexInviscidSolver.AssembleAndFactorSystem(panel, state, 1.0, 0.0);
 
         // Both basis columns should be non-trivial (not all zeros)
         double sumCol0 = 0.0;
@@ -97,7 +97,7 @@ public sealed class LinearVortexInviscidSolverTests
         var (panel, state) = CreatePanelAndState("0012", 61, 60);
         int n = panel.NodeCount;
 
-        LinearVortexInviscidSolver.AssembleAndFactorSystem(panel, state, 1.0);
+        LinearVortexInviscidSolver.AssembleAndFactorSystem(panel, state, 1.0, 0.0);
 
         double alpha = 5.0 * Math.PI / 180.0;
         LinearVortexInviscidSolver.ComputeInviscidSpeed(alpha, state, n);

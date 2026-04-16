@@ -61,7 +61,7 @@ public sealed class StreamfunctionMicroFortranParityTests
 
     private static readonly string[] SegmentFields =
     {
-        "x1", "x2", "yy", "panelAngle", "x1i", "x2i", "yyi",
+        "x0", "x1", "x2", "yy", "panelAngle", "x1i", "x2i", "yyi",
         "rs0", "rs1", "rs2", "g0", "g1", "g2", "t0", "t1", "t2",
         "dso", "dsio", "dsm", "dsim", "dsp", "dsip", "dxInv",
         "sourceTermLeft", "sourceTermRight",
@@ -70,7 +70,7 @@ public sealed class StreamfunctionMicroFortranParityTests
         "pdx0Term1", "pdx0Term2", "pdx0Numerator", "pdx0",
         "pdx1Term1", "pdx1Term2", "pdx1Numerator", "pdx1",
         "pdx2Term1", "pdx2Term2", "pdx2Numerator", "pdx2",
-        "pdyyTerm1", "pdyyTerm2", "pdyyNumerator", "pdyy",
+        "pdyyTerm1", "pdyyTailLinear", "pdyyTailAngular", "pdyyTerm2", "pdyyNumerator", "pdyy",
         "psniTerm1", "psniTerm2", "psniTerm3", "psni",
         "pdniTerm1", "pdniTerm2", "pdniTerm3", "pdni",
         "dzJm", "dzJo", "dzJp", "dzJq",

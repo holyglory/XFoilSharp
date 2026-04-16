@@ -35,6 +35,7 @@ public sealed class DenseLinearSystemSolver
     // Legacy mapping: f_xfoil/src/xsolve.f :: GAUSS forward elimination and back substitution.
     // Difference from legacy: The core is generic across float and double and makes the parity-sensitive fused versus separated multiply-subtract choices explicit.
     // Decision: Keep the shared core because it reduces divergence between the managed precision variants.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoOptimization)]
     private static T[] SolveCore<T>(T[,] matrix, T[] rightHandSide)
         where T : struct, IFloatingPointIeee754<T>
     {
@@ -77,6 +78,7 @@ public sealed class DenseLinearSystemSolver
         }
 
         bool traceGauss = typeof(T) == typeof(float) && rowCount == 4 && columnCount == 4;
+        // Removed verbose per-call GAUSS trace; use C_MRCHDU_M3 instead
         if (traceGauss)
         {
             TraceGaussState(a, b, "initial", pivotIndex: 0, rowIndex: 0);
@@ -130,13 +132,15 @@ public sealed class DenseLinearSystemSolver
                 T factor = a[row, pivotIndex];
                 for (var column = pivotIndex + 1; column < columnCount; column++)
                 {
-                    a[row, column] = LegacyPrecisionMath.FusedMultiplySubtract(
+                    // Fortran GAUSS: Z(K,L) = Z(K,L) - ZTMP*Z(NP,L)
+                    // Must use separate multiply-subtract, NOT FMA negate-multiply-add
+                    a[row, column] = LegacyPrecisionMath.SeparateMultiplySubtract(
                         factor,
                         a[pivotIndex, column],
                         a[row, column]);
                 }
 
-                b[row] = LegacyPrecisionMath.FusedMultiplySubtract(factor, b[pivotIndex], b[row]);
+                b[row] = LegacyPrecisionMath.SeparateMultiplySubtract(factor, b[pivotIndex], b[row]);
 
                 if (traceGauss)
                 {
@@ -155,7 +159,8 @@ public sealed class DenseLinearSystemSolver
         {
             for (var column = row + 1; column < columnCount; column++)
             {
-                b[row] = LegacyPrecisionMath.FusedMultiplySubtract(a[row, column], b[column], b[row]);
+                // Fortran GAUSS: R(NP,L) = R(NP,L) - Z(NP,K)*R(K,L)
+                b[row] = LegacyPrecisionMath.SeparateMultiplySubtract(a[row, column], b[column], b[row]);
             }
 
             if (traceGauss)

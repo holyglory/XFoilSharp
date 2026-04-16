@@ -75,16 +75,11 @@ public static class BoundaryLayerCorrelations
         // BLSYS row assembly. Leaving it on double was enough to move row33 by 1 ULP.
         float denom = LegacyPrecisionMath.ProductThenAdd(0.113f, msqf, 1.0f);
         float numerator = LegacyPrecisionMath.SeparateMultiplySubtract(0.29f, msqf, hf);
-        double hkExtended = ((double)numerator) / denom;
-        float hkf = (float)hkExtended;
+        float hkf = numerator / denom;
         float hkHf = 1.0f / denom;
-        // HKIN's derivative numerator is written in the legacy source as
-        // "-0.29 - 0.113*HK". The native reference build keeps the just-computed
-        // HK value in higher precision for this product before storing HK itself
-        // back to REAL. Reusing the rounded HK float here fixes one alpha-10
-        // point and breaks the next; keeping the extended HK for the derivative
-        // matches both traced seed points.
-        float hkMsNumerator = (float)(-0.29f - (0.113f * hkExtended));
+        // Fortran: HK_MSQ = (-0.29 - 0.113*HK) / DENOM, all in REAL.
+        // Use the rounded hkf to match Fortran's REAL staging.
+        float hkMsNumerator = -0.29f - (0.113f * hkf);
         float hkMsqf = hkMsNumerator / denom;
         return (hkf, hkHf, hkMsqf);
     }
@@ -112,7 +107,7 @@ public static class BoundaryLayerCorrelations
             hs = 0.0111 * tmp * tmp / (hk + 1.0)
                - 0.0278 * tmp * tmp * tmp / (hk + 1.0)
                + 1.528
-               - 0.0002 * (tmp * hk) * (tmp * hk);
+               - 0.0002 * ((tmp * hk) * (tmp * hk));
 
             hs_hk = 0.0111 * (2.0 * tmp - tmp * tmp / (hk + 1.0)) / (hk + 1.0)
                   - 0.0278 * (3.0 * tmp * tmp - tmp * tmp * tmp / (hk + 1.0)) / (hk + 1.0)
@@ -120,9 +115,9 @@ public static class BoundaryLayerCorrelations
         }
         else
         {
-            hs = 0.015 * (hk - 4.35) * (hk - 4.35) / hk + 1.528;
+            hs = 0.015 * ((hk - 4.35) * (hk - 4.35)) / hk + 1.528;
             hs_hk = 0.015 * 2.0 * (hk - 4.35) / hk
-                   - 0.015 * (hk - 4.35) * (hk - 4.35) / (hk * hk);
+                   - 0.015 * ((hk - 4.35) * (hk - 4.35)) / (hk * hk);
         }
 
         return (hs, hs_hk, 0.0, 0.0);
@@ -168,7 +163,7 @@ public static class BoundaryLayerCorrelations
             // The HSL derivative's second term needs the same fused
             // 3*TMP^2 - TMP^3/(HK+1) staging as the native REAL build.
             // Leaving it as a plain product/subtract keeps .NET one ULP low.
-            float hsHkTerm2Inner = MathF.FusedMultiplyAdd(3.0f, tmpSq, -(tmpCube / hkPlusOne));
+            float hsHkTerm2Inner = LegacyPrecisionMath.Fma(3.0f, tmpSq, -(tmpCube / hkPlusOne));
             float hsHkTerm1 = 0.0111f * ((2.0f * tmp) - (tmpSq / hkPlusOne)) / hkPlusOne;
             float hsHkTerm2 = 0.0278f * hsHkTerm2Inner / hkPlusOne;
             // The native REAL build keeps `0.0002*2.0*TMP` on the left but
@@ -202,10 +197,11 @@ public static class BoundaryLayerCorrelations
         else
         {
             float diff = hkf - 4.35f;
-            float diffSqOverHk = (diff * diff) / hkf;
-            // This source is a plain REAL product plus constant, so the legacy
-            // branch keeps the product round separate from the final add.
-            hsf = LegacyPrecisionMath.ProductThenAdd(0.015f, diffSqOverHk, 1.528f);
+            // Replay the classic REAL source expression exactly:
+            // HS = 0.015*(HK-4.35)**2/HK + 1.528
+            // Staging the divided term first keeps the lower-side station-5
+            // transition HSL packet one ULP low.
+            hsf = ((0.015f * ((hkf - 4.35f) * (hkf - 4.35f))) / hkf) + 1.528f;
             // The high-Hk derivative follows the same REAL source order as HSL:
             // round the leading and trailing terms separately before the final
             // subtraction, otherwise HS_HK stays one ULP high in the station-27
@@ -216,24 +212,30 @@ public static class BoundaryLayerCorrelations
             hsHkf = hsHkTerm1 - hsHkTerm2;
         }
 
-        SolverTrace.Event(
-            "hsl_terms",
-            SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                hk = hkf,
-                hs = hsf,
-                hsHk = hsHkf,
-                tmp = tmpTrace,
-                hkPlusOne = hkPlusOneTrace,
-                hsHkTerm1 = hsHkTerm1Trace,
-                hsHkTerm2 = hsHkTerm2Trace,
-                hsHkTerm3 = hsHkTerm3Trace,
-                hsHkDirect = hsHkDirectTrace,
-                hsHkDirectPlainTerm2 = hsHkDirectPlainTerm2Trace,
-                hsHkDirectLeftTerm3 = hsHkDirectLeftTerm3Trace,
-                hsHkDirectTmpHkTerm3 = hsHkDirectTmpHkTerm3Trace
-            });
+                SolverTrace.Event(
+                    "hsl_terms",
+                    SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
+                    new
+                    {
+                        hk = hkf,
+                        hs = hsf,
+                        hsHk = hsHkf,
+                        tmp = tmpTrace,
+                        hkPlusOne = hkPlusOneTrace,
+                        hsHkTerm1 = hsHkTerm1Trace,
+                        hsHkTerm2 = hsHkTerm2Trace,
+                        hsHkTerm3 = hsHkTerm3Trace,
+                        hsHkDirect = hsHkDirectTrace,
+                        hsHkDirectPlainTerm2 = hsHkDirectPlainTerm2Trace,
+                        hsHkDirectLeftTerm3 = hsHkDirectLeftTerm3Trace,
+                        hsHkDirectTmpHkTerm3 = hsHkDirectTmpHkTerm3Trace
+                    });
+            }
+        }
 
         return (hsf, hsHkf, 0.0, 0.0);
     }
@@ -406,9 +408,9 @@ public static class BoundaryLayerCorrelations
 
             // The attached-branch HS_HK combine is also emitted as a fused
             // negative multiply-add by the native legacy build.
-            hsHkf = MathF.FusedMultiplyAdd(hrHkf, hsHkSecondBase, -hsHkFirstMagnitude);
+            hsHkf = LegacyPrecisionMath.Fma(hrHkf, hsHkSecondBase, -hsHkFirstMagnitude);
             float hsRtBase = (((((hrSq * 1.5f) / hkPlusHalf) - 1.0f) * 4.0f) / (rtzf * rtzf)) * rtzRtf;
-            hsRtf = MathF.FusedMultiplyAdd(hsHkSecondBase, hrRtf, hsRtBase);
+            hsRtf = LegacyPrecisionMath.Fma(hsHkSecondBase, hrRtf, hsRtBase);
             hsRtRawf = hsRtf;
         }
         else
@@ -422,7 +424,7 @@ public static class BoundaryLayerCorrelations
             htmpRtf = ((-0.014f * grtf) / (rtmpf * rtmpf * rtmpf)) * (-hoRtf - ((4.0f / (grtf * grtf)) / rtzf) * rtzRtf)
                     + ((0.007f / (rtmpf * rtmpf)) / rtzf) * rtzRtf;
 
-            hsf = MathF.FusedMultiplyAdd(hdiff * hdiff, htmpf, hsMinf);
+            hsf = LegacyPrecisionMath.Fma(hdiff * hdiff, htmpf, hsMinf);
             hsf += 4.0f / rtzf;
             hsHkTerm1f = hdiff * 2.0f * htmpf;
             hsHkTerm2f = hdiff * hdiff * htmpHkf;
@@ -430,58 +432,64 @@ public static class BoundaryLayerCorrelations
             // sums into fused multiply-add/subtract instructions. Matching the
             // term values alone is not enough; the final store must use the
             // same single-rounding combine to stay on the Fortran bit path.
-            hsHkf = MathF.FusedMultiplyAdd(hdiff * hdiff, htmpHkf, hsHkTerm1f);
+            hsHkf = LegacyPrecisionMath.Fma(hdiff * hdiff, htmpHkf, hsHkTerm1f);
             hsRtTerm1f = hdiff * hdiff * htmpRtf;
             hsRtTerm2f = -((4.0f / (rtzf * rtzf)) * rtzRtf);
             hsRtTerm3f = (hdiff * 2.0f * htmpf) * (-hoRtf);
-            hsRtf = MathF.FusedMultiplyAdd(
+            hsRtf = LegacyPrecisionMath.Fma(
                 hsHkTerm1f,
                 -hoRtf,
-                MathF.FusedMultiplyAdd(hdiff * hdiff, htmpRtf, hsRtTerm2f));
+                LegacyPrecisionMath.Fma(hdiff * hdiff, htmpRtf, hsRtTerm2f));
             hsRtRawf = hsRtf;
         }
 
-        float fmf = MathF.FusedMultiplyAdd(msqf, 0.014f, 1.0f);
-        hsf = MathF.FusedMultiplyAdd(msqf, 0.028f, hsf) / fmf;
+        float fmf = LegacyPrecisionMath.Fma(msqf, 0.014f, 1.0f);
+        hsf = LegacyPrecisionMath.Fma(msqf, 0.028f, hsf) / fmf;
         hsHkf /= fmf;
         hsRtf /= fmf;
         float hsMsqf = (0.028f / fmf) - ((0.014f * hsf) / fmf);
 
-        SolverTrace.Event(
-            "hst_terms",
-            SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                hk = hkf,
-                rt = rtf,
-                msq = msqf,
-                branch = branchf,
-                ho = hof,
-                hoRt = hoRtf,
-                rtz = rtzf,
-                rtzRt = rtzRtf,
-                grt = grtf,
-                hdif = hdiff,
-                rtmp = rtmpf,
-                htmp = htmpf,
-                htmpHk = htmpHkf,
-                htmpHkBits = unchecked((int)BitConverter.SingleToUInt32Bits(htmpHkf)),
-                htmpRt = htmpRtf,
-                hsHkTerm1 = hsHkTerm1f,
-                hsHkTerm1Bits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkTerm1f)),
-                hsHkTerm2 = hsHkTerm2f,
-                hsHkTerm2Bits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkTerm2f)),
-                hsRtRaw = hsRtRawf,
-                hsRtTerm1 = hsRtTerm1f,
-                hsRtTerm2 = hsRtTerm2f,
-                hsRtTerm3 = hsRtTerm3f,
-                hs = hsf,
-                hsHk = hsHkf,
-                hsHkBits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkf)),
-                hsRt = hsRtf,
-                hsMsq = hsMsqf,
-                fm = fmf
-            });
+                SolverTrace.Event(
+                    "hst_terms",
+                    SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
+                    new
+                    {
+                        hk = hkf,
+                        rt = rtf,
+                        msq = msqf,
+                        branch = branchf,
+                        ho = hof,
+                        hoRt = hoRtf,
+                        rtz = rtzf,
+                        rtzRt = rtzRtf,
+                        grt = grtf,
+                        hdif = hdiff,
+                        rtmp = rtmpf,
+                        htmp = htmpf,
+                        htmpHk = htmpHkf,
+                        htmpHkBits = unchecked((int)BitConverter.SingleToUInt32Bits(htmpHkf)),
+                        htmpRt = htmpRtf,
+                        hsHkTerm1 = hsHkTerm1f,
+                        hsHkTerm1Bits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkTerm1f)),
+                        hsHkTerm2 = hsHkTerm2f,
+                        hsHkTerm2Bits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkTerm2f)),
+                        hsRtRaw = hsRtRawf,
+                        hsRtTerm1 = hsRtTerm1f,
+                        hsRtTerm2 = hsRtTerm2f,
+                        hsRtTerm3 = hsRtTerm3f,
+                        hs = hsf,
+                        hsHk = hsHkf,
+                        hsHkBits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkf)),
+                        hsRt = hsRtf,
+                        hsMsq = hsMsqf,
+                        fm = fmf
+                    });
+            }
+        }
 
         return (hsf, hsHkf, hsRtf, hsMsqf);
     }
@@ -556,20 +564,27 @@ public static class BoundaryLayerCorrelations
             // CFL is written as PRODUCT minus constant in Fortran. Matching the
             // native REAL path requires preserving the intermediate product
             // rounding instead of contracting to a fused multiply-add.
-            float numerator = LegacyPrecisionMath.ProductThenSubtract(0.0727f, tmp, 0.07f);
+            float product_cf = 0.0727f * tmp;
+            float numerator = product_cf - 0.07f;
             cf = numerator / rtf;
             cfHk = ((-0.0727f * tmp * 3.0f / diff) - ((0.0727f * tmp) / (hkf + 1.0f))) / rtf;
         }
         else
         {
             float tmp = 1.0f - (1.0f / (hkf - 4.5f));
-            // The high-Hk CFL branch is written in the legacy REAL source as
-            // `0.015*TMP*TMP - 0.07`. Replacing that with a rounded TMP^2 helper
-            // keeps the laminar midpoint CFM one ULP high on the alpha-10 P80
-            // transition rung, so parity mode has to preserve the left-associated
-            // multiply chain explicitly here.
-            float scaledTmp = 0.015f * tmp;
-            float numerator = (scaledTmp * tmp) - 0.07f;
+            float numerator;
+            if (LegacyPrecisionMath.DisableFma)
+            {
+                // Fortran -O0: 0.015*TMP**2 evaluates as 0.015*(TMP*TMP).
+                float tmpSq = tmp * tmp;
+                numerator = (0.015f * tmpSq) - 0.07f;
+            }
+            else
+            {
+                // FMA mode: left-to-right (0.015*TMP)*TMP matches the traced parity.
+                float scaledTmp = 0.015f * tmp;
+                numerator = (scaledTmp * tmp) - 0.07f;
+            }
             cf = numerator / rtf;
             cfHk = ((0.015f * tmp * 2.0f) / ((hkf - 4.5f) * (hkf - 4.5f))) / rtf;
         }
@@ -615,12 +630,12 @@ public static class BoundaryLayerCorrelations
             // `1.0 + 0.5*GM1*MSQ` behavior. Replaying it as a separately rounded
             // product plus add leaves FCARG one ULP low and cascades through the
             // turbulent CF/DI family.
-            float fcArg = MathF.FusedMultiplyAdd(0.5f * gm1f, msqf, 1.0f);
+            float fcArg = LegacyPrecisionMath.Fma(0.5f * gm1f, msqf, 1.0f);
             float fc32 = MathF.Sqrt(fcArg);
             float grt32 = LegacyLibm.Log(rtf / fc32);
             grt32 = MathF.Max(grt32, 3.0f);
 
-            float gex32 = MathF.FusedMultiplyAdd(-hkf, 0.31f, -1.74f);
+            float gex32 = LegacyPrecisionMath.Fma(-hkf, 0.31f, -1.74f);
 
             float arg32 = -1.33f * hkf;
             arg32 = MathF.Max(-20.0f, arg32);
@@ -631,11 +646,11 @@ public static class BoundaryLayerCorrelations
             float grtRatio32 = grt32 / 2.3026f;
             float cfo32 = cfFacf;
             cfo32 *= 0.3f;
-            cfo32 *= MathF.Exp(arg32);
+            cfo32 *= LegacyLibm.Exp(arg32);
             cfo32 *= LegacyLibm.Pow(grtRatio32, gex32);
 
             float cfTail32 = thk32 - 1.0f;
-            float cfNumerator32 = MathF.FusedMultiplyAdd(cfTail32, 1.1e-4f, cfo32);
+            float cfNumerator32 = LegacyPrecisionMath.Fma(cfTail32, 1.1e-4f, cfo32);
             float cf32 = cfNumerator32 / fc32;
 
             float cfHkTerm1 = -1.33f * cfo32;
@@ -661,38 +676,44 @@ public static class BoundaryLayerCorrelations
             float cfMsqLeadTerm32 = cfMsqLeadCore32 * (-cfMsqScale32);
             float cfMsq32 = cfMsqLeadTerm32 - cfMsqTail32;
 
-            SolverTrace.Event(
-                "cft_terms",
-                SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-                new
+            if (SolverTrace.IsActive)
+            {
+                if (SolverTrace.IsActive)
                 {
-                    hk = hkf,
-                    rt = rtf,
-                    msq = msqf,
-                    fcArg,
-                    fc = fc32,
-                    grt = grt32,
-                    gex = gex32,
-                    arg = arg32,
-                    thkArg = thkArg32,
-                    thk = thk32,
-                    grtRatio = grtRatio32,
-                    thkSq = thkSq32,
-                    oneMinusThkSq = oneMinusThkSq32,
-                    scaledThkDiff = scaledThkDiff32,
-                    cfo = cfo32,
-                    cfHkTerm1,
-                    cfHkTerm2,
-                    cfHkTerm3,
-                    cfNumerator = cfNumerator32,
-                    cf = cf32,
-                    cfHk = cfHk32,
-                    cfRt = cfRt32,
-                    cfMsqScale = cfMsqScale32,
-                    cfMsqLeadCore = cfMsqLeadCore32,
-                    cfMsqTail = cfMsqTail32,
-                    cfMsq = cfMsq32
-                });
+                    SolverTrace.Event(
+                        "cft_terms",
+                        SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
+                        new
+                        {
+                            hk = hkf,
+                            rt = rtf,
+                            msq = msqf,
+                            fcArg,
+                            fc = fc32,
+                            grt = grt32,
+                            gex = gex32,
+                            arg = arg32,
+                            thkArg = thkArg32,
+                            thk = thk32,
+                            grtRatio = grtRatio32,
+                            thkSq = thkSq32,
+                            oneMinusThkSq = oneMinusThkSq32,
+                            scaledThkDiff = scaledThkDiff32,
+                            cfo = cfo32,
+                            cfHkTerm1,
+                            cfHkTerm2,
+                            cfHkTerm3,
+                            cfNumerator = cfNumerator32,
+                            cf = cf32,
+                            cfHk = cfHk32,
+                            cfRt = cfRt32,
+                            cfMsqScale = cfMsqScale32,
+                            cfMsqLeadCore = cfMsqLeadCore32,
+                            cfMsqTail = cfMsqTail32,
+                            cfMsq = cfMsq32
+                        });
+                }
+            }
 
             return (cf32, cfHk32, cfRt32, cfMsq32);
         }
@@ -777,7 +798,9 @@ public static class BoundaryLayerCorrelations
                 // source tree with plain float operators keeps DI one ULP low on
                 // raw-bit comparisons, so keep the multiply-add wide here and
                 // cast once at the end.
-                float numerator = (float)(((double)0.00205f * pow55) + 0.207f);
+                float numerator = LegacyPrecisionMath.DisableFma
+                    ? (0.00205f * pow55) + 0.207f
+                    : (float)(((double)0.00205f * pow55) + 0.207f);
                 numeratorTrace = numerator;
                 di32 = numerator / rtf;
                 diHk32 = (-0.00205f * 5.5f * LegacyLibm.Pow(diff, 4.5f)) / rtf;
@@ -792,7 +815,9 @@ public static class BoundaryLayerCorrelations
                 float hkbSqf = hkbf * hkbf;
                 float denf = 1.0f + (0.02f * hkbSqf);
                 float ratiof = hkbSqf / denf;
-                float numeratorf = (float)(((double)(-0.0016f) * ratiof) + 0.207f);
+                float numeratorf = LegacyPrecisionMath.DisableFma
+                    ? ((-0.0016f) * ratiof) + 0.207f
+                    : (float)(((double)(-0.0016f) * ratiof) + 0.207f);
                 hkbTrace = hkbf;
                 hkbSqTrace = hkbSqf;
                 denTrace = denf;
@@ -804,22 +829,34 @@ public static class BoundaryLayerCorrelations
             }
 
             float diRt32 = -di32 / rtf;
-            SolverTrace.Event(
-                "laminar_dissipation",
-                SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-                new
+            if (SolverTrace.IsActive)
+            {
+                if (SolverTrace.IsActive)
                 {
-                    hk = hkf,
-                    rt = rtf,
-                    hkb = hkbTrace,
-                    hkbSq = hkbSqTrace,
-                    den = denTrace,
-                    ratio = ratioTrace,
-                    numerator = numeratorTrace,
-                    di = di32,
-                    diHk = diHk32,
-                    diRt = diRt32
-                });
+                    SolverTrace.Event(
+                        "laminar_dissipation",
+                        SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
+                        new
+                        {
+                            hk = hkf,
+                            rt = rtf,
+                            hkb = hkbTrace,
+                            hkbSq = hkbSqTrace,
+                            den = denTrace,
+                            ratio = ratioTrace,
+                            numerator = numeratorTrace,
+                            di = di32,
+                            diHk = diHk32,
+                            diRt = diRt32
+                        });
+                }
+            }
+            if (DebugFlags.SetBlHex
+                && BitConverter.SingleToInt32Bits(hkf) == 0x417A3700)
+                Console.Error.WriteLine(
+                    $"C_DIL hk={BitConverter.SingleToInt32Bits(hkf):X8} rt={BitConverter.SingleToInt32Bits(rtf):X8}" +
+                    $" di={BitConverter.SingleToInt32Bits(di32):X8} hkb={BitConverter.SingleToInt32Bits(hkbTrace):X8}" +
+                    $" num={BitConverter.SingleToInt32Bits(numeratorTrace):X8}");
             return (di32, diHk32, diRt32);
         }
 
@@ -854,22 +891,28 @@ public static class BoundaryLayerCorrelations
 
         double di_rt = -di / rt;
 
-        SolverTrace.Event(
-            "laminar_dissipation",
-            SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-            new
+        if (SolverTrace.IsActive)
+        {
+            if (SolverTrace.IsActive)
             {
-                hk,
-                rt,
-                hkb = hkbTrace64,
-                hkbSq = hkbSqTrace64,
-                den = denTrace64,
-                ratio = ratioTrace64,
-                numerator = numeratorTrace64,
-                di,
-                diHk = di_hk,
-                diRt = di_rt
-            });
+                SolverTrace.Event(
+                    "laminar_dissipation",
+                    SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
+                    new
+                    {
+                        hk,
+                        rt,
+                        hkb = hkbTrace64,
+                        hkbSq = hkbSqTrace64,
+                        den = denTrace64,
+                        ratio = ratioTrace64,
+                        numerator = numeratorTrace64,
+                        di,
+                        diHk = di_hk,
+                        diRt = di_rt
+                    });
+            }
+        }
 
         return (di, di_hk, di_rt);
     }
@@ -907,8 +950,19 @@ public static class BoundaryLayerCorrelations
             float hsRt32 = (float)hsRtf;
 
             float oneMinusInvHk = 1.0f - 1.0f / hkf;
-            float rcd32 = 1.10f * oneMinusInvHk * oneMinusInvHk / hkf;
-            float rcdHk32 = 1.10f * (hkf - 1.0f) * (3.0f - hkf) / (hkf * hkf * hkf * hkf);
+            // Fortran: RCD = 1.10*(1.0-1.0/HK)**2/HK
+            // The **2 operator computes x*x first, then 1.10*result.
+            float oneMinusInvHkSq = oneMinusInvHk * oneMinusInvHk;
+            float rcd32 = 1.10f * oneMinusInvHkSq / hkf;
+            // Fortran: RCD_HK = -1.10*(1.0-1.0/HK)*2.0/HK**3 - RCD/HK
+            // This simplifies to -1.10*(HK-1)*(HK+1)/HK^4 which is NEGATIVE
+            // for HK>1. The mathematically correct derivative is
+            // +1.10*(HK-1)*(3-HK)/HK^4 (positive), but Fortran uses the
+            // above expression which has a different algebraic form. For
+            // binary parity we must match the Fortran evaluation exactly.
+            float hkCubed = hkf * hkf * hkf;
+            float rcdHk32 = -1.10f * oneMinusInvHk * 2.0f / hkCubed
+                            - rcd32 / hkf;
 
             float di32 = 2.0f * rcd32 / (hsf32 * rtf);
             float diHk32 = 2.0f * rcdHk32 / (hsf32 * rtf) - (di32 / hsf32) * hsHk32;

@@ -115,8 +115,10 @@ public static class TridiagonalSolver
 
             upper[km] = upper[km] / diagonal[km];
             rhs[km] = rhs[km] / diagonal[km];
-            diagonal[k] = T.FusedMultiplyAdd(-lower[k], upper[km], diagonal[k]);
-            rhs[k] = T.FusedMultiplyAdd(-lower[k], rhs[km], rhs[k]);
+            // Fortran TRISOL uses mulss;subss (separate, no FMA contraction)
+            // Both diagonal and RHS use separate multiply-subtract to match.
+            diagonal[k] = LegacyPrecisionMath.SeparateMultiplySubtract(lower[k], upper[km], diagonal[k]);
+            rhs[k] = LegacyPrecisionMath.SeparateMultiplySubtract(lower[k], rhs[km], rhs[k]);
 
             TraceForwardElimination(
                 scope,
@@ -147,7 +149,7 @@ public static class TridiagonalSolver
             T rhsBefore = rhs[k];
             T upperValue = upper[k];
             T nextValue = rhs[k + 1];
-            rhs[k] = T.FusedMultiplyAdd(-upper[k], rhs[k + 1], rhs[k]);
+            rhs[k] = LegacyPrecisionMath.SeparateMultiplySubtract(upper[k], rhs[k + 1], rhs[k]);
             TraceBackSubstitution(scope, traceRoutine, k + 1, upperValue, nextValue, rhsBefore, rhs[k], precision);
         }
     }

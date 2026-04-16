@@ -1,4 +1,6 @@
 using System.Numerics;
+using XFoil.Solver.Diagnostics;
+using XFoil.Core.Numerics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
@@ -88,6 +90,24 @@ public static class PanelGeometryBuilder
         {
             panel.XDerivative[i] = double.CreateChecked(xDerivative[i]);
             panel.YDerivative[i] = double.CreateChecked(yDerivative[i]);
+
+            if (typeof(T) == typeof(float)
+                && DebugFlags.SetBlHex
+                && (i < 5 || i == 79))
+            {
+                float xf = float.CreateChecked(x[i]);
+                float yf = float.CreateChecked(y[i]);
+                float sf = float.CreateChecked(s[i]);
+                float xpf = float.CreateChecked(xDerivative[i]);
+                float ypf = float.CreateChecked(yDerivative[i]);
+                Console.Error.WriteLine(
+                    $"C_SPLN i={i + 1}" +
+                    $" x={BitConverter.SingleToInt32Bits(xf):X8}" +
+                    $" y={BitConverter.SingleToInt32Bits(yf):X8}" +
+                    $" s={BitConverter.SingleToInt32Bits(sf):X8}" +
+                    $" xp={BitConverter.SingleToInt32Bits(xpf):X8}" +
+                    $" yp={BitConverter.SingleToInt32Bits(ypf):X8}");
+            }
         }
 
         // Compute outward normals from tangent rotation: normal = (dY/dS, -dX/dS) / magnitude
@@ -95,13 +115,31 @@ public static class PanelGeometryBuilder
         {
             T sx = yDerivative[i];
             T sy = -xDerivative[i];
-            // Classic XFoil's legacy float build contracts this sum-of-squares
-            // in a way that lands on a different ULP than two independently
-            // rounded products. Keep the explicit fused form in parity mode.
-            T magnitude = T.Sqrt(LegacyPrecisionMath.FusedMultiplyAdd(sx, sx, sy * sy));
+            T magnitudeSquared = LegacyPrecisionMath.FusedMultiplyAdd(sx, sx, sy * sy);
+            T magnitude = T.Sqrt(magnitudeSquared);
 
             panel.NormalX[i] = double.CreateChecked(sx / magnitude);
             panel.NormalY[i] = double.CreateChecked(sy / magnitude);
+
+            if (typeof(T) == typeof(float)
+                && DebugFlags.SetBlHex
+                && (i < 5 || i == 79))
+            {
+                float sxf = float.CreateChecked(sx);
+                float syf = float.CreateChecked(sy);
+                float magnitudeSquaredf = float.CreateChecked(magnitudeSquared);
+                float magnitudef = float.CreateChecked(magnitude);
+                float normalXf = float.CreateChecked(panel.NormalX[i]);
+                float normalYf = float.CreateChecked(panel.NormalY[i]);
+                Console.Error.WriteLine(
+                    $"C_NCALC i={i + 1}" +
+                    $" sx={BitConverter.SingleToInt32Bits(sxf):X8}" +
+                    $" sy={BitConverter.SingleToInt32Bits(syf):X8}" +
+                    $" mag2={BitConverter.SingleToInt32Bits(magnitudeSquaredf):X8}" +
+                    $" mag={BitConverter.SingleToInt32Bits(magnitudef):X8}" +
+                    $" nx={BitConverter.SingleToInt32Bits(normalXf):X8}" +
+                    $" ny={BitConverter.SingleToInt32Bits(normalYf):X8}");
+            }
         }
 
         // Average normal vectors at corner points (where arc-length values are identical)
@@ -111,7 +149,8 @@ public static class PanelGeometryBuilder
             {
                 T sx = T.CreateChecked(0.5) * (T.CreateChecked(panel.NormalX[i]) + T.CreateChecked(panel.NormalX[i + 1]));
                 T sy = T.CreateChecked(0.5) * (T.CreateChecked(panel.NormalY[i]) + T.CreateChecked(panel.NormalY[i + 1]));
-                T magnitude = T.Sqrt(LegacyPrecisionMath.FusedMultiplyAdd(sx, sx, sy * sy));
+                T magnitudeSquared = LegacyPrecisionMath.FusedMultiplyAdd(sx, sx, sy * sy);
+                T magnitude = T.Sqrt(magnitudeSquared);
                 double nx = double.CreateChecked(sx / magnitude);
                 double ny = double.CreateChecked(sy / magnitude);
 
@@ -147,11 +186,47 @@ public static class PanelGeometryBuilder
     {
         if (useLegacyPrecision)
         {
-            ComputePanelAnglesCore<float>(panel, state);
+            // Legacy parity uses libm atan2f directly because MathF.Atan2 drifts
+            // 1-3 ULP from glibc atan2f at certain input combinations. The drift
+            // compounds through the streamfunction influence matrix and breaks
+            // bit-exact parity for thicker airfoils (NACA 0009+).
+            ComputePanelAnglesLegacyFloat(panel, state);
             return;
         }
 
         ComputePanelAnglesCore<double>(panel, state);
+    }
+
+    private static void ComputePanelAnglesLegacyFloat(LinearVortexPanelState panel, InviscidSolverState state)
+    {
+        int n = panel.NodeCount;
+
+        for (int i = 0; i < n - 1; i++)
+        {
+            float sx = (float)panel.X[i + 1] - (float)panel.X[i];
+            float sy = (float)panel.Y[i + 1] - (float)panel.Y[i];
+
+            if (sx == 0f && sy == 0f)
+            {
+                panel.PanelAngle[i] = LegacyLibm.Atan2(-(float)panel.NormalY[i], -(float)panel.NormalX[i]);
+            }
+            else
+            {
+                panel.PanelAngle[i] = LegacyLibm.Atan2(sx, -sy);
+            }
+        }
+
+        int last = n - 1;
+        if (state.IsSharpTrailingEdge)
+        {
+            panel.PanelAngle[last] = MathF.PI;
+        }
+        else
+        {
+            float sx = (float)panel.X[0] - (float)panel.X[last];
+            float sy = (float)panel.Y[0] - (float)panel.Y[last];
+            panel.PanelAngle[last] = LegacyLibm.Atan2(-sx, sy) + MathF.PI;
+        }
     }
 
     // Legacy mapping: f_xfoil/src/xpanel.f :: APCALC.
@@ -248,6 +323,17 @@ public static class PanelGeometryBuilder
         state.TrailingEdgeAngleNormal = double.CreateChecked((dxS * dyTE) - (dyS * dxTE));
         state.TrailingEdgeAngleStreamwise = double.CreateChecked((dxS * dxTE) + (dyS * dyTE));
 
+        // GDB: dump ANTE inputs
+        if (DebugFlags.SetBlHex)
+        {
+            Console.Error.WriteLine(
+                $"C_ANTE DXS={BitConverter.SingleToInt32Bits((float)double.CreateChecked(dxS)):X8}" +
+                $" DYS={BitConverter.SingleToInt32Bits((float)double.CreateChecked(dyS)):X8}" +
+                $" DXTE={BitConverter.SingleToInt32Bits((float)double.CreateChecked(dxTE)):X8}" +
+                $" DYTE={BitConverter.SingleToInt32Bits((float)double.CreateChecked(dyTE)):X8}" +
+                $" ANTE={BitConverter.SingleToInt32Bits((float)state.TrailingEdgeAngleNormal):X8}");
+        }
+
         // Total TE gap magnitude
         T gap = T.Sqrt((dxTE * dxTE) + (dyTE * dyTE));
         state.TrailingEdgeGap = double.CreateChecked(gap);
@@ -298,5 +384,27 @@ public static class PanelGeometryBuilder
         double correction = deltaTheta - twoPi * Math.Truncate((deltaTheta + Math.CopySign(Math.PI, deltaTheta)) / twoPi);
 
         return referenceAngle + correction;
+    }
+
+    /// <summary>
+    /// Legacy precision (float) overload of ContinuousAtan2 — uses libm atan2f
+    /// to match Fortran's REAL ATAN2 bit-for-bit.
+    /// </summary>
+    public static double ContinuousAtan2(double y, double x, double referenceAngle, bool useLegacyPrecision)
+    {
+        if (!useLegacyPrecision)
+        {
+            return ContinuousAtan2(y, x, referenceAngle);
+        }
+
+        const float twoPi = 2.0f * MathF.PI;
+
+        float newAngle = LegacyLibm.Atan2((float)y, (float)x);
+        float deltaTheta = newAngle - (float)referenceAngle;
+
+        // Remove multiples of 2*PI to keep delta within (-PI, PI]
+        float correction = deltaTheta - twoPi * MathF.Truncate((deltaTheta + MathF.CopySign(MathF.PI, deltaTheta)) / twoPi);
+
+        return (float)referenceAngle + correction;
     }
 }

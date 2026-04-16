@@ -1,0 +1,44 @@
+  NACA tools/selig-database/goe570.dat Re=10000000 a=20 Nc=5: CD ULP=67963542 CL ULP=2147164299
+  NACA tools/selig-database/kenmar.dat Re=100000 a=6 Nc=5: CD ULP=1750453178 CL ULP=2147153164
+  NACA tools/selig-database/goe571.dat Re=100000 a=-4 Nc=9: CD ULP=6741025 CL ULP=2147057126
+  NACA tools/selig-database/goe428.dat Re=1000000 a=-6 Nc=9: CD ULP=23997617 CL ULP=2147056265
+  NACA tools/selig-database/goe13k.dat Re=10000000 a=-10 Nc=9: CD ULP=8145260 CL ULP=2147028881
+
+Smallest non-zero ULP failures (best debug targets):
+  NACA tools/selig-database/m20.dat Re=100000 a=16 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/sc20503.dat Re=10000000 a=4 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/m1.dat Re=100000 a=-6 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/gw19.dat Re=100000 a=10 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/ag19.dat Re=100000 a=18 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/waspsm.dat Re=10000000 a=8 Nc=5: CD ULP=1 CL ULP=0
+  NACA tools/selig-database/sc20606.dat Re=500000 a=5 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/nlr1t.dat Re=100000 a=-8 Nc=5: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/waspsm.dat Re=1000000 a=10 Nc=9: CD ULP=1 CL ULP=0
+  NACA tools/selig-database/fx69h083.dat Re=100000 a=14 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/usa98.dat Re=100000 a=14 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/goe118.dat Re=10000000 a=20 Nc=5: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/eiffel10.dat Re=10000000 a=-10 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/sokolov.dat Re=10000000 a=8 Nc=5: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/goe366.dat Re=500000 a=3 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/goe14.dat Re=10000000 a=-8 Nc=5: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/fx77w258.dat Re=100000 a=4 Nc=5: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/sc20404.dat Re=10000000 a=-8 Nc=5: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/ultimate.dat Re=1000000 a=7 Nc=9: CD ULP=0 CL ULP=1
+  NACA tools/selig-database/s9104BTE.dat Re=10000000 a=7 Nc=5: CD ULP=1 CL ULP=0
+
+CD ULP Distribution (of 320121 converged):
+  0 ULP (bit-exact): 102168 (31.9 %)
+  <=10 ULP: 104548 (32.7 %)
+  <=100 ULP: 109377 (34.2 %)
+  <=1000 ULP: 128777 (40.2 %)
+
+CD Error Distribution (of 320121 converged):
+  <0.1%: 191769 (59.9 %)
+  <0.5%: 242219 (75.7 %)
+  <1.0%: 257465 (80.4 %)
+  <5.0%: 277420 (86.7 %)
+  <10%:  283839 (88.7 %)
+
+real	134m23.192s
+user	11535m59.286s
+sys	1301m36.511s

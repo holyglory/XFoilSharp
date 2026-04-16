@@ -1506,7 +1506,7 @@ try
                 throw new ArgumentException("The viscous-polar-naca command requires a 4-digit designation, alpha start, alpha end, and alpha step.");
             }
 
-            var viscousPolarAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
+            var viscousPolarAirfoilFromNaca = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239, useLegacyPrecision: true);
             WriteViscousPolarSummary(
                 viscousPolarAirfoilFromNaca,
                 ParseDouble(args[2], "alpha start"),
@@ -2349,7 +2349,11 @@ static void WriteViscousPolarSummary(
             $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t" +
             $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
             $"{r.Converged}\t" +
-            $"{r.Iterations}");
+            $"{r.Iterations}\t" +
+            $"CDf={r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"CDp={r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"Xtr_U={r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"Xtr_L={r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}");
     }
 }
 
@@ -2993,7 +2997,15 @@ static AnalysisSettings CreateViscousSettings(
         machNumber: machNumber,
         reynoldsNumber: reynoldsNumber,
         transitionReynoldsTheta: transitionReynoldsTheta,
-        criticalAmplificationFactor: criticalAmplificationFactor);
+        criticalAmplificationFactor: criticalAmplificationFactor,
+        maxViscousIterations: 200,
+        viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
+        useModernTransitionCorrections: false,
+        useLegacyBoundaryLayerInitialization: true,
+        useLegacyStreamfunctionKernelPrecision: true,
+        useLegacyPanelingPrecision: true,
+        useLegacyWakeSourceKernelPrecision: true,
+        viscousConvergenceTolerance: 1e-4); // Fortran EPS1
 }
 
 // Legacy mapping: none; export-summary formatting is managed-only CLI behavior.

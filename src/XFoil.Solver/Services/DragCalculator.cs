@@ -74,12 +74,12 @@ public static class DragCalculator
         //      Apply Karman-Tsien compressibility correction on Ue.
         // ----------------------------------------------------------------
         double cd = ComputeSquireYoungCD(blState, qinf, machNumber, useExtendedWake, useLegacyPrecision);
-        cd = LegacyPrecisionMath.Max(cd, 1e-8, useLegacyPrecision);
+        // Fortran CDCALC has no floor — Selig parity needs CD=0 in degenerate cases.
 
         // ----------------------------------------------------------------
         // 4. Skin friction drag integration (CDF)
         // ----------------------------------------------------------------
-        double cdf = IntegrateSkinFriction(blState, qinf, alfa, chord, useLegacyPrecision);
+        double cdf = IntegrateSkinFriction(blState, panel, qinf, alfa, chord, useLegacyPrecision);
 
         // Ensure CDF doesn't exceed CD (physical constraint for well-behaved cases)
         if (cdf > cd) cdf = cd;
@@ -153,83 +153,107 @@ public static class DragCalculator
         bool useExtendedWake,
         bool useLegacyPrecision)
     {
-        double cdTotal = 0.0;
+        // Port of CDCALC from xfoil.f lines 1177-1185.
+        // Fortran evaluates Squire-Young ONCE at the wake end (NBL(2),2)
+        // and multiplies by 2.0. The wake combines both surfaces.
 
-        // Karman-Tsien parameters
+        // Karman-Tsien parameter: TKLAM = MINF^2 / (1 + BETA)^2
         double tklam = 0.0;
         if (machNumber > 0.01)
         {
-            double m2 = LegacyPrecisionMath.Square(machNumber, useLegacyPrecision);
-            double beta = LegacyPrecisionMath.Sqrt(LegacyPrecisionMath.Max(LegacyPrecisionMath.Subtract(1.0, m2, useLegacyPrecision), 0.01, useLegacyPrecision), useLegacyPrecision);
-            tklam = LegacyPrecisionMath.Divide(m2, LegacyPrecisionMath.Add(1.0, beta, useLegacyPrecision), useLegacyPrecision);
+            double m2 = machNumber * machNumber;
+            double beta = Math.Sqrt(Math.Max(1.0 - m2, 0.01));
+            double onePlusBeta = 1.0 + beta;
+            tklam = m2 / (onePlusBeta * onePlusBeta);
         }
 
-        // Legacy block: CDCALC per-side Squire-Young accumulation.
-        // Difference from legacy: The same side contributions are preserved, but the managed code can optionally remarch the wake before evaluating the extrapolation.
-        // Decision: Keep the optional extension and preserve the original per-side accumulation structure.
-        for (int side = 0; side < 2; side++)
+        // Use wake-end station: NBL[1]-1 on side 1 (0-based index)
+        // This is the last wake station where theta has fully developed.
+        int wakeEnd = blState.NBL[1] - 1;
+        if (wakeEnd < 1 || wakeEnd >= blState.MaxStations)
         {
-            int ite = blState.IBLTE[side];
-            if (ite <= 1 || ite >= blState.MaxStations) continue;
-
-            // Find the last reliable station: back off from TE if Ue is anomalous.
-            // The closure panel at the TE can have very large or very small Ue,
-            // and the BL values there are unreliable.
-            int iUse = ite;
-            while (iUse > 1 && (blState.UEDG[iUse, side] > 2.0 * qinf
-                || blState.UEDG[iUse, side] < 0.5 * qinf
-                || blState.THET[iUse, side] < 1e-8))
-            {
-                iUse--;
-            }
-
-            double thetaEnd = blState.THET[iUse, side];
-            double ueEnd = blState.UEDG[iUse, side];
-            double dstarEnd = blState.DSTR[iUse, side];
-
-            if (thetaEnd < 1e-10 || ueEnd < 1e-10) continue;
-
-            // Optional: extend wake marching from this station
-            if (useExtendedWake)
-            {
-                double hEnd = dstarEnd / thetaEnd;
-                hEnd = LegacyPrecisionMath.Max(hEnd, 1.0001, useLegacyPrecision);
-                double xsiEnd = blState.XSSI[iUse, side];
-
-                var (thetaExt, ueExt, hExt) = MarchExtendedWake(
-                    thetaEnd, ueEnd, hEnd, xsiEnd, qinf, useLegacyPrecision);
-
-                thetaEnd = thetaExt;
-                ueEnd = ueExt;
-                dstarEnd = hExt * thetaEnd;
-            }
-
-            double hTE = LegacyPrecisionMath.Divide(dstarEnd, LegacyPrecisionMath.Max(thetaEnd, 1e-12, useLegacyPrecision), useLegacyPrecision);
-            hTE = LegacyPrecisionMath.Max(1.0, LegacyPrecisionMath.Min(hTE, 5.0, useLegacyPrecision), useLegacyPrecision);
-
-            // Apply Karman-Tsien compressibility correction
-            double ueComp = ueEnd;
-            if (tklam > 0)
-            {
-                double urat = LegacyPrecisionMath.Divide(ueEnd, qinf, useLegacyPrecision);
-                double denom = LegacyPrecisionMath.MultiplySubtract(tklam, LegacyPrecisionMath.Square(urat, useLegacyPrecision), 1.0, useLegacyPrecision);
-                if (LegacyPrecisionMath.Abs(denom, useLegacyPrecision) > 1e-10)
-                    ueComp = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(ueEnd, LegacyPrecisionMath.Subtract(1.0, tklam, useLegacyPrecision), useLegacyPrecision), denom, useLegacyPrecision);
-            }
-
-            double urat2 = LegacyPrecisionMath.Divide(ueComp, LegacyPrecisionMath.Max(qinf, 1e-10, useLegacyPrecision), useLegacyPrecision);
-            urat2 = LegacyPrecisionMath.Max(urat2, 1e-6, useLegacyPrecision);
-
-            // Squire-Young formula (per side)
-            cdTotal = LegacyPrecisionMath.Add(
-                cdTotal,
-                LegacyPrecisionMath.Multiply(thetaEnd, LegacyPrecisionMath.Pow(urat2, LegacyPrecisionMath.Multiply(0.5, LegacyPrecisionMath.Add(5.0, hTE, useLegacyPrecision), useLegacyPrecision), useLegacyPrecision), useLegacyPrecision),
-                useLegacyPrecision);
+            // Fallback: use TE station on side 1 if wake is not available
+            wakeEnd = blState.IBLTE[1];
         }
 
-        // Factor of 2: sum of both sides
-        cdTotal = LegacyPrecisionMath.Multiply(2.0, cdTotal, useLegacyPrecision);
-        return LegacyPrecisionMath.Max(cdTotal, 1e-8, useLegacyPrecision);
+        if (wakeEnd < 1 || wakeEnd >= blState.MaxStations)
+            return 1e-8;
+
+        double thwake = blState.THET[wakeEnd, 1];
+        double ueWake = blState.UEDG[wakeEnd, 1];
+        double dsWake = blState.DSTR[wakeEnd, 1];
+
+        // Fortran CDCALC has no guard — if THWAKE is zero or tiny it produces 0 or NaN.
+        // Returning 1e-8 sentinel diverges from Fortran NaN-parity on degenerate cases.
+        if (thwake < 1e-10 || ueWake < 1e-10)
+            return 0.0;
+
+        // Karman-Tsien compressibility correction on wake Ue
+        // UEWAKE = UEDG * (1-TKLAM) / (1 - TKLAM*URAT^2)
+        double urat = ueWake / qinf;
+        double uewake = ueWake;
+        if (tklam > 0)
+        {
+            double denom = 1.0 - tklam * urat * urat;
+            if (Math.Abs(denom) > 1e-10)
+                uewake = ueWake * (1.0 - tklam) / denom;
+        }
+
+        // Shape factor at wake end
+        double shwake = useLegacyPrecision
+            ? (float)((float)dsWake / (float)thwake)
+            : dsWake / thwake;
+
+        // Squire-Young: CD = 2 * THWAKE * (UEWAKE/QINF)^(0.5*(5+SHWAKE))
+        double cd;
+        if (useLegacyPrecision)
+        {
+            // Fortran: CD = 2.0*THWAKE * (UEWAKE/QINF)**(0.5*(5.0+SHWAKE))
+            // All REAL (float) arithmetic including the power function.
+            float fThw = (float)thwake;
+            float fUew = (float)uewake;
+            float fQinf2 = (float)qinf;
+            float fShw = (float)shwake;
+            float fBase = fUew / fQinf2;
+            float fExp = 0.5f * (5.0f + fShw);
+            float fPow = (float)LegacyPrecisionMath.Pow(fBase, fExp, true);
+            cd = 2.0f * fThw * fPow;
+        }
+        else
+        {
+            cd = 2.0 * thwake * Math.Pow(uewake / qinf, 0.5 * (5.0 + shwake));
+        }
+
+        if (DebugFlags.SetBlHex)
+        {
+            float fThw = (float)thwake;
+            float fDst = (float)dsWake;
+            float fUeg = (float)ueWake;
+            float fShw = (float)shwake;
+            float fUew = (float)uewake;
+            float fQinf = (float)qinf;
+            float fCd = (float)cd;
+            Console.Error.WriteLine($"C_CDCALC_INPUTS THW={BitConverter.SingleToInt32Bits(fThw):X8} DST={BitConverter.SingleToInt32Bits(fDst):X8} UEG={BitConverter.SingleToInt32Bits(fUeg):X8} SHW={BitConverter.SingleToInt32Bits(fShw):X8} UEW={BitConverter.SingleToInt32Bits(fUew):X8} QINF={BitConverter.SingleToInt32Bits(fQinf):X8} CD={BitConverter.SingleToInt32Bits(fCd):X8}");
+            // Dump all BL stations for parity comparison
+            for (int side = 0; side < 2; side++)
+            {
+                int fortSide = side + 1;
+                for (int ibl = 2; ibl < blState.NBL[side]; ibl++)
+                {
+                    float ft = (float)blState.THET[ibl, side];
+                    float fd = (float)blState.DSTR[ibl, side];
+                    float fu = (float)blState.UEDG[ibl, side];
+                    Console.Error.WriteLine($"C_BL s={fortSide} i={ibl + 1,4} T={BitConverter.SingleToInt32Bits(ft):X8} D={BitConverter.SingleToInt32Bits(fd):X8} U={BitConverter.SingleToInt32Bits(fu):X8}");
+                }
+            }
+        }
+
+        SolverTrace.Event(
+            "squire_young_wake",
+            SolverTrace.ScopeName(typeof(DragCalculator)),
+            new { wakeEnd, nbl1 = blState.NBL[1], iblte1 = blState.IBLTE[1], thwake, ueWake, dsWake, shwake, urat, ueWakeAdjusted = uewake, qinf, cd });
+
+        return cd;
     }
 
     /// <summary>
@@ -302,76 +326,73 @@ public static class DragCalculator
     // Decision: Keep the helper and preserve the physical interpretation; it remains a managed decomposition term rather than the primary parity metric.
     private static double IntegrateSkinFriction(
         BoundaryLayerSystemState blState,
+        LinearVortexPanelState panel,
         double qinf,
         double alfa,
         double chord,
         bool useLegacyPrecision)
     {
-        double cdf = 0.0;
+        // Legacy mapping: f_xfoil/src/xfoil.f :: CDCALC skin-friction integration
+        // CDF = sum_sides sum_IBL=3..IBLTE: 0.5*(TAU[IBL]+TAU[IBL-1])*DX * 2/QINF^2
+        // where DX = (X(I)-X(IM))*cos(alfa) + (Y(I)-Y(IM))*sin(alfa)
+        if (useLegacyPrecision)
+        {
+            // Fortran CDCALC: sequential REAL accumulation
+            float fSa = MathF.Sin((float)alfa);
+            float fCa = MathF.Cos((float)alfa);
+            float fCdf = 0.0f;
+            float fQinf = (float)qinf;
+            float fQinf2 = fQinf * fQinf;
 
-        // Legacy block: managed skin-friction surface integration.
-        // Difference from legacy: The loop is a managed post-processing pass over the converged state rather than a direct copy of one legacy routine.
-        // Decision: Keep the explicit integration because it supports the richer decomposition output.
+            for (int side = 0; side < 2; side++)
+            {
+                int iblte = blState.IBLTE[side];
+                for (int ibl = 2; ibl <= iblte && ibl < blState.MaxStations; ibl++)
+                {
+                    int iPan = blState.IPAN[ibl, side];
+                    int iPanPrev = blState.IPAN[ibl - 1, side];
+                    if (iPan < 0 || iPanPrev < 0) continue;
+                    if (iPan >= panel.NodeCount || iPanPrev >= panel.NodeCount) continue;
+                    float fDx = ((float)panel.X[iPan] - (float)panel.X[iPanPrev]) * fCa
+                              + ((float)panel.Y[iPan] - (float)panel.Y[iPanPrev]) * fSa;
+                    float fTau = (float)blState.TAU[ibl, side];
+                    float fTauPrev = (float)blState.TAU[ibl - 1, side];
+                    fCdf = fCdf + 0.5f * (fTau + fTauPrev) * fDx * 2.0f / fQinf2;
+                }
+            }
+            return Math.Max(fCdf, 0.0);
+        }
+
+        double sa = Math.Sin(alfa);
+        double ca = Math.Cos(alfa);
+        double cdf = 0.0;
+        double qinf2 = qinf * qinf;
+
         for (int side = 0; side < 2; side++)
         {
             int iblte = blState.IBLTE[side];
-            int itran = blState.ITRAN[side];
 
-            for (int ibl = 1; ibl <= iblte && ibl < blState.MaxStations; ibl++)
+            // Fortran loops IBL=3..IBLTE (1-based), C# ibl=2..iblte (0-based)
+            for (int ibl = 2; ibl <= iblte && ibl < blState.MaxStations; ibl++)
             {
-                double ue = blState.UEDG[ibl, side];
-                double th = blState.THET[ibl, side];
-                double ds = blState.DSTR[ibl, side];
+                int iPan = blState.IPAN[ibl, side];
+                int iPanPrev = blState.IPAN[ibl - 1, side];
 
-                if (ue < 1e-10 || th < 1e-30) continue;
+                if (iPan < 0 || iPanPrev < 0) continue;
+                if (iPan >= panel.NodeCount || iPanPrev >= panel.NodeCount) continue;
 
-                double hk = LegacyPrecisionMath.Divide(ds, th, useLegacyPrecision);
-                hk = LegacyPrecisionMath.Max(hk, 1.05, useLegacyPrecision);
+                // Physical panel distance projected in freestream direction
+                double dx = (panel.X[iPan] - panel.X[iPanPrev]) * ca
+                          + (panel.Y[iPan] - panel.Y[iPanPrev]) * sa;
 
-                // Reynolds number based on momentum thickness
-                double rt = LegacyPrecisionMath.Max(
-                    LegacyPrecisionMath.Multiply(
-                        LegacyPrecisionMath.Multiply(qinf, ue, th, useLegacyPrecision),
-                        1_000_000.0,
-                        useLegacyPrecision),
-                    200.0,
-                    useLegacyPrecision);
-                // Use a more reasonable estimate: the Re is embedded in the BL solution.
-                // For the integration, we need Cf from the correlations.
-                // The Re_theta is computed from the converged state.
-                // Since we don't have the global Re directly, estimate from typical values.
-                // In practice, we use the same approach as in ViscousSolverEngine.
-                // Re_theta ~ Re * Ue * theta where Re is the chord Reynolds number.
-                // Ue and theta are from the BL solution.
+                double tau_ibl = blState.TAU[ibl, side];
+                double tau_prev = blState.TAU[ibl - 1, side];
 
-                double cf;
-                if (ibl < itran)
-                {
-                    (cf, _, _, _) = BoundaryLayerCorrelations.LaminarSkinFriction(hk, rt, 0.0);
-                }
-                else
-                {
-                    (cf, _, _, _) = BoundaryLayerCorrelations.TurbulentSkinFriction(hk, rt, 0.0);
-                }
-
-                // Arc-length step
-                double dx = LegacyPrecisionMath.Subtract(
-                    blState.XSSI[ibl, side],
-                    blState.XSSI[Math.Max(ibl - 1, 0), side],
-                    useLegacyPrecision);
-                if (dx < 1e-12) continue;
-
-                // CDF contribution: Cf * (Ue/Qinf)^2 * cos(angle) * ds / chord
-                // For alpha=0 and thin airfoil, cos(angle) ~ 1
-                double urat = LegacyPrecisionMath.Divide(ue, LegacyPrecisionMath.Max(qinf, 1e-10, useLegacyPrecision), useLegacyPrecision);
-                cdf = LegacyPrecisionMath.Add(
-                    cdf,
-                    LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(cf, LegacyPrecisionMath.Square(urat, useLegacyPrecision), dx, useLegacyPrecision), chord, useLegacyPrecision),
-                    useLegacyPrecision);
+                cdf += 0.5 * (tau_ibl + tau_prev) * dx * 2.0 / qinf2;
             }
         }
 
-        return LegacyPrecisionMath.Max(cdf, 0.0, useLegacyPrecision);
+        return Math.Max(cdf, 0.0);
     }
 
     // ================================================================

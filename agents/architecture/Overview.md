@@ -13,6 +13,7 @@ The managed codebase is a layered rewrite of XFoil that separates domain data, a
 - The governing rule lives in [../DocumentationPolicy.md](../DocumentationPolicy.md).
 - New behavior or newly learned behavior must be written back into the nearest `agents/` leaf and any affected parity/TODO file.
 - The full-file C# parity ledger lives in `ParityAudit.md`.
+- Repo-local developer automation is documented in [RepoAutomation.md](RepoAutomation.md).
 
 ## Project dependency graph
 
@@ -79,6 +80,12 @@ The managed codebase is a layered rewrite of XFoil that separates domain data, a
 - One large command switch in `Program.cs`.
 - Stateless command verbs that instantiate and compose service calls.
 - No interactive retained shell or plotting state like original `xfoil.f`.
+
+## Development automation boundary
+
+- Repo-local Codex automation now lives in `.codex/` and `.agents/skills/`.
+- The installed autonomous-loop wiring is a repository workflow aid, not part of the shipped managed runtime.
+- Machine-global bootstrap still lives under `~/.codex/` and must exist before the repo-local hooks will validate.
 
 ## Design principles actually visible in code
 

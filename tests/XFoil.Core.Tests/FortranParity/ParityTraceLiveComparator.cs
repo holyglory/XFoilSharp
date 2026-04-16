@@ -1111,6 +1111,11 @@ internal sealed class ParityTraceLiveComparator
                         $"{selector} mismatch: reference={referenceElement.GetRawText()} [{ResolvePreferredBitPattern(referenceBits)}] managed={managedElement.GetRawText()} [{ResolvePreferredBitPattern(managedBits)}]");
                 }
 
+                if (TryCompareSingleEquivalentUsingAvailableBits(referenceElement, managedElement, referenceBits, managedBits))
+                {
+                    return;
+                }
+
                 if (!AreJsonNumbersEquivalent(referenceElement, managedElement))
                 {
                     throw BuildMismatch(
@@ -1330,6 +1335,47 @@ internal sealed class ParityTraceLiveComparator
         }
 
         return referenceElement.GetDouble().Equals(managedElement.GetDouble());
+    }
+
+    private static bool TryCompareSingleEquivalentUsingAvailableBits(
+        JsonElement referenceElement,
+        JsonElement managedElement,
+        IReadOnlyDictionary<string, string>? referenceBits,
+        IReadOnlyDictionary<string, string>? managedBits)
+    {
+        return TryCompareSingleEquivalent(referenceElement, managedElement, referenceBits) ||
+               TryCompareSingleEquivalent(referenceElement, managedElement, managedBits);
+    }
+
+    private static bool TryCompareSingleEquivalent(
+        JsonElement referenceElement,
+        JsonElement managedElement,
+        IReadOnlyDictionary<string, string>? bits)
+    {
+        if (bits is null || !bits.TryGetValue("f32", out string? singleBits))
+        {
+            return false;
+        }
+
+        if (!TryParseHexBits(singleBits, out uint expectedBits))
+        {
+            return false;
+        }
+
+        uint referenceBits = unchecked((uint)BitConverter.SingleToInt32Bits((float)referenceElement.GetDouble()));
+        uint managedBits = unchecked((uint)BitConverter.SingleToInt32Bits((float)managedElement.GetDouble()));
+        return referenceBits == expectedBits && managedBits == expectedBits;
+    }
+
+    private static bool TryParseHexBits(string value, out uint bits)
+    {
+        ReadOnlySpan<char> text = value.AsSpan();
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[2..];
+        }
+
+        return uint.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out bits);
     }
 
     private static IReadOnlyDictionary<string, string>? TryResolveDataBits(ParityTraceRecord record, string path)

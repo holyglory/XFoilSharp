@@ -24,10 +24,16 @@ cp "$SCRIPT_DIR"/spline_trace_stub.f "$BUILD_DIR/"
 
 (
     cd "$BUILD_DIR"
-    gfortran -std=legacy -O2 -ffixed-line-length-none -c spline.f -o spline.o
-    gfortran -std=legacy -O2 -ffixed-line-length-none -c spline_trace_stub.f -o spline_trace_stub.o
-    gfortran -O2 spline_parity_driver.f90 spline.o spline_trace_stub.o -o spline_parity_driver
-    gfortran -std=legacy -O2 -ffixed-line-length-none segmented_spline_parity_driver.f spline.o spline_trace_stub.o -o segmented_spline_parity_driver
+    # When XFOIL_DISABLE_FMA=1, compile without FMA for debugging real parity bugs.
+    if [[ "${XFOIL_DISABLE_FMA:-0}" == "1" ]]; then
+        FFLAGS="-O0 -ffp-contract=off -march=x86-64"
+    else
+        FFLAGS="-O2 -march=native"
+    fi
+    gfortran -std=legacy $FFLAGS -ffixed-line-length-none -c spline.f -o spline.o
+    gfortran -std=legacy $FFLAGS -ffixed-line-length-none -c spline_trace_stub.f -o spline_trace_stub.o
+    gfortran $FFLAGS -ffree-line-length-none spline_parity_driver.f90 spline.o spline_trace_stub.o -o spline_parity_driver
+    gfortran -std=legacy $FFLAGS -ffixed-line-length-none segmented_spline_parity_driver.f spline.o spline_trace_stub.o -o segmented_spline_parity_driver
 )
 
 echo "$BUILD_DIR"

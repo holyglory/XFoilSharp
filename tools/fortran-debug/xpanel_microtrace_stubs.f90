@@ -560,3 +560,39 @@ real function atanc()
   implicit none
   atanc = 0.0
 end function atanc
+
+subroutine trace_psilin_source_pdyy_write(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v)
+  character(*) a; integer b,c,d; character(*) e
+  real f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v
+end subroutine
+
+subroutine trace_psilin_te_pgam_terms(a,b,c,d,e,f,g,h,i,j,k,l)
+  character(*) a; integer b; real c,d,e,f,g,h,i,j,k,l
+end subroutine
+
+! FMA wrapper: respects XFOIL_DISABLE_FMA env var.
+real function fmaf_real(a, b, c) result(r)
+  use iso_c_binding, only: c_float
+  implicit none
+  real, intent(in) :: a, b, c
+  interface
+    real(c_float) function c_fmaf(x, y, z) bind(C, name='fmaf')
+      import :: c_float
+      real(c_float), value :: x, y, z
+    end function c_fmaf
+  end interface
+  logical, save :: checked = .false.
+  logical, save :: disable_fma = .false.
+  character(len=8) :: env_val
+  integer :: env_len, env_stat
+  if (.not. checked) then
+    call get_environment_variable('XFOIL_DISABLE_FMA', env_val, env_len, env_stat)
+    disable_fma = (env_stat == 0 .and. env_len > 0)
+    checked = .true.
+  end if
+  if (disable_fma) then
+    r = a * b + c
+  else
+    r = c_fmaf(a, b, c)
+  end if
+end function fmaf_real

@@ -36,9 +36,10 @@ else()
   set(XFOIL_SRCS ${XFOIL_SRCS} frplot0.f)
 endif()
 
+add_library(trace_stubs STATIC ${CMAKE_BINARY_DIR}/trace_stubs.c)
 add_executable(xfoil ${XFOIL_SRCS})
 set_target_properties(xfoil PROPERTIES VERSION ${PROJECT_VERSION})
-target_link_libraries(xfoil plt)
+target_link_libraries(xfoil plt trace_stubs)
 
 export(TARGETS xfoil FILE "${CMAKE_BINARY_DIR}/xfoil-targets.cmake")
 

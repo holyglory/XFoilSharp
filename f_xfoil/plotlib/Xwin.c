@@ -223,10 +223,14 @@ GWXOPEN(xsizeroot, ysizeroot, depth)
 /* open the display */
    display = XOpenDisplay(NULL);
    /* XSynchronize(display,1); */
-   if (display == NULL) 
+   if (display == NULL)
 
-      {printf(" Cannot open display...aborting\n");
-       exit(1);
+      {/* Headless mode: no X display available. Return safe defaults so the
+          plot library is effectively a no-op for the rest of the run. */
+       *xsizeroot = 800;
+       *ysizeroot = 600;
+       *depth = 24;
+       return;
       }
 
 /* get old window focus to use later for cursor positioning */
@@ -282,10 +286,12 @@ GWXWINOPEN(xstart, ystart, xsize, ysize)
      0x80,0x00,0x80,0x00,0x80,0x00,0x00,0x00 };
 
 /* check for open display */
-   if (display == NULL) 
+   if (display == NULL)
 
-      {printf(" Cannot open display...aborting in gwxwinopen\n");
-       exit(1);
+      {/* Headless: pretend the window opened with the requested size. */
+       width  = *xsize;
+       height = *ysize;
+       return;
       }
 
    width  = *xsize;

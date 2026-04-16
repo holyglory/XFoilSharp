@@ -1,4 +1,5 @@
 using System.Numerics;
+using XFoil.Solver.Diagnostics;
 using XFoil.Core.Numerics;
 
 // Legacy audit:
@@ -89,10 +90,25 @@ internal static class WakeSpacing
 
         int segmentCount = pointCount - 1;
         float ratio = SolveGeometricRatioLegacyFloat(firstSpacing, maxDistance, segmentCount);
+        if (DebugFlags.SetBlHex)
+        {
+            Console.Error.WriteLine(
+                $"C_SETEXP_R ratio={BitConverter.SingleToInt32Bits(ratio):X8}" +
+                $" ds1={BitConverter.SingleToInt32Bits(firstSpacing):X8}" +
+                $" nn={pointCount}" +
+                $" smax={BitConverter.SingleToInt32Bits(maxDistance):X8}");
+        }
         float step = firstSpacing;
         for (int index = 1; index < pointCount; index++)
         {
             result[index] = result[index - 1] + step;
+            if (DebugFlags.SetBlHex && index < 8)
+            {
+                Console.Error.WriteLine(
+                    $"C_SETEXP n={index + 1}" +
+                    $" s={BitConverter.SingleToInt32Bits(result[index]):X8}" +
+                    $" ds={BitConverter.SingleToInt32Bits(step):X8}");
+            }
             step *= ratio;
         }
 
@@ -218,6 +234,8 @@ internal static class WakeSpacing
         return ratio;
     }
 
+    // Mirrors libgfortran's pow_r4_i4 (binary exponentiation with squaring)
+    // so RATIO**NEX in SETEXP reproduces the classic Fortran bit pattern.
     private static float PowIntegerLegacyFloat(float value, int exponent)
     {
         if (exponent < 0)
@@ -226,9 +244,19 @@ internal static class WakeSpacing
         }
 
         float result = 1.0f;
-        for (int i = 0; i < exponent; i++)
+        float basePow = value;
+        int n = exponent;
+        while (n != 0)
         {
-            result *= value;
+            if ((n & 1) != 0)
+            {
+                result *= basePow;
+            }
+            n >>= 1;
+            if (n != 0)
+            {
+                basePow *= basePow;
+            }
         }
 
         return result;

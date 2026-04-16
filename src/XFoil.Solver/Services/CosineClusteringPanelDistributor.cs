@@ -49,12 +49,24 @@ public static class CosineClusteringPanelDistributor
             DistributeCore<float>(
                 inputX, inputY, inputCount, panel, desiredNodeCount,
                 curvatureWeight, trailingEdgeDensityRatio, curvatureDensityRatio);
-            return;
+        }
+        else
+        {
+            DistributeCore<double>(
+                inputX, inputY, inputCount, panel, desiredNodeCount,
+                curvatureWeight, trailingEdgeDensityRatio, curvatureDensityRatio);
         }
 
-        DistributeCore<double>(
-            inputX, inputY, inputCount, panel, desiredNodeCount,
-            curvatureWeight, trailingEdgeDensityRatio, curvatureDensityRatio);
+        if (Environment.GetEnvironmentVariable("XFOIL_DUMP_PANELS") is { } dumpPath
+            && !string.IsNullOrEmpty(dumpPath))
+        {
+            using var w = new System.IO.StreamWriter(dumpPath);
+            w.WriteLine($"# C# panels n={panel.NodeCount} legacy={useLegacyPrecision}");
+            for (int i = 0; i < panel.NodeCount; i++)
+            {
+                w.WriteLine($"{panel.X[i]:E15} {panel.Y[i]:E15}");
+            }
+        }
     }
 
     // Legacy mapping: f_xfoil/src/xfoil.f :: PANGEN.
@@ -111,6 +123,15 @@ public static class CosineClusteringPanelDistributor
         for (int i = 0; i < nb; i++)
         {
             TraceBufferSplineNode(traceScope, i + 1, xb[i], yb[i], sb[i], xbp[i], ybp[i]);
+        }
+        if (DebugFlags.SetBlHex)
+        {
+            for (int i = 0; i < nb; i++)
+                Console.Error.WriteLine(
+                    $"C_BUF_DRV i={i + 1,4}" +
+                    $" S={BitConverter.SingleToInt32Bits((float)double.CreateChecked(sb[i])):X8}" +
+                    $" XP={BitConverter.SingleToInt32Bits((float)double.CreateChecked(xbp[i])):X8}" +
+                    $" YP={BitConverter.SingleToInt32Bits((float)double.CreateChecked(ybp[i])):X8}");
         }
 
         T sbref = half * (sb[nb - 1] - sb[0]);
@@ -465,8 +486,28 @@ public static class CosineClusteringPanelDistributor
             {
                 TracePangenNewtonRow(traceScope, iter + 1, i + 1, snew[i], ww1[i], ww2[i], ww3[i], ww4[i]);
             }
+            if (DebugFlags.SetBlHex && iter <= 5)
+            {
+                uint sH = 0, w1H = 0, w2H = 0, w3H = 0, w4H = 0;
+                for (int i = 0; i < nn; i++)
+                {
+                    sH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(snew[i])));
+                    w1H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww1[i])));
+                    w2H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww2[i])));
+                    w3H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww3[i])));
+                    w4H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww4[i])));
+                }
+                Console.Error.WriteLine($"C_NW_HASH it={iter + 1} S={sH:X8} W1={w1H:X8} W2={w2H:X8} W3={w3H:X8} W4={w4H:X8}");
+            }
 
             TridiagonalSolver.Solve(ww1, ww2, ww3, ww4, nn);
+            if (DebugFlags.SetBlHex && iter <= 5)
+            {
+                uint w4H = 0;
+                for (int i = 0; i < nn; i++)
+                    w4H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww4[i])));
+                Console.Error.WriteLine($"C_NW_HASH_POST it={iter + 1} W4={w4H:X8}");
+            }
 
             for (int i = 0; i < nn; i++)
             {
@@ -527,6 +568,12 @@ public static class CosineClusteringPanelDistributor
         var xOut = new T[n];
         var yOut = new T[n];
 
+        if (DebugFlags.SetBlHex)
+        {
+            for (int i = 0; i < nn; i++)
+                Console.Error.WriteLine(
+                    $"C_SNEW i={i + 1,4} S={BitConverter.SingleToInt32Bits((float)double.CreateChecked(snew[i])):X8}");
+        }
         for (int i = 0; i < n; i++)
         {
             int ind = Ipfac * i;
@@ -656,13 +703,26 @@ public static class CosineClusteringPanelDistributor
     {
         if (typeof(T) == typeof(float))
         {
-            float baseSum = float.CreateChecked(leftBase + rightBase);
-            double product1 = (double)float.CreateChecked(left1) * float.CreateChecked(right1);
-            float product2 = float.CreateChecked(left2 * right2);
-            double scaledCurvature =
-                (double)float.CreateChecked(scale) *
-                (product1 + product2);
-            return T.CreateChecked((float)(baseSum + scaledCurvature));
+            // Fortran (xfoil.f line ~1973): W2(I) = FP + FM + CC*(DSP*CAVP_S2 + DSM*CAVM_S2)
+            // Pure float arithmetic, left-to-right with operator precedence:
+            //   inner = (left1*right1) + (left2*right2)
+            //   scaled = scale * inner
+            //   result = (leftBase + rightBase) + scaled
+            // The previous double-promoted variant drifted 1 ULP from Fortran for
+            // NACA 0009+ panel sets at PANGEN iter 2.
+            float lb = float.CreateChecked(leftBase);
+            float rb = float.CreateChecked(rightBase);
+            float sc = float.CreateChecked(scale);
+            float l1 = float.CreateChecked(left1);
+            float r1 = float.CreateChecked(right1);
+            float l2 = float.CreateChecked(left2);
+            float r2 = float.CreateChecked(right2);
+            float p1 = l1 * r1;
+            float p2 = l2 * r2;
+            float inner = p1 + p2;
+            float scaled = sc * inner;
+            float baseSum = lb + rb;
+            return T.CreateChecked(baseSum + scaled);
         }
 
         return (leftBase + rightBase) + (scale * ((left1 * right1) + (left2 * right2)));
@@ -814,8 +874,9 @@ public static class CosineClusteringPanelDistributor
         T ds = s[i] - s[iLow];
         T t = (ss - s[iLow]) / ds;
 
-        T cx1 = T.FusedMultiplyAdd(ds, xp[iLow], -x[i]) + x[iLow];
-        T cx2 = T.FusedMultiplyAdd(ds, xp[i], -x[i]) + x[iLow];
+        // Fortran SEVAL: CX1 = DS*XP(ILOW) - X(I) + X(ILOW)  (separate mul then add/sub)
+        T cx1 = (ds * xp[iLow]) - x[i] + x[iLow];
+        T cx2 = (ds * xp[i]) - x[i] + x[iLow];
         // Classic XFoil evaluates this cubic coefficient in single precision with a
         // fused add-multiply on current toolchains. Keep that contraction in the
         // parity path so the legacy panel replay stays bitwise aligned, while the
@@ -826,23 +887,20 @@ public static class CosineClusteringPanelDistributor
         T xTerm1 = xFactor1 * cx1;
         T xTerm2 = xFactor2 * cx2;
         T xd = xDelta + xTerm1 + xTerm2;
-        T xdd = T.FusedMultiplyAdd(
-            T.FusedMultiplyAdd(six, t, -four),
-            cx1,
-            (T.FusedMultiplyAdd(six, t, -two) * cx2));
+        // Fortran SEVAL second derivative: separate operations
+        T xdd = ((six * t) - four) * cx1 + ((six * t) - two) * cx2;
 
-        T cy1 = T.FusedMultiplyAdd(ds, yp[iLow], -y[i]) + y[iLow];
-        T cy2 = T.FusedMultiplyAdd(ds, yp[i], -y[i]) + y[iLow];
+        // Fortran SEVAL: CY1 = DS*YP(ILOW) - Y(I) + Y(ILOW)  (separate)
+        T cy1 = (ds * yp[iLow]) - y[i] + y[iLow];
+        T cy2 = (ds * yp[i]) - y[i] + y[iLow];
         T yFactor1 = LegacyPrecisionMath.FusedMultiplyAdd(three * t, t, one - (four * t));
         T yFactor2 = t * ((three * t) - two);
         T yDelta = y[i] - y[iLow];
         T yTerm1 = yFactor1 * cy1;
         T yTerm2 = yFactor2 * cy2;
         T yd = yDelta + yTerm1 + yTerm2;
-        T ydd = T.FusedMultiplyAdd(
-            T.FusedMultiplyAdd(six, t, -four),
-            cy1,
-            (T.FusedMultiplyAdd(six, t, -two) * cy2));
+        // Fortran SEVAL second derivative: separate operations
+        T ydd = ((six * t) - four) * cy1 + ((six * t) - two) * cy2;
 
         T sd = ParametricSpline.ComputeDistance(xd, yd);
         T minSd = T.CreateChecked(0.001) * ds;
@@ -851,7 +909,8 @@ public static class CosineClusteringPanelDistributor
             sd = minSd;
         }
 
-        T curvatureNumerator = T.FusedMultiplyAdd(xd, ydd, -(yd * xdd));
+        // Fortran: separate multiply-subtract for curvature cross product
+        T curvatureNumerator = (xd * ydd) - (yd * xdd);
         T curvature = curvatureNumerator / (sd * sd * sd);
         TraceCurvatureEvaluation(
             nameof(ParametricSpline),
@@ -920,6 +979,7 @@ public static class CosineClusteringPanelDistributor
     private static void TracePangenCurvatureNode<T>(string scope, string stage, int index, T arcLength, T value)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_curvature_node",
             scope,
@@ -942,6 +1002,7 @@ public static class CosineClusteringPanelDistributor
         T yp)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "buffer_spline_node",
             scope,
@@ -966,6 +1027,7 @@ public static class CosineClusteringPanelDistributor
         T yp)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_panel_node",
             scope,
@@ -993,6 +1055,7 @@ public static class CosineClusteringPanelDistributor
         int ible)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_lefind",
             scope,
@@ -1020,6 +1083,7 @@ public static class CosineClusteringPanelDistributor
         T curvatureSum)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_le_sample",
             scope,
@@ -1037,6 +1101,7 @@ public static class CosineClusteringPanelDistributor
     private static void TracePangenIteration<T>(string scope, int iteration, T dmax, T rlx)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_iteration",
             scope,
@@ -1059,6 +1124,7 @@ public static class CosineClusteringPanelDistributor
         T residual)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_newton_row",
             scope,
@@ -1102,6 +1168,7 @@ public static class CosineClusteringPanelDistributor
         T residual)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_newton_state",
             scope,
@@ -1137,6 +1204,7 @@ public static class CosineClusteringPanelDistributor
     private static void TracePangenNewtonDelta<T>(string scope, int iteration, int index, T delta)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_newton_delta",
             scope,
@@ -1161,6 +1229,7 @@ public static class CosineClusteringPanelDistributor
         T dmaxAfter)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_relaxation_step",
             scope,
@@ -1181,6 +1250,7 @@ public static class CosineClusteringPanelDistributor
     private static void TracePangenSnewNode<T>(string scope, string stage, int iteration, int index, T value)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         SolverTrace.Event(
             "pangen_snew_node",
             scope,
@@ -1223,40 +1293,44 @@ public static class CosineClusteringPanelDistributor
         T curvature)
         where T : struct, IFloatingPointIeee754<T>
     {
+        if (!SolverTrace.IsActive) return;
         string precision = typeof(T) == typeof(float) ? "Single" : "Double";
-        SolverTrace.Event(
-            "curvature_eval",
-            scope,
-            new
-            {
-                routine,
-                lowerIndex,
-                upperIndex,
-                parameter = double.CreateChecked(parameter),
-                ds = double.CreateChecked(ds),
-                t = double.CreateChecked(t),
-                xDelta = double.CreateChecked(xDelta),
-                yDelta = double.CreateChecked(yDelta),
-                cx1 = double.CreateChecked(cx1),
-                cx2 = double.CreateChecked(cx2),
-                cy1 = double.CreateChecked(cy1),
-                cy2 = double.CreateChecked(cy2),
-                xFactor1 = double.CreateChecked(xFactor1),
-                xFactor2 = double.CreateChecked(xFactor2),
-                yFactor1 = double.CreateChecked(yFactor1),
-                yFactor2 = double.CreateChecked(yFactor2),
-                xTerm1 = double.CreateChecked(xTerm1),
-                xTerm2 = double.CreateChecked(xTerm2),
-                yTerm1 = double.CreateChecked(yTerm1),
-                yTerm2 = double.CreateChecked(yTerm2),
-                xd = double.CreateChecked(xd),
-                xdd = double.CreateChecked(xdd),
-                yd = double.CreateChecked(yd),
-                ydd = double.CreateChecked(ydd),
-                sd = double.CreateChecked(sd),
-                curvature = double.CreateChecked(curvature),
-                precision
-            });
+        if (SolverTrace.IsActive)
+        {
+            SolverTrace.Event(
+                "curvature_eval",
+                scope,
+                new
+                {
+                    routine,
+                    lowerIndex,
+                    upperIndex,
+                    parameter = double.CreateChecked(parameter),
+                    ds = double.CreateChecked(ds),
+                    t = double.CreateChecked(t),
+                    xDelta = double.CreateChecked(xDelta),
+                    yDelta = double.CreateChecked(yDelta),
+                    cx1 = double.CreateChecked(cx1),
+                    cx2 = double.CreateChecked(cx2),
+                    cy1 = double.CreateChecked(cy1),
+                    cy2 = double.CreateChecked(cy2),
+                    xFactor1 = double.CreateChecked(xFactor1),
+                    xFactor2 = double.CreateChecked(xFactor2),
+                    yFactor1 = double.CreateChecked(yFactor1),
+                    yFactor2 = double.CreateChecked(yFactor2),
+                    xTerm1 = double.CreateChecked(xTerm1),
+                    xTerm2 = double.CreateChecked(xTerm2),
+                    yTerm1 = double.CreateChecked(yTerm1),
+                    yTerm2 = double.CreateChecked(yTerm2),
+                    xd = double.CreateChecked(xd),
+                    xdd = double.CreateChecked(xdd),
+                    yd = double.CreateChecked(yd),
+                    ydd = double.CreateChecked(ydd),
+                    sd = double.CreateChecked(sd),
+                    curvature = double.CreateChecked(curvature),
+                    precision
+                });
+        }
     }
 
     // Legacy mapping: managed-only scalar helper corresponding to Fortran intrinsic MAX/AMAX1 usage.

@@ -99,6 +99,18 @@ C
 C---- march BL with current Ue and Ds to establish transition
       CALL MRCHDU
 C
+C---- Dump post-MRCHDU state (T, D, U, MASS)
+      DO 898 IS=1, 2
+        DO 899 IBL=2, NBL(IS)
+          WRITE(0,'(A,I1,A,I4,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &      'F_PM s=', IS, ' i=', IBL,
+     &      ' T=', TRANSFER(THET(IBL,IS),1),
+     &      ' D=', TRANSFER(DSTR(IBL,IS),1),
+     &      ' U=', TRANSFER(UEDG(IBL,IS),1),
+     &      ' M=', TRANSFER(MASS(IBL,IS),1)
+ 899    CONTINUE
+ 898  CONTINUE
+C
 C---- DEBUG: log full wake geometry for parity diagnostics
       DO 4 IW=1, NW
         I = N + IW

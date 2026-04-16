@@ -214,6 +214,17 @@ C
           SUM = A(I,J)
           DO 15 K=1, J-1
             SUM = SUM - A(I,K)*A(K,J)
+C---- GDB: trace LU at diagonal j=N-1 (second to last col)
+            IF(I.EQ.J .AND. J.EQ.N-1
+     &         .AND. (K.EQ.120.OR.K.EQ.130.OR.K.EQ.140
+     &                .OR.K.EQ.150.OR.K.GE.154))
+     &      THEN
+              WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8)')
+     &         'F_LU159 k=',K,
+     &         ' sum=',TRANSFER(SUM,1),
+     &         ' L=',TRANSFER(A(I,K),1),
+     &         ' R=',TRANSFER(A(K,J),1)
+            ENDIF
    15     CONTINUE
           A(I,J) = SUM
 C
@@ -302,7 +313,12 @@ C       S        3x1  Re influence vectors
 C-----------------------------------------------------------------
       INCLUDE 'XFOIL.INC'
 C
+      INTEGER BLSOLV_CNT
+      SAVE BLSOLV_CNT
+      DATA BLSOLV_CNT /0/
+C
       IVTE1 = ISYS(IBLTE(1),1)
+      BLSOLV_CNT = BLSOLV_CNT + 1
 C
       VACC1 = VACCEL
       VACC2 = VACCEL * 2.0 / (S(N) - S(1))
@@ -400,15 +416,32 @@ C====== Eliminate VB(IV+1) block, rows  1 -> 3
      &        - (  VTMP1*VDEL(1,1,IV)
      &           + VTMP2*VDEL(2,1,IV)
      &           + VTMP3*VDEL(3,1,IV) )
+          IF(IV.EQ.1 .AND. K.EQ.1) THEN
+           WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &      'F_VB_ELIM t1=',TRANSFER(VTMP1,1),
+     &      ' t2=',TRANSFER(VTMP2,1),
+     &      ' t3=',TRANSFER(VTMP3,1),
+     &      ' d0=',TRANSFER(VDEL(1,1,IV),1),
+     &      ' d1=',TRANSFER(VDEL(2,1,IV),1),
+     &      ' d2=',TRANSFER(VDEL(3,1,IV),1)
+           WRITE(0,'(A,Z8)')
+     &      'F_VB_ORIG orig=',TRANSFER(
+     &        VDEL(K,1,IVP)+(VTMP1*VDEL(1,1,IV)
+     &        +VTMP2*VDEL(2,1,IV)+VTMP3*VDEL(3,1,IV)),1)
+          ENDIF
           VDEL(K,2,IVP) = VDEL(K,2,IVP)
      &        - (  VTMP1*VDEL(1,2,IV)
      &           + VTMP2*VDEL(2,2,IV)
      &           + VTMP3*VDEL(3,2,IV) )
    50   CONTINUE
 C
+C (IVZ dump moved to after IVZ is set)
         IF(IV.EQ.IVTE1) THEN
 C------- eliminate VZ block
          IVZ = ISYS(IBLTE(2)+1,2)
+         WRITE(0,'(A,Z8,A,I4,A,I4)')
+     &    'F_PRE_VZ V3nxt=',TRANSFER(VDEL(3,1,IVP),1),
+     &    ' IVTE1=',IVTE1,' IVZ=',IVZ
 C
          DO 55 K=1, 3
            VTMP1 = VZ(K,1)
@@ -427,6 +460,14 @@ C
    55    CONTINUE
         ENDIF
 C
+C---- GDB: dump VDEL after VB+VZ elimination
+        IF(IV.EQ.1) THEN
+         WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_BLSOLV_POSTVB VDEL11=',TRANSFER(VDEL(1,1,2),1),
+     &    ' VDEL21=',TRANSFER(VDEL(2,1,2),1),
+     &    ' VDEL31=',TRANSFER(VDEL(3,1,2),1),
+     &    ' VDEL12=',TRANSFER(VDEL(1,1,3),1)
+        ENDIF
         IF(IVP.EQ.NSYS) GO TO 1000
 C
 C====== Eliminate lower VM column
@@ -460,9 +501,27 @@ C
           ENDIF
 C
    60   CONTINUE
+C---- GDB: dump at end of each forward step
+        IF(IV.LE.3 .OR. IV.EQ.41 .OR. IV.EQ.NSYS) THEN
+         WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8)')
+     &    'F_FWD_IV',IV,
+     &    ' V3last=',TRANSFER(VDEL(3,1,NSYS),1),
+     &    ' V3nxt=',TRANSFER(VDEL(3,1,MIN(IV+1,NSYS)),1),
+     &    ' V30=',TRANSFER(VDEL(3,1,1),1)
+        ENDIF
 C
  1000 CONTINUE
 C
+C---- dump per-station VDEL after forward elimination at call 14
+      IF(BLSOLV_CNT.EQ.14) THEN
+        DO 1002 IVD=1, NSYS
+          WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8)')
+     &     'F_FWD14 iv=',IVD,
+     &     ' V30=',TRANSFER(VDEL(3,1,IVD),1),
+     &     ' V10=',TRANSFER(VDEL(1,1,IVD),1),
+     &     ' V20=',TRANSFER(VDEL(2,1,IVD),1)
+ 1002   CONTINUE
+      ENDIF
 C
 C
       DO 2000 IV=NSYS, 2, -1

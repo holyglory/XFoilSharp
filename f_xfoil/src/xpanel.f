@@ -59,12 +59,31 @@ C
 C
       CALL SEGSPL(X,XN,S,N)
       CALL SEGSPL(Y,YN,S,N)
+C---- GDB: Trace spline derivs at a few nodes BEFORE normal
+      DO 9 ITR=1, 5
+        WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_SPLN i=',ITR,
+     &   ' x=',TRANSFER(X(ITR),1),
+     &   ' y=',TRANSFER(Y(ITR),1),
+     &   ' s=',TRANSFER(S(ITR),1),
+     &   ' xp=',TRANSFER(XN(ITR),1),
+     &   ' yp=',TRANSFER(YN(ITR),1)
+ 9    CONTINUE
       DO 10 I=1, N
         SX =  YN(I)
         SY = -XN(I)
         SMOD = SQRT(SX*SX + SY*SY)
         XN(I) = SX/SMOD
         YN(I) = SY/SMOD
+C---- GDB: Trace NCALC output at a few nodes
+        IF(I.LE.5 .OR. I.EQ.80) THEN
+         WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_NCALC i=',I,
+     &    ' sx=',TRANSFER(SX,1),
+     &    ' sy=',TRANSFER(SY,1),
+     &    ' mag=',TRANSFER(SMOD,1),
+     &    ' nx=',TRANSFER(XN(I),1)
+        ENDIF
    10 CONTINUE
 C
 C---- average normal vectors at corner points
@@ -118,6 +137,12 @@ C
 C
       COSA = COS(ALFA)
       SINA = SIN(ALFA)
+      IF(IO.EQ.N+1 .AND. NXI.GT.0.5) THEN
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_CSNI ALFA=',TRANSFER(ALFA,1),
+     &  ' COSA=',TRANSFER(COSA,1),
+     &  ' SINA=',TRANSFER(SINA,1)
+      ENDIF
 C
       DO 3 JO=1, N
         DZDG(JO) = 0.0
@@ -542,18 +567,56 @@ C------ dPsi/dGam
         DZGJP = QOPI*(PSIS+PSID)
         DZDG(JO) = DZDG(JO) + DZGJO
         DZDG(JP) = DZDG(JP) + DZGJP
+C---- GDB: trace DZDG(1) at field node 33
+        IF(IO.EQ.33 .AND. (JO.EQ.1.OR.JO.EQ.N-1)) THEN
+          WRITE(0,'(A,I3,A,I3,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_DZDG0 io=',IO,' jo=',JO,
+     &     ' dzdg1=',TRANSFER(DZDG(1),1),
+     &     ' dzgjo=',TRANSFER(DZGJO,1),
+     &     ' dzgjp=',TRANSFER(DZGJP,1),
+     &     ' psis=',TRANSFER(PSIS,1),
+     &     ' psid=',TRANSFER(PSID,1)
+        ENDIF
 C
 C------ dPsi/dni
         PSNI = PSX1*X1I + PSX2*X2I + PSYY*YYI
         PDNI = PDX1*X1I + PDX2*X2I + PDYY*YYI
         QVOR = QOPI*(GSUM*PSNI + GDIF*PDNI)
         PSI_NI = PSI_NI + QVOR
+        IF(IO.EQ.N+1 .AND. NXI.GT.0.5 .AND. JO.GE.141) THEN
+         WRITE(0,'(A,I4,A,Z8)')
+     &    'F_WK0X jo=',JO,' ni=',TRANSFER(PSI_NI,1)
+        ENDIF
+        IF(IO.EQ.N+6 .AND. NXI.GT.0.5) THEN
+         IF(JO.GE.65 .AND. JO.LE.70) THEN
+          WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_PSI6D jo=',JO,
+     &     ' ni_b=',TRANSFER(PSI_NI-QVOR,1),
+     &     ' delt=',TRANSFER(QVOR,1),
+     &     ' ni=',TRANSFER(PSI_NI,1),
+     &     ' gsum=',TRANSFER(GSUM,1),
+     &     ' gdif=',TRANSFER(GDIF,1)
+         ELSE
+          WRITE(0,'(A,I4,A,Z8)')
+     &     'F_PSI6X jo=',JO,' ni=',TRANSFER(PSI_NI,1)
+         ENDIF
+        ENDIF
+        IF(IO.EQ.N+7 .AND. (JO.EQ.1.OR.JO.EQ.40
+     &     .OR.JO.EQ.80.OR.JO.EQ.120.OR.JO.EQ.N)) THEN
+         WRITE(0,'(A,I4,A,Z8)')
+     &    'F_PSACC167 jo=',JO,' ni=',TRANSFER(PSI_NI,1)
+        ENDIF
         CALL TRACE_PSILIN_ACCUM_STATE('PSILIN', IO, 'vortex_segment',
      &                               JO, JP, PSIBEF, PSINIBEF,
      &                               PSI, PSI_NI)
 C
         QTAN1 = QTAN1 + QOPI*(GSUM1*PSNI + GDIF1*PDNI)
         QTAN2 = QTAN2 + QOPI*(GSUM2*PSNI + GDIF2*PDNI)
+        IF(IO.EQ.N+7 .AND. (JO.EQ.1.OR.JO.EQ.40
+     &     .OR.JO.EQ.80.OR.JO.EQ.120.OR.JO.EQ.N)) THEN
+         WRITE(0,'(A,I4,A,Z8)')
+     &    'F_PSILIN167 jo=',JO,' q1=',TRANSFER(QTAN1,1)
+        ENDIF
 C
         DQGJO = QOPI*(PSNI - PDNI)
         DQGJP = QOPI*(PSNI + PDNI)
@@ -651,6 +714,17 @@ C
       DZGJPGAM = -HOPI*PGAM*SDS*0.5
       DZDG(JO) = DZDG(JO) + DZGJOGAM
       DZDG(JP) = DZDG(JP) + DZGJPGAM
+C---- GDB: dump DZDG(1) after TE at field 33
+      IF(IO.EQ.33) THEN
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TE33 dzdg1=',TRANSFER(DZDG(1),1),
+     &   ' dzgjpsig=',TRANSFER(DZGJPSIG,1),
+     &   ' dzgjpgam=',TRANSFER(DZGJPGAM,1),
+     &   ' psig=',TRANSFER(PSIG,1),
+     &   ' pgam=',TRANSFER(PGAM,1),
+     &   ' scs=',TRANSFER(SCS,1),
+     &   ' sds=',TRANSFER(SDS,1)
+      ENDIF
 C
 C---- dPsi/dni
       PSI_NI = PSI_NI + HOPI*(PSIGNI*SIGTE + PGAMNI*GAMTE)
@@ -718,6 +792,12 @@ C---- dPsi/dn
 C
       QTAN1 = QTAN1 + QINF*NYI
       QTAN2 = QTAN2 - QINF*NXI
+      IF(IO.EQ.N+7) THEN
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_PSINI167 ni=',TRANSFER(PSI_NI,1),
+     &  ' q1=',TRANSFER(QTAN1,1),
+     &  ' q2=',TRANSFER(QTAN2,1)
+      ENDIF
 C
 C---- dPsi/dQinf
       Z_QINF = Z_QINF + (COSA*YI - SINA*XI)
@@ -1190,6 +1270,23 @@ C
      &       X(JP)-X(JO), Y(JP)-Y(JO), DSO, DSIO,
      &       SX, SY, RX1, RY1, RX2, RY2)
 C
+        IF(IO.EQ.78 .AND. JO.EQ.N+2) THEN
+         WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,
+     &    A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_PSWLIN77','  SX=',TRANSFER(SX,1),
+     &    ' SY=',TRANSFER(SY,1),
+     &    ' DX=',TRANSFER(X(JP)-X(JO),1),
+     &    ' DY=',TRANSFER(Y(JP)-Y(JO),1),
+     &    ' DSO=',TRANSFER(DSO,1),
+     &    ' DSIO=',TRANSFER(DSIO,1),
+     &    ' X1=',TRANSFER(X1,1),
+     &    ' X2=',TRANSFER(X2,1),
+     &    ' YY=',TRANSFER(YY,1),
+     &    ' RS1=',TRANSFER(RS1,1),
+     &    ' RS2=',TRANSFER(RS2,1),
+     &    ' XJo=',TRANSFER(X(JO),1),
+     &    ' YJo=',TRANSFER(Y(JO),1)
+        ENDIF
         IF(IO.NE.JO .AND. RS1.GT.0.0) THEN
          G1 = LOG(RS1)
          T1 = ATAN2(SGN*X1,SGN*YY) - (0.5 - 0.5*SGN)*PI
@@ -1204,6 +1301,15 @@ C
         ELSE
          G2 = 0.0
          T2 = 0.0
+        ENDIF
+        IF(IO.EQ.78 .AND. JO.EQ.N+2) THEN
+         WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_PSWLIN77_GT',
+     &    ' G1=',TRANSFER(G1,1),
+     &    ' T1=',TRANSFER(T1,1),
+     &    ' G2=',TRANSFER(G2,1),
+     &    ' T2=',TRANSFER(T2,1),
+     &    ' SGN=',TRANSFER(SGN,1)
         ENDIF
 C
         X1I = SX*NXI + SY*NYI
@@ -1333,6 +1439,9 @@ C
          DQDM(JM) = DQDM(JM) + DQJM
          DQDM(JO) = DQDM(JO) + DQJO
          DQDM(JP) = DQDM(JP) + DQJP
+         IF(IOWAKE.EQ.5.AND.(JM.EQ.N+5.OR.JO.EQ.N+5.OR.JP.EQ.N+5))
+     &    WRITE(*,'(A,I3,A,Z8)')
+     &     'F_PSWQ5 seg=',JO-N,' dq5=',TRANSFER(DQDM(N+5),1)
          CALL TRACE_PSWLIN_RECURRENCE('PSWLIN', IO, IOWAKE, JO-N, 1,
      &        DZJOLEFT, DZJORIGHT, DZJOINNER, DZJO,
      &        DQJOLEFT, DQJORIGHT, DQJOINNER, DQJO, QOPI)
@@ -1467,6 +1576,9 @@ C
          DQDM(JO) = DQDM(JO) + DQJO
          DQDM(JP) = DQDM(JP) + DQJP
          DQDM(JQ) = DQDM(JQ) + DQJQ
+         IF(IOWAKE.EQ.5.AND.(JO.EQ.N+5.OR.JP.EQ.N+5.OR.JQ.EQ.N+5))
+     &    WRITE(*,'(A,I3,A,Z8)')
+     &     'F_PSWQ5h2 seg=',JO-N,' dq5=',TRANSFER(DQDM(N+5),1)
          CALL TRACE_PSWLIN_RECURRENCE('PSWLIN', IO, IOWAKE, JO-N, 2,
      &        DZJOLEFT, DZJORIGHT, DZJOINNER, DZJO,
      &        DQJOLEFT, DQJORIGHT, DQJOINNER, DQJO, QOPI)
@@ -1521,6 +1633,44 @@ C
       WRITE(*,*) 'Calculating unit vorticity distributions ...'
       INQUIRE(UNIT=50, OPENED=LDEBUG50)
       CALL TRACE_ENTER('GGCALC')
+C
+C---- GDB parity: dump panel coordinates and angles at sample indices
+      IF(N.GE.80) THEN
+        DO 11 IPDX=1, N, MAX(1,N/10)
+         WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8)')
+     &    'F_PAN_XY i=',IPDX,
+     &    ' X=',TRANSFER(X(IPDX),1),
+     &    ' Y=',TRANSFER(Y(IPDX),1),
+     &    ' A=',TRANSFER(APANEL(IPDX),1)
+   11   CONTINUE
+        WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8)')
+     &   'F_PAN_XY i=',N,
+     &   ' X=',TRANSFER(X(N),1),
+     &   ' Y=',TRANSFER(Y(N),1),
+     &   ' A=',TRANSFER(APANEL(N),1)
+        IAHASH = 0
+        DO 12 IPDX=1, N
+         IAHASH = IEOR(IAHASH, TRANSFER(APANEL(IPDX),1))
+   12   CONTINUE
+        WRITE(0,'(A,Z8)') 'F_PAN_AHASH=',IAHASH
+        DO 13 IPDX=1, N
+         WRITE(0,'(A,I4,A,Z8)')
+     &    'F_PAN_ANG i=',IPDX,
+     &    ' A=',TRANSFER(APANEL(IPDX),1)
+   13   CONTINUE
+        DO 14 IPDX=1, N
+         WRITE(0,'(A,I4,A,Z8,A,Z8)')
+     &    'F_PAN_FXY i=',IPDX,
+     &    ' X=',TRANSFER(X(IPDX),1),
+     &    ' Y=',TRANSFER(Y(IPDX),1)
+   14   CONTINUE
+        DO 15 IPDX=1, NB
+         WRITE(0,'(A,I4,A,Z8,A,Z8)')
+     &    'F_BUF_XY i=',IPDX,
+     &    ' X=',TRANSFER(XB(IPDX),1),
+     &    ' Y=',TRANSFER(YB(IPDX),1)
+   15   CONTINUE
+      ENDIF
 C
       DO 10 I=1, N
         GAM(I) = 0.
@@ -1647,11 +1797,28 @@ C
    39   CONTINUE
    37 CONTINUE
 C
+C---- GDB: dump AIJ row 33 before LU factorization
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_AIJ33 c1=',TRANSFER(AIJ(33,1),1),
+     &  ' c2=',TRANSFER(AIJ(33,2),1),
+     &  ' c3=',TRANSFER(AIJ(33,3),1),
+     &  ' c80=',TRANSFER(AIJ(33,80),1)
 C---- LU-factor coefficient matrix AIJ
       LU_TRACE_CONTEXT = 'basis_aij_single'
       CALL LUDCMP(IQX,N+1,AIJ,AIJPIV)
       LU_TRACE_CONTEXT = ' '
       LQAIJ = .TRUE.
+C---- GDB: dump FULL LU matrix to binary file
+      OPEN(UNIT=77,FILE='f_lu_matrix.bin',
+     &     FORM='UNFORMATTED',ACCESS='STREAM')
+      DO 9282 JJCOL=1, N+1
+        DO 9283 JJROW=1, N+1
+          WRITE(77) AIJ(JJROW,JJCOL)
+ 9283   CONTINUE
+ 9282 CONTINUE
+      CLOSE(77)
+      WRITE(0,'(A,I6,A)') 'F_LU_DUMP ',
+     &  (N+1)*(N+1),' entries to f_lu_matrix.bin'
 C
       DO 43 I=1, N+1
         CALL TRACE_PIVOT_ENTRY('GGCALC', 'basis_lu_pivot', I, AIJPIV(I))
@@ -1667,6 +1834,17 @@ C---- solve system for the two vorticity distributions
       BAKSUB_TRACE_CONTEXT = 'basis_gamma_alpha90_single'
       CALL BAKSUB(IQX,N+1,AIJ,AIJPIV,GAMU(1,2))
       BAKSUB_TRACE_CONTEXT = ' '
+C---- GDB parity trace: dump GAMU basis at representative nodes
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_GAM0 g0=',TRANSFER(GAMU(1,1),1),
+     & ' g1=',TRANSFER(GAMU(2,1),1),
+     & ' g80=',TRANSFER(GAMU(81,1),1),
+     & ' gLast=',TRANSFER(GAMU(N+1,1),1)
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_GAM1 g0=',TRANSFER(GAMU(1,2),1),
+     & ' g1=',TRANSFER(GAMU(2,2),1),
+     & ' g80=',TRANSFER(GAMU(81,2),1),
+     & ' gLast=',TRANSFER(GAMU(N+1,2),1)
 C
       IF(LDEBUG50) THEN
        DO 45 I=1, N+1
@@ -1716,6 +1894,24 @@ C---- rest of wake
         CALL PSILIN(I,X(I),Y(I),NX(I),NY(I),PSI,PSI_NI,.FALSE.,.FALSE.)
         QINVU(I,1) = QTAN1
         QINVU(I,2) = QTAN2
+        IF(I.LE.N+12) THEN
+         WRITE(0,'(A,I3,5(A,Z8))')
+     &    'F_WSPD iw=',I-N-1,
+     &    ' q1=',TRANSFER(QTAN1,1),
+     &    ' q2=',TRANSFER(QTAN2,1),
+     &    ' X=',TRANSFER(X(I),1),
+     &    ' NX=',TRANSFER(NX(I),1),
+     &    ' NY=',TRANSFER(NY(I),1)
+        ENDIF
+        IF(I.EQ.N+7) THEN
+         WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_WGEOM7 X=',TRANSFER(X(I),1),
+     &    ' Y=',TRANSFER(Y(I),1),
+     &    ' NX=',TRANSFER(NX(I),1),
+     &    ' NY=',TRANSFER(NY(I),1),
+     &    ' q1=',TRANSFER(QTAN1,1),
+     &    ' q2=',TRANSFER(QTAN2,1)
+        ENDIF
    10 CONTINUE
 C
       CALL TRACE_EXIT('QWCALC')
@@ -1774,6 +1970,29 @@ C
    10  CONTINUE
        LADIJ = .TRUE.
 C
+C---- GDB parity: dump DIJ at specific elements
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_DIJ d11=',TRANSFER(DIJ(1,1),1),
+     & ' d1_40=',TRANSFER(DIJ(1,40),1),
+     & ' d40_1=',TRANSFER(DIJ(40,1),1),
+     & ' d40_40=',TRANSFER(DIJ(40,40),1)
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_DIJ d1_80=',TRANSFER(DIJ(1,80),1),
+     & ' d80_1=',TRANSFER(DIJ(80,1),1),
+     & ' d80_80=',TRANSFER(DIJ(80,80),1),
+     & ' d41_1=',TRANSFER(DIJ(41,1),1)
+C---- GDB parity: dump wake DIJ columns
+      IF(N+NW .GE. 82) THEN
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_DIJ_W d41_82=',TRANSFER(DIJ(41,82),1),
+     &  ' d41_85=',TRANSFER(DIJ(41,85),1),
+     &  ' d41_92=',TRANSFER(DIJ(41,92),1)
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_DIJ_W d1_82=',TRANSFER(DIJ(1,82),1),
+     &  ' d1_85=',TRANSFER(DIJ(1,85),1),
+     &  ' d40_82=',TRANSFER(DIJ(40,82),1)
+      ENDIF
+C
       ENDIF
 C
 C---- set up coefficient matrix of dPsi/dm on airfoil surface
@@ -1815,6 +2034,14 @@ C
    35  CONTINUE
       ENDIF
 C
+C---- trace BIJ before BAKSUB at row 77
+      DO 39 J=N+1, N+NW
+        WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8)')
+     &   'F_WBIJ jw=',J-N,
+     &   ' rhs77=',TRANSFER(BIJ(77,J),1),
+     &   ' rhs1=',TRANSFER(BIJ(1,J),1),
+     &   ' rhs40=',TRANSFER(BIJ(40,J),1)
+   39 CONTINUE
 C---- multiply by inverse of factored dPsi/dGam matrix
       DO 40 J=N+1, N+NW
         IF(J.EQ.N+1) THEN
@@ -1849,6 +2076,12 @@ C---- set the source influence matrix for the wake sources
           DIJ(I,J) = BIJ(I,J)
   510   CONTINUE
    50 CONTINUE
+C---- trace wake DIJ at row 77 for each wake column
+      DO 51 J=N+1, N+NW
+        WRITE(0,'(A,I3,A,I4,A,Z8)')
+     &   'F_WDIJ jw=',J-N,' col=',J,
+     &   ' dij77=',TRANSFER(DIJ(77,J),1)
+   51 CONTINUE
 C
 C**** Now we need to calculate the influence of sources on the wake velocities
 C
@@ -1867,6 +2100,11 @@ C
         DO 720 J=1, N
           DIJ(I,J) = DQDM(J)
   720   CONTINUE
+        IF(IW.EQ.4 .OR. IW.EQ.5) THEN
+         WRITE(*,'(A,I2,A,Z8,A,Z8)')
+     &    'F_WROW IW=',IW,' DQDM78=',TRANSFER(DQDM(78),1),
+     &    ' CIJ78=',TRANSFER(CIJ(IW,78),1)
+        ENDIF
 C
 C------ wake contribution
         CALL PSWLIN(I,X(I),Y(I),NX(I),NY(I),PSI,PSI_N)
@@ -1896,6 +2134,12 @@ C------ wake source contribution next
           DO 8200 K=1, N
             SUM = SUM + CIJ(IW,K)*BIJ(K,J)
  8200     CONTINUE
+          IF(IW.EQ.5 .AND. J.EQ.I) THEN
+           WRITE(*,'(A,Z8,A,Z8,A,Z8)')
+     &      'F_WKDIAG_PARTS pre=',TRANSFER(DIJ(I,J),1),
+     &      ' sum=',TRANSFER(SUM,1),
+     &      ' bij=',TRANSFER(BIJ(1,J),1)
+          ENDIF
           DIJ(I,J) = DIJ(I,J) + SUM
   820   CONTINUE
 C
@@ -1907,6 +2151,23 @@ C---- make sure first wake point has same velocity as trailing edge
    90 CONTINUE
 C
       LWDIJ = .TRUE.
+C
+C---- Dump wake row 5 DIJ at c78 + wake diagonal (after indirect sum)
+      WRITE(*,'(A,Z8,A,Z8,A,I4)')
+     & 'F_WROW5_FINAL c78=',TRANSFER(DIJ(N+5,78),1),
+     & ' wkDiag=',TRANSFER(DIJ(N+5,N+5),1),
+     & ' wkD_col=',N+5
+C---- GDB parity: dump COMPLETE wake DIJ (after all fills)
+      IF(N+NW .GE. 92) THEN
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_DIJ_W2 d41_82=',TRANSFER(DIJ(41,82),1),
+     &  ' d41_85=',TRANSFER(DIJ(41,85),1),
+     &  ' d41_92=',TRANSFER(DIJ(41,92),1)
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_DIJ_W2 d1_82=',TRANSFER(DIJ(1,82),1),
+     &  ' d1_85=',TRANSFER(DIJ(1,85),1),
+     &  ' d40_82=',TRANSFER(DIJ(40,82),1)
+      ENDIF
 C
       RETURN
  9902 FORMAT('WAKE_RHS I=',I4,' J=',I4,' BIJ=',1PE15.8)
@@ -1963,6 +2224,11 @@ C---- set first wake point a tiny distance behind TE
       X(I) = XTE - 0.0001*NY(I)
       Y(I) = YTE + 0.0001*NX(I)
       S(I) = S(N)
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_WK1 X=',TRANSFER(X(I),1),
+     & ' Y=',TRANSFER(Y(I),1),
+     & ' NX=',TRANSFER(NX(I),1),
+     & ' NY=',TRANSFER(NY(I),1)
 C
 C---- calculate streamfunction gradient components at first point
       CALL PSILIN(I,X(I),Y(I),1.0,0.0,PSI,PSI_X,.FALSE.,.FALSE.)
@@ -1971,6 +2237,11 @@ C
 C---- set unit vector normal to wake at first point
       NX(I+1) = -PSI_X / SQRT(PSI_X**2 + PSI_Y**2)
       NY(I+1) = -PSI_Y / SQRT(PSI_X**2 + PSI_Y**2)
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_WK1_PSI psiX=',TRANSFER(PSI_X,1),
+     & ' psiY=',TRANSFER(PSI_Y,1),
+     & ' nx2=',TRANSFER(NX(I+1),1),
+     & ' ny2=',TRANSFER(NY(I+1),1)
 C
 C---- set angle of wake panel normal
       APANEL(I) = ATAN2( PSI_Y , PSI_X )
@@ -1988,6 +2259,18 @@ C------ set new point DS downstream of last point
         X(I) = X(I-1) - DS*NY(I)
         Y(I) = Y(I-1) + DS*NX(I)
         S(I) = S(I-1) + DS
+C---- NACA 1410 Re=500K wake march debug: step-by-step intermediate
+        IF(I-N.LE.6) THEN
+          WRITE(0,'(A,I3,7(A,Z8))')
+     &     'F_WKM i=',I-N,
+     &     ' ds=',TRANSFER(DS,1),
+     &     ' nx=',TRANSFER(NX(I),1),
+     &     ' ny=',TRANSFER(NY(I),1),
+     &     ' xp=',TRANSFER(X(I-1),1),
+     &     ' yp=',TRANSFER(Y(I-1),1),
+     &     ' xn=',TRANSFER(X(I),1),
+     &     ' yn=',TRANSFER(Y(I),1)
+        ENDIF
         CALL TRACE_WAKE_STEP_TERMS('SETBL', I-N+1, DS,
      &                             X(I-1), Y(I-1), NX(I), NY(I),
      &                             X(I), Y(I))
@@ -2000,6 +2283,13 @@ C------- calculate normal vector for next point
 C
          NX(I+1) = -PSI_X / SQRT(PSI_X**2 + PSI_Y**2)
          NY(I+1) = -PSI_Y / SQRT(PSI_X**2 + PSI_Y**2)
+         WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_WKMARCH i=',I-N,' X=',TRANSFER(X(I),1),
+     &    ' Y=',TRANSFER(Y(I),1),
+     &    ' psiX=',TRANSFER(PSI_X,1),
+     &    ' psiY=',TRANSFER(PSI_Y,1),
+     &    ' nx_n=',TRANSFER(NX(I+1),1),
+     &    ' ny_n=',TRANSFER(NY(I+1),1)
 C
 C------- set angle of wake panel normal
          APANEL(I) = ATAN2( PSI_Y , PSI_X )
@@ -2049,6 +2339,11 @@ C
 C
       CALL TRACE_ENTER('STFIND')
 C
+      WRITE(0,'(A)') 'F_STFIND_ENTRY'
+      DO 5 I=90, MIN(N,105)
+        WRITE(0,'(A,I3,A,Z8)') 'F_GAM_STFIND i=',I,
+     &   ' GAM=',TRANSFER(GAM(I),1)
+    5 CONTINUE
       DO 10 I=1, N-1
         IF(GAM(I).GE.0.0 .AND. GAM(I+1).LT.0.0) THEN
          CALL TRACE_STAGNATION_CANDIDATE('STFIND', I,
@@ -2090,6 +2385,14 @@ C---- evaluate so as to minimize roundoff for very small GAM(I) or GAM(I+1)
       ELSE
        SST = S(I+1) - DS*(GAM(I+1)/DGAM)
       ENDIF
+C---- trace STFIND inputs and result for parity debugging
+      WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_STFIND I=',I,
+     &  ' GI=',TRANSFER(GAM(I),1),
+     &  ' GIP=',TRANSFER(GAM(I+1),1),
+     &  ' SI=',TRANSFER(S(I),1),
+     &  ' SIP=',TRANSFER(S(I+1),1),
+     &  ' SST=',TRANSFER(SST,1)
 C
 C---- tweak stagnation point if it falls right on a node (very unlikely)
       IF(SST .LE. S(I)  ) SST = S(I)   + 1.0E-7
@@ -2248,6 +2551,21 @@ C----- set TE flap (wake gap) array
          ZN = 1.0 - (XSSI(IBL,IS)-XSSI(IBLTE(IS),IS)) / (TELRAT*ANTE)
          WGAP(IW) = 0.
          IF(ZN.GE.0.0) WGAP(IW) = ANTE * (AA + BB*ZN)*ZN**2
+         IF(IW.EQ.1) THEN
+          WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_WGAP_D AA=',TRANSFER(AA,1),
+     &     ' BB=',TRANSFER(BB,1),
+     &     ' DWDXTE=',TRANSFER(DWDXTE,1),
+     &     ' ANTE=',TRANSFER(ANTE,1),
+     &     ' AA+BB=',TRANSFER(AA+BB,1),
+     &     ' AABBZN=',TRANSFER((AA+BB*ZN)*ZN**2,1)
+         ENDIF
+         WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_WGAP IW=',IW,
+     &    ' XSSI=',TRANSFER(XSSI(IBL,IS),1),
+     &    ' XSSI_TE=',TRANSFER(XSSI(IBLTE(IS),IS),1),
+     &    ' ZN=',TRANSFER(ZN,1),
+     &    ' WGAP=',TRANSFER(WGAP(IW),1)
    35  CONTINUE
       ENDIF
 C
@@ -2271,6 +2589,13 @@ C
           I = IPAN(IBL,IS)
           UINV  (IBL,IS) = VTI(IBL,IS)*QINV  (I)
           UINV_A(IBL,IS) = VTI(IBL,IS)*QINV_A(I)
+          IF (IBL.LE.8) THEN
+            WRITE(0,'(A,I1,A,I2,A,I3,3(A,Z8))')
+     &        'F_UEINV s=',IS,' ibl=',IBL,' ipan=',I,
+     &        ' VTI=',TRANSFER(VTI(IBL,IS),1),
+     &        ' QINV=',TRANSFER(QINV(I),1),
+     &        ' UEINV=',TRANSFER(UINV(IBL,IS),1)
+          ENDIF
   110   CONTINUE
    10 CONTINUE
 C
@@ -2356,9 +2681,15 @@ C---------------------------------------------------
 C
       CALL TRACE_ENTER('STMOVE')
 C
+      SSTOLD = SST
 C---- locate new stagnation point arc length SST from GAM distribution
       ISTOLD = IST
       CALL STFIND
+C
+      WRITE(0,'(A,A,Z8,A,Z8,A,I4,A,I4)') 'F_SSTVAL',
+     &  ' sstOld=',TRANSFER(SSTOLD,1),
+     &  ' sstNew=',TRANSFER(SST,1),
+     &  ' istOld=',ISTOLD,' istNew=',IST
 C
       IF(ISTOLD.EQ.IST) THEN
 C
@@ -2447,6 +2778,13 @@ c        write(*,*) 'Uenew xinew', idif+1, uedg(idif+1,2), xssi(idif+1,2)
 C
 C------ move top side BL variables upstream
         DO 220 IBL=2, NBL(1)
+          IF(IBL.EQ.27) THEN
+           WRITE(0,'(A,I2,A,Z8,A,I4,A,Z8)')
+     &      'F_SHIFT27 it=',ITER,
+     &      ' src_T=',TRANSFER(THET(IBL+IDIF,1),1),
+     &      ' src=',IBL+IDIF,
+     &      ' old_T=',TRANSFER(THET(IBL,1),1)
+          ENDIF
           CTAU(IBL,1) = CTAU(IBL+IDIF,1)
           THET(IBL,1) = THET(IBL+IDIF,1)
           DSTR(IBL,1) = DSTR(IBL+IDIF,1)
@@ -2503,6 +2841,92 @@ C
               J  = IPAN(JBL,JS)
               UE_M = -VTI(IBL,IS)*VTI(JBL,JS)*DIJ(I,J)
               DUI = DUI + UE_M*MASS(JBL,JS)
+              IF(IS.EQ.2 .AND. IBL.EQ.29 .AND. JS.EQ.2
+     &           .AND. (JBL.EQ.104 .OR. JBL.EQ.105)) THEN
+               WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8)')
+     &          'F_DUI29D JBL=',JBL,
+     &          ' DUI=',TRANSFER(DUI,1),
+     &          ' M=',TRANSFER(MASS(JBL,JS),1),
+     &          ' C=',TRANSFER(UE_M*MASS(JBL,JS),1)
+              ENDIF
+              IF(IS.EQ.1 .AND. IBL.EQ.53 .AND.
+     &           JS.EQ.2 .AND. JBL.GE.81 .AND. JBL.LE.87) THEN
+               WRITE(0,782) JS,JBL,
+     &          TRANSFER(DUI,1),TRANSFER(MASS(JBL,JS),1),
+     &          TRANSFER(UE_M,1)
+ 782           FORMAT('F_DUI53 JS=',I1,' JBL=',I3,
+     &          3(1X,Z8.8))
+              ENDIF
+              IF(IS.EQ.1 .AND. IBL.EQ.2) THEN
+               WRITE(0,'(A,I2,A,I3,A,I4,A,I4,A,Z8,A,Z8,A,Z8)')
+     &          'F_DUI2 JS=',JS,' JBL=',JBL,
+     &          ' I=',I,' J=',J,
+     &          ' MASS=',TRANSFER(MASS(JBL,JS),1),
+     &          ' UEM=',TRANSFER(UE_M,1),
+     &          ' DUI=',TRANSFER(DUI,1)
+              ENDIF
+              IF(IS.EQ.2 .AND. IBL.EQ.88) THEN
+               WRITE(*,'(A,I2,A,I3,A,Z8)')
+     &          'F_DUI88 JS=',JS,' JBL=',JBL,
+     &          ' DUI=',TRANSFER(DUI,1)
+              ENDIF
+              IF(IS.EQ.1 .AND. IBL.EQ.3 .AND. JS.EQ.2
+     &           .AND. JBL.GE.85 .AND. JBL.LE.92) THEN
+               WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &          'F_WK_MASS JBL=',JBL,
+     &          ' MASS=',TRANSFER(MASS(JBL,JS),1),
+     &          ' UEM=',TRANSFER(UE_M,1),
+     &          ' CONT=',TRANSFER(UE_M*MASS(JBL,JS),1),
+     &          ' DUI_B=',TRANSFER(DUI-UE_M*MASS(JBL,JS),1),
+     &          ' DUI=',TRANSFER(DUI,1)
+              ENDIF
+              IF(IS.EQ.1 .AND. IBL.EQ.9) THEN
+               WRITE(0,'(A,I2,A,I3,A,I4,A,I4,A,Z8,A,Z8,A,Z8)')
+     &          'F_DUI9 JS=',JS,' JBL=',JBL,
+     &          ' I=',I,' J=',J,
+     &          ' MASS=',TRANSFER(MASS(JBL,JS),1),
+     &          ' UEM=',TRANSFER(UE_M,1),
+     &          ' DUI=',TRANSFER(DUI,1)
+              ENDIF
+              IF(IS.EQ.1 .AND. (IBL.EQ.3 .OR. IBL.EQ.6)) THEN
+               WRITE(0,'(A,I2,A,I3,A,I4,A,I4,A,Z8)')
+     &          'F_DUI_T JS=',JS,' JBL=',JBL,
+     &          ' I=',I,' J=',J,' DUI=',TRANSFER(DUI,1)
+               IF(JS.EQ.2 .AND. (JBL.EQ.81 .OR.
+     &             (JBL.GE.43 .AND. JBL.LE.46))) THEN
+                WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &           'F_DUI_D JBL=',JBL,
+     &           ' MASS=',TRANSFER(MASS(JBL,JS),1),
+     &           ' DIJ=',TRANSFER(DIJ(I,J),1),
+     &           ' UEM=',TRANSFER(UE_M,1),
+     &           ' CONT=',TRANSFER(UE_M*MASS(JBL,JS),1)
+                IF(JBL.EQ.81) THEN
+                  WRITE(0,'(A,Z8,A,Z8)')
+     &             'F_WK81 DSTR=',TRANSFER(DSTR(JBL,JS),1),
+     &             ' UEI=',TRANSFER(UEDG(JBL,JS),1)
+                ENDIF
+               ENDIF
+              ENDIF
+              IF(IS.EQ.2 .AND. IBL.EQ.3) THEN
+               WRITE(0,'(A,I2,A,I3,A,I4,A,I4,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &          'F_DUI23 JS=',JS,' JBL=',JBL,
+     &          ' I=',I,' J=',J,
+     &          ' MASS=',TRANSFER(MASS(JBL,JS),1),
+     &          ' UEM=',TRANSFER(UE_M,1),
+     &          ' CONT=',TRANSFER(UE_M*MASS(JBL,JS),1),
+     &          ' DUI_B=',TRANSFER(DUI-UE_M*MASS(JBL,JS),1),
+     &          ' DUI=',TRANSFER(DUI,1)
+              ENDIF
+              IF(IS.EQ.2 .AND. IBL.EQ.2) THEN
+               WRITE(0,'(A,I2,A,I3,A,I4,A,I4,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &          'F_DUI22 JS=',JS,' JBL=',JBL,
+     &          ' I=',I,' J=',J,
+     &          ' MASS=',TRANSFER(MASS(JBL,JS),1),
+     &          ' UEM=',TRANSFER(UE_M,1),
+     &          ' CONT=',TRANSFER(UE_M*MASS(JBL,JS),1),
+     &          ' DUI_B=',TRANSFER(DUI-UE_M*MASS(JBL,JS),1),
+     &          ' DUI=',TRANSFER(DUI,1)
+              ENDIF
               IF(J .LE. N) THEN
                DUIA = DUIA + UE_M*MASS(JBL,JS)
                CALL TRACE_PREDICTED_EDGE_VELOCITY_TERM('UESET',
@@ -2517,9 +2941,25 @@ C
      &              MASS(JBL,JS), UE_M, UE_M*MASS(JBL,JS), 1)
               ENDIF
  1000       CONTINUE
+          IF(IS.EQ.2 .AND. IBL.EQ.29) THEN
+           WRITE(0,'(A,I2,A,Z8)')
+     &      'F_DUI29_END JS=',JS,' DUI=',TRANSFER(DUI,1)
+          ENDIF
   100     CONTINUE
 C
+C---- GDB: per-term DUI trace for IS=1 IBL=3
+          IF(IS.EQ.1 .AND. IBL.EQ.3) THEN
+           WRITE(0,'(A,I3,A,Z8)')
+     &      'F_UESET_TERM N=',N,' DUI_FINAL=',TRANSFER(DUI,1)
+          ENDIF
           UEDG(IBL,IS) = UINV(IBL,IS) + DUI
+C
+C---- GDB parity: dump UESET accumulators in hex
+      WRITE(0,'(A,I2,A,I3,A,Z8,A,Z8,A,Z8)')
+     & 'F_UESET IS=',IS,' IBL=',IBL,
+     & ' UINV=',TRANSFER(UINV(IBL,IS),1),
+     & ' DUI=',TRANSFER(DUI,1),
+     & ' UEDG=',TRANSFER(UEDG(IBL,IS),1)
 C
           CALL TRACE_REALHEX(UINV(IBL,IS), UINVBITS)
           CALL TRACE_REALHEX(DUIA, DUIABITS)

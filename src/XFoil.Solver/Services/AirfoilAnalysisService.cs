@@ -155,7 +155,18 @@ public sealed class AirfoilAnalysisService
         settings ??= new AnalysisSettings();
 
         var coords = ExtractCoordinates(geometry);
-        double alphaRadians = angleOfAttackDegrees * Math.PI / 180.0;
+        double alphaRadians;
+        if (settings.UseLegacyBoundaryLayerInitialization)
+        {
+            // Fortran: ALFA = ADEG * DTOR where DTOR = ACOS(-1.0)/180.0 in REAL.
+            // Use float DTOR to match Fortran's float-precision alpha.
+            float dtor = MathF.Acos(-1.0f) / 180.0f;
+            alphaRadians = (float)angleOfAttackDegrees * dtor;
+        }
+        else
+        {
+            alphaRadians = angleOfAttackDegrees * Math.PI / 180.0;
+        }
 
         return ViscousSolverEngine.SolveViscous(coords, settings, alphaRadians);
     }

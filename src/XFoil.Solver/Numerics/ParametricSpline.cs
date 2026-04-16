@@ -858,7 +858,7 @@ public static class ParametricSpline
     internal static T ComputeDistance<T>(T dx, T dy)
         where T : struct, IFloatingPointIeee754<T>
     {
-        T distanceSquared = T.FusedMultiplyAdd(dx, dx, dy * dy);
+        T distanceSquared = (dx * dx) + (dy * dy);
         return T.Sqrt(distanceSquared);
     }
 }

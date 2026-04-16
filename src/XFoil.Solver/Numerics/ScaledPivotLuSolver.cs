@@ -5,6 +5,7 @@
 // Differences: The algorithm still follows the legacy scaled-pivot LU path, but the managed port exposes float/double entry points, generic shared cores, and structured trace hooks instead of relying on one implicit REAL/DOUBLE build and ad hoc debug output.
 // Decision: Keep the managed shared solver because it preserves the LUDCMP/BAKSUB algorithm while making precision and tracing explicit.
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using XFoil.Solver.Diagnostics;
 
 namespace XFoil.Solver.Numerics;
@@ -80,6 +81,7 @@ public static class ScaledPivotLuSolver
     // Legacy mapping: f_xfoil/src/xsolve.f :: LUDCMP scaled pivoting and Crout factorization.
     // Difference from legacy: The managed core shares one generic control flow across float and double and makes the parity-sensitive fused subtract staging explicit.
     // Decision: Keep the shared core because it reduces drift between precision modes while preserving the legacy elimination order.
+    [MethodImpl(MethodImplOptions.NoOptimization)]
     private static void DecomposeCore<T>(T[,] matrix, int[] pivotIndices, int size, string? traceContext, string precision)
         where T : struct, IFloatingPointIeee754<T>
     {
@@ -157,6 +159,16 @@ public static class ScaledPivotLuSolver
                         product,
                         sumBefore,
                         sum);
+                    // GDB: trace LU elimination at diagonal j=159 (1-indexed: j=160)
+                    if (i == j && j == size - 2 && typeof(T) == typeof(float)
+                        && DebugFlags.SetBlHex
+                        && (k == 119 || k == 129 || k == 139 || k == 149 || k >= 153))
+                    {
+                        Console.Error.WriteLine(
+                            $"C_LU159 k={k,4} sum={BitConverter.SingleToInt32Bits(float.CreateChecked(sum)):X8}" +
+                            $" L={BitConverter.SingleToInt32Bits(float.CreateChecked(leftValue)):X8}" +
+                            $" R={BitConverter.SingleToInt32Bits(float.CreateChecked(rightValue)):X8}");
+                    }
                 }
 
                 matrix[i, j] = sum;
@@ -199,6 +211,7 @@ public static class ScaledPivotLuSolver
     // Legacy mapping: f_xfoil/src/xsolve.f :: BAKSUB forward swap/elimination and backward solve.
     // Difference from legacy: The managed core centralizes float/double behavior and structured tracing while keeping the same solve phases.
     // Decision: Keep the shared core because it preserves the legacy algorithm and centralizes instrumentation.
+    [MethodImpl(MethodImplOptions.NoOptimization)]
     private static void BackSubstituteCore<T>(T[,] luMatrix, int[] pivotIndices, T[] rhs, int size, string? traceContext, string precision)
         where T : struct, IFloatingPointIeee754<T>
     {

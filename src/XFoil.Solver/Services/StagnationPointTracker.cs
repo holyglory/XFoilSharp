@@ -1,4 +1,5 @@
 using XFoil.Solver.Models;
+using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Numerics;
 
 // Legacy audit:
@@ -191,6 +192,11 @@ public static class StagnationPointTracker
                 int source = ibl + idif;
                 if (source < oldUpperCount)
                 {
+                    if (ibl == 26 && DebugFlags.SetBlHex)
+                        Console.Error.WriteLine(
+                            $"C_SHIFT27 src_T={BitConverter.SingleToInt32Bits((float)blState.THET[source, 0]):X8}" +
+                            $" src={source + 1}" +
+                            $" old_T={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, 0]):X8}");
                     blState.CTAU[ibl, 0] = blState.CTAU[source, 0];
                     blState.THET[ibl, 0] = blState.THET[source, 0];
                     blState.DSTR[ibl, 0] = blState.DSTR[source, 0];

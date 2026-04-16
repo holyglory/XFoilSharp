@@ -70,7 +70,7 @@ C
      &  /'          Repaneling with PANE and/or PPAR suggested'
      &  /'           (doing GDES,CADD before repaneling _may_'
      &  /'            improve excessively coarse LE spacing' )
-         CALL PANPLT
+ccc      PANPLT skipped: triggers X11 display open and aborts in headless runs.
         ENDIF
        ENDIF
       ENDIF
@@ -212,7 +212,7 @@ C
         CALL CANG(X,Y,N,0, IMAX,AMAX)
         IF(ABS(AMAX).GT.ANGTOL) THEN
          WRITE(*,1081) AMAX, IMAX
-         CALL PANPLT
+ccc       PANPLT skipped: triggers X11 display open and aborts in headless runs.
         ENDIF
        ENDIF
 C
@@ -672,6 +672,7 @@ C---- default viscous parameters
       RETYP = 1
       REINF1 = 0.
       ACRIT = 9.0
+      CALL SET_NCRIT_FROM_ENV
       XSTRIP(1) = 1.0
       XSTRIP(2) = 1.0
       XOCTR(1) = 1.0
@@ -1149,6 +1150,16 @@ C
         AG_MSQ = 0.5*(CPG2_MSQ + CPG1_MSQ)
 C
         CL     = CL     + DX* AG
+        IF(I.GE.81 .AND. I.LE.92) THEN
+         WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_CLCALC_STEP i=',I-1,
+     &    ' dx=',TRANSFER(DX,1),
+     &    ' ag=',TRANSFER(AG,1),
+     &    ' cpg1=',TRANSFER(CPG1,1),
+     &    ' cpg2=',TRANSFER(CPG2,1),
+     &    ' gamip=',TRANSFER(GAM(IP),1),
+     &    ' cl=',TRANSFER(CL,1)
+        ENDIF
         CDP    = CDP    - DY* AG
         CM     = CM     - DX*(AG*AX + DG*DX/12.0)
      &                  - DY*(AG*AY + DG*DY/12.0)
@@ -1183,6 +1194,32 @@ C
 C----- extrapolate wake to downstream infinity using Squire-Young relation
 C      (reduces errors of the wake not being long enough)
        CD = 2.0*THWAKE * (UEWAKE/QINF)**(0.5*(5.0+SHWAKE))
+       WRITE(*,'(A,I4,6(1X,E15.8))')
+     &   'CDCALC_DBG', NBL(2),
+     &   THWAKE, DSTR(NBL(2),2), UEDG(NBL(2),2),
+     &   SHWAKE, UEWAKE, CD
+       WRITE(*,'(A,Z8,A,Z8,A,Z8)')
+     &   'CDCALC_HEX CD=', TRANSFER(CD,1),
+     &   ' CDF=', TRANSFER(CDF,1),
+     &   ' CL=', TRANSFER(CL,1)
+       WRITE(*,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'CDCALC_INPUTS THW=', TRANSFER(THWAKE,1),
+     &   ' DST=', TRANSFER(DSTR(NBL(2),2),1),
+     &   ' UEG=', TRANSFER(UEDG(NBL(2),2),1),
+     &   ' SHW=', TRANSFER(SHWAKE,1),
+     &   ' UEW=', TRANSFER(UEWAKE,1)
+       DO 888 IS=1, 2
+         DO 889 IBL=2, NBL(IS)
+           WRITE(*,'(A,I1,A,I4,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &       'F_BL s=', IS, ' i=', IBL,
+     &       ' T=', TRANSFER(THET(IBL,IS),1),
+     &       ' D=', TRANSFER(DSTR(IBL,IS),1),
+     &       ' U=', TRANSFER(UEDG(IBL,IS),1),
+     &       ' C=', TRANSFER(CTAU(IBL,IS),1)
+         IF(IBL.EQ.2) WRITE(*,'(A,I1,A,I4,A,I4)')
+     &     'F_ITRAN s=',IS,' itran=',ITRAN(IS),' nbl=',NBL(IS)
+ 889     CONTINUE
+ 888   CONTINUE
 C
       ELSE
 C
@@ -1666,6 +1703,13 @@ C---- spline raw airfoil coordinates
         CALL TRACE_BUFFER_SPLINE_NODE('PANGEN', I,
      &       XB(I), YB(I), SB(I), XBP(I), YBP(I))
       ENDDO
+      DO IBDX = 1, NB
+        WRITE(0,'(A,I4,A,Z8,A,Z8,A,Z8)')
+     &   'F_BUF_DRV i=',IBDX,
+     &   ' S=',TRANSFER(SB(IBDX),1),
+     &   ' XP=',TRANSFER(XBP(IBDX),1),
+     &   ' YP=',TRANSFER(YBP(IBDX),1)
+      ENDDO
 C
 C---- normalizing length (~ chord)
       SBREF = 0.5*(SB(NB)-SB(1))
@@ -1988,9 +2032,35 @@ C------ trace assembled Newton system before solve
           CALL TRACE_PANGEN_NEWTON_ROW('PANGEN', ITER, I, SNEW(I),
      &         W1(I), W2(I), W3(I), W4(I))
         ENDDO
+        IF(ITER.LE.5) THEN
+          ISH = 0
+          IW1H = 0
+          IW2H = 0
+          IW3H = 0
+          IW4H = 0
+          DO INDX=1, NN
+            ISH = IEOR(ISH, TRANSFER(SNEW(INDX),1))
+            IW1H = IEOR(IW1H, TRANSFER(W1(INDX),1))
+            IW2H = IEOR(IW2H, TRANSFER(W2(INDX),1))
+            IW3H = IEOR(IW3H, TRANSFER(W3(INDX),1))
+            IW4H = IEOR(IW4H, TRANSFER(W4(INDX),1))
+          ENDDO
+          WRITE(0,'(A,I2,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_NW_HASH it=',ITER,
+     &     ' S=',ISH,' W1=',IW1H,' W2=',IW2H,
+     &     ' W3=',IW3H,' W4=',IW4H
+        ENDIF
 C
 C------ solve for changes W4 in node position arc length values
         CALL TRISOL(W2,W1,W3,W4,NN)
+C
+        IF(ITER.LE.5) THEN
+          IW4H = 0
+          DO INDX=1, NN
+            IW4H = IEOR(IW4H, TRANSFER(W4(INDX),1))
+          ENDDO
+          WRITE(0,'(A,I2,A,Z8)') 'F_NW_HASH_POST it=',ITER,' W4=',IW4H
+        ENDIF
 C
 C------ trace solved arc-length deltas
         DO I=1, NN
@@ -2033,12 +2103,26 @@ CCC        IF(RLX.NE.1.0) WRITE(*,*) DMAX,'    RLX =',RLX
 C
    11 CONTINUE
 C
+C---- F_SNEW dump after Newton convergence
+      DO ISDX = 1, NN
+        WRITE(0,'(A,I4,A,Z8)')
+     &   'F_SNEW i=',ISDX,
+     &   ' S=',TRANSFER(SNEW(ISDX),1)
+      ENDDO
+C
 C---- set new panel node coordinates
       DO I=1, N
         IND = IPFAC*(I-1) + 1
         S(I) = SNEW(IND)
         X(I) = SEVAL(SNEW(IND),XB,XBP,SB,NB)
         Y(I) = SEVAL(SNEW(IND),YB,YBP,SB,NB)
+        IF(I.EQ.14 .OR. I.EQ.46 .OR. I.EQ.61) THEN
+          WRITE(*,'(A,I4,3(1X,Z16.16))')
+     &      'PANGEN_F',I,
+     &      TRANSFER(DBLE(S(I)),0_8),
+     &      TRANSFER(DBLE(X(I)),0_8),
+     &      TRANSFER(DBLE(Y(I)),0_8)
+        ENDIF
         CALL TRACE_PANGEN_SNEW_NODE('PANGEN', 'final', 0, I, S(I))
       ENDDO
 C
@@ -2102,6 +2186,17 @@ C
         CALL TRACE_PANGEN_PANEL_NODE('PANGEN', I,
      &       X(I), Y(I), S(I), XP(I), YP(I))
       ENDDO
+      DO 9991 KK=1, N
+        IF(.TRUE.) THEN
+          WRITE(*,'(A,I4,5(1X,Z16.16))')
+     &      'SPLN',KK,
+     &      TRANSFER(DBLE(X(KK)),0_8),
+     &      TRANSFER(DBLE(Y(KK)),0_8),
+     &      TRANSFER(DBLE(S(KK)),0_8),
+     &      TRANSFER(DBLE(XP(KK)),0_8),
+     &      TRANSFER(DBLE(YP(KK)),0_8)
+        ENDIF
+ 9991 CONTINUE
       CALL LEFIND(SLE,X,XP,Y,YP,S,N)
 C
       XLE = SEVAL(SLE,X,XP,S,N)
@@ -2173,6 +2268,7 @@ C
      &       /'   Top    side refined area x/c limits ' , 2F6.3
      &       /'   Bottom side refined area x/c limits ' , 2F6.3)
 C
+C---- panel coordinate dump moved after SEGSPL
       RETURN
       END ! PANGEN
 
@@ -2345,6 +2441,13 @@ C
 C---- normal and streamwise projected TE gap areas
       ANTE = DXS*DYTE - DYS*DXTE
       ASTE = DXS*DXTE + DYS*DYTE
+C---- GDB: dump ANTE inputs
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_ANTE DXS=',TRANSFER(DXS,1),
+     & ' DYS=',TRANSFER(DYS,1),
+     & ' DXTE=',TRANSFER(DXTE,1),
+     & ' DYTE=',TRANSFER(DYTE,1),
+     & ' ANTE=',TRANSFER(ANTE,1)
 C
 C---- total TE gap area
       DSTE = SQRT(DXTE**2 + DYTE**2)

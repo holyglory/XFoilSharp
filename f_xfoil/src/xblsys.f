@@ -44,6 +44,10 @@ C----------------------------------------------------------
 C     Returns average amplification AX over interval 1..2
 C----------------------------------------------------------
 C
+      INTEGER TRACE_SIDE, TRACE_STATION, TRACE_PHASE, TRACE_ITER
+      INTEGER TRACE_OUTER
+      COMMON/V_TRACE/ TRACE_SIDE, TRACE_STATION, TRACE_PHASE,
+     &                 TRACE_ITER, TRACE_OUTER
 cC==========================
 cC---- 1st-order -- based on "1" quantities only
 c      CALL DAMPL( HK1, T1, RT1, AX1, AX1_HK1, AX1_T1, AX1_RT1 )
@@ -143,7 +147,42 @@ C
      &     AXSQ, AXA, AXA_AX1, AXA_AX2,
      &     ARG, EXN, DAX, DAX_A1, DAX_A2, DAX_T1, DAX_T2,
      &     AXA + DAX)
+      IF(TRACE_SIDE.EQ.2
+     &   .AND. TRACE_STATION.GE.2
+     &   .AND. TRACE_STATION.LE.4
+     &   .AND. TRACE_PHASE.EQ.1) THEN
+        WRITE(0,'(A,I2,A,I3,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_AXSET1 IS=',TRACE_SIDE,' IBL=',TRACE_STATION,
+     &   ' HK1=',TRANSFER(HK1,1),
+     &   ' T1=',TRANSFER(T1,1),
+     &   ' RT1=',TRANSFER(RT1,1),
+     &   ' A1=',TRANSFER(A1,1),
+     &   ' HK2=',TRANSFER(HK2,1),
+     &   ' T2=',TRANSFER(T2,1),
+     &   ' RT2=',TRANSFER(RT2,1),
+     &   ' A2=',TRANSFER(A2,1)
+        WRITE(0,'(A,I2,A,I3,A,Z8,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_AXSET2 IS=',TRACE_SIDE,' IBL=',TRACE_STATION,
+     &   ' AX1=',TRANSFER(AX1,1),
+     &   ' AX2=',TRANSFER(AX2,1),
+     &   ' AX1SQ=',TRANSFER(AX1SQDBG,1),
+     &   ' AX2SQ=',TRANSFER(AX2SQDBG,1),
+     &   ' AXSQ=',TRANSFER(AXSQ,1),
+     &   ' AXA=',TRANSFER(AXA,1),
+     &   ' ARG=',TRANSFER(ARG,1),
+     &   ' EXN=',TRANSFER(EXN,1),
+     &   ' DAX=',TRANSFER(DAX,1),
+     &   ' AX=',TRANSFER(AXA + DAX,1)
+      ENDIF
       AX     = AXA             + DAX
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.GE.66 .AND. TRACE_STATION.LE.70
+     &   .AND. TRACE_OUTER.EQ.33) THEN
+        WRITE(0,'(A,I3,A,I2,4(1X,A,Z8.8))') 'F_AXSET_AH79 ibl=',TRACE_STATION,
+     &   ' ph=',TRACE_PHASE,
+     &   'A1=',TRANSFER(A1,1),'A2=',TRANSFER(A2,1),
+     &   'AX=',TRANSFER(AX,1),'DAX=',TRANSFER(DAX,1)
+      ENDIF
 C
       AX_HK1 = AXA_AX1*AX1_HK1
       AX_T1  = AXA_AX1*AX1_T1  + DAX_T1
@@ -287,11 +326,33 @@ C---- save variables and sensitivities at IBL ("2") for future restoration
 C
 C---- calculate average amplification rate AX over X1..X2 interval
       AMPL2IN = AMPL2
+      IF(.FALSE.) THEN
+        WRITE(0,'(A,I2,A,I2,A,I1,A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TRC_IN oi=',TRACE_OUTER,' ii=',TRACE_ITER,
+     &   ' s=',TRACE_SIDE,' i=',TRACE_STATION,
+     &   ' A1=',TRANSFER(AMPL1,1),
+     &   ' A2=',TRANSFER(AMPL2,1),
+     &   ' X1=',TRANSFER(X1,1),
+     &   ' X2=',TRANSFER(X2,1)
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TRC_IN2 HK1=',TRANSFER(HK1,1),
+     &   ' T1=',TRANSFER(T1,1),
+     &   ' RT1=',TRANSFER(RT1,1),
+     &   ' HK2=',TRANSFER(HK2,1),
+     &   ' T2=',TRANSFER(T2,1),
+     &   ' RT2=',TRANSFER(RT2,1)
+      ENDIF
       CALL AXSET( HK1,    T1,    RT1, AMPL1,
      &            HK2,    T2,    RT2, AMPL2,  AMCRIT, IDAMPV,
      &     AX, AX_HK1, AX_T1, AX_RT1, AX_A1,
      &         AX_HK2, AX_T2, AX_RT2, AX_A2 )
 C
+      IF(.FALSE.) THEN
+        WRITE(0,'(A,I2,A,I1,A,I3,A,Z8)')
+     &   'F_TRC_AX it=',TRACE_ITER,
+     &   ' s=',TRACE_SIDE,' i=',TRACE_STATION,
+     &   ' AX=',TRANSFER(AX,1)
+      ENDIF
 C---- set initial guess for iterate N2 (AMPL2) at X2
       AMPL2 = AMPL1 + AX*(X2-X1)
       CALL TRACE_TRANSITION_POINT_SEED('TRCHEK2',
@@ -326,6 +387,10 @@ C
         SFX_X1 = (SFX    - 1.0)/(X2-X1)
         SFX_X2 = (       - SFX)/(X2-X1)
         SFX_XF =  1.0          /(X2-X1)
+        WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &   'F_SFXXF XIFORC=',TRANSFER(XIFORC,1),
+     &   ' X2=',TRANSFER(X2,1),
+     &   ' SFX_XF=',TRANSFER(SFX_XF,1)
       ELSE
         SFX    = 1.0
         SFX_X1 = 0.
@@ -334,6 +399,33 @@ C
       ENDIF
 C
 C---- set weighting factor from free or forced transition
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.79) THEN
+       WRITE(*,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_TRCHEK_WF SFA=',TRANSFER(SFA,1),
+     &  ' SFX=',TRANSFER(SFX,1),
+     &  ' SFX_XF=',TRANSFER(SFX_XF,1),
+     &  ' XIFORC=',TRANSFER(XIFORC,1),
+     &  ' X2=',TRANSFER(X2,1)
+      ENDIF
+C---- TRCHEK_WF trace for case 188 NACA 0009 a=-2 Nc=12
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78) THEN
+       WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_TRCHEK_WF78 SFA=',TRANSFER(SFA,1),
+     &  ' SFX=',TRANSFER(SFX,1),
+     &  ' SFX_XF=',TRANSFER(SFX_XF,1),
+     &  ' XIFORC=',TRANSFER(XIFORC,1),
+     &  ' X1=',TRANSFER(X1,1),
+     &  ' X2=',TRANSFER(X2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_OUTER.EQ.10 .AND. TRACE_ITER.EQ.2) THEN
+        WRITE(0,'(A,5(1X,A,Z8.8))') 'F_TRCHK_N66',
+     &   'AMCRIT=',TRANSFER(AMCRIT,1),
+     &   'AMPL1=',TRANSFER(AMPL1,1),
+     &   'AMPL2=',TRANSFER(AMPL2,1),
+     &   'SFA=',TRANSFER(SFA,1),
+     &   'SFA_A1=',TRANSFER(SFA_A1,1)
+      ENDIF
       IF(SFA.LT.SFX) THEN
         WF2    = SFA
         WF2_A1 = SFA_A1
@@ -349,6 +441,11 @@ C---- set weighting factor from free or forced transition
         WF2_X2 = SFX_X2
         WF2_XF = SFX_XF
       ENDIF
+      WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,L1)')
+     & 'F_WF2 ',
+     & ' WF2=',TRANSFER(WF2,1),' WF2_A1=',TRANSFER(WF2_A1,1),
+     & ' SFA=',TRANSFER(SFA,1),' SFX=',TRANSFER(SFX,1),
+     & ' SFA_A1=',TRANSFER(SFA_A1,1),' branchSFA=',(SFA.LT.SFX)
 C
 C
 C=====================
@@ -430,6 +527,15 @@ C
 C
       RLX = 1.0
       DXT = XT_A2*DA2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.24
+     &   .AND. TRACE_ITER.EQ.4) THEN
+       WRITE(0,'(A,I2,5(A,Z8))') 'F_TR2_INNER itam=',ITAM,
+     &  ' AMPL2=',TRANSFER(AMPL2,1),
+     &  ' AX=',TRANSFER(AX,1),
+     &  ' RES=',TRANSFER(RES,1),
+     &  ' DA2=',TRANSFER(DA2,1),
+     &  ' WF2=',TRANSFER(WF2,1)
+      ENDIF
 C
       IF(RLX*ABS(DXT/(X2-X1)) .GT. 0.05) RLX = 0.05*ABS((X2-X1)/DXT)
       IF(RLX*ABS(DA2)         .GT. 1.0 ) RLX = 1.0 *ABS(   1.0 /DA2)
@@ -437,10 +543,26 @@ C
       CALL TRACE_TRANSITION_POINT_ITER('TRCHEK2', ITAM,
      & X1, X2, AMPL1, AMPL2, AMCRIT, AX, WF2, XT, TT, DT, UT,
      & RES, RES_A2, DA2, RLX)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,I2,8(1X,Z8.8))') 'G_TRIT', ITAM,
+     &    TRANSFER(AMPL2,1), TRANSFER(AMPLT,1), TRANSFER(AX,1),
+     &    TRANSFER(SFA,1), TRANSFER(RES,1), TRANSFER(RES_A2,1),
+     &    TRANSFER(DA2,1), TRANSFER(RLX,1)
+        WRITE(0,'(A,I2,5(1X,Z8.8))') 'G_TRXT', ITAM,
+     &    TRANSFER(WF2,1), TRANSFER(XT,1), TRANSFER(TT,1),
+     &    TRANSFER(DT,1), TRANSFER(UT,1)
+      ENDIF
 C
+      IF(TRACE_OUTER.EQ.33) THEN
+        WRITE(0,'(A,I3,A,I3,A,I2,5(1X,A,Z8.8))') 'F_TRC33 s=',TRACE_SIDE,
+     &   ' ibl=',TRACE_STATION,' tam=',ITAM,
+     &   'A1=',TRANSFER(AMPL1,1),'A2=',TRANSFER(AMPL2,1),
+     &   'DA=',TRANSFER(DA2,1),'RLX=',TRANSFER(RLX,1),
+     &   'AX=',TRANSFER(AX,1)
+      ENDIF
 C---- check if converged
       IF(ABS(DA2) .LT. DAEPS) GO TO 101
-C
       IF((AMPL2.GT.AMCRIT .AND. AMPL2+RLX*DA2.LT.AMCRIT).OR.
      &   (AMPL2.LT.AMCRIT .AND. AMPL2+RLX*DA2.GT.AMCRIT)    ) THEN
 C------ limited Newton step so AMPL2 doesn't step across AMCRIT either way
@@ -456,6 +578,27 @@ C
  6700 FORMAT(1X,'x:', 3F9.5,'  N:',3F7.3,'  Nx:',F8.3,'   dN:',E10.3)
 C
  101  CONTINUE
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.24
+     &   .AND. TRACE_ITER.EQ.4) THEN
+       WRITE(0,'(A,6(A,Z8))') 'F_TR22_INSIDE',
+     &  ' AMPL2=',TRANSFER(AMPL2,1),
+     &  ' WF2=',TRANSFER(WF2,1),
+     &  ' XT=',TRANSFER(XT,1),
+     &  ' TT=',TRANSFER(TT,1),
+     &  ' DT=',TRANSFER(DT,1),
+     &  ' UT=',TRANSFER(UT,1)
+       WRITE(0,'(A,4(A,Z8))') 'F_FINALAX',
+     &  ' Ax=',TRANSFER(AX,1),
+     &  ' Ax_TT=',TRANSFER(AX_TT,1),
+     &  ' Ax_HKT=',TRANSFER(AX_HKT,1),
+     &  ' Ax_RTT=',TRANSFER(AX_RTT,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,4(1X,Z8.8))') 'G_TRACC',
+     &    TRANSFER(AMPL2,1), TRANSFER(WF2,1),
+     &    TRANSFER(XT,1), TRANSFER(AMPLT,1)
+      ENDIF
 C
 C
 C---- test for free or forced transition
@@ -473,6 +616,17 @@ C---- resolve if both forced and free transition
        TRFREE = XIFORC .GE. XT
       ENDIF
 C
+C---- TRCHEK branch trace for case 188 (side 1 station 78) and NACA 0003 (side 2 station 80)
+      IF((TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78)
+     &   .OR. (TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.80)) THEN
+       WRITE(0,'(A,I1,A,I3,A,L2,A,L2,A,Z8,A,Z8,A,Z8)')
+     &  'F_TRBRANCH s=',TRACE_SIDE,' i=',TRACE_STATION,
+     &  ' TRFORC=',TRFORC,
+     &  ' TRFREE=',TRFREE,
+     &  ' XT=',TRANSFER(REAL(XT),1),
+     &  ' XIFORC=',TRANSFER(REAL(XIFORC),1),
+     &  ' AMPL2=',TRANSFER(REAL(AMPL2),1)
+      ENDIF
       IF(TRFORC) THEN
 C----- if forced transition, then XT is prescribed,
 C-     no sense calculating the sensitivities, since we know them...
@@ -489,6 +643,13 @@ C-     no sense calculating the sensitivities, since we know them...
        XT_MS = 0.
        XT_RE = 0.
        XT_XF = 1.0
+       IF((TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78)
+     &    .OR. (TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.80)) THEN
+        WRITE(0,'(A,I1,A,I3,A,Z8,A,Z8)')
+     &   'F_FORCX_ENTER s=',TRACE_SIDE,' i=',TRACE_STATION,
+     &   ' XT_X2=',TRANSFER(REAL(XT_X2),1),
+     &   ' XT_XF=',TRANSFER(REAL(XT_XF),1)
+       ENDIF
        RETURN
       ENDIF
 C
@@ -514,6 +675,11 @@ C
       TT_A1 = T1*WF1_A1 + T2*WF2_A1
       DT_A1 = D1*WF1_A1 + D2*WF2_A1
       UT_A1 = U1*WF1_A1 + U2*WF2_A1
+      WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_TR_DER ',
+     & ' XT_A1=',TRANSFER(XT_A1,1),' TT_A1=',TRANSFER(TT_A1,1),
+     & ' DT_A1=',TRANSFER(DT_A1,1),' UT_A1=',TRANSFER(UT_A1,1),
+     & ' XT=',TRANSFER(XT,1)
 C
 CC    XT_A2 = X1*WF1_A2 + X2*WF2_A2
 CC    TT_A2 = T1*WF1_A2 + T2*WF2_A2
@@ -561,6 +727,19 @@ C
      &      + (AX_HKT*HKT_TT + AX_TT + AX_RTT*RTT_TT)*TT_A2
      &      + (AX_HKT*HKT_DT                        )*DT_A2
      &      + (AX_HKT*HKT_UT         + AX_RTT*RTT_UT)*UT_A2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_OUTER.EQ.10 .AND. TRACE_ITER.EQ.2) THEN
+       AXA2_AM = AX_AT*AMPLT_A2
+       AXA2_TT = (AX_HKT*HKT_TT + AX_TT + AX_RTT*RTT_TT)*TT_A2
+       AXA2_DT = (AX_HKT*HKT_DT)*DT_A2
+       AXA2_UT = (AX_HKT*HKT_UT + AX_RTT*RTT_UT)*UT_A2
+       WRITE(0,'(A,5(A,Z8))') 'F_AXA2_10_66',
+     &  ' ax_A2=',TRANSFER(AX_A2,1),
+     &  ' amplT=',TRANSFER(AXA2_AM,1),
+     &  ' ttT=',TRANSFER(AXA2_TT,1),
+     &  ' dtT=',TRANSFER(AXA2_DT,1),
+     &  ' utT=',TRANSFER(AXA2_UT,1)
+      ENDIF
       AX_X2 = (AX_HKT*HKT_TT + AX_TT + AX_RTT*RTT_TT)*TT_X2
      &      + (AX_HKT*HKT_DT                        )*DT_X2
      &      + (AX_HKT*HKT_UT         + AX_RTT*RTT_UT)*UT_X2
@@ -602,18 +781,69 @@ C---- set sensitivities of XT, with RES being stationary for A2 constraint
       XTA1COR = (XT_A2/Z_A2)*Z_A1
       XTX2BAS = XT_X2
       XTX2COR = (XT_A2/Z_A2)*Z_X2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_OUTER.EQ.10 .AND. TRACE_ITER.EQ.2) THEN
+        WRITE(0,'(A,8(1X,A,Z8.8))') 'F_XTA1COR_N66',
+     &   'AX=',TRANSFER(AX,1),
+     &   'DX=',TRANSFER(X2-X1,1),
+     &   'AX_A1=',TRANSFER(AX_A1,1),
+     &   'Z_AX=',TRANSFER(Z_AX,1),
+     &   'Z_A1=',TRANSFER(Z_A1,1),
+     &   'Z_A2=',TRANSFER(Z_A2,1),
+     &   'XT_A1_pre=',TRANSFER(XT_A1,1),
+     &   'XT_A2=',TRANSFER(XT_A2,1)
+      ENDIF
       XT_A1 = XT_A1 - XTA1COR
       XT_T1 =       - (XT_A2/Z_A2)*Z_T1
       XT_D1 =       - (XT_A2/Z_A2)*Z_D1
       XT_U1 =       - (XT_A2/Z_A2)*Z_U1
       XT_X1 = XT_X1 - (XT_A2/Z_A2)*Z_X1
+      WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_TR_DER_POST ',
+     & ' XT_A1=',TRANSFER(XT_A1,1),
+     & ' TT_A1=',TRANSFER(TT_A1,1),
+     & ' DT_A1=',TRANSFER(DT_A1,1),
+     & ' UT_A1=',TRANSFER(UT_A1,1)
       XT_T2 =       - (XT_A2/Z_A2)*Z_T2
       XT_D2 =       - (XT_A2/Z_A2)*Z_D2
       XT_U2 =       - (XT_A2/Z_A2)*Z_U2
       XT_X2 = XT_X2 - (XT_A2/Z_A2)*Z_X2
+C---- n6h20 Z derivative inputs trace at IBL=66 iter 2 mc=10
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66) THEN
+       WRITE(0,'(A,6(A,Z8))') 'F_ZDERIV10_66',
+     &  ' xtA2=',TRANSFER(XT_A2,1),
+     &  ' zA2=',TRANSFER(Z_A2,1),
+     &  ' zT2=',TRANSFER(Z_T2,1),
+     &  ' zD2=',TRANSFER(Z_D2,1),
+     &  ' zU2=',TRANSFER(Z_U2,1),
+     &  ' zX2=',TRANSFER(Z_X2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.80) THEN
+       WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_XTX2_80 bas=',TRANSFER(XTX2BAS,1),
+     &  ' cor=',TRANSFER(XTX2COR,1),
+     &  ' res=',TRANSFER(XT_X2,1),
+     &  ' xtA2=',TRANSFER(XT_A2,1),
+     &  ' zA2=',TRANSFER(Z_A2,1)
+      ENDIF
       XT_MS =       - (XT_A2/Z_A2)*Z_MS
       XT_RE =       - (XT_A2/Z_A2)*Z_RE
       XT_XF = 0.0
+      IF(.FALSE.) THEN
+        WRITE(0,'(A,I2,A,I1,A,I3)')
+     &   'F_TRC_OUT it=',TRACE_ITER,
+     &   ' s=',TRACE_SIDE,' i=',TRACE_STATION
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TRC_SEN XT_X2=',TRANSFER(XT_X2,1),
+     &   ' XT_A1=',TRANSFER(XT_A1,1),
+     &   ' XT_T1=',TRANSFER(XT_T1,1),
+     &   ' XT_D1=',TRANSFER(XT_D1,1)
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TRC_SEN2 WF2=',TRANSFER(WF2,1),
+     &   ' A2=',TRANSFER(AMPL2,1),
+     &   ' XT=',TRANSFER(XT,1),
+     &   ' zA2=',TRANSFER(Z_A2,1)
+      ENDIF
 C
       AXTTCMB =  AX_HKT*HKT_TT + AX_TT + AX_RTT*RTT_TT
       AXDTCMB =  AX_HKT*HKT_DT
@@ -696,7 +926,50 @@ C---- calculate secondary BL variables and their sensitivities
        CALL BLMID(1)
       ENDIF
 C
+C---- n ah79 station 2 side 1 kinematic iter 33
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.2
+     &   .AND. TRACE_OUTER.EQ.33) THEN
+       WRITE(0,'(A,6(1X,A,Z8.8))') 'F_SEC_AH79 s=1 i=2',
+     &  ' HK=',TRANSFER(HK2,1),' RT=',TRANSFER(RT2,1),
+     &  ' HS=',TRANSFER(HS2,1),' US=',TRANSFER(US2,1),
+     &  ' CF=',TRANSFER(CF2,1),' DI=',TRANSFER(DI2,1)
+      ENDIF
+C---- Trace kinematic2 at station 16 iter 1 MRCHDU
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.16
+     &   .AND. TRACE_ITER.EQ.1) THEN
+       WRITE(*,'(A,6(1X,Z8.8))')
+     &  'F_KIN2_16',
+     &  TRANSFER(HK2,1),TRANSFER(HK2_T2,1),
+     &  TRANSFER(HK2_D2,1),TRANSFER(H2,1),
+     &  TRANSFER(RT2,1),TRANSFER(RT2_T2,1)
+      ENDIF
+C---- Trace station 2 secondary at station 16 MRCHDU
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.16) THEN
+       WRITE(*,'(A,9(1X,Z8.8))')
+     &  'F_SEC2_16',
+     &  TRANSFER(HS2,1),TRANSFER(HS2_T2,1),
+     &  TRANSFER(HS2_D2,1),TRANSFER(CF2,1),
+     &  TRANSFER(CF2_T2,1),TRANSFER(CF2_D2,1),
+     &  TRANSFER(CQ2,1),TRANSFER(CQ2_T2,1),
+     &  TRANSFER(CQ2_D2,1)
+      ENDIF
       TRACE_PHASE = TRACEPHASE
+      IF(((TRACE_SIDE.EQ.1
+     &   .AND.(TRACE_STATION.EQ.58.OR.TRACE_STATION.EQ.59))
+     &  .OR.(TRACE_SIDE.EQ.2
+     &   .AND.(TRACE_STATION.EQ.82.OR.TRACE_STATION.EQ.83)))
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(*,'(A,I1,A,I3,6(1X,Z8.8))')
+     &   'F_BLV s',TRACE_SIDE,' i',TRACE_STATION,
+     &   TRANSFER(HK2,1), TRANSFER(CF2,1),
+     &   TRANSFER(HS2,1), TRANSFER(DI2,1),
+     &   TRANSFER(US2,1), TRANSFER(CQ2,1)
+        WRITE(*,'(A,I1,A,I3,A,6(1X,Z8.8))')
+     &   'F_BLV s',TRACE_SIDE,' i',TRACE_STATION,'_1',
+     &   TRANSFER(HK1,1), TRANSFER(CF1,1),
+     &   TRANSFER(HS1,1), TRANSFER(DI1,1),
+     &   TRANSFER(US1,1), TRANSFER(CQ1,1)
+      ENDIF
 C
 C---- for the similarity station, "1" and "2" variables are the same
       IF(SIMI) THEN
@@ -711,6 +984,30 @@ C
      &     X1, X2, U1, U2, T1, T2,
      &     D1, D2, S1, S2, DW1, DW2,
      &     AMPL1, AMPL2, M1, M2)
+C---- NACA 0018 dump COM1+COM2 at stn 90 s=2 (MRCHUE wake debug)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.90) THEN
+       WRITE(0,'(A,6(A,Z8))')
+     &  'F_COM1_S90',
+     &  ' HK1=',TRANSFER(HK1,1),
+     &  ' HS1=',TRANSFER(HS1,1),
+     &  ' RT1=',TRANSFER(RT1,1),
+     &  ' HK2=',TRANSFER(HK2,1),
+     &  ' H2=',TRANSFER(H2,1),
+     &  ' M2=',TRANSFER(M2,1)
+      ENDIF
+C---- NACA 0012 2M a=3: dump COM1 secondary at stn 66 s=2 call 2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_PHASE.EQ.1) THEN
+       WRITE(0,'(A,7(A,Z8))')
+     &  'F_COM1_S66',
+     &  ' HK1=',TRANSFER(HK1,1),
+     &  ' HS1=',TRANSFER(HS1,1),
+     &  ' CF1=',TRANSFER(CF1,1),
+     &  ' DI1=',TRANSFER(DI1,1),
+     &  ' CQ1=',TRANSFER(CQ1,1),
+     &  ' US1=',TRANSFER(US1,1),
+     &  ' RT1=',TRANSFER(RT1,1)
+      ENDIF
 C
 C---- set up appropriate finite difference system for current interval
       IF(TRAN) THEN
@@ -723,6 +1020,128 @@ C---- set up appropriate finite difference system for current interval
        CALL BLDIF(3)
       ELSE IF(TURB) THEN
        CALL BLDIF(2)
+      ENDIF
+C---- Dump TRDIF VS2 row 1 at transition stations
+      IF(TRAN .AND. TRACE_PHASE.EQ.1 .AND.
+     &   TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.80) THEN
+       WRITE(0,'(A,I1,A,I3,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_TRDIF14 s=',TRACE_SIDE,' i=',TRACE_STATION,
+     &  ' V10=',TRANSFER(VS2(1,1),1),
+     &  ' V11=',TRANSFER(VS2(1,2),1),
+     &  ' V12=',TRANSFER(VS2(1,3),1),
+     &  ' V13=',TRANSFER(VS2(1,4),1),
+     &  ' V14=',TRANSFER(VS2(1,5),1),
+     &  ' R0=',TRANSFER(VSREZ(1),1)
+      ENDIF
+C---- ah79k135: dump BLDIF inputs+results at 2nd wake IS=2 IBL=69 every call
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.69) THEN
+        WRITE(0,'(A,I3,A,I4,A,I2,A,L1,A,L1,A,L1,A,L1,
+     &    12(1X,A,Z8.8))')
+     &    'F_VSTE2 iter=',TRACE_ITER,
+     &    ' i=',TRACE_STATION,
+     &    ' ityp=',ITYPB,
+     &    ' TRAN=',TRAN,' TURB=',TURB,' WAKE=',WAKE,' SIMI=',SIMI,
+     &    'T1=',TRANSFER(T1,1),'T2=',TRANSFER(T2,1),
+     &    'D1=',TRANSFER(D1,1),'D2=',TRANSFER(D2,1),
+     &    'U1=',TRANSFER(U1,1),'U2=',TRANSFER(U2,1),
+     &    'HK1=',TRANSFER(HK1,1),'HK2=',TRANSFER(HK2,1),
+     &    'HS1=',TRANSFER(HS1,1),'HS2=',TRANSFER(HS2,1),
+     &    'DI1=',TRANSFER(DI1,1),'DI2=',TRANSFER(DI2,1)
+        WRITE(0,'(A,I3,3(1X,A,Z8.8))')
+     &    'F_VSTE2R iter=',TRACE_ITER,
+     &    'R1=',TRANSFER(VSREZ(1),1),
+     &    'R2=',TRANSFER(VSREZ(2),1),
+     &    'R3=',TRANSFER(VSREZ(3),1)
+      ENDIF
+C---- GDB: dump BLDIF inputs at wake station 83 MRCHUE
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.83
+     &   .AND. TRACE_ITER.EQ.1 .AND. WAKE) THEN
+       WRITE(0,'(A,6(1X,Z8.8))')
+     &  'F_BLDIF83_IN',
+     &  TRANSFER(T1,1),TRANSFER(D1,1),
+     &  TRANSFER(T2,1),TRANSFER(D2,1),
+     &  TRANSFER(U1,1),TRANSFER(U2,1)
+       WRITE(0,'(A,6(1X,Z8.8))')
+     &  'F_BLDIF83_SEC',
+     &  TRANSFER(HK1,1),TRANSFER(HS1,1),
+     &  TRANSFER(HK2,1),TRANSFER(HS2,1),
+     &  TRANSFER(DI1,1),TRANSFER(DI2,1)
+       WRITE(0,'(A,3(1X,Z8.8))')
+     &  'F_BLDIF83_RES',
+     &  TRANSFER(VSREZ(1),1),TRANSFER(VSREZ(2),1),
+     &  TRANSFER(VSREZ(3),1)
+      ENDIF
+C---- GDB: dump VS2(1,3) after BLDIF at station 58
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.97) THEN
+        WRITE(0,'(A,I2,A,Z8)')
+     &   'F_POST_BLDIF ityp=',ITYPB,
+     &   ' v13=',TRANSFER(VS2(1,3),1)
+      ENDIF
+C
+C---- HEX TRACE: stations 3-4 side 1 AND station 59 side 2 MRCHDU
+      IF(((TRACE_SIDE.EQ.1
+     &   .AND. (TRACE_STATION.EQ.3
+     &          .OR.TRACE_STATION.EQ.4
+     &          .OR.TRACE_STATION.EQ.47
+     &          .OR.TRACE_STATION.EQ.35))
+     &  .OR. (TRACE_SIDE.EQ.2
+     &   .AND. TRACE_STATION.EQ.59))
+     &   .AND. TRACEPHASE.EQ.3) THEN
+        WRITE(0,'(A,I2,A,I2,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8,A,Z8)')
+     &   'F_STN',TRACE_STATION,
+     &   '_CARRY i=',TRACE_ITER,
+     &   ' hk1=',TRANSFER(HK1,1),
+     &   ' rt1=',TRANSFER(RT1,1),
+     &   ' hs1=',TRANSFER(HS1,1),
+     &   ' cf1=',TRANSFER(CF1,1),
+     &   ' di1=',TRANSFER(DI1,1)
+        WRITE(0,'(A,I2,A,I2,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8,A,Z8)')
+     &   'F_STN',TRACE_STATION,
+     &   '_CUR   iter=',TRACE_ITER,
+     &   ' hk2=',TRANSFER(HK2,1),
+     &   ' rt2=',TRANSFER(RT2,1),
+     &   ' hs2=',TRANSFER(HS2,1),
+     &   ' cf2=',TRANSFER(CF2,1),
+     &   ' di2=',TRANSFER(DI2,1)
+        WRITE(0,'(A,I2,A,I2,A,Z8,A,Z8,'//
+     &   'A,Z8)')
+     &   'F_STN',TRACE_STATION,
+     &   '_VSREZ iter=',TRACE_ITER,
+     &   ' rez1=',TRANSFER(VSREZ(1),1),
+     &   ' rez2=',TRANSFER(VSREZ(2),1),
+     &   ' rez3=',TRANSFER(VSREZ(3),1)
+        WRITE(0,'(A,I2,A,I2,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8)')
+     &   'F_STN',TRACE_STATION,
+     &   '_VS2C2 iter=',TRACE_ITER,
+     &   ' v12=',TRANSFER(VS2(1,2),1),
+     &   ' v13=',TRANSFER(VS2(1,3),1),
+     &   ' v22=',TRANSFER(VS2(2,2),1),
+     &   ' v23=',TRANSFER(VS2(2,3),1)
+        WRITE(0,'(A,I2,A,I2,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_STN',TRACE_STATION,
+     &   '_XU    iter=',TRACE_ITER,
+     &   ' x1=',TRANSFER(X1,1),
+     &   ' x2=',TRANSFER(X2,1),
+     &   ' u1=',TRANSFER(U1,1),
+     &   ' u2=',TRANSFER(U2,1),
+     &   ' t1=',TRANSFER(T1,1),
+     &   ' t2=',TRANSFER(T2,1),
+     &   ' d1=',TRANSFER(D1,1),
+     &   ' d2=',TRANSFER(D2,1)
+        WRITE(0,'(A,I2,A,I2,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_STN',TRACE_STATION,
+     &   '_SEC   iter=',TRACE_ITER,
+     &   ' de1=',TRANSFER(DE1,1),
+     &   ' de2=',TRANSFER(DE2,1),
+     &   ' us1=',TRANSFER(US1,1),
+     &   ' us2=',TRANSFER(US2,1),
+     &   ' cq1=',TRANSFER(CQ1,1),
+     &   ' cq2=',TRANSFER(CQ2,1)
       ENDIF
 C
       IF(SIMI) THEN
@@ -758,6 +1177,14 @@ C------ combine with derivatives of compressible  U1,U2 = Uec(Uei M)
         VSM(K)   = RES_U1*U1_MS + RES_U2*U2_MS  + RES_MS
    20 CONTINUE
 C
+C---- GDB: track VS1(2,1) stale value at stations 57-58
+      IF((TRACE_STATION.EQ.57.OR.TRACE_STATION.EQ.58)
+     &   .AND.(TRACE_SIDE.EQ.1.OR.TRACE_SIDE.EQ.2)) THEN
+        WRITE(0,'(A,I1,A,I2,A,I2,A,Z8)')
+     &   'F_VS121 s=',TRACE_SIDE,' i=',TRACE_STATION,
+     &   ' p=',TRACEPHASE,
+     &   ' v=',TRANSFER(VS1(2,1),1)
+      ENDIF
       CALL TRACE_EXIT('BLSYS')
       RETURN
       END
@@ -785,10 +1212,15 @@ C
    55 CONTINUE
 C
       CALL BLVAR(3)
+      WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     & 'F_TESYS_BLV S2=',TRANSFER(S2,1),
+     & ' DI=',TRANSFER(DI2,1),
+     & ' CTE=',TRANSFER(CTE,1),
+     & ' CF=',TRANSFER(CF2,1)
 C
       VS1(1,1) = -1.0
       VS2(1,1) = 1.0
-      VSREZ(1) = CTE - S2      
+      VSREZ(1) = CTE - S2
 C
       VS1(2,2) = -1.0
       VS2(2,2) = 1.0
@@ -818,6 +1250,14 @@ C
       T2  = THI
       D2  = DSI - DSWAKI
       DW2 = DSWAKI
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.90) THEN
+       WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_D2FS_90',
+     &  ' d2=',TRANSFER(DSI,1),
+     &  ' dw2=',TRANSFER(DSWAKI,1),
+     &  ' d2FS=',TRANSFER(D2,1),
+     &  ' t2=',TRANSFER(T2,1)
+      ENDIF
 C
       U2 = UEI*(1.0-TKBL) / (1.0 - TKBL*(UEI/QINFBL)**2)
       U2_UEI = (1.0 + TKBL*(2.0*U2*UEI/QINFBL**2 - 1.0))
@@ -868,6 +1308,12 @@ C---- set shape parameter
       H2    =  D2/T2
       H2_D2 = 1.0/T2
       H2_T2 = -H2/T2
+C---- GDB: dump D2/T2/H2 for wake parity
+      IF(WAKE) THEN
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_BLKIN_H2 D2=',TRANSFER(D2,1),
+     &  ' T2=',TRANSFER(T2,1),' H2=',TRANSFER(H2,1)
+      ENDIF
 C
 C---- set edge static/stagnation enthalpy
       HERAT = 1.0 - 0.5*U2*U2*HSTINV
@@ -1005,6 +1451,21 @@ C
       CQRAT = CQNUM/CQDEN
       CQ2     =
      &    SQRT( CQRAT )
+      IF(TRACE_STATION.GE.65 .AND. TRACE_STATION.LE.70
+     &   .AND. TRACE_SIDE.EQ.2) THEN
+       WRITE(0,'(A,I1,11(A,Z8))') 'F_CQ_TRACE ityp=',ITYP,
+     &  ' hk=',TRANSFER(HK2,1),
+     &  ' rt=',TRANSFER(RT2,1),
+     &  ' hs=',TRANSFER(HS2,1),
+     &  ' us=',TRANSFER(US2,1),
+     &  ' h=',TRANSFER(H2,1),
+     &  ' hkc=',TRANSFER(HKC,1),
+     &  ' hkb=',TRANSFER(HKB,1),
+     &  ' usb=',TRANSFER(USB,1),
+     &  ' num=',TRANSFER(CQNUM,1),
+     &  ' den=',TRANSFER(CQDEN,1),
+     &  ' arg=',TRANSFER(CQRAT,1)
+      ENDIF
       CALL TRACE_CQ_TERMS('BLVAR', ITYP, HK2, HS2, US2, H2, RT2,
      &     HKC, HKB, USB, CQNUM, CQDEN, CQRAT, CQ2)
       CQ2_HS2 = CTCON    *HKB*HKC**2 / (USB*H2*HK2**2)       * 0.5/CQ2
@@ -1028,6 +1489,20 @@ C
       CQ2_D2 = CQ2_D2 + CQ2_H2*H2_D2
       CQ2_MS = CQ2_MS                + CQ2_RT2*RT2_MS
       CQ2_RE = CQ2_RE                + CQ2_RT2*RT2_RE
+C---- n6h20 derivative trace: secondary derivatives at IBL=66 iter 2 mc=10
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_ITER.EQ.2 .AND. TRACE_OUTER.EQ.10) THEN
+       WRITE(0,'(A,I2,2(A,Z8))') 'F_HSDRV10_66 it=',TRACE_ITER,
+     &  ' HST=',TRANSFER(HS2_T2,1), ' HSD=',TRANSFER(HS2_D2,1)
+       WRITE(0,'(A,I2,2(A,Z8))') 'F_CFDRV10_66 it=',TRACE_ITER,
+     &  ' CFT=',TRANSFER(CF2_T2,1), ' CFD=',TRANSFER(CF2_D2,1)
+       WRITE(0,'(A,I2,2(A,Z8))') 'F_DIDRV10_66 it=',TRACE_ITER,
+     &  ' DIT=',TRANSFER(DI2_T2,1), ' DID=',TRANSFER(DI2_D2,1)
+       WRITE(0,'(A,I2,2(A,Z8))') 'F_USDRV10_66 it=',TRACE_ITER,
+     &  ' UST=',TRANSFER(US2_T2,1), ' USD=',TRANSFER(US2_D2,1)
+       WRITE(0,'(A,I2,2(A,Z8))') 'F_CQDRV10_66 it=',TRACE_ITER,
+     &  ' CQT=',TRANSFER(CQ2_T2,1), ' CQD=',TRANSFER(CQ2_D2,1)
+      ENDIF
       CALL TRACE_CQ_DERIVATIVE_TERMS('BLVAR', ITYP,
      & HK2, HS2, US2, H2, RT2,
      & CQ2_HS2, CQ2_US2, CQ2_HK2, CQ2_H2, CQ2_RT2,
@@ -1103,6 +1578,14 @@ C----- turbulent wall contribution
        CF2T_RE =                   CF2T_RT2*RT2_RE
 C
        DI2      =  ( 0.5*CF2T*US2 ) * 2.0/HS2
+       IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5) THEN
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TURB_DI2 CF2T=',TRANSFER(CF2T,1),
+     &   ' US2=',TRANSFER(US2,1),
+     &   ' HS2=',TRANSFER(HS2,1),
+     &   ' DI2=',TRANSFER(DI2,1),
+     &   ' S2=',TRANSFER(S2,1)
+       ENDIF
        DI2_HS2  = -( 0.5*CF2T*US2 ) * 2.0/HS2**2
        DI2_US2  =  ( 0.5*CF2T     ) * 2.0/HS2
        DI2_CF2T =  ( 0.5     *US2 ) * 2.0/HS2
@@ -1169,6 +1652,16 @@ C
        DD_US2 = -S2**2               * 2.0/HS2
        DD_S2  =  S2*2.0* (0.995-US2) * 2.0/HS2
        DDOUT = DD
+       IF(ITYP.EQ.3 .AND. TRACE_STATION.EQ.71 .AND. TRACE_SIDE.EQ.2
+     &    .AND. MRCHDU_COUNT.EQ.10) THEN
+         WRITE(0,'(A,8(A,Z8))') 'F_BLVAR_DI_MC10',
+     &    ' hk=',TRANSFER(HK2,1),
+     &    ' rt=',TRANSFER(RT2,1),
+     &    ' hs=',TRANSFER(HS2,1),
+     &    ' us=',TRANSFER(US2,1),
+     &    ' S2=',TRANSFER(S2,1),
+     &    ' ddO=',TRANSFER(DD,1)
+       ENDIF
        DDOUTHS = DD_HS2
        DDOUTUS = DD_US2
        DDOUTD = DD_HS2*HS2_D2 + DD_US2*US2_D2
@@ -1257,6 +1750,19 @@ C
       IF(ITYP.EQ.3) THEN
 C------ laminar wake CD
         CALL DILW( HK2, RT2, DI2L, DI2L_HK2, DI2L_RT2 )
+        IF(TRACE_STATION.EQ.93 .AND. TRACE_SIDE.EQ.2
+     &     .AND. HK2 .LT. 1.001) THEN
+         WRITE(0,'(A,3(A,Z8),A,L1,4(A,Z8))')
+     &    'F_DILW93',
+     &    ' dilw=',TRANSFER(DI2L,1),
+     &    ' ddi=',TRANSFER(DI2,1),
+     &    ' diTt=',TRANSFER(DI2_T2,1),
+     &    ' gt=',DI2L .GT. DI2,
+     &    ' dHk=',TRANSFER(DI2L_HK2,1),
+     &    ' hkT=',TRANSFER(HK2_T2,1),
+     &    ' dRt=',TRANSFER(DI2L_RT2,1),
+     &    ' rtT=',TRANSFER(RT2_T2,1)
+        ENDIF
         IF(DI2L .GT. DI2) THEN
 C------- laminar wake CD is greater than turbulent CD -- use laminar
 C-       (this will only occur for unreasonably small Rtheta)
@@ -1432,8 +1938,16 @@ C-----------------------------------------------
      &    , ROW23BASETERM, ROW23UPWTERM, ROW23DETERM, ROW23USTERM
      &    , ROW23TRANSPORT, ROW23CQTERM, ROW23CFTERM, ROW23HKTERM
       REAL  X1ORIG, T1ORIG, D1ORIG, U1ORIG
+      REAL  BL1VS121, BL1P1, BL1P2, BL1P3, BL1P4
 C
 C---- save variables and sensitivities for future restoration
+      WRITE(0,'(A,I2,A,I3)') 'F_TRDIF_ENTRY IS=',
+     & TRACE_SIDE,' IBL=',TRACE_STATION
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_ITER.EQ.2 .AND. TRACE_OUTER.EQ.10) THEN
+       WRITE(0,'(A,A,Z8)') 'F_TRPT10_66_XT',
+     &  ' XT=',TRANSFER(XT,1)
+      ENDIF
       X1ORIG = X1
       T1ORIG = T1
       D1ORIG = D1
@@ -1446,6 +1960,24 @@ C
 C---- weighting factors for linear interpolation to transition point
       WF2    = (XT-X1)/(X2-X1)
       WF2_XT = 1.0/(X2-X1)
+      IF(TRACE_SIDE.EQ.2 .AND.
+     &   (TRACE_STATION.EQ.50.OR.TRACE_STATION.EQ.80)) THEN
+       WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_TRDIF_XF i=',TRACE_STATION,
+     &  ' XT=',TRANSFER(XT,1),
+     &  ' WF2=',TRANSFER(WF2,1),
+     &  ' X1=',TRANSFER(X1,1),
+     &  ' X2=',TRANSFER(X2,1)
+      ENDIF
+C---- TRDIF parity trace at side 1 station 78 (NACA 0009 case 188)
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78) THEN
+       WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_TRDIF_S1I78 i=',TRACE_STATION,
+     &  ' XT=',TRANSFER(XT,1),
+     &  ' WF2=',TRANSFER(WF2,1),
+     &  ' X1=',TRANSFER(X1,1),
+     &  ' X2=',TRANSFER(X2,1)
+      ENDIF
 C
       WF2_A1 = WF2_XT*XT_A1
       WF2_X1 = WF2_XT*XT_X1 + (WF2-1.0)/(X2-X1)
@@ -1459,6 +1991,36 @@ C
       WF2_MS = WF2_XT*XT_MS
       WF2_RE = WF2_XT*XT_RE
       WF2_XF = WF2_XT*XT_XF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.80) THEN
+       WRITE(0,'(A,A,Z8,A,Z8)')
+     &  'F_WF2XF80',
+     &  ' wf2xf=',TRANSFER(WF2_XF,1),
+     &  ' xtxf=',TRANSFER(XT_XF,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78) THEN
+       WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_WF2XF78',
+     &  ' wf2xf=',TRANSFER(WF2_XF,1),
+     &  ' xtxf=',TRANSFER(XT_XF,1),
+     &  ' wf2_xt=',TRANSFER(WF2_XT,1),
+     &  ' wf2=',TRANSFER(WF2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,12(1X,Z8.8))') 'G_WF',
+     &    TRANSFER(XT,1), TRANSFER(X1,1), TRANSFER(X2,1),
+     &    TRANSFER(WF2,1), TRANSFER(WF2_XT,1),
+     &    TRANSFER(WF2_A1,1), TRANSFER(WF2_T1,1),
+     &    TRANSFER(WF2_T2,1), TRANSFER(WF2_D1,1),
+     &    TRANSFER(WF2_D2,1), TRANSFER(WF2_U1,1),
+     &    TRANSFER(WF2_U2,1)
+        WRITE(0,'(A,9(1X,Z8.8))') 'G_XT',
+     &    TRANSFER(XT_A1,1), TRANSFER(XT_T1,1),
+     &    TRANSFER(XT_T2,1), TRANSFER(XT_D1,1),
+     &    TRANSFER(XT_D2,1), TRANSFER(XT_U1,1),
+     &    TRANSFER(XT_U2,1), TRANSFER(XT_X1,1),
+     &    TRANSFER(XT_X2,1)
+      ENDIF
 C
       WF1    = 1.0 - WF2
       WF1_A1 = -WF2_A1
@@ -1478,6 +2040,13 @@ C
 C**** FIRST,  do laminar part between X1 and XT
 C
 C-----interpolate primary variables to transition point
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_OUTER.EQ.10 .AND. TRACE_ITER.EQ.2) THEN
+        WRITE(0,'(A,6(1X,A,Z8.8))') 'F_TTIN_N66',
+     &   'T1=',TRANSFER(T1,1),'T2=',TRANSFER(T2,1),
+     &   'WF1_A1=',TRANSFER(WF1_A1,1),'WF2_A1=',TRANSFER(WF2_A1,1),
+     &   'WF1=',TRANSFER(WF1,1),'WF2=',TRANSFER(WF2,1)
+      ENDIF
       TT    = T1*WF1    + T2*WF2
       TT_A1 = T1*WF1_A1 + T2*WF2_A1
       TT_X1 = T1*WF1_X1 + T2*WF2_X1
@@ -1491,6 +2060,21 @@ C-----interpolate primary variables to transition point
       TT_MS = T1*WF1_MS + T2*WF2_MS
       TT_RE = T1*WF1_RE + T2*WF2_RE
       TT_XF = T1*WF1_XF + T2*WF2_XF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,8(1X,Z8.8))') 'G_TDU_TT',
+     &    TRANSFER(TT,1), TRANSFER(TT_A1,1),
+     &    TRANSFER(TT_T1,1), TRANSFER(TT_T2,1),
+     &    TRANSFER(TT_D1,1), TRANSFER(TT_D2,1),
+     &    TRANSFER(TT_U1,1), TRANSFER(TT_U2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.50) THEN
+       WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     &  'F_TP50_SENS ',
+     &  TRANSFER(TT_D1,1),TRANSFER(DT_D1,1),
+     &  TRANSFER(UT_D1,1),TRANSFER(TT_T1,1),
+     &  TRANSFER(DT_T1,1),TRANSFER(UT_T1,1)
+      ENDIF
 C
       DT    = D1*WF1    + D2*WF2
       DT_A1 = D1*WF1_A1 + D2*WF2_A1
@@ -1507,6 +2091,19 @@ C
       DT_XF = D1*WF1_XF + D2*WF2_XF
 C
       UT    = U1*WF1    + U2*WF2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_ITER.EQ.2 .AND. TRACE_OUTER.EQ.10) THEN
+       WRITE(0,'(A,4(A,Z8))') 'F_TRPT10_66',
+     &  ' XT=',TRANSFER(XT,1),
+     &  ' UT=',TRANSFER(UT,1),
+     &  ' TT=',TRANSFER(TT,1),
+     &  ' DT=',TRANSFER(DT,1)
+       WRITE(0,'(A,4(A,Z8))') 'F_TRPT10_66',
+     &  ' WF1=',TRANSFER(WF1,1),
+     &  ' WF2=',TRANSFER(WF2,1),
+     &  ' T1=',TRANSFER(T1,1),
+     &  ' T2=',TRANSFER(T2,1)
+      ENDIF
       UT_A1 = U1*WF1_A1 + U2*WF2_A1
       UT_X1 = U1*WF1_X1 + U2*WF2_X1
       UT_X2 = U1*WF1_X2 + U2*WF2_X2
@@ -1519,7 +2116,58 @@ C
       UT_MS = U1*WF1_MS + U2*WF2_MS
       UT_RE = U1*WF1_RE + U2*WF2_RE
       UT_XF = U1*WF1_XF + U2*WF2_XF
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78) THEN
+        WRITE(0,'(A,6(A,Z8))')
+     &   'F_TRDIFX2_78',
+     &   ' TT_X2=',TRANSFER(TT_X2,1),
+     &   ' DT_X2=',TRANSFER(DT_X2,1),
+     &   ' UT_X2=',TRANSFER(UT_X2,1),
+     &   ' XT_X2=',TRANSFER(XT_X2,1),
+     &   ' WF2=',TRANSFER(WF2,1),
+     &   ' WF2X2=',TRANSFER(WF2_X2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.80) THEN
+        WRITE(0,'(A,6(A,Z8))')
+     &   'F_TRDIFX2_80',
+     &   ' TT_X2=',TRANSFER(TT_X2,1),
+     &   ' DT_X2=',TRANSFER(DT_X2,1),
+     &   ' UT_X2=',TRANSFER(UT_X2,1),
+     &   ' XT_X2=',TRANSFER(XT_X2,1),
+     &   ' WF2=',TRANSFER(WF2,1),
+     &   ' WF2X2=',TRANSFER(WF2_X2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,8(1X,Z8.8))') 'G_TDU_DT',
+     &    TRANSFER(DT,1), TRANSFER(DT_A1,1),
+     &    TRANSFER(DT_T1,1), TRANSFER(DT_T2,1),
+     &    TRANSFER(DT_D1,1), TRANSFER(DT_D2,1),
+     &    TRANSFER(DT_U1,1), TRANSFER(DT_U2,1)
+        WRITE(0,'(A,8(1X,Z8.8))') 'G_TDU_UT',
+     &    TRANSFER(UT,1), TRANSFER(UT_A1,1),
+     &    TRANSFER(UT_T1,1), TRANSFER(UT_T2,1),
+     &    TRANSFER(UT_D1,1), TRANSFER(UT_D2,1),
+     &    TRANSFER(UT_U1,1), TRANSFER(UT_U2,1)
+      ENDIF
 C
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.50
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TRDIF50 WF2=',TRANSFER(WF2,1),
+     &   ' TT=',TRANSFER(TT,1),
+     &   ' DT=',TRANSFER(DT,1),
+     &   ' UT=',TRANSFER(UT,1),
+     &   ' T1=',TRANSFER(T1,1),
+     &   ' T2=',TRANSFER(T2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.58
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(*,'(A,6(1X,Z8.8))')
+     &   'F_TRDER58',
+     &   TRANSFER(ST_T2,1), TRANSFER(TT_T2,1),
+     &   TRANSFER(DT_T2,1), TRANSFER(UT_T2,1),
+     &   TRANSFER(XT_T2,1), TRANSFER(WF2,1)
+      ENDIF
 C---- set primary "T" variables at XT  (really placed into "2" variables)
       X2 = XT
       T2 = TT
@@ -1539,8 +2187,111 @@ C=
 C=    at this point, all "2" variables are really "T" variables at XT
 C=
 C
+C---- Trace laminar BLDIF inputs at station 5 side 2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5) THEN
+       WRITE(*,'(A,6(1X,Z8.8))')
+     &  'F_XTSENS5',
+     &  TRANSFER(XT_A1,1),TRANSFER(XT_T1,1),
+     &  TRANSFER(XT_D1,1),TRANSFER(XT_U1,1),
+     &  TRANSFER(DT_A1,1),TRANSFER(WF2_A1,1)
+       WRITE(*,'(A,9(1X,Z8.8))')
+     &  'F_LAM5',
+     &  TRANSFER(X1,1),TRANSFER(X2,1),
+     &  TRANSFER(T1,1),TRANSFER(T2,1),
+     &  TRANSFER(D1,1),TRANSFER(D2,1),
+     &  TRANSFER(U1,1),TRANSFER(U2,1),
+     &  TRANSFER(HK2,1)
+       WRITE(*,'(A,7(1X,Z8.8))')
+     &  'F_KIN1_5',
+     &  TRANSFER(HK1,1),TRANSFER(HK1_T1,1),
+     &  TRANSFER(HK1_D1,1),TRANSFER(RT1,1),
+     &  TRANSFER(RT1_T1,1),TRANSFER(M1,1),
+     &  TRANSFER(H1,1)
+       WRITE(*,'(A,4(1X,Z8.8))')
+     &  'F_SEC1_5',
+     &  TRANSFER(HS1,1),TRANSFER(CF1,1),
+     &  TRANSFER(DI1,1),TRANSFER(US1,1)
+      ENDIF
+C---- n6h20 sensitivity dump: transition point A1/T1/U1 derivatives
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_OUTER.EQ.10 .AND. TRACE_ITER.EQ.2) THEN
+        WRITE(0,'(A,8(1X,A,Z8.8))') 'F_STINPUTS_N66',
+     &   'st_Tt=',TRANSFER(ST_TT,1),
+     &   'st_Dt=',TRANSFER(ST_DT,1),
+     &   'st_Ut=',TRANSFER(ST_UT,1),
+     &   'ctr=',TRANSFER(CTR,1),
+     &   'cqT=',TRANSFER(CQ2,1),
+     &   'cqT_Tt=',TRANSFER(CQ2_T2,1),
+     &   'ctr_Hk=',TRANSFER(CTR_HK2,1),
+     &   'HK2_T2=',TRANSFER(HK2_T2,1)
+        WRITE(0,'(A,5(1X,A,Z8.8))') 'F_SENS_N66_A1',
+     &   'ST=',TRANSFER(ST_A1,1),'TT=',TRANSFER(TT_A1,1),
+     &   'DT=',TRANSFER(DT_A1,1),'UT=',TRANSFER(UT_A1,1),
+     &   'XT=',TRANSFER(XT_A1,1)
+        WRITE(0,'(A,5(1X,A,Z8.8))') 'F_SENS_N66_T1',
+     &   'ST=',TRANSFER(ST_T1,1),'TT=',TRANSFER(TT_T1,1),
+     &   'DT=',TRANSFER(DT_T1,1),'UT=',TRANSFER(UT_T1,1),
+     &   'XT=',TRANSFER(XT_T1,1)
+        WRITE(0,'(A,5(1X,A,Z8.8))') 'F_SENS_N66_U1',
+     &   'ST=',TRANSFER(ST_U1,1),'TT=',TRANSFER(TT_U1,1),
+     &   'DT=',TRANSFER(DT_U1,1),'UT=',TRANSFER(UT_U1,1),
+     &   'XT=',TRANSFER(XT_U1,1)
+      ENDIF
 C---- set up Newton system for dAm, dTh, dDs, dUe, dXi  at  X1 and XT
       CALL BLDIF(1)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.24
+     &   .AND. TRACE_ITER.EQ.4) THEN
+       DO 9193 KL=1, 3
+        WRITE(0,'(A,I1,5(1X,Z8))') 'F_LAMVS2 r',KL-1,
+     &   TRANSFER(VS2(KL,1),1),TRANSFER(VS2(KL,2),1),
+     &   TRANSFER(VS2(KL,3),1),TRANSFER(VS2(KL,4),1),
+     &   TRANSFER(VS2(KL,5),1)
+        WRITE(0,'(A,I1,5(1X,Z8))') 'F_LAMVS1 r',KL-1,
+     &   TRANSFER(VS1(KL,1),1),TRANSFER(VS1(KL,2),1),
+     &   TRANSFER(VS1(KL,3),1),TRANSFER(VS1(KL,4),1),
+     &   TRANSFER(VS1(KL,5),1)
+ 9193  CONTINUE
+      ENDIF
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78) THEN
+       WRITE(0,'(A,4(A,Z8))')
+     &  'F_LAMV3A_78',
+     &  ' v22=',TRANSFER(VS2(3,2),1),
+     &  ' v23=',TRANSFER(VS2(3,3),1),
+     &  ' v24=',TRANSFER(VS2(3,4),1),
+     &  ' v25=',TRANSFER(VS2(3,5),1)
+       WRITE(0,'(A,4(A,Z8))')
+     &  'F_LAMV3B_78',
+     &  ' tt4=',TRANSFER(TT_X2,1),
+     &  ' dt4=',TRANSFER(DT_X2,1),
+     &  ' ut4=',TRANSFER(UT_X2,1),
+     &  ' xt4=',TRANSFER(XT_X2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5) THEN
+       WRITE(*,'(A,4(1X,Z8.8))')
+     &  'F_LAM_VS21',
+     &  TRANSFER(VS2(2,1),1),TRANSFER(VS2(2,2),1),
+     &  TRANSFER(VS2(2,3),1),TRANSFER(VS2(2,4),1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78
+     &   .AND. TRACE_OUTER.EQ.5) THEN
+       WRITE(0,'(A,8(1X,A,Z8))')
+     &  'F_LAMV2R3_78',
+     &  ' v22=',TRANSFER(VS2(3,2),1),
+     &  ' v23=',TRANSFER(VS2(3,3),1),
+     &  ' v24=',TRANSFER(VS2(3,4),1),
+     &  ' v25=',TRANSFER(VS2(3,5),1),
+     &  ' ttX2=',TRANSFER(TT_X2,1),
+     &  ' dtX2=',TRANSFER(DT_X2,1),
+     &  ' utX2=',TRANSFER(UT_X2,1),
+     &  ' xtX2=',TRANSFER(XT_X2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.50
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &   'F_TRDIF_LAM R2=',TRANSFER(VSREZ(2),1),
+     &   ' R3=',TRANSFER(VSREZ(3),1),
+     &   ' HK2=',TRANSFER(HK2,1)
+      ENDIF
 C
 C---- The current Newton system is in terms of "1" and "T" variables,
 C-    so calculate its equivalent in terms of "1" and "2" variables.
@@ -1565,6 +2316,13 @@ C-    equation is unnecessary here, so the K=1 row is left empty.
      &           + VS2(K,4)*UT_XF
      &           + VS2(K,5)*XT_XF
 C
+        IF(K.EQ.2) THEN
+         BL1VS121 = VS1(2,1)
+         BL1P1 = VS2(2,2)*TT_A1
+         BL1P2 = VS2(2,3)*DT_A1
+         BL1P3 = VS2(2,4)*UT_A1
+         BL1P4 = VS2(2,5)*XT_A1
+        ENDIF
         BL1(K,1) = VS1(K,1)
      &           + VS2(K,2)*TT_A1
      &           + VS2(K,3)*DT_A1
@@ -1608,6 +2366,22 @@ C
      &           + VS2(K,3)*DT_X2
      &           + VS2(K,4)*UT_X2
      &           + VS2(K,5)*XT_X2
+C---- n6h20 BL1/BL2 row-0 trace at IBL=66 iter 2 mc=10
+        IF(K.EQ.1 .AND. TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &     .AND. TRACE_ITER.EQ.2) THEN
+         WRITE(0,'(A,5(A,Z8))') 'F_BL1_10_66 r0',
+     &    ' c1=',TRANSFER(BL1(1,1),1),
+     &    ' c2=',TRANSFER(BL1(1,2),1),
+     &    ' c3=',TRANSFER(BL1(1,3),1),
+     &    ' c4=',TRANSFER(BL1(1,4),1),
+     &    ' c5=',TRANSFER(BL1(1,5),1)
+         WRITE(0,'(A,5(A,Z8))') 'F_BL2_10_66 r0',
+     &    ' c1=',TRANSFER(BL2(1,1),1),
+     &    ' c2=',TRANSFER(BL2(1,2),1),
+     &    ' c3=',TRANSFER(BL2(1,3),1),
+     &    ' c4=',TRANSFER(BL2(1,4),1),
+     &    ' c5=',TRANSFER(BL2(1,5),1)
+        ENDIF
 C
    10 CONTINUE
 C
@@ -1650,6 +2424,86 @@ C---- calculate ST sensitivities wrt the actual "1" and "2" variables
       ST_MS = ST_TT*TT_MS + ST_DT*DT_MS + ST_UT*UT_MS + ST_MS
       ST_RE = ST_TT*TT_RE + ST_DT*DT_RE + ST_UT*UT_RE + ST_RE
       ST_XF = ST_TT*TT_XF + ST_DT*DT_XF + ST_UT*UT_XF
+C---- n6h20 ST inputs and A1/T1/U1 dump AFTER ST_A1 is fully assembled
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_OUTER.EQ.10 .AND. TRACE_ITER.EQ.2) THEN
+        WRITE(0,'(A,8(1X,A,Z8.8))') 'F2_STINPUTS_N66',
+     &   'st_Tt=',TRANSFER(ST_TT,1),
+     &   'st_Dt=',TRANSFER(ST_DT,1),
+     &   'st_Ut=',TRANSFER(ST_UT,1),
+     &   'ctr=',TRANSFER(CTR,1),
+     &   'cqT=',TRANSFER(CQ2,1),
+     &   'cqT_Tt=',TRANSFER(CQ2_T2,1),
+     &   'ctr_Hk=',TRANSFER(CTR_HK2,1),
+     &   'HK2_T2=',TRANSFER(HK2_T2,1)
+        WRITE(0,'(A,5(1X,A,Z8.8))') 'F2_SENS_N66_A1',
+     &   'ST=',TRANSFER(ST_A1,1),'TT=',TRANSFER(TT_A1,1),
+     &   'DT=',TRANSFER(DT_A1,1),'UT=',TRANSFER(UT_A1,1),
+     &   'XT=',TRANSFER(XT_A1,1)
+        WRITE(0,'(A,5(1X,A,Z8.8))') 'F2_SENS_N66_T1',
+     &   'ST=',TRANSFER(ST_T1,1),'TT=',TRANSFER(TT_T1,1),
+     &   'DT=',TRANSFER(DT_T1,1),'UT=',TRANSFER(UT_T1,1),
+     &   'XT=',TRANSFER(XT_T1,1)
+      ENDIF
+C---- TRDIF chain variables at side 2 station 73 (NACA 0009 5M debug, post BLVAR(2), SETBL only)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.73
+     &   .AND. TRACE_PHASE.EQ.1) THEN
+       WRITE(0,'(A,6(A,Z8))')
+     &  'F_TRD73_W',
+     &  ' WF1=',TRANSFER(REAL(WF1),1),
+     &  ' WF2=',TRANSFER(REAL(WF2),1),
+     &  ' WF2_T1=',TRANSFER(REAL(WF2_T1),1),
+     &  ' WF2_T2=',TRANSFER(REAL(WF2_T2),1),
+     &  ' WF2_D1=',TRANSFER(REAL(WF2_D1),1),
+     &  ' WF2_D2=',TRANSFER(REAL(WF2_D2),1)
+       WRITE(0,'(A,6(A,Z8))')
+     &  'F_TRD73_TT',
+     &  ' TT=',TRANSFER(REAL(TT),1),
+     &  ' TT_T1=',TRANSFER(REAL(TT_T1),1),
+     &  ' TT_T2=',TRANSFER(REAL(TT_T2),1),
+     &  ' TT_D1=',TRANSFER(REAL(TT_D1),1),
+     &  ' TT_D2=',TRANSFER(REAL(TT_D2),1),
+     &  ' TT_A1=',TRANSFER(REAL(TT_A1),1)
+       WRITE(0,'(A,6(A,Z8))')
+     &  'F_TRD73_DT',
+     &  ' DT=',TRANSFER(REAL(DT),1),
+     &  ' DT_T1=',TRANSFER(REAL(DT_T1),1),
+     &  ' DT_T2=',TRANSFER(REAL(DT_T2),1),
+     &  ' DT_D1=',TRANSFER(REAL(DT_D1),1),
+     &  ' DT_D2=',TRANSFER(REAL(DT_D2),1),
+     &  ' DT_A1=',TRANSFER(REAL(DT_A1),1)
+       WRITE(0,'(A,6(A,Z8))')
+     &  'F_TRD73_UT',
+     &  ' UT=',TRANSFER(REAL(UT),1),
+     &  ' UT_T1=',TRANSFER(REAL(UT_T1),1),
+     &  ' UT_T2=',TRANSFER(REAL(UT_T2),1),
+     &  ' UT_D1=',TRANSFER(REAL(UT_D1),1),
+     &  ' UT_D2=',TRANSFER(REAL(UT_D2),1),
+     &  ' UT_A1=',TRANSFER(REAL(UT_A1),1)
+       WRITE(0,'(A,6(A,Z8))')
+     &  'F_TRD73_XT',
+     &  ' XT=',TRANSFER(REAL(XT),1),
+     &  ' XT_T1=',TRANSFER(REAL(XT_T1),1),
+     &  ' XT_T2=',TRANSFER(REAL(XT_T2),1),
+     &  ' XT_D1=',TRANSFER(REAL(XT_D1),1),
+     &  ' XT_D2=',TRANSFER(REAL(XT_D2),1),
+     &  ' XT_A1=',TRANSFER(REAL(XT_A1),1)
+       WRITE(0,'(A,6(A,Z8))')
+     &  'F_TRD73_ST',
+     &  ' ST=',TRANSFER(REAL(ST),1),
+     &  ' ST_T1=',TRANSFER(REAL(ST_T1),1),
+     &  ' ST_T2=',TRANSFER(REAL(ST_T2),1),
+     &  ' ST_D1=',TRANSFER(REAL(ST_D1),1),
+     &  ' ST_D2=',TRANSFER(REAL(ST_D2),1),
+     &  ' ST_A1=',TRANSFER(REAL(ST_A1),1)
+       WRITE(0,'(A,5(A,Z8))')
+     &  'F_TRD73_CQ',
+     &  ' CQ2=',TRANSFER(REAL(CQ2),1),
+     &  ' CTR=',TRANSFER(REAL(CTR),1),
+     &  ' HK2=',TRANSFER(REAL(HK2),1),
+     &  ' RT2=',TRANSFER(REAL(RT2),1),
+     &  ' CTR_HK2=',TRANSFER(REAL(CTR_HK2),1)
+      ENDIF
 C
       CALL HST(HK2, RT2, M2,
      &         TRACE_HS2, TRACE_HS2_HK2, TRACE_HS2_RT2, TRACE_HS2_M2)
@@ -1705,18 +2559,94 @@ C---- calculate XT-X2 midpoint CFM value
 C
 C---- set up Newton system for dCt, dTh, dDs, dUe, dXi  at  XT and X2
       CALL BLDIF(2)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.50
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &   'F_TRDIF_TRB R1=',TRANSFER(VSREZ(1),1),
+     &   ' R2=',TRANSFER(VSREZ(2),1),
+     &   ' R3=',TRANSFER(VSREZ(3),1)
+      ENDIF
+C---- Station 73 side 2 turbulent BLDIF(2) output (row 1 shear lag) for NACA 0009 5M
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.73
+     &   .AND. TRACE_PHASE.EQ.1) THEN
+        WRITE(0,'(A,10(A,Z8))')
+     &   'F_TURBVS_73',
+     &   ' VS10=',TRANSFER(REAL(VS1(1,1)),1),
+     &   ' VS11=',TRANSFER(REAL(VS1(1,2)),1),
+     &   ' VS12=',TRANSFER(REAL(VS1(1,3)),1),
+     &   ' VS13=',TRANSFER(REAL(VS1(1,4)),1),
+     &   ' VS14=',TRANSFER(REAL(VS1(1,5)),1),
+     &   ' VS20=',TRANSFER(REAL(VS2(1,1)),1),
+     &   ' VS21=',TRANSFER(REAL(VS2(1,2)),1),
+     &   ' VS22=',TRANSFER(REAL(VS2(1,3)),1),
+     &   ' VS23=',TRANSFER(REAL(VS2(1,4)),1),
+     &   ' VS24=',TRANSFER(REAL(VS2(1,5)),1)
+      ENDIF
+C---- Station 73 side 2: after BT1 row 1 assembly, dump BT1(1,1..3) (SETBL only)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.73
+     &   .AND. TRACE_PHASE.EQ.1) THEN
+       F_BT10_T1 = VS1(1,1)*ST_A1 + VS1(1,2)*TT_A1
+     &           + VS1(1,3)*DT_A1 + VS1(1,4)*UT_A1 + VS1(1,5)*XT_A1
+       F_BT11_T1 = VS1(1,1)*ST_T1 + VS1(1,2)*TT_T1
+     &           + VS1(1,3)*DT_T1 + VS1(1,4)*UT_T1 + VS1(1,5)*XT_T1
+       F_BT12_T1 = VS1(1,1)*ST_D1 + VS1(1,2)*TT_D1
+     &           + VS1(1,3)*DT_D1 + VS1(1,4)*UT_D1 + VS1(1,5)*XT_D1
+       WRITE(0,'(A,8(A,Z8))')
+     &  'F_BT10_73',
+     &  ' bt10=',TRANSFER(F_BT10_T1,1),
+     &  ' bt11=',TRANSFER(F_BT11_T1,1),
+     &  ' bt12=',TRANSFER(F_BT12_T1,1),
+     &  ' vs10=',TRANSFER(VS1(1,1),1),
+     &  ' vs11=',TRANSFER(VS1(1,2),1),
+     &  ' vs12=',TRANSFER(VS1(1,3),1),
+     &  ' vs13=',TRANSFER(VS1(1,4),1),
+     &  ' vs14=',TRANSFER(VS1(1,5),1)
+       WRITE(0,'(A,5(A,Z8))')
+     &  'F_BT10_73_SENS',
+     &  ' stA1=',TRANSFER(ST_A1,1),
+     &  ' ttA1=',TRANSFER(TT_A1,1),
+     &  ' dtA1=',TRANSFER(DT_A1,1),
+     &  ' utA1=',TRANSFER(UT_A1,1),
+     &  ' xtA1=',TRANSFER(XT_A1,1)
+      ENDIF
+C---- Station 78 side 1 outer iter 3: turbulent BLDIF output (row 1 shear lag)
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78
+     &   .AND. TRACE_OUTER.EQ.3) THEN
+        WRITE(0,'(A,10(A,Z8))')
+     &   'F_TURBVS_78',
+     &   ' VS10=',TRANSFER(REAL(VS1(1,1)),1),
+     &   ' VS11=',TRANSFER(REAL(VS1(1,2)),1),
+     &   ' VS12=',TRANSFER(REAL(VS1(1,3)),1),
+     &   ' VS13=',TRANSFER(REAL(VS1(1,4)),1),
+     &   ' VS14=',TRANSFER(REAL(VS1(1,5)),1),
+     &   ' VS20=',TRANSFER(REAL(VS2(1,1)),1),
+     &   ' VS21=',TRANSFER(REAL(VS2(1,2)),1),
+     &   ' VS22=',TRANSFER(REAL(VS2(1,3)),1),
+     &   ' VS23=',TRANSFER(REAL(VS2(1,4)),1),
+     &   ' VS24=',TRANSFER(REAL(VS2(1,5)),1)
+      ENDIF
 C
 C---- convert sensitivities wrt "T" variables into sensitivities
 C-    wrt "1" and "2" variables as done before for the laminar part
       DO 40 K=1, 3
         BTREZ(K) = VSREZ(K)
-        BTM(K)   = VSM(K) 
+        BTM(K)   = VSM(K)
      &           + VS1(K,1)*ST_MS
      &           + VS1(K,2)*TT_MS
      &           + VS1(K,3)*DT_MS
      &           + VS1(K,4)*UT_MS
      &           + VS1(K,5)*XT_MS
-        BTR(K)   = VSR(K) 
+        IF(K.EQ.1 .AND. TRACE_SIDE.EQ.1 .AND.
+     &     TRACE_STATION.EQ.79) THEN
+         WRITE(*,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_BTX_TERMS VSX=',TRANSFER(VSX(1),1),
+     &    ' V11=',TRANSFER(VS1(1,1),1),
+     &    ' ST_XF=',TRANSFER(ST_XF,1),
+     &    ' TT_XF=',TRANSFER(TT_XF,1),
+     &    ' UT_XF=',TRANSFER(UT_XF,1),
+     &    ' XT_XF=',TRANSFER(XT_XF,1)
+        ENDIF
+        BTR(K)   = VSR(K)
      &           + VS1(K,1)*ST_RE
      &           + VS1(K,2)*TT_RE
      &           + VS1(K,3)*DT_RE
@@ -1728,6 +2658,15 @@ C-    wrt "1" and "2" variables as done before for the laminar part
      &           + VS1(K,3)*DT_XF
      &           + VS1(K,4)*UT_XF
      &           + VS1(K,5)*XT_XF
+        IF(K.EQ.3 .AND. TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78) THEN
+         WRITE(0,'(A,5(1X,Z8.8),1X,5(1X,Z8.8))')
+     &    'F_BTX78R3',
+     &    TRANSFER(VS1(3,1),1),TRANSFER(VS1(3,2),1),
+     &    TRANSFER(VS1(3,3),1),TRANSFER(VS1(3,4),1),
+     &    TRANSFER(VS1(3,5),1),
+     &    TRANSFER(ST_XF,1),TRANSFER(TT_XF,1),TRANSFER(DT_XF,1),
+     &    TRANSFER(UT_XF,1),TRANSFER(XT_XF,1)
+        ENDIF
 C
         BT1(K,1) = VS1(K,1)*ST_A1
      &           + VS1(K,2)*TT_A1
@@ -1744,6 +2683,33 @@ C
      &           + VS1(K,3)*DT_D1
      &           + VS1(K,4)*UT_D1
      &           + VS1(K,5)*XT_D1
+        IF(K.EQ.1 .AND. TRACE_SIDE.EQ.2 .AND.
+     &     TRACE_STATION.EQ.5) THEN
+         WRITE(0,'(A,5(1X,Z8.8),A,5(1X,Z8.8),A,Z8)')
+     &    'F_BT12_5',
+     &    TRANSFER(VS1(1,1),1),TRANSFER(ST_D1,1),
+     &    TRANSFER(VS1(1,2),1),TRANSFER(TT_D1,1),
+     &    TRANSFER(VS1(1,3),1),
+     &    ' |',TRANSFER(DT_D1,1),
+     &    TRANSFER(VS1(1,4),1),TRANSFER(UT_D1,1),
+     &    TRANSFER(VS1(1,5),1),TRANSFER(XT_D1,1),
+     &    ' R=',TRANSFER(BT1(1,3),1)
+        ENDIF
+        IF(K.EQ.2 .AND. TRACE_SIDE.EQ.2 .AND.
+     &     TRACE_STATION.EQ.50) THEN
+         WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     &    'F_BT12_INPUTS ',
+     &    TRANSFER(VS1(2,1),1),TRANSFER(ST_D1,1),
+     &    TRANSFER(VS1(2,2),1),TRANSFER(TT_D1,1),
+     &    TRANSFER(VS1(2,3),1)
+         WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     &    'F_BT12_INPUTS2 ',
+     &    TRANSFER(DT_D1,1),TRANSFER(VS1(2,4),1),
+     &    TRANSFER(UT_D1,1),TRANSFER(VS1(2,5),1),
+     &    TRANSFER(XT_D1,1)
+         WRITE(0,'(A,Z8)')
+     &    'F_BT12_RESULT ',TRANSFER(BT1(2,3),1)
+        ENDIF
         BT1(K,4) = VS1(K,1)*ST_U1
      &           + VS1(K,2)*TT_U1
      &           + VS1(K,3)*DT_U1
@@ -1780,9 +2746,85 @@ C
      &           + VS1(K,3)*DT_X2
      &           + VS1(K,4)*UT_X2
      &           + VS1(K,5)*XT_X2
+        IF(K.EQ.1 .AND. TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.69
+     &      .AND. TRACE_ITER.EQ.33) THEN
+         WRITE(0,'(A,11(1X,A,Z8.8))') 'F_BT24_69',
+     &    'base=',TRANSFER(REAL(VS2(1,5)),1),
+     &    'vs10=',TRANSFER(REAL(VS1(1,1)),1),
+     &    'st4=',TRANSFER(REAL(ST_X2),1),
+     &    'vs11=',TRANSFER(REAL(VS1(1,2)),1),
+     &    'tt4=',TRANSFER(REAL(TT_X2),1),
+     &    'vs12=',TRANSFER(REAL(VS1(1,3)),1),
+     &    'dt4=',TRANSFER(REAL(DT_X2),1),
+     &    'vs13=',TRANSFER(REAL(VS1(1,4)),1),
+     &    'ut4=',TRANSFER(REAL(UT_X2),1),
+     &    'vs14=',TRANSFER(REAL(VS1(1,5)),1),
+     &    'xt4=',TRANSFER(REAL(XT_X2),1)
+        ENDIF
+C---- n6h20 BT2 row-0 trace at IBL=66 iter 2 mc=10
+        IF(K.EQ.1 .AND. TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &     .AND. TRACE_ITER.EQ.2 .AND. TRACE_OUTER.EQ.10) THEN
+         WRITE(0,'(A,5(A,Z8))') 'F_BT2_10_66 r0',
+     &    ' c1=',TRANSFER(BT2(1,1),1),
+     &    ' c2=',TRANSFER(BT2(1,2),1),
+     &    ' c3=',TRANSFER(BT2(1,3),1),
+     &    ' c4=',TRANSFER(BT2(1,4),1),
+     &    ' c5=',TRANSFER(BT2(1,5),1)
+         WRITE(0,'(A,5(A,Z8))') 'F_VS12_AT_BT2',
+     &    ' VS12_0=',TRANSFER(VS1(1,1),1),
+     &    ' VS12_1=',TRANSFER(VS1(1,2),1),
+     &    ' VS12_2=',TRANSFER(VS1(1,3),1),
+     &    ' VS12_3=',TRANSFER(VS1(1,4),1),
+     &    ' VS12_4=',TRANSFER(VS1(1,5),1)
+         WRITE(0,'(A,4(A,Z8))') 'F_DER12_T2',
+     &    ' ST_T2=',TRANSFER(ST_T2,1),
+     &    ' TT_T2=',TRANSFER(TT_T2,1),
+     &    ' DT_T2=',TRANSFER(DT_T2,1),
+     &    ' UT_T2=',TRANSFER(UT_T2,1)
+         WRITE(0,'(A,4(A,Z8))') 'F_XT_DERIVS',
+     &    ' XT_T2=',TRANSFER(XT_T2,1),
+     &    ' XT_D2=',TRANSFER(XT_D2,1),
+     &    ' XT_U2=',TRANSFER(XT_U2,1),
+     &    ' XT_X2=',TRANSFER(XT_X2,1)
+        ENDIF
+        IF(K.EQ.1 .AND. TRACE_SIDE.EQ.2 .AND.
+     &     TRACE_STATION.EQ.80 .AND. TRACE_PHASE.EQ.1) THEN
+         WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,
+     &    A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_BT24_80 bt24=',TRANSFER(BT2(1,5),1),
+     &    ' VS25=',TRANSFER(VS2(1,5),1),
+     &    ' V10=',TRANSFER(VS1(1,1),1),
+     &    ' stX2=',TRANSFER(ST_X2,1),
+     &    ' V11=',TRANSFER(VS1(1,2),1),
+     &    ' ttX2=',TRANSFER(TT_X2,1),
+     &    ' V12=',TRANSFER(VS1(1,3),1),
+     &    ' dtX2=',TRANSFER(DT_X2,1),
+     &    ' V13=',TRANSFER(VS1(1,4),1),
+     &    ' utX2=',TRANSFER(UT_X2,1),
+     &    ' V14=',TRANSFER(VS1(1,5),1),
+     &    ' xtX2=',TRANSFER(XT_X2,1)
+        ENDIF
+        IF(K.EQ.3 .AND. TRACE_SIDE.EQ.1 .AND.
+     &     TRACE_STATION.EQ.78) THEN
+         WRITE(0,'(A,11(A,Z8))')
+     &    'F_BT24_78',
+     &    ' base=',TRANSFER(VS2(3,5),1),
+     &    ' vs10=',TRANSFER(VS1(3,1),1),
+     &    ' stX2=',TRANSFER(ST_X2,1),
+     &    ' vs11=',TRANSFER(VS1(3,2),1),
+     &    ' ttX2=',TRANSFER(TT_X2,1),
+     &    ' vs12=',TRANSFER(VS1(3,3),1),
+     &    ' dtX2=',TRANSFER(DT_X2,1),
+     &    ' vs13=',TRANSFER(VS1(3,4),1),
+     &    ' utX2=',TRANSFER(UT_X2,1),
+     &    ' vs14=',TRANSFER(VS1(3,5),1),
+     &    ' xtX2=',TRANSFER(XT_X2,1),
+     &    ' bt24=',TRANSFER(BT2(3,5),1)
+        ENDIF
 C
    40 CONTINUE
 C
+C     BT2TT trace disabled
       CALL TRACE_TRANSITION_INTERVAL_BT2_D_TERMS('TRDIF',
      & VS2(1,3),
      & VS1(1,1)*ST_D2, VS1(1,2)*TT_D2, VS1(1,3)*DT_D2,
@@ -1852,20 +2894,121 @@ C
      & VS1(3,4)*UT_U2, VS1(3,5)*XT_U2,
      & BT2(3,4))
 C
+C---- Trace BL1/BT1 components at station 5 side 2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5) THEN
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_BLBT21 BL1=',TRANSFER(BL1(2,1),1),
+     &  ' BT1=',TRANSFER(BT1(2,1),1),
+     &  ' SUM=',TRANSFER(BL1(2,1)+BT1(2,1),1)
+C---- BL1(2,1) individual terms
+       WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_BL121 v21=',TRANSFER(BL1VS121,1),
+     &  ' p1=',TRANSFER(BL1P1,1),
+     &  ' p2=',TRANSFER(BL1P2,1),
+     &  ' p3=',TRANSFER(BL1P3,1),
+     &  ' p4=',TRANSFER(BL1P4,1)
+       WRITE(0,'(A,Z8,A,Z8,A,Z8)')
+     &  'F_P2DBG VS23=',TRANSFER(VS2(2,3),1),
+     &  ' DTA1=',TRANSFER(DT_A1,1),
+     &  ' prod=',TRANSFER(VS2(2,3)*DT_A1,1)
+      ENDIF
 C---- Add up laminar and turbulent parts to get final system
 C-    in terms of honest-to-God "1" and "2" variables.
       VSREZ(1) =            BTREZ(1)
       VSREZ(2) = BLREZ(2) + BTREZ(2)
       VSREZ(3) = BLREZ(3) + BTREZ(3)
+      IF(TRACE_OUTER.EQ.33) THEN
+        WRITE(0,'(A,I3,A,I3,6(1X,A,Z8.8))') 'F_TRDIF_OUT s=',TRACE_SIDE,
+     &   ' ibl=',TRACE_STATION,
+     &   'BLR1=',TRANSFER(BLREZ(1),1),
+     &   'BLR2=',TRANSFER(BLREZ(2),1),
+     &   'BLR3=',TRANSFER(BLREZ(3),1),
+     &   'BTR1=',TRANSFER(BTREZ(1),1),
+     &   'BTR2=',TRANSFER(BTREZ(2),1),
+     &   'BTR3=',TRANSFER(BTREZ(3),1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_ITER.EQ.2) THEN
+       WRITE(0,'(A,6(A,Z8))') 'F_TRDIF_HALVES_66 it=2',
+     &  ' LAM_R0=',TRANSFER(BLREZ(1),1),
+     &  ' LAM_R1=',TRANSFER(BLREZ(2),1),
+     &  ' LAM_R2=',TRANSFER(BLREZ(3),1),
+     &  ' TRB_R0=',TRANSFER(BTREZ(1),1),
+     &  ' TRB_R1=',TRANSFER(BTREZ(2),1),
+     &  ' TRB_R2=',TRANSFER(BTREZ(3),1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5) THEN
+        WRITE(0,'(A,I1,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TR5 P=',TRACE_PHASE,
+     &   ' BLR3=',TRANSFER(BLREZ(3),1),
+     &   ' BTR3=',TRANSFER(BTREZ(3),1),
+     &   ' R3=',TRANSFER(VSREZ(3),1),
+     &   ' XT=',TRANSFER(XT,1),
+     &   ' WF1=',TRANSFER(WF1,1),
+     &   ' WF2=',TRANSFER(WF2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.50
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_TRDIF_COMB R1=',TRANSFER(VSREZ(1),1),
+     &   ' R2=',TRANSFER(VSREZ(2),1),
+     &   ' R3=',TRANSFER(VSREZ(3),1),
+     &   ' BL2=',TRANSFER(BLREZ(2),1),
+     &   ' BT2=',TRANSFER(BTREZ(2),1)
+      ENDIF
       VSM(1)   =            BTM(1)
       VSM(2)   = BLM(2)   + BTM(2)
       VSM(3)   = BLM(3)   + BTM(3)
+C---- n6h20 trace: residual+Jacobian at IBL=66 IS=2 MRCHDU 10 iter 1-2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. (TRACE_ITER.EQ.1 .OR. TRACE_ITER.EQ.2)) THEN
+        WRITE(0,'(A,I2,3(A,Z8))')
+     &   'F_MDU10_N66_RHS it=',TRACE_ITER,
+     &   ' R0=',TRANSFER(VSREZ(1),1),
+     &   ' R1=',TRANSFER(VSREZ(2),1),
+     &   ' R2=',TRANSFER(VSREZ(3),1)
+        WRITE(0,'(A,I2,A,4(A,Z8))')
+     &   'F_MDU10_N66_VS2 it=',TRACE_ITER,' row=0',
+     &   ' c0=',TRANSFER(VS2(1,1),1),
+     &   ' c1=',TRANSFER(VS2(1,2),1),
+     &   ' c2=',TRANSFER(VS2(1,3),1),
+     &   ' c3=',TRANSFER(VS2(1,4),1)
+        WRITE(0,'(A,I2,A,4(A,Z8))')
+     &   'F_MDU10_N66_VS2 it=',TRACE_ITER,' row=1',
+     &   ' c0=',TRANSFER(VS2(2,1),1),
+     &   ' c1=',TRANSFER(VS2(2,2),1),
+     &   ' c2=',TRANSFER(VS2(2,3),1),
+     &   ' c3=',TRANSFER(VS2(2,4),1)
+        WRITE(0,'(A,I2,A,4(A,Z8))')
+     &   'F_MDU10_N66_VS2 it=',TRACE_ITER,' row=2',
+     &   ' c0=',TRANSFER(VS2(3,1),1),
+     &   ' c1=',TRANSFER(VS2(3,2),1),
+     &   ' c2=',TRANSFER(VS2(3,3),1),
+     &   ' c3=',TRANSFER(VS2(3,4),1)
+      ENDIF
       VSR(1)   =            BTR(1)
       VSR(2)   = BLR(2)   + BTR(2)
       VSR(3)   = BLR(3)   + BTR(3)
       VSX(1)   =            BTX(1)
       VSX(2)   = BLX(2)   + BTX(2)
       VSX(3)   = BLX(3)   + BTX(3)
+C---- VSX row 3 trace for case 188 NACA 0009 a=-2 Nc=12
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78) THEN
+        WRITE(0,'(A,A,Z8,A,Z8,A,Z8)')
+     &   'F_VSX78R3F',
+     &   ' BLX=',TRANSFER(BLX(3),1),
+     &   ' BTX=',TRANSFER(BTX(3),1),
+     &   ' VSX=',TRANSFER(VSX(3),1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.79) THEN
+       WRITE(*,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &  'F_TRDIF_VSX BTX1=',TRANSFER(BTX(1),1),
+     &  ' BLX2=',TRANSFER(BLX(2),1),
+     &  ' BTX2=',TRANSFER(BTX(2),1),
+     &  ' BLX3=',TRANSFER(BLX(3),1),
+     &  ' BTX3=',TRANSFER(BTX(3),1),
+     &  ' VSX1=',TRANSFER(VSX(1),1)
+      ENDIF
       DO 60 L=1, 5
         VS1(1,L) =            BT1(1,L)
         VS2(1,L) =            BT2(1,L)
@@ -1874,7 +3017,126 @@ C-    in terms of honest-to-God "1" and "2" variables.
         VS1(3,L) = BL1(3,L) + BT1(3,L)
         VS2(3,L) = BL2(3,L) + BT2(3,L)
    60 CONTINUE
+C---- n6h20 focused row-0 VS1/VS2 dump at IBL=66 IS=2 MRCHDU 10 iter 2
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_OUTER.EQ.10 .AND. TRACE_ITER.EQ.2) THEN
+        WRITE(0,'(A,10(1X,A,Z8.8))')
+     &    'F_TRDIF_R0_66',
+     &    'V11=',TRANSFER(REAL(VS1(1,1)),1),
+     &    'V12=',TRANSFER(REAL(VS1(1,2)),1),
+     &    'V13=',TRANSFER(REAL(VS1(1,3)),1),
+     &    'V14=',TRANSFER(REAL(VS1(1,4)),1),
+     &    'V15=',TRANSFER(REAL(VS1(1,5)),1),
+     &    'V21=',TRANSFER(REAL(VS2(1,1)),1),
+     &    'V22=',TRANSFER(REAL(VS2(1,2)),1),
+     &    'V23=',TRANSFER(REAL(VS2(1,3)),1),
+     &    'V24=',TRANSFER(REAL(VS2(1,4)),1),
+     &    'V25=',TRANSFER(REAL(VS2(1,5)),1)
+      ENDIF
+C---- Final combined VS1/VS2 row 3 at station 78 side 1 Newton outer iter 5
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78
+     &   .AND. TRACE_OUTER.EQ.5) THEN
+        WRITE(0,'(A,I3,11(1X,A,Z8.8))')
+     &    'F_VS3FINAL_78 it=',TRACE_OUTER,
+     &    'VS1_0=',TRANSFER(REAL(VS1(3,1)),1),
+     &    'VS1_1=',TRANSFER(REAL(VS1(3,2)),1),
+     &    'VS1_2=',TRANSFER(REAL(VS1(3,3)),1),
+     &    'VS1_3=',TRANSFER(REAL(VS1(3,4)),1),
+     &    'VS1_4=',TRANSFER(REAL(VS1(3,5)),1),
+     &    'VS2_0=',TRANSFER(REAL(VS2(3,1)),1),
+     &    'VS2_1=',TRANSFER(REAL(VS2(3,2)),1),
+     &    'VS2_2=',TRANSFER(REAL(VS2(3,3)),1),
+     &    'VS2_3=',TRANSFER(REAL(VS2(3,4)),1),
+     &    'VS2_4=',TRANSFER(REAL(VS2(3,5)),1),
+     &    'VSX=',TRANSFER(REAL(VSX(3)),1)
+      ENDIF
+C---- Station 78 side 1 outer iter 3: full BL2/BT2 trace for 1 ULP diff
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78
+     &   .AND. TRACE_OUTER.EQ.3) THEN
+        DO 9881 KKK=1, 3
+          DO 9882 LLL=1, 5
+            WRITE(0,'(A,I1,A,I1,4(A,Z8))')
+     &       'F_BLBT78_3 r',KKK-1,' L',LLL-1,
+     &       ' BL1=',TRANSFER(REAL(BL1(KKK,LLL)),1),
+     &       ' BT1=',TRANSFER(REAL(BT1(KKK,LLL)),1),
+     &       ' BL2=',TRANSFER(REAL(BL2(KKK,LLL)),1),
+     &       ' BT2=',TRANSFER(REAL(BT2(KKK,LLL)),1)
+ 9882     CONTINUE
+ 9881   CONTINUE
+      ENDIF
+C---- TRDIF row 3 (energy) BL/BT trace for case 188 NACA 0009 at Newton outer iter 5
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78
+     &   .AND. TRACE_OUTER.EQ.5) THEN
+        DO 9778 L=1, 5
+          WRITE(0,'(A,I1,A,I3,A,I1,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_TRDIF_R3 s=',TRACE_SIDE,' i=',TRACE_STATION,
+     &     ' L=',L,
+     &     ' BL1=',TRANSFER(REAL(BL1(3,L)),1),
+     &     ' BT1=',TRANSFER(REAL(BT1(3,L)),1),
+     &     ' BL2=',TRANSFER(REAL(BL2(3,L)),1),
+     &     ' BT2=',TRANSFER(REAL(BT2(3,L)),1)
+ 9778   CONTINUE
+      ENDIF
+C---- TRDIF rows 1+2 at iter 5 station 78 side 1 for case 188
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78
+     &   .AND. TRACE_ITER.EQ.5) THEN
+        DO 9779 L=1, 5
+          WRITE(0,'(A,I1,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_TRDIF78_R1 L=',L,
+     &     ' BL1=',TRANSFER(REAL(BL1(1,L)),1),
+     &     ' BT1=',TRANSFER(REAL(BT1(1,L)),1),
+     &     ' BL2=',TRANSFER(REAL(BL2(1,L)),1),
+     &     ' BT2=',TRANSFER(REAL(BT2(1,L)),1)
+ 9779   CONTINUE
+        DO 9780 L=1, 5
+          WRITE(0,'(A,I1,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &     'F_TRDIF78_R2 L=',L,
+     &     ' BL1=',TRANSFER(REAL(BL1(2,L)),1),
+     &     ' BT1=',TRANSFER(REAL(BT1(2,L)),1),
+     &     ' BL2=',TRANSFER(REAL(BL2(2,L)),1),
+     &     ' BT2=',TRANSFER(REAL(BT2(2,L)),1)
+ 9780   CONTINUE
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.50) THEN
+       WRITE(0,'(A,Z8,1X,Z8,1X,Z8)')
+     &  'F_BLBT_COMBINE ',
+     &  TRANSFER(BL1(2,3),1),TRANSFER(BT1(2,3),1),
+     &  TRANSFER(VS1(2,3),1)
+      ENDIF
 C
+C---- GDB: dump transition point interpolation at transition stations
+      IF((TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.58)
+     &  .OR.(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.47)
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_XTPT xt=',TRANSFER(XT,1),
+     &   ' tt=',TRANSFER(TT,1),
+     &   ' dt=',TRANSFER(DT,1),
+     &   ' ut=',TRANSFER(UT,1),
+     &   ' st=',TRANSFER(ST,1)
+      ENDIF
+C---- GDB: dump BL2/BT2/VS2 at transition stations
+      IF((TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.58)
+     &  .OR.(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.47)) THEN
+        WRITE(0,'(A,I2,A,Z8,A,Z8,A,Z8)')
+     &   'F_BT21_58 it=',TRACE_ITER,
+     &   ' bl2=',TRANSFER(BL2(2,2),1),
+     &   ' bt2=',TRANSFER(BT2(2,2),1),
+     &   ' vs2=',TRANSFER(VS2(2,2),1)
+        WRITE(0,'(A,I2,A,Z8,A,Z8,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8)')
+     &   'F_BT21T it=',TRACE_ITER,
+     &   ' base=',TRANSFER(VS2(2,2),1),
+     &   ' st=',TRANSFER(VS1(2,1)*ST_T2,1),
+     &   ' tt=',TRANSFER(VS1(2,2)*TT_T2,1),
+     &   ' dt=',TRANSFER(VS1(2,3)*DT_T2,1),
+     &   ' ut=',TRANSFER(VS1(2,4)*UT_T2,1),
+     &   ' xt=',TRANSFER(VS1(2,5)*XT_T2,1)
+        WRITE(0,'(A,I2,A,Z8,A,Z8)')
+     &   'F_BT21O it=',TRACE_ITER,
+     &   ' vs121=',TRANSFER(VS1(2,1),1),
+     &   ' st_t2=',TRANSFER(ST_T2,1)
+      ENDIF
       CALL TRACE_TRANSITION_INTERVAL_FINAL_TERMS('TRDIF',
      & TRACE_SIDE, TRACE_STATION,
      & 2, 2,
@@ -1959,6 +3221,21 @@ C-----------------------------------------------------------
 C
       CALL TRACE_ENTER('BLDIF')
 C
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.98) THEN
+       WRITE(0,'(A,5(A,Z8))')
+     &  'F_COM1_98',
+     &  ' HK1=',TRANSFER(HK1,1),
+     &  ' HS1=',TRANSFER(HS1,1),
+     &  ' DI1=',TRANSFER(DI1,1),
+     &  ' US1=',TRANSFER(US1,1),
+     &  ' RT1=',TRANSFER(RT1,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.71) THEN
+       WRITE(*,'(A,I1,A,I3,A,I1)')
+     &  'F_BLDIF_ENTRY s=',TRACE_SIDE,' i=',TRACE_STATION,
+     &  ' ty=',ITYP
+      ENDIF
+C
       IF(ITYP.EQ.0) THEN
 C----- similarity logarithmic differences  (prescribed)
        XLOG = 1.0
@@ -1966,6 +3243,34 @@ C----- similarity logarithmic differences  (prescribed)
        TLOG = 0.5*(1.0 - BULE)
        HLOG = 0.
        DDLOG = 0.
+C----- s1210 dump closure at simi
+       IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.2) THEN
+        WRITE(0,'(A,8(A,Z8))') 'F_S1210_CLO',
+     &   ' HS2=',TRANSFER(HS2,1),
+     &   ' HS2T=',TRANSFER(HS2_T2,1),
+     &   ' HS2D=',TRANSFER(HS2_D2,1),
+     &   ' HS2U=',TRANSFER(HS2_U2,1),
+     &   ' CF2=',TRANSFER(CF2,1),
+     &   ' CF2T=',TRANSFER(CF2_T2,1),
+     &   ' CF2D=',TRANSFER(CF2_D2,1),
+     &   ' CF2U=',TRANSFER(CF2_U2,1)
+        WRITE(0,'(A,8(A,Z8))') 'F_S1210_CL2',
+     &   ' DI2=',TRANSFER(DI2,1),
+     &   ' DI2T=',TRANSFER(DI2_T2,1),
+     &   ' DI2D=',TRANSFER(DI2_D2,1),
+     &   ' DI2U=',TRANSFER(DI2_U2,1),
+     &   ' US2=',TRANSFER(US2,1),
+     &   ' US2T=',TRANSFER(US2_T2,1),
+     &   ' US2D=',TRANSFER(US2_D2,1),
+     &   ' US2U=',TRANSFER(US2_U2,1)
+        WRITE(0,'(A,6(A,Z8))') 'F_S1210_KIN',
+     &   ' HK2=',TRANSFER(HK2,1),
+     &   ' HK2T=',TRANSFER(HK2_T2,1),
+     &   ' HK2D=',TRANSFER(HK2_D2,1),
+     &   ' HK2U=',TRANSFER(HK2_U2,1),
+     &   ' RT2T=',TRANSFER(RT2_T2,1),
+     &   ' RT2U=',TRANSFER(RT2_U2,1)
+       ENDIF
       ELSE
 C----- usual logarithmic differences
        XLOG = LOG(X2/X1)
@@ -1983,6 +3288,21 @@ C
      &     TRACE_SIDE, TRACE_STATION, TRACE_PHASE, ITYP,
      &     X1, X2, U1, U2, T1, T2, HS1, HS2,
      &     X2/X1, U2/U1, T2/T1, HS2/HS1)
+C
+C---- HEX TRACE: BLDIF LOG terms for stn 3-4 side 1 MRCHDU
+      IF(TRACE_SIDE.EQ.1
+     &   .AND. (TRACE_STATION.EQ.3
+     &          .OR.TRACE_STATION.EQ.4)
+     &   .AND. TRACE_PHASE.EQ.3) THEN
+        WRITE(0,'(A,I2,A,I2,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8)')
+     &   'F_STN',TRACE_STATION,
+     &   '_LOG   iter=',TRACE_ITER,
+     &   ' xlog=',TRANSFER(XLOG,1),
+     &   ' ulog=',TRANSFER(ULOG,1),
+     &   ' tlog=',TRANSFER(TLOG,1),
+     &   ' hlog=',TRANSFER(HLOG,1)
+      ENDIF
 C
       DO 55 K=1, 4
         VSREZ(K) = 0.
@@ -2070,6 +3390,21 @@ C---- trace the BLDIF state before equation assembly
      &     CQ2, CF2, CF2_U2, CF2_T2, CF2_D2, CF2_MS,
      &     CFM_U2, CFM_T2, CFM_D2, CFM_MS,
      &     DI2, DI2_T2, DE2)
+      IF(TRACE_SIDE.EQ.2 .AND. (TRACE_STATION.EQ.85
+     &   .OR. TRACE_STATION.EQ.86) .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,I3,8(1X,Z8.8))')
+     &   'F_COM1_85 I=',TRACE_STATION,
+     &   TRANSFER(HK1,1), TRANSFER(RT1,1),
+     &   TRANSFER(CF1,1), TRANSFER(DI1,1),
+     &   TRANSFER(HS1,1), TRANSFER(US1,1),
+     &   TRANSFER(CQ1,1), TRANSFER(DE1,1)
+        WRITE(0,'(A,I3,8(1X,Z8.8))')
+     &   'F_COM2_85 I=',TRACE_STATION,
+     &   TRANSFER(HK2,1), TRANSFER(RT2,1),
+     &   TRANSFER(CF2,1), TRANSFER(DI2,1),
+     &   TRANSFER(HS2,1), TRANSFER(US2,1),
+     &   TRANSFER(CQ2,1), TRANSFER(DE2,1)
+      ENDIF
       CALL TRACE_BLDIF_COMMON('BLDIF', ITYP, CFM, UPW,
      &     XLOG, ULOG, TLOG, HLOG, DDLOG)
       CALL TRACE_BLDIF_UPW_TERMS('BLDIF', ITYP,
@@ -2108,7 +3443,15 @@ C
        VS1(1,5) =  AX
        VS2(1,1) = Z_AX* AX_A2  +  1.0
        VS2(1,2) = Z_AX*(AX_HK2*HK2_T2 + AX_T2 + AX_RT2*RT2_T2)
-       VS2(1,3) = Z_AX*(AX_HK2*HK2_D2                        )         
+       VS2(1,3) = Z_AX*(AX_HK2*HK2_D2                        )
+C---- GDB: dump laminar VS2(1,3) operands at station 58
+       IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.97) THEN
+         WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_AXHK zax=',TRANSFER(Z_AX,1),
+     &    ' axhk=',TRANSFER(AX_HK2,1),
+     &    ' hkd=',TRANSFER(HK2_D2,1),
+     &    ' res=',TRANSFER(VS2(1,3),1)
+       ENDIF
        VS2(1,4) = Z_AX*(AX_HK2*HK2_U2         + AX_RT2*RT2_U2)
        VS2(1,5) = -AX
        VSM(1)   = Z_AX*(AX_HK1*HK1_MS         + AX_RT1*RT1_MS
@@ -2117,6 +3460,41 @@ C
      &                                        + AX_RT2*RT2_RE)
        VSX(1)   = 0.
        VSREZ(1) = -REZC
+       IF(TRACE_SIDE.EQ.2
+     &    .AND. TRACE_STATION.GE.2
+     &    .AND. TRACE_STATION.LE.4
+     &    .AND. TRACE_PHASE.EQ.1) THEN
+        WRITE(0,'(A,I2,A,I3,A,Z8,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_AXDER IS=',TRACE_SIDE,' IBL=',TRACE_STATION,
+     &   ' HK1T=',TRANSFER(HK1_T1,1),
+     &   ' HK1D=',TRANSFER(HK1_D1,1),
+     &   ' HK1U=',TRANSFER(HK1_U1,1),
+     &   ' RT1T=',TRANSFER(RT1_T1,1),
+     &   ' RT1U=',TRANSFER(RT1_U1,1),
+     &   ' HK2T=',TRANSFER(HK2_T2,1),
+     &   ' HK2D=',TRANSFER(HK2_D2,1),
+     &   ' HK2U=',TRANSFER(HK2_U2,1),
+     &   ' RT2T=',TRANSFER(RT2_T2,1),
+     &   ' RT2U=',TRANSFER(RT2_U2,1)
+        WRITE(0,'(A,I2,A,I3,A,Z8,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,'//
+     &   'A,Z8,A,Z8,A,Z8)')
+     &   'F_AXROW IS=',TRACE_SIDE,' IBL=',TRACE_STATION,
+     &   ' ZAX=',TRANSFER(Z_AX,1),
+     &   ' REZC=',TRANSFER(REZC,1),
+     &   ' R1=',TRANSFER(VSREZ(1),1),
+     &   ' V11=',TRANSFER(VS1(1,1),1),
+     &   ' V12=',TRANSFER(VS1(1,2),1),
+     &   ' V13=',TRANSFER(VS1(1,3),1),
+     &   ' V14=',TRANSFER(VS1(1,4),1),
+     &   ' V15=',TRANSFER(VS1(1,5),1),
+     &   ' V21=',TRANSFER(VS2(1,1),1),
+     &   ' V22=',TRANSFER(VS2(1,2),1),
+     &   ' V23=',TRANSFER(VS2(1,3),1),
+     &   ' V24=',TRANSFER(VS2(1,4),1),
+     &   ' V25=',TRANSFER(VS2(1,5),1)
+       ENDIF
        CALL TRACE_BLDIF_LAMINAR_AX_TERMS('BLDIF',
      &      X1, X2, T1, T2, D1, D2, HK1, HK2, RT1, RT2, AMPL1, AMPL2,
      &      Z_AX, AX, AX_HK1, AX_T1, AX_RT1, AX_A1,
@@ -2138,6 +3516,15 @@ C
        USA = 0.5*(US1 + US2)
        RTA = 0.5*(RT1 + RT2)
        DEA = 0.5*(DE1 + DE2)
+       IF(TRACE_SIDE.EQ.2 .AND. (TRACE_STATION.EQ.85
+     &    .OR.TRACE_STATION.EQ.86) .AND.TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_DEA I=',TRACE_STATION,
+     &   ' de1=',TRANSFER(DE1,1),
+     &   ' de2=',TRANSFER(DE2,1),
+     &   ' dea=',TRANSFER(DEA,1),
+     &   ' u2=',TRANSFER(U2,1)
+       ENDIF
        DA  = 0.5*(D1  + D2 )
 C
 C
@@ -2258,9 +3645,35 @@ c        endif
        Z_CQA = SCC*DXI
        Z_SA = -SCC*DXI*ALD
        Z_DEA = 2.0*((UQ*DXI - ULOG)*DUXCON - SLOG)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.98) THEN
+       WRITE(0,'(A,6(A,Z8))')
+     &   'F_EQ1X98',
+     &   ' X1=',TRANSFER(X1,1),
+     &   ' X2=',TRANSFER(X2,1),
+     &   ' dxi=',TRANSFER(DXI,1),
+     &   ' slog=',TRANSFER(SLOG,1),
+     &   ' zDea=',TRANSFER(Z_DEA,1),
+     &   ' zUsa=',TRANSFER(Z_USA,1)
+      ENDIF
 C
        Z_UPW = Z_CQA*(CQ2-CQ1) + Z_SA *(S2 -S1 )
      &       + Z_CFA*(CF2-CF1) + Z_HKA*(HK2-HK1)
+C---- n6h20 z_s dump at IBL=66 IS=2 MRCHDU 10 iter 2 (TRDIF turbulent half, ityp=2)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &   .AND. TRACE_OUTER.EQ.10 .AND. TRACE_ITER.EQ.2
+     &   .AND. ITYP.EQ.2) THEN
+        WRITE(0,'(A,10(1X,A,Z8.8))') 'F_ZS_N66_IT2',
+     &    'upw=',TRANSFER(UPW,1),
+     &    'oneMinusUpw=',TRANSFER(1.0-UPW,1),
+     &    'z_sa=',TRANSFER(Z_SA,1),
+     &    'z_sl=',TRANSFER(Z_SL,1),
+     &    's1=',TRANSFER(S1,1),
+     &    's2=',TRANSFER(S2,1),
+     &    'z_s1_storedTerm=',TRANSFER((1.0-UPW)*Z_SA,1),
+     &    'z_s1_logTerm=',TRANSFER(Z_SL/S1,1),
+     &    'z_s1=',TRANSFER((1.0-UPW)*Z_SA - Z_SL/S1,1),
+     &    'z_s2=',TRANSFER(UPW*Z_SA + Z_SL/S2,1)
+      ENDIF
       ZUPWCQDL = CQ2-CQ1
       ZUPWSDLT = S2-S1
       ZUPWCFDL = CF2-CF1
@@ -2291,10 +3704,19 @@ C
       TEQ1ZXDUX = DEA*2.0*UQ*DUXCON
        Z_S1  = (1.0-UPW)*Z_SA  - Z_SL/S1
        Z_S2  =      UPW *Z_SA  + Z_SL/S2
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.59
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(*,'(A,I1,5(1X,Z8.8))')
+     &   'F_ZS2 p',TRACE_PHASE,
+     &   TRANSFER(UPW,1), TRANSFER(Z_SA,1),
+     &   TRANSFER(Z_SL,1), TRANSFER(S2,1),
+     &   TRANSFER(Z_S2,1)
+      ENDIF
       ROW11STERM = (1.0-UPW)*Z_SA
       ROW11LTERM = Z_SL/S1
       ROW21STERM = UPW*Z_SA
       ROW21LTERM = Z_SL/S2
+C     ZS2 trace disabled
       CALL TRACE_BLDIF_EQ1_S_TERMS('BLDIF', ITYP,
      & (1.0-UPW), UPW, Z_SA, Z_SL, S1, S2,
      & ROW11STERM, ROW11LTERM, Z_S1,
@@ -2311,11 +3733,84 @@ C
        VS1(1,1) = Z_S1
        VS1(1,2) =        Z_UPW*UPW_T1 + Z_DE1*DE1_T1 + Z_US1*US1_T1
        VS1(1,3) = Z_D1 + Z_UPW*UPW_D1 + Z_DE1*DE1_D1 + Z_US1*US1_D1
+       IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.90) THEN
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     &   'F_DE_DETAIL ',
+     &   TRANSFER(Z_DE1,1),
+     &   TRANSFER(Z_DEA,1),
+     &   TRANSFER((UQ*DXI-ULOG)*DUXCON,1),
+     &   TRANSFER(SLOG,1),
+     &   TRANSFER((UQ*DXI-ULOG)*DUXCON-SLOG,1)
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     &   'F_ROW13_TRANS ',
+     &   TRANSFER(Z_D1,1),
+     &   TRANSFER(Z_UPW*UPW_D1,1),
+     &   TRANSFER(Z_DE1*DE1_D1,1),
+     &   TRANSFER(Z_US1*US1_D1,1),
+     &   TRANSFER(VS1(1,3),1)
+       ENDIF
        VS1(1,4) = Z_U1 + Z_UPW*UPW_U1 + Z_DE1*DE1_U1 + Z_US1*US1_U1
        VS1(1,5) = Z_X1
        VS2(1,1) = Z_S2
        VS2(1,2) =        Z_UPW*UPW_T2 + Z_DE2*DE2_T2 + Z_US2*US2_T2
+C---- n6h20 base VS2(1,2) trace at IBL=66 iter 2 mc=10
+       IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &    .AND. TRACE_ITER.EQ.2 .AND. TRACE_OUTER.EQ.10) THEN
+        WRITE(0,'(A,4(A,Z8))') 'F_BASE10_66_T',
+     &   ' ZUPW=',TRANSFER(Z_UPW,1),
+     &   ' UPW_T2=',TRANSFER(UPW_T2,1),
+     &   ' ZDE2=',TRANSFER(Z_DE2,1),
+     &   ' DE2_T2=',TRANSFER(DE2_T2,1)
+        WRITE(0,'(A,3(A,Z8))') 'F_BASE10_66_T',
+     &   ' ZUS2=',TRANSFER(Z_US2,1),
+     &   ' US2_T2=',TRANSFER(US2_T2,1),
+     &   ' VS12=',TRANSFER(VS2(1,2),1)
+       ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.98) THEN
+       WRITE(0,'(A,6(A,Z8))')
+     &   'F_EQ1T98',
+     &   ' upw=',TRANSFER(Z_UPW*UPW_T2,1),
+     &   ' de=',TRANSFER(Z_DE2*DE2_T2,1),
+     &   ' us=',TRANSFER(Z_US2*US2_T2,1),
+     &   ' trn=',TRANSFER(VS2(1,2),1),
+     &   ' zUpw=',TRANSFER(Z_UPW,1),
+     &   ' uT2=',TRANSFER(UPW_T2,1)
+       WRITE(0,'(A,6(A,Z8))')
+     &   'F_EQ1D98',
+     &   ' zDe=',TRANSFER(Z_DE2,1),
+     &   ' deT=',TRANSFER(DE2_T2,1),
+     &   ' zUs=',TRANSFER(Z_US2,1),
+     &   ' usT=',TRANSFER(US2_T2,1),
+     &   ' DI2=',TRANSFER(DI2,1),
+     &   ' US2=',TRANSFER(US2,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. (TRACE_STATION.EQ.85
+     &   .OR. TRACE_STATION.EQ.86) .AND. TRACE_ITER.EQ.1) THEN
+       WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_V22T I=',TRACE_STATION,
+     &   ' trn=',TRANSFER(VS2(1,2),1),
+     &   ' upw=',TRANSFER(Z_UPW*UPW_T2,1),
+     &   ' de=',TRANSFER(Z_DE2*DE2_T2,1),
+     &   ' us=',TRANSFER(Z_US2*US2_T2,1)
+       WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_V22F I=',TRACE_STATION,
+     &   ' zupw=',TRANSFER(Z_UPW,1),
+     &   ' upwt2=',TRANSFER(UPW_T2,1),
+     &   ' zus2=',TRANSFER(Z_US2,1),
+     &   ' us2t2=',TRANSFER(US2_T2,1)
+      ENDIF
        VS2(1,3) = Z_D2 + Z_UPW*UPW_D2 + Z_DE2*DE2_D2 + Z_US2*US2_D2
+C---- GDB: dump transport terms at station 30 side 1
+       IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.97) THEN
+         WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_TR zd2=',TRANSFER(Z_D2,1),
+     &    ' upw=',TRANSFER(Z_UPW*UPW_D2,1),
+     &    ' zupw=',TRANSFER(Z_UPW,1),
+     &    ' upwd=',TRANSFER(UPW_D2,1),
+     &    ' de=',TRANSFER(Z_DE2*DE2_D2,1),
+     &    ' us=',TRANSFER(Z_US2*US2_D2,1),
+     &    ' tot=',TRANSFER(VS2(1,3),1)
+       ENDIF
        VS2(1,4) = Z_U2 + Z_UPW*UPW_U2 + Z_DE2*DE2_U2 + Z_US2*US2_U2
        VS2(1,5) = Z_X2
        VSM(1)   =        Z_UPW*UPW_MS + Z_DE1*DE1_MS + Z_US1*US1_MS
@@ -2323,11 +3818,77 @@ C
 C
        VS1(1,2) = VS1(1,2) + Z_CQ1*CQ1_T1 + Z_CF1*CF1_T1 + Z_HK1*HK1_T1
        VS1(1,3) = VS1(1,3) + Z_CQ1*CQ1_D1 + Z_CF1*CF1_D1 + Z_HK1*HK1_D1
+       IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.90) THEN
+        WRITE(0,'(A,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     &   'F_ROW13_CORR ',
+     &   TRANSFER(Z_CQ1*CQ1_D1,1),
+     &   TRANSFER(Z_CF1*CF1_D1,1),
+     &   TRANSFER(Z_HK1*HK1_D1,1),
+     &   TRANSFER(VS1(1,3),1)
+       ENDIF
        VS1(1,4) = VS1(1,4) + Z_CQ1*CQ1_U1 + Z_CF1*CF1_U1 + Z_HK1*HK1_U1
 C
+C---- n6h20 correction terms trace BEFORE update at IBL=66 iter 2 mc=10
+       IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &    .AND. TRACE_ITER.EQ.2 .AND. TRACE_OUTER.EQ.10) THEN
+        WRITE(0,'(A,3(A,Z8))') 'F_CORR10_66',
+     &   ' ZCQ2=',TRANSFER(Z_CQ2,1),
+     &   ' CQ2T2=',TRANSFER(CQ2_T2,1),
+     &   ' ZCF2=',TRANSFER(Z_CF2,1)
+        WRITE(0,'(A,3(A,Z8))') 'F_CORR10_66',
+     &   ' CF2T2=',TRANSFER(CF2_T2,1),
+     &   ' ZHK2=',TRANSFER(Z_HK2,1),
+     &   ' HK2T2=',TRANSFER(HK2_T2,1)
+        WRITE(0,'(A,4(A,Z8))') 'F_CORR10_66',
+     &   ' CqT=',TRANSFER(Z_CQ2*CQ2_T2,1),
+     &   ' CfT=',TRANSFER(Z_CF2*CF2_T2,1),
+     &   ' HkT=',TRANSFER(Z_HK2*HK2_T2,1),
+     &   ' BASE=',TRANSFER(VS2(1,2),1)
+       ENDIF
        VS2(1,2) = VS2(1,2) + Z_CQ2*CQ2_T2 + Z_CF2*CF2_T2 + Z_HK2*HK2_T2
+       IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.66
+     &    .AND. TRACE_ITER.EQ.2 .AND. TRACE_OUTER.EQ.10) THEN
+        WRITE(0,'(A,A,Z8)') 'F_CORR10_66',
+     &   ' FINAL=',TRANSFER(VS2(1,2),1)
+       ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. (TRACE_STATION.EQ.85
+     &   .OR. TRACE_STATION.EQ.86) .AND. TRACE_ITER.EQ.1) THEN
+       WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_V22C I=',TRACE_STATION,
+     &   ' fin=',TRANSFER(VS2(1,2),1),
+     &   ' cq=',TRANSFER(Z_CQ2*CQ2_T2,1),
+     &   ' cf=',TRANSFER(Z_CF2*CF2_T2,1),
+     &   ' hk=',TRANSFER(Z_HK2*HK2_T2,1)
+      ENDIF
        VS2(1,3) = VS2(1,3) + Z_CQ2*CQ2_D2 + Z_CF2*CF2_D2 + Z_HK2*HK2_D2
+C---- GDB: dump VS2(1,3) derivative terms at station 30 side 1
+       IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.97) THEN
+         WRITE(0,'(A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &    'F_V13 base=',
+     &    TRANSFER(VS2(1,3)-Z_CQ2*CQ2_D2-Z_CF2*CF2_D2-Z_HK2*HK2_D2
+     &    ,1),
+     &    ' cq=',TRANSFER(Z_CQ2*CQ2_D2,1),
+     &    ' cf=',TRANSFER(Z_CF2*CF2_D2,1),
+     &    ' hk=',TRANSFER(Z_HK2*HK2_D2,1),
+     &    ' zcq=',TRANSFER(Z_CQ2,1),
+     &    ' cqd=',TRANSFER(CQ2_D2,1),
+     &    ' res=',TRANSFER(VS2(1,3),1)
+       ENDIF
+       IF(TRACE_SIDE.EQ.2 .AND. (TRACE_STATION.EQ.85
+     &    .OR. TRACE_STATION.EQ.86) .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_V24T I=',TRACE_STATION,
+     &   ' trn=',TRANSFER(VS2(1,4),1),
+     &   ' base=',TRANSFER(Z_U2,1),
+     &   ' us=',TRANSFER(Z_US2*US2_U2,1),
+     &   ' de=',TRANSFER(Z_DE2*DE2_U2,1)
+       ENDIF
        VS2(1,4) = VS2(1,4) + Z_CQ2*CQ2_U2 + Z_CF2*CF2_U2 + Z_HK2*HK2_U2
+       IF(TRACE_SIDE.EQ.2 .AND. (TRACE_STATION.EQ.85
+     &    .OR. TRACE_STATION.EQ.86) .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,I3,A,Z8)')
+     &   'F_V24C I=',TRACE_STATION,' fin=',TRANSFER(VS2(1,4),1)
+       ENDIF
 C
       CALL TRACE_BLDIF_EQ1_T_TERMS('BLDIF', ITYP,
      & Z_DE1, DE1_T1, Z_UPW*UPW_T1, Z_DE1*DE1_T1, Z_US1*US1_T1,
@@ -2424,6 +3985,18 @@ C
      &     CF2, CF2_T2, CF2_D2, CF2_U2,
      &     XLOG, ULOG, TLOG, DDLOG)
       REZT  = TLOG + BTMP*ULOG - XLOG*0.5*CFX
+      IF((TRACE_SIDE.EQ.1.AND.TRACE_STATION.EQ.3
+     &   .AND.TRACE_ITER.EQ.1)
+     &  .OR.(TRACE_SIDE.EQ.1.AND.TRACE_STATION.EQ.58
+     &   .AND.TRACE_ITER.EQ.3)
+     &  .OR.(TRACE_SIDE.EQ.2.AND.TRACE_STATION.EQ.83
+     &   .AND.TRACE_ITER.EQ.1)) THEN
+        WRITE(*,'(A,I3,A,I2,6(1X,Z8.8))')
+     &   'F_REZT',TRACE_STATION,' i',TRACE_ITER,
+     &   TRANSFER(TLOG,1), TRANSFER(ULOG,1),
+     &   TRANSFER(XLOG,1), TRANSFER(BTMP,1),
+     &   TRANSFER(CFX,1), TRANSFER(REZT,1)
+      ENDIF
       CALL TRACE_BLDIF_EQ2_RESIDUAL_TERMS('BLDIF', ITYP,
      &     HA, MA, XA, TA, HWA,
      &     0.50*CFM*XA/TA,
@@ -2456,6 +4029,16 @@ C
      &     Z_TL/T2, Z_CFX*CFX_T2, Z_HWA*0.5*(-DW2/T2**2), Z_T2)
 C
       VS1(2,2) = 0.5*Z_HA*H1_T1 + Z_CFM*CFM_T1 + Z_CF1*CF1_T1 + Z_T1
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.56
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(*,'(A,4(1X,Z8),A,4(1X,Z8),A,Z8)')
+     &   'F_VS1_22',
+     &   TRANSFER(0.5*Z_HA,1), TRANSFER(Z_CFM,1),
+     &   TRANSFER(Z_CF1,1), TRANSFER(Z_T1,1),
+     &   ' D=', TRANSFER(H1_T1,1), TRANSFER(CFM_T1,1),
+     &   TRANSFER(CF1_T1,1), TRANSFER(0.0,1),
+     &   ' S=', TRANSFER(VS1(2,2),1)
+      ENDIF
       CALL TRACE_BLDIF_EQ2_T1_TERMS('BLDIF',
      &     0.5*Z_HA, Z_CFM, Z_CF1, Z_T1,
      &     H1_T1, CFM_T1, CF1_T1,
@@ -2471,6 +4054,13 @@ C
       VS1(2,4) = 0.5*Z_MA*M1_U1 + Z_CFM*CFM_U1 + Z_CF1*CF1_U1 + Z_U1
       VS1(2,5) =                                                Z_X1
       VS2(2,2) = 0.5*Z_HA*H2_T2 + Z_CFM*CFM_T2 + Z_CF2*CF2_T2 + Z_T2
+      IF(TRACE_STATION.EQ.58 .AND. TRACE_ITER.EQ.4) THEN
+        WRITE(*,'(A,I1,A,I1,A,Z8,A,Z8,A,Z8)')
+     &   'F_VS222 s',TRACE_SIDE,' p',TRACE_PHASE,
+     &   ' T2=',TRANSFER(T2,1),
+     &   ' D2=',TRANSFER(D2,1),
+     &   ' VS222=',TRANSFER(VS2(2,2),1)
+      ENDIF
       ISTRACE = TRACE_SIDE
       IBLTRACE = TRACE_STATION
       ITYPTRACE = ITYP
@@ -2517,6 +4107,21 @@ C
       HCA = 0.5*(HC1 + HC2)
       HWA = 0.5*(DW1/T1 + DW2/T2)
 C
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.83
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,
+     &   A,Z8,A,Z8)')
+     &   'F_BLDIF83_IN',
+     &   ' DI1=',TRANSFER(DI1,1),
+     &   ' DI2=',TRANSFER(DI2,1),
+     &   ' XOT1=',TRANSFER(XOT1,1),
+     &   ' XOT2=',TRANSFER(XOT2,1),
+     &   ' UPW=',TRANSFER(UPW,1),
+     &   ' HS1=',TRANSFER(HS1,1),
+     &   ' HS2=',TRANSFER(HS2,1),
+     &   ' H1=',TRANSFER(H1,1),
+     &   ' H2=',TRANSFER(H2,1)
+      ENDIF
       DIX = (1.0-UPW)*DI1*XOT1 + UPW*DI2*XOT2
       CFX = (1.0-UPW)*CF1*XOT1 + UPW*CF2*XOT2
       DIX_UPW = DI2*XOT2 - DI1*XOT1
@@ -2525,6 +4130,65 @@ C
       BTMP = 2.0*HCA/HSA + 1.0 - HA - HWA
 C
       REZH  = HLOG + BTMP*ULOG + XLOG*(0.5*CFX-DIX)
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5
+     &   .AND. TRACE_ITER.EQ.1 .AND. ITYP.EQ.1) THEN
+        WRITE(0,'(A,11(1X,Z8.8))') 'G_REZH_INPUTS',
+     &    TRANSFER(XOT1,1), TRANSFER(XOT2,1),
+     &    TRANSFER(UPW,1), TRANSFER(H1,1), TRANSFER(H2,1),
+     &    TRANSFER(HS1,1), TRANSFER(HS2,1),
+     &    TRANSFER(HC1,1), TRANSFER(HC2,1),
+     &    TRANSFER(DW1,1), TRANSFER(DW2,1)
+        WRITE(0,'(A,10(1X,Z8.8))') 'G_REZH_MIX',
+     &    TRANSFER(HA,1), TRANSFER(HSA,1),
+     &    TRANSFER(HCA,1), TRANSFER(HWA,1),
+     &    TRANSFER(DI1,1), TRANSFER(DI2,1),
+     &    TRANSFER(CF1,1), TRANSFER(CF2,1),
+     &    TRANSFER(DIX,1), TRANSFER(CFX,1)
+        WRITE(0,'(A,5(1X,Z8.8))') 'G_REZH',
+     &    TRANSFER(REZH,1), TRANSFER(HLOG,1),
+     &    TRANSFER(BTMP,1), TRANSFER(ULOG,1),
+     &    TRANSFER(XLOG,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.5
+     &   .AND. ITYP.EQ.1) THEN
+        WRITE(0,'(A,I1,A,I2,7(1X,Z8.8))')
+     &   'F_REZH5L P=',TRACE_PHASE,' I=',TRACE_ITER,
+     &   TRANSFER(HLOG,1), TRANSFER(BTMP,1),
+     &   TRANSFER(ULOG,1), TRANSFER(XLOG,1),
+     &   TRANSFER(CFX,1), TRANSFER(DIX,1),
+     &   TRANSFER(REZH,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. (TRACE_STATION.EQ.85
+     &   .OR. TRACE_STATION.EQ.86) .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,I3,A,I2,7(1X,Z8.8))')
+     &   'F_REZH85 I=',TRACE_STATION,' P=',TRACE_PHASE,
+     &   TRANSFER(HLOG,1), TRANSFER(BTMP,1),
+     &   TRANSFER(ULOG,1), TRANSFER(XLOG,1),
+     &   TRANSFER(CFX,1), TRANSFER(DIX,1),
+     &   TRANSFER(REZH,1)
+        WRITE(0,'(A,I3,4(1X,Z8.8))')
+     &   'F_HLOG85 I=',TRACE_STATION,
+     &   TRANSFER(HS1,1), TRANSFER(HS2,1),
+     &   TRANSFER(HS2/HS1,1), TRANSFER(HLOG,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.2 .AND. TRACE_STATION.EQ.83
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(0,'(A,7(1X,Z8.8))')
+     &   'F_REZH83',
+     &   TRANSFER(HLOG,1), TRANSFER(BTMP,1),
+     &   TRANSFER(ULOG,1), TRANSFER(XLOG,1),
+     &   TRANSFER(CFX,1), TRANSFER(DIX,1),
+     &   TRANSFER(REZH,1)
+      ENDIF
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.4
+     &   .AND. TRACE_ITER.EQ.1) THEN
+        WRITE(*,'(A,7(1X,Z8.8))')
+     &   'F_REZH4',
+     &   TRANSFER(HLOG,1), TRANSFER(BTMP,1),
+     &   TRANSFER(ULOG,1), TRANSFER(XLOG,1),
+     &   TRANSFER(CFX,1), TRANSFER(DIX,1),
+     &   TRANSFER(REZH,1)
+      ENDIF
       CALL TRACE_BLDIF_EQ3_RESIDUAL_TERMS('BLDIF', ITYP,
      &     HLOG, BTMP, ULOG, BTMP*ULOG, XLOG, CFX, 0.5*CFX,
      &     DIX, 0.5*CFX-DIX, XLOG*(0.5*CFX-DIX), REZH)
@@ -2536,6 +4200,20 @@ C
       Z_XL  = DDLOG * (0.5*CFX-DIX)
       Z_UL  = DDLOG * BTMP
       Z_HL  = DDLOG
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78
+     &   .AND. TRACE_ITER.EQ.5) THEN
+        WRITE(0,'(A,I1,8(1X,Z8.8))')
+     &    'F_ZINP_78 it=',TRACE_ITER,
+     &    TRANSFER(REAL(HS1),1), TRANSFER(REAL(HS2),1),
+     &    TRANSFER(REAL(HCA),1), TRANSFER(REAL(HSA),1),
+     &    TRANSFER(REAL(ULOG),1), TRANSFER(REAL(XLOG),1),
+     &    TRANSFER(REAL(DDLOG),1), TRANSFER(REAL(UPW),1)
+        WRITE(0,'(A,I1,6(1X,Z8.8))')
+     &    'F_ZOUT_78 it=',TRACE_ITER,
+     &    TRANSFER(REAL(Z_CFX),1), TRANSFER(REAL(Z_DIX),1),
+     &    TRANSFER(REAL(Z_HCA),1), TRANSFER(REAL(Z_XL),1),
+     &    TRANSFER(REAL(Z_UL),1), TRANSFER(REAL(Z_HL),1)
+      ENDIF
 C
       Z_UPW = Z_CFX*CFX_UPW + Z_DIX*DIX_UPW
 C
@@ -2603,6 +4281,19 @@ C
       VS1(3,1) =                               Z_DI1*DI1_S1
       VS1(3,2) = Z_HS1*HS1_T1 + Z_CF1*CF1_T1 + Z_DI1*DI1_T1 + Z_T1
       ROW32T1_BASESTORE = VS1(3,2)
+      IF(TRACE_SIDE.EQ.2 .AND. (TRACE_STATION.EQ.71
+     & .OR.TRACE_STATION.EQ.73.OR.TRACE_STATION.EQ.93)) THEN
+       WRITE(*,'(A,I3,A,I1,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     &  'F_DI1T i=',TRACE_STATION,' ty=',ITYP,
+     &  TRANSFER(DI1_T1,1),TRANSFER(DI1,1),
+     &  TRANSFER(HK1,1),TRANSFER(HS1,1),
+     &  TRANSFER(US1,1),TRANSFER(RT1,1)
+       WRITE(*,'(A,I3,A,I1,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8,1X,Z8)')
+     &  'F_DI2T i=',TRACE_STATION,' ty=',ITYP,
+     &  TRANSFER(DI2_T2,1),TRANSFER(DI2,1),
+     &  TRANSFER(HK2,1),TRANSFER(HS2,1),
+     &  TRANSFER(US2,1),TRANSFER(RT2,1)
+      ENDIF
       VS1(3,3) = Z_HS1*HS1_D1 + Z_CF1*CF1_D1 + Z_DI1*DI1_D1
       VS1(3,4) = Z_HS1*HS1_U1 + Z_CF1*CF1_U1 + Z_DI1*DI1_U1 + Z_U1
       VS1(3,5) =                                              Z_X1
@@ -2624,6 +4315,35 @@ C
       VS2(3,2) = VS2(3,2) + 0.5*(Z_HCA*HC2_T2+Z_HA*H2_T2) + Z_UPW*UPW_T2
       VS2(3,3) = VS2(3,3) + 0.5*(Z_HCA*HC2_D2+Z_HA*H2_D2) + Z_UPW*UPW_D2
       VS2(3,4) = VS2(3,4) + 0.5*(Z_HCA*HC2_U2           ) + Z_UPW*UPW_U2
+C
+      IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.EQ.78
+     &   .AND. TRACE_ITER.EQ.5) THEN
+        WRITE(0,'(A,I1,A,I1,10(1X,Z8.8))')
+     &    'F_VS3ROW_78 it=',TRACE_ITER,' ty=',ITYP,
+     &    TRANSFER(REAL(VS1(3,1)),1), TRANSFER(REAL(VS1(3,2)),1),
+     &    TRANSFER(REAL(VS1(3,3)),1), TRANSFER(REAL(VS1(3,4)),1),
+     &    TRANSFER(REAL(VS1(3,5)),1),
+     &    TRANSFER(REAL(VS2(3,1)),1), TRANSFER(REAL(VS2(3,2)),1),
+     &    TRANSFER(REAL(VS2(3,3)),1), TRANSFER(REAL(VS2(3,4)),1),
+     &    TRANSFER(REAL(VS2(3,5)),1)
+        WRITE(0,'(A,I1,A,I1,10(1X,Z8.8))')
+     &    'F_VS3IN_78 it=',TRACE_ITER,' ty=',ITYP,
+     &    TRANSFER(REAL(HS1_T1),1),TRANSFER(REAL(HS1_D1),1),
+     &    TRANSFER(REAL(HS1_U1),1),TRANSFER(REAL(HS2_T2),1),
+     &    TRANSFER(REAL(HS2_D2),1),TRANSFER(REAL(HS2_U2),1),
+     &    TRANSFER(REAL(CF1_T1),1),TRANSFER(REAL(CF2_T2),1),
+     &    TRANSFER(REAL(DI1_T1),1),TRANSFER(REAL(DI2_T2),1)
+        WRITE(0,'(A,I1,15(1X,Z8.8))')
+     &    'F_VS3ZIN_78 it=',TRACE_ITER,
+     &    TRANSFER(REAL(Z_HS1),1),TRANSFER(REAL(Z_HS2),1),
+     &    TRANSFER(REAL(Z_CF1),1),TRANSFER(REAL(Z_CF2),1),
+     &    TRANSFER(REAL(Z_DI1),1),TRANSFER(REAL(Z_DI2),1),
+     &    TRANSFER(REAL(Z_T1),1),TRANSFER(REAL(Z_T2),1),
+     &    TRANSFER(REAL(Z_U1),1),TRANSFER(REAL(Z_U2),1),
+     &    TRANSFER(REAL(Z_X1),1),TRANSFER(REAL(Z_X2),1),
+     &    TRANSFER(REAL(Z_UPW),1),TRANSFER(REAL(Z_HCA),1),
+     &    TRANSFER(REAL(Z_HA),1)
+      ENDIF
 C
       CALL TRACE_BLDIF_EQ3_T1_TERMS('BLDIF',
      &    TRACE_SIDE, TRACE_STATION, ITYP,
@@ -2720,6 +4440,10 @@ C            is below the critical Rtheta.  Transition occurs
 C            when N(x) reaches Ncrit (Ncrit= 9 is "standard").
 C==============================================================
       IMPLICIT REAL (A-H,M,O-Z)
+      INTEGER TRACE_SIDE, TRACE_STATION, TRACE_PHASE, TRACE_ITER
+      INTEGER TRACE_OUTER
+      COMMON/V_TRACE/ TRACE_SIDE, TRACE_STATION, TRACE_PHASE,
+     &                 TRACE_ITER, TRACE_OUTER
 ccc   DATA DGR / 0.04 /
       DATA DGR / 0.08 /
 C
@@ -2796,6 +4520,24 @@ C
      &       + (AF   *DADR/TH                ) * RFAC_HK
        AX_TH = -AX/TH
        AX_RT = (AF   *DADR/TH                ) * RFAC_RT
+       IF(TRACE_SIDE.EQ.1 .AND. TRACE_STATION.GE.24
+     &    .AND. TRACE_STATION.LE.26
+     &    .AND. (TRACE_OUTER.LE.1 .OR. TRACE_OUTER.EQ.8)) THEN
+        WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_DAMPL i=',TRACE_STATION,
+     &   ' HMI=',TRANSFER(HMI,1),
+     &   ' AA=',TRANSFER(AA,1),
+     &   ' BB=',TRANSFER(BB,1),
+     &   ' GRC=',TRANSFER(GRCRIT,1),
+     &   ' GR=',TRANSFER(GR,1),
+     &   ' RFAC=',TRANSFER(RFAC,1)
+        WRITE(0,'(A,I3,A,Z8,A,Z8,A,Z8,A,Z8)')
+     &   'F_DAMPL2 i=',TRACE_STATION,
+     &   ' EX=',TRANSFER(EX,1),
+     &   ' DADR=',TRANSFER(DADR,1),
+     &   ' AF=',TRANSFER(AF,1),
+     &   ' AX=',TRANSFER(AX,1)
+       ENDIF
        CALL TRACE_TRANSITION_DAMPL_DERIVATIVE_TERMS('DAMPL',
      &      HK, HMI, HMI**2, HMI_HK, BB, 1.0-BB*BB,
      &      AA_HK, BB_HK, GRC_HK, GR_RT,

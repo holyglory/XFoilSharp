@@ -6,12 +6,35 @@
 // Decision: Keep the shared helper surface because it gives the audit one central place to enforce parity arithmetic policy without degrading the default managed path.
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using XFoil.Core.Numerics;
+using XFoil.Solver.Diagnostics;
 
 namespace XFoil.Solver.Numerics;
 
 internal static class LegacyPrecisionMath
 {
+    /// <summary>
+    /// When true, all FMA helpers use separate multiply-then-add with RoundBarrier
+    /// instead of hardware FMA. This matches Fortran compiled with -O0 -ffp-contract=off
+    /// and makes any remaining mismatch a real algorithmic bug, not an FMA artifact.
+    /// </summary>
+    internal static bool DisableFma { get; set; }
+        = DebugFlags.DisableFma;
+
+    /// <summary>
+    /// FMA or separate multiply-add depending on DisableFma flag.
+    /// When DisableFma is true: returns REAL-style a*b + c with separate
+    /// product and sum roundings.
+    /// When false: returns Fma(a, b, c) (single rounding).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float Fma(float a, float b, float c)
+        => DisableFma
+            ? RoundBarrier(RoundBarrier(a * b) + c)
+            : MathF.FusedMultiplyAdd(a, b, c);
+
     // Legacy mapping: f_xfoil/src/XFOIL.INC :: GAMMA/GAMM1 REAL staging and the general BLKIN/BLVAR scalar REAL path.
     // Difference from legacy: The managed port centralizes classic REAL rounding and scalar operator selection into explicit helpers instead of relying on ambient type declarations.
     // Decision: Keep this scalar helper family because it provides the audit's canonical legacy-float template.
@@ -30,6 +53,7 @@ internal static class LegacyPrecisionMath
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal static float RoundBarrier(float value)
         => BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(value));
+
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal static float AddRounded(float left, float right)
@@ -72,13 +96,13 @@ internal static class LegacyPrecisionMath
         => useLegacyPrecision ? LegacyLibm.Pow((float)value, (float)exponent) : Math.Pow(value, exponent);
 
     internal static double Exp(double value, bool useLegacyPrecision)
-        => useLegacyPrecision ? MathF.Exp((float)value) : Math.Exp(value);
+        => useLegacyPrecision ? LegacyLibm.Exp((float)value) : Math.Exp(value);
 
     internal static double Log(double value, bool useLegacyPrecision)
         => useLegacyPrecision ? LegacyLibm.Log((float)value) : Math.Log(value);
 
     internal static double Log10(double value, bool useLegacyPrecision)
-        => useLegacyPrecision ? MathF.Log10((float)value) : Math.Log10(value);
+        => useLegacyPrecision ? LegacyLibm.Log10((float)value) : Math.Log10(value);
 
     internal static double Tanh(double value, bool useLegacyPrecision)
         => useLegacyPrecision ? LegacyLibm.Tanh((float)value) : Math.Tanh(value);
@@ -90,7 +114,7 @@ internal static class LegacyPrecisionMath
         => useLegacyPrecision ? MathF.Cos((float)value) : Math.Cos(value);
 
     internal static double Atan2(double y, double x, bool useLegacyPrecision)
-        => useLegacyPrecision ? MathF.Atan2((float)y, (float)x) : Math.Atan2(y, x);
+        => useLegacyPrecision ? LegacyLibm.Atan2((float)y, (float)x) : Math.Atan2(y, x);
 
     internal static double Abs(double value, bool useLegacyPrecision)
         => useLegacyPrecision ? MathF.Abs((float)value) : Math.Abs(value);
@@ -109,7 +133,7 @@ internal static class LegacyPrecisionMath
     // the same last-bit path as the classic solver without affecting doubles.
     internal static double AddScaled(double value, double scale, double delta, bool useLegacyPrecision)
         => useLegacyPrecision
-            ? MathF.FusedMultiplyAdd((float)scale, (float)delta, (float)value)
+            ? Fma((float)scale, (float)delta, (float)value)
             : value + (scale * delta);
 
     // Use the contracted helpers only for legacy REAL blocks that have been
@@ -118,12 +142,12 @@ internal static class LegacyPrecisionMath
     // ProductThenSubtract so the intermediate product rounds separately.
     internal static double MultiplyAdd(double left, double right, double addend, bool useLegacyPrecision)
         => useLegacyPrecision
-            ? MathF.FusedMultiplyAdd((float)left, (float)right, (float)addend)
+            ? Fma((float)left, (float)right, (float)addend)
             : (left * right) + addend;
 
     internal static double MultiplySubtract(double left, double right, double minuend, bool useLegacyPrecision)
         => useLegacyPrecision
-            ? MathF.FusedMultiplyAdd(-(float)left, (float)right, (float)minuend)
+            ? Fma(-(float)left, (float)right, (float)minuend)
             : minuend - (left * right);
 
     internal static double ProductThenAdd(double left, double right, double addend, bool useLegacyPrecision)
@@ -158,7 +182,7 @@ internal static class LegacyPrecisionMath
         double right2,
         bool useLegacyPrecision)
         => useLegacyPrecision
-            ? MathF.FusedMultiplyAdd(
+            ? Fma(
                 (float)left1,
                 (float)right1,
                 (float)((float)left2 * (float)right2))
@@ -173,10 +197,10 @@ internal static class LegacyPrecisionMath
         double right3,
         bool useLegacyPrecision)
         => useLegacyPrecision
-            ? MathF.FusedMultiplyAdd(
+            ? Fma(
                 (float)left3,
                 (float)right3,
-                MathF.FusedMultiplyAdd(
+                Fma(
                     (float)left1,
                     (float)right1,
                     (float)((float)left2 * (float)right2)))
@@ -193,13 +217,13 @@ internal static class LegacyPrecisionMath
         double right4,
         bool useLegacyPrecision)
         => useLegacyPrecision
-            ? MathF.FusedMultiplyAdd(
+            ? Fma(
                 (float)left4,
                 (float)right4,
-                MathF.FusedMultiplyAdd(
+                Fma(
                     (float)left3,
                     (float)right3,
-                    MathF.FusedMultiplyAdd(
+                    Fma(
                         (float)left1,
                         (float)right1,
                 (float)((float)left2 * (float)right2))))
@@ -220,19 +244,19 @@ internal static class LegacyPrecisionMath
         double right6,
         bool useLegacyPrecision)
         => useLegacyPrecision
-            ? MathF.FusedMultiplyAdd(
+            ? Fma(
                 (float)left6,
                 (float)right6,
-                MathF.FusedMultiplyAdd(
+                Fma(
                     (float)left5,
                     (float)right5,
-                    MathF.FusedMultiplyAdd(
+                    Fma(
                         (float)left4,
                         (float)right4,
-                        MathF.FusedMultiplyAdd(
+                        Fma(
                             (float)left3,
                             (float)right3,
-                            MathF.FusedMultiplyAdd(
+                            Fma(
                                 (float)left2,
                                 (float)right2,
                                 (float)((float)left1 * (float)right1))))))
@@ -298,6 +322,8 @@ internal static class LegacyPrecisionMath
             return (left1 * right1) + (left2 * right2) + (left3 * right3) + addend;
         }
 
+        // Products-first, addend-last matches the -O2 Fortran best.
+        // Source order (addend first) gives 138/180 diffs vs 46/180.
         float sum = (float)left1 * (float)right1;
         sum = (float)(sum + ((float)left2 * (float)right2));
         sum = (float)(sum + ((float)left3 * (float)right3));
@@ -326,7 +352,7 @@ internal static class LegacyPrecisionMath
         }
 
         float addend = (float)((float)left2 * (float)right2);
-        return MathF.FusedMultiplyAdd((float)left1, (float)right1, addend);
+        return Fma((float)left1, (float)right1, addend);
     }
 
     internal static double NativeFloatExpressionProductSumAdd(
@@ -344,9 +370,9 @@ internal static class LegacyPrecisionMath
             return (left1 * right1) + (left2 * right2) + (left3 * right3) + addend;
         }
 
-        float sum = MathF.FusedMultiplyAdd((float)left1, (float)right1, (float)addend);
-        sum = MathF.FusedMultiplyAdd((float)left2, (float)right2, sum);
-        sum = MathF.FusedMultiplyAdd((float)left3, (float)right3, sum);
+        float sum = Fma((float)left1, (float)right1, (float)addend);
+        sum = Fma((float)left2, (float)right2, sum);
+        sum = Fma((float)left3, (float)right3, sum);
         return sum;
     }
 
@@ -361,7 +387,7 @@ internal static class LegacyPrecisionMath
     {
         if (typeof(T) == typeof(float))
         {
-            float result = MathF.FusedMultiplyAdd(
+            float result = Fma(
                 float.CreateChecked(left),
                 float.CreateChecked(right),
                 float.CreateChecked(addend));
@@ -376,10 +402,12 @@ internal static class LegacyPrecisionMath
     {
         if (typeof(T) == typeof(float))
         {
-            float result = MathF.FusedMultiplyAdd(
+            // Barrier the addend so JIT can't keep it in extended precision
+            float addend = RoundBarrier(float.CreateChecked(left2) * float.CreateChecked(right2));
+            float result = Fma(
                 float.CreateChecked(left1),
                 float.CreateChecked(right1),
-                float.CreateChecked(left2) * float.CreateChecked(right2));
+                addend);
             return T.CreateChecked(result);
         }
 
@@ -391,11 +419,15 @@ internal static class LegacyPrecisionMath
     {
         if (typeof(T) == typeof(float))
         {
-            float productChain = MathF.FusedMultiplyAdd(
+            // Fortran: FMAF_REAL(left3, right3, FMAF_REAL(left1, right1, left2*right2))
+            // The inner FMAF_REAL receives left2*right2 as the addend, which is already
+            // a REAL value. Barrier it so the JIT can't keep it in extended precision.
+            float innerAddend = RoundBarrier(float.CreateChecked(left2) * float.CreateChecked(right2));
+            float productChain = Fma(
                 float.CreateChecked(left1),
                 float.CreateChecked(right1),
-                float.CreateChecked(left2) * float.CreateChecked(right2));
-            float result = MathF.FusedMultiplyAdd(
+                innerAddend);
+            float result = Fma(
                 float.CreateChecked(left3),
                 float.CreateChecked(right3),
                 productChain);
@@ -421,11 +453,11 @@ internal static class LegacyPrecisionMath
     {
         if (typeof(T) == typeof(float))
         {
-            float productChain = MathF.FusedMultiplyAdd(
+            float productChain = Fma(
                 float.CreateChecked(left1),
                 float.CreateChecked(right1),
                 float.CreateChecked(left2) * float.CreateChecked(right2));
-            float productSum = MathF.FusedMultiplyAdd(
+            float productSum = Fma(
                 float.CreateChecked(left3),
                 float.CreateChecked(right3),
                 productChain);
@@ -450,7 +482,7 @@ internal static class LegacyPrecisionMath
             // the left weighted product is fused with the rounded right term.
             float weightedLeft = float.CreateChecked(leftWeight) * float.CreateChecked(leftValue);
             float weightedRight = float.CreateChecked(rightWeight) * float.CreateChecked(rightValue);
-            float result = MathF.FusedMultiplyAdd(
+            float result = Fma(
                 weightedLeft,
                 float.CreateChecked(leftScale),
                 weightedRight * float.CreateChecked(rightScale));
@@ -473,7 +505,7 @@ internal static class LegacyPrecisionMath
             // with the right product already rounded. The parity path spells that
             // out so the managed result stops depending on JIT contraction luck.
             float roundedRightProduct = float.CreateChecked(rightValue) * float.CreateChecked(rightScale);
-            float result = MathF.FusedMultiplyAdd(
+            float result = Fma(
                 float.CreateChecked(leftValue),
                 float.CreateChecked(leftScale),
                 -roundedRightProduct);
@@ -488,7 +520,7 @@ internal static class LegacyPrecisionMath
     {
         if (typeof(T) == typeof(float))
         {
-            float result = MathF.FusedMultiplyAdd(
+            float result = Fma(
                 -float.CreateChecked(left),
                 float.CreateChecked(right),
                 float.CreateChecked(minuend));
@@ -498,6 +530,34 @@ internal static class LegacyPrecisionMath
         return minuend - (left * right);
     }
 
+    // Legacy mapping: f_xfoil/src/spline.f :: TRISOL back substitution D(K)=D(K)-C(K)*D(K+1).
+    // Difference from legacy: This helper preserves the proved single-round float-expression replay
+    // even when the global "disable FMA" diagnostics mode is enabled for other kernels.
+    // Decision: Keep this separate from SeparateMultiplySubtract because standalone/full-run traces
+    // show TRISOL back substitution matches a contracted single-round result while GAUSS does not.
+    internal static T ContractedMultiplySubtract<T>(T left, T right, T minuend)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(float))
+        {
+            // Fortran with -mno-fma uses separate mulss;subss.
+            // Respect DisableFma to match.
+            float result = Fma(
+                -float.CreateChecked(left),
+                float.CreateChecked(right),
+                float.CreateChecked(minuend));
+            return T.CreateChecked(result);
+        }
+
+        return minuend - (left * right);
+    }
+
+    // Legacy mapping: f_xfoil/src/xblsys.f :: CFL/CFT REAL product-then-add staging.
+    // Difference from legacy: Preserves the non-contracted "product, then add constant"
+    // pattern used in CFL where the addend is a literal constant that gfortran does NOT
+    // contract into FMA at -O2 -march=native.
+    // Decision: Do NOT use FMA here — the Fortran reference keeps these as two separate
+    // operations (multiply rounded, then add/subtract rounded).
     internal static T ProductThenAdd<T>(T left, T right, T addend)
         where T : struct, IFloatingPointIeee754<T>
     {
@@ -543,20 +603,29 @@ internal static class LegacyPrecisionMath
         return minuend - genericProduct;
     }
 
-    // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV/GAUSS product-sum updates written as separate REAL products and left-associated additions.
-    // Difference from legacy: The helper makes the non-fused multi-product recurrence explicit so solver ports do not accidentally reuse contracted SumOfProducts helpers.
-    // Decision: Keep this helper because repeated solver parity fixes should centralize the plain REAL accumulation shape.
+    // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV/GAUSS product-sum updates.
+    // Difference from legacy: The managed port uses FMA chains for float to match
+    // the contraction behavior that gfortran emits for REAL multiply-add patterns.
+    // Decision: Keep FMA for float and plain arithmetic for double, matching the
+    // SumOfProducts(... useLegacyPrecision) family used elsewhere.
     internal static T SeparateSumOfProducts<T>(T left1, T right1, T left2, T right2)
         where T : struct, IFloatingPointIeee754<T>
     {
-        T product1 = left1 * right1;
-        T product2 = left2 * right2;
-        return product1 + product2;
+        if (typeof(T) == typeof(float))
+        {
+            float result = Fma(
+                float.CreateChecked(left1),
+                float.CreateChecked(right1),
+                float.CreateChecked(left2) * float.CreateChecked(right2));
+            return T.CreateChecked(result);
+        }
+
+        return (left1 * right1) + (left2 * right2);
     }
 
     // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV three-term elimination sums.
-    // Difference from legacy: The helper preserves the source-order "p1 + p2 + p3" REAL accumulation instead of contracting the products through FMA-style helpers.
-    // Decision: Keep this helper because it captures the legacy solver arithmetic family directly.
+    // Difference from legacy: Uses FMA chains for float to match gfortran contraction.
+    // Decision: Keep this aligned with the SumOfProducts family for consistency.
     internal static T SeparateSumOfProducts<T>(
         T left1,
         T right1,
@@ -566,9 +635,17 @@ internal static class LegacyPrecisionMath
         T right3)
         where T : struct, IFloatingPointIeee754<T>
     {
-        T product1 = left1 * right1;
-        T product2 = left2 * right2;
-        T product3 = left3 * right3;
-        return (product1 + product2) + product3;
+        if (typeof(T) == typeof(float))
+        {
+            // Fortran: (VTMP1*V1 + VTMP2*V2 + VTMP3*V3) — left-to-right REAL
+            // Must match: ((p1 + p2) + p3) with each product and sum round-barriered
+            float p1 = RoundBarrier(float.CreateChecked(left1) * float.CreateChecked(right1));
+            float p2 = RoundBarrier(float.CreateChecked(left2) * float.CreateChecked(right2));
+            float p3 = RoundBarrier(float.CreateChecked(left3) * float.CreateChecked(right3));
+            float s1 = RoundBarrier(p1 + p2);
+            return T.CreateChecked(RoundBarrier(s1 + p3));
+        }
+
+        return ((left1 * right1) + (left2 * right2)) + (left3 * right3);
     }
 }
