@@ -5030,8 +5030,10 @@ public static class ViscousSolverEngine
 
                 }
 
-                var matrix = new double[4, 4];
-                var rhs = new double[4];
+                var matrix = SolverBuffers.Matrix4x4Double;
+                var rhs = SolverBuffers.Vector4Double;
+                Array.Clear(matrix);
+                Array.Clear(rhs);
                 for (int row = 0; row < 3; row++)
                 {
                     for (int col = 0; col < 4; col++)
@@ -6296,8 +6298,10 @@ public static class ViscousSolverEngine
                     traceLabel: "seed_interval_accept");
             }
 
-            var matrix = new double[4, 4];
-            var rhs = new double[4];
+            var matrix = SolverBuffers.Matrix4x4Double;
+            var rhs = SolverBuffers.Vector4Double;
+            Array.Clear(matrix);
+            Array.Clear(rhs);
             for (int row = 0; row < 3; row++)
             {
                 for (int col = 0; col < 4; col++)
@@ -7489,8 +7493,10 @@ public static class ViscousSolverEngine
                     traceLabel: "similarity_seed");
             }
 
-            var matrix = new double[4, 4];
-            var rhs = new double[4];
+            var matrix = SolverBuffers.Matrix4x4Double;
+            var rhs = SolverBuffers.Vector4Double;
+            Array.Clear(matrix);
+            Array.Clear(rhs);
             for (int row = 0; row < 3; row++)
             {
                 for (int col = 0; col < 4; col++)
@@ -7837,8 +7843,10 @@ public static class ViscousSolverEngine
             double u2Uei = localResult.U2_UEI;
 
             // Direct mode: prescribe Ue (dUe=0)
-            var matrix = new double[4, 4];
-            var rhs = new double[4];
+            var matrix = SolverBuffers.Matrix4x4Double;
+            var rhs = SolverBuffers.Vector4Double;
+            Array.Clear(matrix);
+            Array.Clear(rhs);
             for (int row = 0; row < 3; row++)
             {
                 for (int col = 0; col < 4; col++)
@@ -8219,8 +8227,10 @@ public static class ViscousSolverEngine
                     traceLabel: "laminar_seed");
             }
 
-            var matrix = new double[4, 4];
-            var rhs = new double[4];
+            var matrix = SolverBuffers.Matrix4x4Double;
+            var rhs = SolverBuffers.Vector4Double;
+            Array.Clear(matrix);
+            Array.Clear(rhs);
             for (int row = 0; row < 3; row++)
             {
                 for (int col = 0; col < 4; col++)
@@ -9625,8 +9635,10 @@ public static class ViscousSolverEngine
                         }
                     }
 
-                    var matrix = new double[4, 4];
-                    var rhs = new double[4];
+                    var matrix = SolverBuffers.Matrix4x4Double;
+                    var rhs = SolverBuffers.Vector4Double;
+                    Array.Clear(matrix);
+                    Array.Clear(rhs);
 
                     for (int row = 0; row < 3; row++)
                     {
@@ -9680,8 +9692,15 @@ public static class ViscousSolverEngine
                         // then constrain the Newton solve along the quasi-normal
                         // Ue-Hk direction that classic XFoil uses to avoid the
                         // Goldstein/Levy-Lees singular characteristic.
-                        var characteristicMatrix = (double[,])matrix.Clone();
-                        var characteristicRhs = new double[4];
+                        var characteristicMatrix = SolverBuffers.Matrix4x4DoubleSecondary;
+                        var characteristicRhs = SolverBuffers.Vector4DoubleSecondary;
+                        for (int rr = 0; rr < 4; rr++)
+                        {
+                            for (int cc = 0; cc < 4; cc++)
+                            {
+                                characteristicMatrix[rr, cc] = matrix[rr, cc];
+                            }
+                        }
                         Array.Copy(rhs, characteristicRhs, 3);
                         characteristicMatrix[3, 0] = 0;
                         characteristicMatrix[3, 1] = hk2T2;
@@ -11759,8 +11778,10 @@ public static class ViscousSolverEngine
                     }
                 }
 
-                var matrix = new double[4, 4];
-                var rhs = new double[4];
+                var matrix = SolverBuffers.Matrix4x4Double;
+                var rhs = SolverBuffers.Vector4Double;
+                Array.Clear(matrix);
+                Array.Clear(rhs);
                 for (int row = 0; row < 3; row++)
                 {
                     for (int col = 0; col < 4; col++)
@@ -12430,33 +12451,41 @@ public static class ViscousSolverEngine
         double[] rhs,
         bool useLegacyPrecision)
     {
+        int n = rhs.Length;
         if (!useLegacyPrecision)
         {
-            return solver.Solve(matrix, rhs);
+            // In-place double solve: rhs is mutated into the solution.
+            solver.SolveInPlace(matrix, rhs);
+            return rhs;
         }
 
         // The parity seed path follows classic XFoil's single-precision solves.
-        // Keeping the float cast centralized here lets every legacy seed caller
-        // share the same arithmetic policy instead of open-coding conversions.
-        var singleMatrix = new float[matrix.GetLength(0), matrix.GetLength(1)];
-        var singleRhs = new float[rhs.Length];
-        for (int row = 0; row < matrix.GetLength(0); row++)
+        // ThreadStatic scratch buffers eliminate the three per-call allocations
+        // (singleMatrix, singleRhs, singleDelta) that the 4x4 Newton hot path
+        // otherwise triggers on every station/iteration.
+        int rows = matrix.GetLength(0);
+        int cols = matrix.GetLength(1);
+        var singleMatrix = SolverBuffers.DenseScratchMatrixFloat(rows, cols);
+        var singleRhs = SolverBuffers.DenseScratchVectorFloat(n);
+        for (int row = 0; row < rows; row++)
         {
             singleRhs[row] = (float)rhs[row];
-            for (int col = 0; col < matrix.GetLength(1); col++)
+            for (int col = 0; col < cols; col++)
             {
                 singleMatrix[row, col] = (float)matrix[row, col];
             }
         }
 
-        float[] singleDelta = solver.Solve(singleMatrix, singleRhs);
-        var delta = new double[singleDelta.Length];
-        for (int i = 0; i < singleDelta.Length; i++)
+        solver.SolveInPlace(singleMatrix, singleRhs);
+
+        // Copy the float solution back into the caller's rhs buffer; the
+        // caller treats rhs as the returned delta, so no new array is needed.
+        for (int i = 0; i < n; i++)
         {
-            delta[i] = singleDelta[i];
+            rhs[i] = singleRhs[i];
         }
 
-        return delta;
+        return rhs;
     }
 
     // Legacy mapping: none

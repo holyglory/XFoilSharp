@@ -32,6 +32,18 @@ public sealed class DenseLinearSystemSolver
         return SolveCore(matrix, rightHandSide);
     }
 
+    /// <summary>
+    /// Solves the system in-place. Both <paramref name="matrix"/> and
+    /// <paramref name="rightHandSide"/> are mutated by Gaussian elimination;
+    /// on return, <paramref name="rightHandSide"/> contains the solution.
+    /// Used by the per-station Newton hot path to avoid GC pressure.
+    /// </summary>
+    public void SolveInPlace(double[,] matrix, double[] rightHandSide)
+        => SolveCoreInPlace(matrix, rightHandSide);
+
+    public void SolveInPlace(float[,] matrix, float[] rightHandSide)
+        => SolveCoreInPlace(matrix, rightHandSide);
+
     // Legacy mapping: f_xfoil/src/xsolve.f :: GAUSS forward elimination and back substitution.
     // Difference from legacy: The core is generic across float and double and makes the parity-sensitive fused versus separated multiply-subtract choices explicit.
     // Decision: Keep the shared core because it reduces divergence between the managed precision variants.
@@ -170,6 +182,130 @@ public sealed class DenseLinearSystemSolver
         }
 
         return b;
+    }
+
+    /// <summary>
+    /// In-place variant of <see cref="SolveCore{T}"/>. Mutates the caller's
+    /// matrix and right-hand side arrays directly, leaving the solution in
+    /// <paramref name="rightHandSide"/>. The arithmetic steps are identical
+    /// to <see cref="SolveCore{T}"/> so parity seed callers remain bit-exact.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoOptimization)]
+    private static void SolveCoreInPlace<T>(T[,] matrix, T[] rightHandSide)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (matrix is null)
+        {
+            throw new ArgumentNullException(nameof(matrix));
+        }
+
+        if (rightHandSide is null)
+        {
+            throw new ArgumentNullException(nameof(rightHandSide));
+        }
+
+        var rowCount = matrix.GetLength(0);
+        var columnCount = matrix.GetLength(1);
+        if (rowCount != columnCount)
+        {
+            throw new ArgumentException("The coefficient matrix must be square.", nameof(matrix));
+        }
+
+        if (rightHandSide.Length != rowCount)
+        {
+            throw new ArgumentException("The right-hand side length must match the matrix size.", nameof(rightHandSide));
+        }
+
+        if (rowCount == 0)
+        {
+            return;
+        }
+
+        T[,] a = matrix;
+        T[] b = rightHandSide;
+
+        bool traceGauss = typeof(T) == typeof(float) && rowCount == 4 && columnCount == 4;
+        if (traceGauss)
+        {
+            TraceGaussState(a, b, "initial", pivotIndex: 0, rowIndex: 0);
+        }
+
+        for (var pivotIndex = 0; pivotIndex < rowCount - 1; pivotIndex++)
+        {
+            var pivotRow = pivotIndex;
+            for (var row = pivotIndex + 1; row < rowCount; row++)
+            {
+                if (T.Abs(a[row, pivotIndex]) > T.Abs(a[pivotRow, pivotIndex]))
+                {
+                    pivotRow = row;
+                }
+            }
+
+            T pivotValue = a[pivotRow, pivotIndex];
+            if (T.Abs(pivotValue) < T.CreateChecked(1e-12))
+            {
+                throw new InvalidOperationException("The linear system is singular or ill-conditioned.");
+            }
+
+            T pivotInverse = T.One / pivotValue;
+            a[pivotRow, pivotIndex] = a[pivotIndex, pivotIndex];
+
+            for (var column = pivotIndex + 1; column < columnCount; column++)
+            {
+                T temp = a[pivotRow, column] * pivotInverse;
+                a[pivotRow, column] = a[pivotIndex, column];
+                a[pivotIndex, column] = temp;
+            }
+
+            {
+                T temp = b[pivotRow] * pivotInverse;
+                b[pivotRow] = b[pivotIndex];
+                b[pivotIndex] = temp;
+            }
+
+            if (traceGauss)
+            {
+                TraceGaussState(a, b, "normalized", pivotIndex + 1, pivotRow + 1);
+            }
+
+            for (var row = pivotIndex + 1; row < rowCount; row++)
+            {
+                T factor = a[row, pivotIndex];
+                for (var column = pivotIndex + 1; column < columnCount; column++)
+                {
+                    a[row, column] = LegacyPrecisionMath.SeparateMultiplySubtract(
+                        factor,
+                        a[pivotIndex, column],
+                        a[row, column]);
+                }
+
+                b[row] = LegacyPrecisionMath.SeparateMultiplySubtract(factor, b[pivotIndex], b[row]);
+
+                if (traceGauss)
+                {
+                    TraceGaussState(a, b, "eliminate", pivotIndex + 1, row + 1);
+                }
+            }
+        }
+
+        b[rowCount - 1] /= a[rowCount - 1, rowCount - 1];
+        if (traceGauss)
+        {
+            TraceGaussState(a, b, "last", rowCount, rowCount);
+        }
+
+        for (var row = rowCount - 2; row >= 0; row--)
+        {
+            for (var column = row + 1; column < columnCount; column++)
+            {
+                b[row] = LegacyPrecisionMath.SeparateMultiplySubtract(a[row, column], b[column], b[row]);
+            }
+
+            if (traceGauss)
+            {
+                TraceGaussState(a, b, "backsub", row + 1, 0);
+            }
+        }
     }
 
     // Legacy mapping: tools/fortran-debug/xsolve_debug.f :: GAUSS trace instrumentation.
