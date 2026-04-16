@@ -74,31 +74,11 @@ public static class ViscousNewtonUpdater
         TextWriter? debugWriter = null,
         bool useLegacyPrecision = false)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-            new
-            {
-                mode = mode.ToString(),
-                trustRadius,
-                previousRmsbl,
-                currentRmsbl,
-                nsys = newtonSystem.NSYS
-            });
         s_updateCallCount++;
         if (mode == ViscousSolverMode.XFoilRelaxation)
         {
             var (rlx, normalizedRms, dac) = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, dij, isp, nPanel, updateContext, debugWriter, useLegacyPrecision);
             double rmsbl = useLegacyPrecision ? normalizedRms : ComputeUpdateRms(blState, newtonSystem, useLegacyPrecision);
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "update_applied",
-                        SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-                        new { mode = "XFoilRelaxation", rlx, rmsbl, trustRadius, accepted = true });
-                }
-            }
             return (rlx, rmsbl, trustRadius, true, dac);
         }
 
@@ -127,9 +107,6 @@ public static class ViscousNewtonUpdater
         TextWriter? debugWriter,
         bool useLegacyPrecision)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-            new { nsys = newtonSystem.NSYS });
         var vdel = newtonSystem.VDEL;
         var isys = newtonSystem.ISYS;
         int nsys = newtonSystem.NSYS;
@@ -405,16 +382,6 @@ public static class ViscousNewtonUpdater
                 "UPDATE_RLX RLX={0,15:E8}", rlx));
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "relaxation_factor",
-                    SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-                    new { rlx, nsys });
-            }
-        }
 
         // GDB: dump RLX, DAC, RMSBL and max-delta station
         if (DebugFlags.SetBlHex)
@@ -484,9 +451,6 @@ public static class ViscousNewtonUpdater
         TextWriter? debugWriter,
         bool useLegacyPrecision)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-            new { trustRadius, previousRmsbl, currentRmsbl, nsys = newtonSystem.NSYS });
         // Compute step norm
         double stepNorm = ComputeStepNorm(blState, newtonSystem, useLegacyPrecision);
 
@@ -570,16 +534,6 @@ public static class ViscousNewtonUpdater
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "trust_region_result",
-                    SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-                    new { rlx, newRmsbl, newTrustRadius, accepted, stepNorm });
-            }
-        }
 
         return (rlx, newRmsbl, newTrustRadius, accepted);
     }
@@ -601,9 +555,6 @@ public static class ViscousNewtonUpdater
         int nPanel,
         bool useLegacyPrecision)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-            new { nsys = newtonSystem.NSYS, hasDij = dij != null, isp, nPanel });
         int nsys = newtonSystem.NSYS;
         var vdel = newtonSystem.VDEL;
         var isys = newtonSystem.ISYS;
@@ -645,14 +596,6 @@ public static class ViscousNewtonUpdater
             duedg[iv] = ueSum;
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-                "duedg",
-                duedg,
-                new { nsys });
-        }
         return duedg;
     }
 
@@ -914,22 +857,6 @@ public static class ViscousNewtonUpdater
                 useLegacyPrecision);
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "legacy_update_control",
-                    SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-                    new
-                    {
-                        clNew,
-                        clAc,
-                        currentCl = context.CurrentCl,
-                        dac
-                    });
-            }
-        }
 
         return new UpdateStepCoupling(dac, duedg);
     }
@@ -951,9 +878,6 @@ public static class ViscousNewtonUpdater
         TextWriter? debugWriter,
         bool useLegacyPrecision)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-            new { rlx, nsys = newtonSystem.NSYS });
         var vdel = newtonSystem.VDEL;
         var isys = newtonSystem.ISYS;
         int nsys = newtonSystem.NSYS;
@@ -1194,25 +1118,6 @@ public static class ViscousNewtonUpdater
                     $" DUEDG={BitConverter.SingleToInt32Bits((float)duedg):X8}");
             }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "station_update",
-                        SolverTrace.ScopeName(typeof(ViscousNewtonUpdater)),
-                        new
-                        {
-                            side = side + 1,
-                            station = ibl + 1,
-                            duedg,
-                            ctau = blState.CTAU[ibl, side],
-                            theta = blState.THET[ibl, side],
-                            dstar = blState.DSTR[ibl, side],
-                            mass = blState.MASS[ibl, side]
-                        });
-                }
-            }
 
             if (debugWriter != null)
             {

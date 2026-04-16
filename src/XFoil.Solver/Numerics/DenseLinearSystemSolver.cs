@@ -314,34 +314,5 @@ public sealed class DenseLinearSystemSolver
     private static void TraceGaussState<T>(T[,] matrix, T[] rhs, string phase, int pivotIndex, int rowIndex)
         where T : struct, IFloatingPointIeee754<T>
     {
-        SolverTrace.Event(
-            "gauss_state",
-            "GAUSS",
-            new
-            {
-                phase,
-                pivotIndex,
-                rowIndex,
-                row11 = float.CreateChecked(matrix[0, 0]),
-                row12 = float.CreateChecked(matrix[0, 1]),
-                row13 = float.CreateChecked(matrix[0, 2]),
-                row14 = float.CreateChecked(matrix[0, 3]),
-                row21 = float.CreateChecked(matrix[1, 0]),
-                row22 = float.CreateChecked(matrix[1, 1]),
-                row23 = float.CreateChecked(matrix[1, 2]),
-                row24 = float.CreateChecked(matrix[1, 3]),
-                row31 = float.CreateChecked(matrix[2, 0]),
-                row32 = float.CreateChecked(matrix[2, 1]),
-                row33 = float.CreateChecked(matrix[2, 2]),
-                row34 = float.CreateChecked(matrix[2, 3]),
-                row41 = float.CreateChecked(matrix[3, 0]),
-                row42 = float.CreateChecked(matrix[3, 1]),
-                row43 = float.CreateChecked(matrix[3, 2]),
-                row44 = float.CreateChecked(matrix[3, 3]),
-                rhs1 = float.CreateChecked(rhs[0]),
-                rhs2 = float.CreateChecked(rhs[1]),
-                rhs3 = float.CreateChecked(rhs[2]),
-                rhs4 = float.CreateChecked(rhs[3])
-            });
     }
 }

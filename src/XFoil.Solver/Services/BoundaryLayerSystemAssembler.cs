@@ -89,9 +89,6 @@ public static class BoundaryLayerSystemAssembler
             float qinfblf = (float)qinfbl;
             float tkblMsf = (float)tkbl_ms;
 
-            using var legacyScope = SolverTrace.Scope(
-                SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                new { uei = ueif, tkbl = tkblf, qinfbl = qinfblf, tkbl_ms = tkblMsf });
 
             float ueiOq2f = (float)(((double)ueif / qinfblf) * ((double)ueif / qinfblf));
             float denomf = (float)(1.0 - ((double)tkblf * ueiOq2f));
@@ -101,39 +98,10 @@ public static class BoundaryLayerSystemAssembler
                 / denomf);
             float u2Msf = (float)(((((double)u2f * ueiOq2f) - ueif) * tkblMsf) / denomf);
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "compressible_velocity",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            uei = ueif,
-                            ueiBits = BitConverter.SingleToInt32Bits(ueif),
-                            tkbl = tkblf,
-                            tkblBits = BitConverter.SingleToInt32Bits(tkblf),
-                            qinfbl = qinfblf,
-                            qinfblBits = BitConverter.SingleToInt32Bits(qinfblf),
-                            tkbl_ms = tkblMsf,
-                            tkblMsBits = BitConverter.SingleToInt32Bits(tkblMsf),
-                            u2 = u2f,
-                            u2Bits = BitConverter.SingleToInt32Bits(u2f),
-                            u2_uei = u2Ueif,
-                            u2UeiBits = BitConverter.SingleToInt32Bits(u2Ueif),
-                            u2_ms = u2Msf,
-                            u2MsBits = BitConverter.SingleToInt32Bits(u2Msf),
-                        });
-                }
-            }
 
             return (u2f, u2Ueif, u2Msf);
         }
 
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-            new { uei, tkbl, qinfbl, tkbl_ms });
         double ueiOq2 = (uei / qinfbl) * (uei / qinfbl);
         double denom = 1.0 - tkbl * ueiOq2;
 
@@ -141,32 +109,6 @@ public static class BoundaryLayerSystemAssembler
         double u2_uei = (1.0 + tkbl * (2.0 * u2 * uei / (qinfbl * qinfbl) - 1.0)) / denom;
         double u2_ms = (u2 * ueiOq2 - uei) * tkbl_ms / denom;
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "compressible_velocity",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        uei,
-                        ueiBits = BitConverter.SingleToInt32Bits((float)uei),
-                        tkbl,
-                        tkblBits = BitConverter.SingleToInt32Bits((float)tkbl),
-                        qinfbl,
-                        qinfblBits = BitConverter.SingleToInt32Bits((float)qinfbl),
-                        tkbl_ms,
-                        tkblMsBits = BitConverter.SingleToInt32Bits((float)tkbl_ms),
-                        u2,
-                        u2Bits = BitConverter.SingleToInt32Bits((float)u2),
-                        u2_uei,
-                        u2UeiBits = BitConverter.SingleToInt32Bits((float)u2_uei),
-                        u2_ms,
-                        u2MsBits = BitConverter.SingleToInt32Bits((float)u2_ms),
-                    });
-            }
-        }
         return (u2, u2_uei, u2_ms);
     }
 
@@ -205,53 +147,7 @@ public static class BoundaryLayerSystemAssembler
             float reyblRef = (float)reybl_re;
             float reyblMsf = (float)reybl_ms;
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "blkin_inputs",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            u2 = u2f,
-                            u2Bits = BitConverter.SingleToInt32Bits(u2f),
-                            t2 = t2f,
-                            t2Bits = BitConverter.SingleToInt32Bits(t2f),
-                            d2 = d2f,
-                            d2Bits = BitConverter.SingleToInt32Bits(d2f),
-                            dw2 = dw2f,
-                            hstinv = hstinvf,
-                            hstinv_ms = hstinvMsf,
-                            gm1bl = gm1blf,
-                            rstbl = rstblf,
-                            rstbl_ms = rstblMsf,
-                            hvrat = hvratf,
-                            reybl = reyblf,
-                            reybl_re = reyblRef,
-                            reybl_ms = reyblMsf
-                        });
-                }
-            }
 
-            using var legacyScope = SolverTrace.Scope(
-                SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                new
-                {
-                    u2 = u2f,
-                    t2 = t2f,
-                    d2 = d2f,
-                    dw2 = dw2f,
-                    hstinv = hstinvf,
-                    hstinv_ms = hstinvMsf,
-                    gm1bl = gm1blf,
-                    rstbl = rstblf,
-                    rstbl_ms = rstblMsf,
-                    hvrat = hvratf,
-                    reybl = reyblf,
-                    reybl_re = reyblRef,
-                    reybl_ms = reyblMsf
-                });
 
             var legacy = new KinematicResult();
 
@@ -262,23 +158,6 @@ public static class BoundaryLayerSystemAssembler
             legacy.M2_U2 = 2.0f * (float)legacy.M2 * tr2f / u2f;
             float legacyM2MsNum = u2f * u2f * tr2f;
             legacy.M2_MS = (legacyM2MsNum / legacyM2Den) * hstinvMsf;
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "blkin_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            u2sqHstinv,
-                            m2Den = legacyM2Den,
-                            tr2 = tr2f,
-                            m2MsNum = legacyM2MsNum,
-                            m2Ms = legacy.M2_MS
-                        });
-                }
-            }
 
             legacy.R2 = rstblf * LegacyLibm.Pow(tr2f, -1.0f / gm1blf);
             legacy.R2_U2 = -(float)legacy.R2 / tr2f * 0.5f * (float)legacy.M2_U2;
@@ -320,90 +199,11 @@ public static class BoundaryLayerSystemAssembler
             legacy.RT2_MS = rt2f * (((float)legacy.R2_MS / (float)legacy.R2) - (legacyV2Ms / legacyV2));
             legacy.RT2_RE = rt2f * (-(legacyV2Re / legacyV2));
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "kinematic_result",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            u2 = u2f,
-                            u2Bits = BitConverter.SingleToInt32Bits(u2f),
-                            t2 = t2f,
-                            t2Bits = BitConverter.SingleToInt32Bits(t2f),
-                            d2 = d2f,
-                            d2Bits = BitConverter.SingleToInt32Bits(d2f),
-                            dw2 = dw2f,
-                            m2 = legacy.M2,
-                            m2_u2 = legacy.M2_U2,
-                            m2_ms = legacy.M2_MS,
-                            r2 = legacy.R2,
-                            r2_u2 = legacy.R2_U2,
-                            r2_ms = legacy.R2_MS,
-                            h2 = legacy.H2,
-                            h2Bits = BitConverter.SingleToInt32Bits((float)legacy.H2),
-                            hK2 = legacy.HK2,
-                            hK2Bits = BitConverter.SingleToInt32Bits((float)legacy.HK2),
-                            hK2_u2 = legacy.HK2_U2,
-                            hK2_t2 = legacy.HK2_T2,
-                            hK2_d2 = legacy.HK2_D2,
-                            hK2_ms = legacy.HK2_MS,
-                            rT2 = legacy.RT2,
-                            rT2Bits = BitConverter.SingleToInt32Bits((float)legacy.RT2),
-                            rT2_u2 = legacy.RT2_U2,
-                            rT2_t2 = legacy.RT2_T2,
-                            rT2_ms = legacy.RT2_MS,
-                            rT2_re = legacy.RT2_RE,
-                            hstinv_ms = hstinvMsf,
-                            rstbl_ms = rstblMsf,
-                            reybl_ms = reyblMsf,
-                            he_ms = legacyHeMs,
-                            v2_he = legacyV2He,
-                            v2MsReyblTerm = legacyV2MsReyblTerm,
-                            v2MsHeTerm = legacyV2MsHeTerm,
-                            v2 = legacyV2,
-                            v2_ms = legacyV2Ms
-                        });
-                }
-            }
             legacy.InputD2 = d2f;
             legacy.InputT2 = t2f;
             return legacy;
         }
 
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-            new { u2, t2, d2, dw2, hstinv, hstinv_ms, gm1bl, rstbl, rstbl_ms, hvrat, reybl, reybl_re, reybl_ms });
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "blkin_inputs",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        u2,
-                        u2Bits = BitConverter.SingleToInt32Bits((float)u2),
-                        t2,
-                        t2Bits = BitConverter.SingleToInt32Bits((float)t2),
-                        d2,
-                        d2Bits = BitConverter.SingleToInt32Bits((float)d2),
-                        dw2,
-                        hstinv,
-                        hstinv_ms,
-                        gm1bl,
-                        rstbl,
-                        rstbl_ms,
-                        hvrat,
-                        reybl,
-                        reybl_re,
-                        reybl_ms
-                    });
-            }
-        }
         var r = new KinematicResult();
 
         // Edge Mach^2
@@ -452,54 +252,6 @@ public static class BoundaryLayerSystemAssembler
         r.RT2_MS = r.RT2 * (r.R2_MS / r.R2 - v2_ms / v2);
         r.RT2_RE = r.RT2 * (-v2_re / v2);
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "kinematic_result",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        u2,
-                        u2Bits = BitConverter.SingleToInt32Bits((float)u2),
-                        t2,
-                        t2Bits = BitConverter.SingleToInt32Bits((float)t2),
-                        d2,
-                        d2Bits = BitConverter.SingleToInt32Bits((float)d2),
-                        dw2,
-                        m2 = r.M2,
-                        m2_u2 = r.M2_U2,
-                        m2_ms = r.M2_MS,
-                        r2 = r.R2,
-                        r2_u2 = r.R2_U2,
-                        r2_ms = r.R2_MS,
-                        h2 = r.H2,
-                        h2Bits = BitConverter.SingleToInt32Bits((float)r.H2),
-                        hK2 = r.HK2,
-                        hK2Bits = BitConverter.SingleToInt32Bits((float)r.HK2),
-                        hK2_u2 = r.HK2_U2,
-                        hK2_t2 = r.HK2_T2,
-                        hK2_d2 = r.HK2_D2,
-                        hK2_ms = r.HK2_MS,
-                        rT2 = r.RT2,
-                        rT2Bits = BitConverter.SingleToInt32Bits((float)r.RT2),
-                        rT2_u2 = r.RT2_U2,
-                        rT2_t2 = r.RT2_T2,
-                        rT2_ms = r.RT2_MS,
-                        rT2_re = r.RT2_RE,
-                        hstinv_ms,
-                        rstbl_ms,
-                        reybl_ms,
-                        he_ms,
-                        v2_he,
-                        v2MsReyblTerm = v2_ms_reybl_term,
-                        v2MsHeTerm = v2_ms_he_term,
-                        v2,
-                        v2_ms
-                    });
-            }
-        }
         r.InputD2 = d2;
         r.InputT2 = t2;
         return r;
@@ -522,9 +274,6 @@ public static class BoundaryLayerSystemAssembler
         int ityp, double hk, double rt, double msq, double h,
         double ctau, double dw, double theta, double d = double.NaN)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-            new { ityp, hk, rt, msq, h, ctau, dw, theta });
         var v = new StationVariables();
 
         // Legacy block: xblsys.f BLVAR Hk clamp and secondary correlation setup.
@@ -758,16 +507,6 @@ public static class BoundaryLayerSystemAssembler
             }
             Console.Error.WriteLine($"C_COM2 ityp={ityp} HK={BitConverter.SingleToInt32Bits((float)hk):X8} RT={BitConverter.SingleToInt32Bits((float)rt):X8} HS={BitConverter.SingleToInt32Bits((float)v.Hs):X8} US={BitConverter.SingleToInt32Bits((float)v.Us):X8} CF={BitConverter.SingleToInt32Bits((float)v.Cf):X8} DI={BitConverter.SingleToInt32Bits((float)v.Di):X8} from={callsite}");
         }
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "station_variables",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new { ityp, v.Hs, v.Us, v.Cteq, v.Cf, v.Di });
-            }
-        }
         return v;
     }
 
@@ -804,8 +543,6 @@ public static class BoundaryLayerSystemAssembler
         double cfm, cfm_hka, cfm_rta, cfm_ma;
         double cfmTurb = 0.0, cfmTurbHka = 0.0, cfmTurbRta = 0.0, cfmTurbMa = 0.0;
         double cfmLam = 0.0, cfmLamHka = 0.0, cfmLamRta = 0.0, cfmLamMa = 0.0;
-        int usedLaminar = 0;
-
         if (ityp == 3)
         {
             cfm = 0; cfm_hka = 0; cfm_rta = 0; cfm_ma = 0;
@@ -817,7 +554,6 @@ public static class BoundaryLayerSystemAssembler
             cfm_hka = cfmLamHka;
             cfm_rta = cfmLamRta;
             cfm_ma = cfmLamMa;
-            usedLaminar = 1;
         }
         else
         {
@@ -833,39 +569,9 @@ public static class BoundaryLayerSystemAssembler
                 cfm_hka = cfmLamHka;
                 cfm_rta = cfmLamRta;
                 cfm_ma = cfmLamMa;
-                usedLaminar = 1;
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "blmid_candidate_cf_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        ityp,
-                        hka,
-                        rta,
-                        ma,
-                        cfmTurb,
-                        cfmTurbHka,
-                        cfmTurbRta,
-                        cfmTurbMa,
-                        cfmLam,
-                        cfmLamHka,
-                        cfmLamRta,
-                        cfmLamMa,
-                        usedLaminar,
-                        cfm,
-                        cfmHka = cfm_hka,
-                        cfmRta = cfm_rta,
-                        cfmMa = cfm_ma
-                    });
-            }
-        }
 
         r.Cfm = cfm;
         r.Cfm_Hka = cfm_hka;
@@ -1031,60 +737,6 @@ public static class BoundaryLayerSystemAssembler
         double m2_u2 = kinematic2.M2_U2;
         double m2_ms = kinematic2.M2_MS;
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "bldif_primary_station",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        intervalStation = traceStation,
-                        iteration = traceIteration,
-                        phase = canonicalTracePhase,
-                        ityp = bldifType,
-                        station = 1,
-                        x = x1,
-                        u = u1,
-                        t = t1,
-                        d = d1,
-                        s = s1,
-                        msq = msq1,
-                        h = h1,
-                        hk = hk1,
-                        rt = rt1
-                    });
-            }
-        }
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "bldif_primary_station",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        intervalStation = traceStation,
-                        iteration = traceIteration,
-                        phase = canonicalTracePhase,
-                        ityp = bldifType,
-                        station = 2,
-                        x = x2,
-                        u = u2,
-                        t = t2,
-                        d = d2,
-                        s = s2,
-                        msq = msq2,
-                        h = h2,
-                        hk = hk2,
-                        rt = rt2
-                    });
-            }
-        }
 
         // ================================================================
         // Correlation derivatives at both stations (BLVAR-style chains)
@@ -1366,63 +1018,8 @@ public static class BoundaryLayerSystemAssembler
         // correlation partials. Keep those raw terms in a dedicated source-level
         // trace so BLDIF input comparisons stay aligned with the Fortran common
         // state instead of mixing comparable chained fields with unavailable locals.
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "blvar_cf_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        ityp = flowType,
-                        station = 2,
-                        hkMs = hk2_ms,
-                        rtMs = rt2_ms,
-                        mMs = m2_ms,
-                        cf = cf2,
-                        cfHk = cf2_hk,
-                        cfRt = cf2_rt,
-                        cfM = cf2_m,
-                        cfU = cf2_u2,
-                        cfT = cf2_t2,
-                        cfD = cf2_d2,
-                        cfMs = cf2_ms,
-                        rtRe = rt2_re,
-                        cfRe = cf2_re
-                    });
-            }
-        }
         if (useLegacyPrecision && flowType == 2)
         {
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "blvar_cf_terms_station1",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp = flowType,
-                            station = 1,
-                            x = x1,
-                            hkMs = hk1_ms,
-                            rtMs = rt1_ms,
-                            mMs = m1_ms,
-                            cf = cf1,
-                            cfHk = cf1_hk,
-                            cfRt = cf1_rt,
-                            cfM = cf1_m,
-                            cfU = cf1_u1,
-                            cfT = cf1_t1,
-                            cfD = cf1_d1,
-                            cfMs = cf1_ms,
-                            rtRe = rt1_re,
-                            cfRe = cf1_re
-                        });
-                }
-            }
         }
 
         // --- DI (dissipation) with full derivative chains (Fortran BLVAR lines 929-1097) ---
@@ -1483,27 +1080,6 @@ public static class BoundaryLayerSystemAssembler
         if (flowType == 1)
         {
             var (di2Lam, di2Hk, di2Rt) = BoundaryLayerCorrelations.LaminarDissipation(hk2, rt2, useLegacyPrecision);
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "blvar_laminar_di_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            station = 2,
-                            hk = hk2,
-                            rt = rt2,
-                            di = di2Lam,
-                            diHk = di2Hk,
-                            diRt = di2Rt,
-                            hkT = hk2_t2,
-                            rtT = rt2_t2,
-                            diT = di2_t2
-                        });
-                }
-            }
         }
 
         // --- DE (BL thickness) chains (Fortran BLVAR lines 1099-1117) ---
@@ -1709,43 +1285,6 @@ public static class BoundaryLayerSystemAssembler
                 LegacyPrecisionMath.SumOfProducts(cfm_rta, rt1_re, cfm_rta, rt2_re, true),
                 true)
             : 0.5 * (cfm_rta * rt1_re + cfm_rta * rt2_re);
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "blmid_cf_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        ityp = flowType,
-                        hk1Ms = hk1_ms,
-                        rt1Ms = rt1_ms,
-                        m1Ms = m1_ms,
-                        hk2Ms = hk2_ms,
-                        rt2Ms = rt2_ms,
-                        m2Ms = m2_ms,
-                        cfm,
-                        cfmHka = cfm_hka,
-                        cfmRta = cfm_rta,
-                        cfmMa = cfm_ma,
-                        hk1T1 = hk1_t1,
-                        rt1T1 = rt1_t1,
-                        hk2T2 = hk2_t2,
-                        rt2T2 = rt2_t2,
-                        cfmU1 = cfm_u1,
-                        cfmT1 = cfm_t1,
-                        cfmD1 = cfm_d1,
-                        cfmU2 = cfm_u2,
-                        cfmT2 = cfm_t2,
-                        cfmD2 = cfm_d2,
-                        cfmMs = cfm_ms,
-                        rt1Re = rt1_re,
-                        rt2Re = rt2_re,
-                        cfmRe = cfm_re
-                    });
-            }
-        }
 
         // The Fortran BLDIF trace cannot log the raw HSL/HST dHs/dHk scratch
         // variables here because BLVAR stores only the chained dHs/dD terms in
@@ -1757,92 +1296,6 @@ public static class BoundaryLayerSystemAssembler
             ? LegacyPrecisionMath.Divide(hs2_d2, hk2_d2, useLegacyPrecision)
             : 0.0;
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "bldif_secondary_station",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        intervalStation = traceStation,
-                        iteration = traceIteration,
-                        phase = canonicalTracePhase,
-                        ityp = bldifType,
-                        station = 1,
-                        usedSecondaryOverride = useLegacyPrecision && station1SecondaryOverride != null,
-                        hc = hc1,
-                        hs = hs1,
-                        hsHk = (float)hs1TraceHk,
-                        hkD = (float)hk1_d1,
-                        hsD = (float)hs1_d1,
-                        hsT = (float)hs1_t1,
-                        us = us1,
-                        usT = (float)us1_t1,
-                        hkU = hk1_u1,
-                        rtT = (float)rt1_t1,
-                        rtU = rt1_u1,
-                        cq = cq1,
-                        cf = cf1,
-                        cfU = cf1_u1,
-                        cfT = cf1_t1,
-                        cfD = cf1_d1,
-                        cfMs = cf1_ms,
-                        cfmU = cfm_u1,
-                        cfmT = cfm_t1,
-                        cfmD = cfm_d1,
-                        cfmMs = cfm_ms,
-                        di = di1,
-                        diT = di1_t1,
-                        de = de1
-                    });
-            }
-        }
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "bldif_secondary_station",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        intervalStation = traceStation,
-                        iteration = traceIteration,
-                        phase = canonicalTracePhase,
-                        ityp = bldifType,
-                        station = 2,
-                        usedSecondaryOverride = useLegacyPrecision && station2SecondaryOverride != null,
-                        hc = hc2,
-                        hs = hs2,
-                        hsHk = (float)hs2TraceHk,
-                        hkD = (float)hk2_d2,
-                        hsD = (float)hs2_d2,
-                        hsT = (float)hs2_t2,
-                        us = us2,
-                        usT = (float)us2_t2,
-                        hkU = hk2_u2,
-                        rtT = (float)rt2_t2,
-                        rtU = rt2_u2,
-                        cq = cq2,
-                        cf = cf2,
-                        cfU = cf2_u2,
-                        cfT = cf2_t2,
-                        cfD = cf2_d2,
-                        cfMs = cf2_ms,
-                        cfmU = cfm_u2,
-                        cfmT = cfm_t2,
-                        cfmD = cfm_d2,
-                        cfmMs = cfm_ms,
-                        di = di2,
-                        diT = di2_t2,
-                        de = de2
-                    });
-            }
-        }
 
         // Comprehensive input + secondary hash at station 16 (ALL paths)
         if (DebugFlags.SetBlHex
@@ -1964,46 +1417,6 @@ public static class BoundaryLayerSystemAssembler
         double hlog = logTerms.HLog;
         double ddlog = logTerms.DdLog;
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "bldif_log_inputs",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        station = traceStation,
-                        phase = canonicalTracePhase,
-                        ityp = bldifType,
-                        x1,
-                        x2,
-                        u1,
-                        u2,
-                        t1,
-                        t2,
-                        hs1,
-                        hs2,
-                        x1Bits = unchecked((int)BitConverter.SingleToUInt32Bits((float)x1)),
-                        x2Bits = unchecked((int)BitConverter.SingleToUInt32Bits((float)x2)),
-                        u1Bits = unchecked((int)BitConverter.SingleToUInt32Bits((float)u1)),
-                        u2Bits = unchecked((int)BitConverter.SingleToUInt32Bits((float)u2)),
-                        t1Bits = unchecked((int)BitConverter.SingleToUInt32Bits((float)t1)),
-                        t2Bits = unchecked((int)BitConverter.SingleToUInt32Bits((float)t2)),
-                        hs1Bits = unchecked((int)BitConverter.SingleToUInt32Bits((float)hs1)),
-                        hs2Bits = unchecked((int)BitConverter.SingleToUInt32Bits((float)hs2)),
-                        xRatio = logTerms.XRatio,
-                        uRatio = logTerms.URatio,
-                        tRatio = logTerms.TRatio,
-                        hRatio = logTerms.HRatio,
-                        xRatioBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)logTerms.XRatio)),
-                        uRatioBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)logTerms.URatio)),
-                        tRatioBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)logTerms.TRatio)),
-                        hRatioBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)logTerms.HRatio))
-                    });
-            }
-        }
         if (useLegacyPrecision
             && DebugFlags.SetBlHex
             && traceSide == 2 && (traceStation == 85 || traceStation == 86) && traceIteration == 1)
@@ -2140,78 +1553,6 @@ public static class BoundaryLayerSystemAssembler
             upw_ms = upwHk1 * hk1_ms + upwHk2 * hk2_ms;
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "bldif_common",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        station = traceStation,
-                        iteration = traceIteration,
-                        phase = canonicalTracePhase,
-                        ityp = bldifType,
-                        cfm,
-                        upw,
-                        xlog,
-                        ulog,
-                        tlog,
-                        hlog,
-                        ddlog,
-                        cfmBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)cfm)),
-                        upwBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)upw)),
-                        xlogBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)xlog)),
-                        ulogBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)ulog)),
-                        tlogBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)tlog)),
-                        hlogBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)hlog)),
-                        ddlogBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)ddlog))
-                    });
-            }
-        }
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "bldif_upw_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        station = traceStation,
-                        iteration = traceIteration,
-                        phase = canonicalTracePhase,
-                        ityp = bldifType,
-                        hk1,
-                        hk2,
-                        hk1T1 = hk1_t1,
-                        hk1D1 = hk1_d1,
-                        hk1U1 = hk1_u1,
-                        hk1Ms = hk1_ms,
-                        hk2T2 = hk2_t2,
-                        hk2D2 = hk2_d2,
-                        hk2U2 = hk2_u2,
-                        hk2Ms = hk2_ms,
-                        hl,
-                        hlsq,
-                        ehh,
-                        upwHl,
-                        upwHd,
-                        upwHk1,
-                        upwHk2,
-                        upwT1 = upw_t1,
-                        upwD1 = upw_d1,
-                        upwU1 = upw_u1,
-                        upwT2 = upw_t2,
-                        upwD2 = upw_d2,
-                        upwU2 = upw_u2,
-                        upwMs = upw_ms
-                    });
-            }
-        }
 
         // ================================================================
         // Equation 1: Ctau/Amplification (Fortran BLDIF lines 1646-1839)
@@ -2332,50 +1673,6 @@ public static class BoundaryLayerSystemAssembler
                     $" RT2U={BitConverter.SingleToInt32Bits((float)rt2_u2):X8}");
             }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_ax_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            x1,
-                            x2,
-                            t1,
-                            t2,
-                            d1,
-                            d2,
-                            hk1,
-                            hk2,
-                            rt1,
-                            rt2,
-                            ampl1,
-                            ampl2,
-                            zAx,
-                            ax = ax.Ax,
-                            axHk1 = ax.Ax_Hk1,
-                            axT1 = ax.Ax_T1,
-                            axRt1 = ax.Ax_Rt1,
-                            axA1 = ax.Ax_A1,
-                            axHk2 = ax.Ax_Hk2,
-                            axT2 = ax.Ax_T2,
-                            axRt2 = ax.Ax_Rt2,
-                            axA2 = ax.Ax_A2,
-                            vs1Row12Term1 = LegacyPrecisionMath.Multiply(ax.Ax_Hk1, hk1_t1, useLegacyPrecision),
-                            vs1Row12Term2 = ax.Ax_T1,
-                            vs1Row12Term3 = LegacyPrecisionMath.Multiply(ax.Ax_Rt1, rt1_t1, useLegacyPrecision),
-                            vs1Row12Inner,
-                            vs1Row13Inner = LegacyPrecisionMath.Multiply(ax.Ax_Hk1, hk1_d1, useLegacyPrecision),
-                            vs2Row12Term1 = LegacyPrecisionMath.Multiply(ax.Ax_Hk2, hk2_t2, useLegacyPrecision),
-                            vs2Row12Term2 = ax.Ax_T2,
-                            vs2Row12Term3 = LegacyPrecisionMath.Multiply(ax.Ax_Rt2, rt2_t2, useLegacyPrecision),
-                            vs2Row12Inner,
-                            vs2Row13Inner = LegacyPrecisionMath.Multiply(ax.Ax_Hk2, hk2_d2, useLegacyPrecision)
-                        });
-                }
-            }
 
             result.Residual[0] = LegacyPrecisionMath.Negate(rezc, useLegacyPrecision);
             result.VS1[0, 0] = LegacyPrecisionMath.Subtract(
@@ -2531,35 +1828,6 @@ public static class BoundaryLayerSystemAssembler
             double uq_da = SubP(0.0, DivP(uq, da));
             double uq_upw = Sop2(uq_cfa, SubP(cf2, cf1), uq_hka, SubP(hk2, hk1));
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq1_uq_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp = bldifType,
-                            cfa,
-                            hka,
-                            rta,
-                            da,
-                            ald,
-                            hkc,
-                            hkcHka = hkc_hka,
-                            hkcRta = hkc_rta,
-                            hr,
-                            hrHka = hr_hka,
-                            hrRta = hr_rta,
-                            uq,
-                            uqHka = uq_hka,
-                            uqRta = uq_rta,
-                            uqCfa = uq_cfa,
-                            uqDa = uq_da
-                        });
-                }
-            }
 
             // Fortran BLDIF lines 2834-2854: UQ derivative chain in REAL.
             // Each product and sum must round to single when useLegacyPrecision.
@@ -2673,79 +1941,6 @@ public static class BoundaryLayerSystemAssembler
             }
             result.Residual[0] = LegacyPrecisionMath.Negate(rezc, useLegacyPrecision);
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq1_residual_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            iteration = traceIteration,
-                            phase = tracePhase,
-                            ityp = bldifType,
-                            x1,
-                            x2,
-                            scc,
-                            cqa,
-                            cqaStagedProducts,
-                            cqaWideOriginalOperands,
-                            cqaNativeFloatExpression,
-                            upw,
-                            oneMinusUpw,
-                            s1,
-                            s2,
-                            saLeftTerm = MulP(oneMinusUpw, s1),
-                            saRightTerm = MulP(upw, s2),
-                            saNativeFloatExpression,
-                            cq1,
-                            cq2,
-                            cqaLeftTerm = oneMinusUpw * cq1,
-                            cqaRightTerm = upw * cq2,
-                            sa,
-                            ald,
-                            dxi,
-                            de1,
-                            de2,
-                            dea,
-                            slog,
-                            uq,
-                            ulog,
-                            eq1Source,
-                            eq1SourceWide,
-                            eq1Production,
-                            eq1ProductionWide,
-                            eq1ProductionBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)eq1Production)),
-                            eq1LogLoss,
-                            eq1LogLossWide,
-                            eq1LogLossBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)eq1LogLoss)),
-                            eq1Convection,
-                            eq1DuxGain,
-                            eq1DuxGainWide,
-                            eq1DuxGainBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)eq1DuxGain)),
-                            eq1SubStored,
-                            rezcStoredTerms,
-                            rezcRoundedLogLoss,
-                            eq1SubInlineProduction,
-                            rezcInlineProduction,
-                            eq1SubInlineFull,
-                            rezcInlineFull,
-                            eq1SubDirectFloatExpression,
-                            rezcDirectFloatExpression,
-                            eq1SubDirectFmaExpression,
-                            rezcDirectFmaExpression,
-                            rezcDirectFmaStoredDux,
-                            rezcDirectFmaFull,
-                            rezcWideLogLoss,
-                            rezcWideEverything,
-                            rezcExpressionWide,
-                            rezc
-                        });
-                }
-            }
 
             // Z-coefficients (Fortran lines 1780-1810)
             double z_cfa = MulP(MulP(MulP(MulP(dea, 2.0), uq_cfa), dxi), DUXCON);
@@ -2825,38 +2020,6 @@ public static class BoundaryLayerSystemAssembler
                 : AddP(
                     AddP(zUpwCqTerm, zUpwSTerm),
                     AddP(zUpwCfTerm, zUpwHkTerm));
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_z_upw_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            iteration = traceIteration,
-                            phase = canonicalTracePhase,
-                            ityp = bldifType,
-                            zCqA = z_cqa,
-                            cqDelta,
-                            cqTerm = zUpwCqTerm,
-                            zSa = z_sa,
-                            sDelta,
-                            sTerm = zUpwSTerm,
-                            zCfA = z_cfa,
-                            cfDelta,
-                            cfTerm = zUpwCfTerm,
-                            zHkA = z_hka,
-                            hkDelta,
-                            hkTerm = zUpwHkTerm,
-                            sum12 = zUpwSum12,
-                            sum123 = zUpwSum123,
-                            zUpw = z_upw
-                        });
-                }
-            }
             double z_de1 = MulP(0.5, z_dea);
             double z_de2 = MulP(0.5, z_dea);
             // Trace Z_DE2/Z_US2 at station 98 side 2
@@ -2911,35 +2074,6 @@ public static class BoundaryLayerSystemAssembler
                     $" {BitConverter.SingleToInt32Bits((float)s2):X8}" +
                     $" {BitConverter.SingleToInt32Bits((float)z_s2):X8}");
             }
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq1_s_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            iteration = traceIteration,
-                            phase = canonicalTracePhase,
-                            ityp = bldifType,
-                            oneMinusUpw,
-                            upw,
-                            zSa = z_sa,
-                            zSl = z_sl,
-                            s1,
-                            s2,
-                            row11StoredTerm = zS1StoredTerm,
-                            row11LogTerm = zS1LogTerm,
-                            row11 = z_s1,
-                            row21StoredTerm = zS2StoredTerm,
-                            row21LogTerm = zS2LogTerm,
-                            row21 = z_s2
-                        });
-                }
-            }
             double z_cq1 = MulP(oneMinusUpw, z_cqa);
             double z_cq2 = MulP(upw, z_cqa);
             double z_cf1 = MulP(oneMinusUpw, z_cfa);
@@ -2947,24 +2081,6 @@ public static class BoundaryLayerSystemAssembler
             double z_hk1 = MulP(oneMinusUpw, z_hka);
             double z_hk2 = MulP(upw, z_hka);
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq1_x_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp = bldifType,
-                            zDxiBaseTerm,
-                            zDxiDuxTerm,
-                            zDxi = z_dxi,
-                            zX1 = z_x1,
-                            zX2 = z_x2
-                        });
-                }
-            }
 
             // Assemble Equation 1 Jacobians (Fortran lines 1812-1837) with the
             // same left-associated REAL row sums as the source.
@@ -3257,202 +2373,8 @@ public static class BoundaryLayerSystemAssembler
                 Console.Error.Flush();
             }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq1_t_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            iteration = traceIteration,
-                            phase = canonicalTracePhase,
-                            ityp = bldifType,
-                            zDe1 = z_de1,
-                            de1T1 = de1_t1,
-                            upwT1Term = row12UpwTerm,
-                            de1T1Term = row12DeTerm,
-                            us1T1Term = row12UsTerm,
-                            row12Transport,
-                            zCq1 = z_cq1,
-                            cq1T1 = cq1_t1,
-                            cq1T1Term = row12CqTerm,
-                            zCf1 = z_cf1,
-                            cf1T1 = cf1_t1,
-                            cf1T1Term = row12CfTerm,
-                            zHk1 = z_hk1,
-                            hk1T1 = hk1_t1,
-                            hk1T1Term = row12HkTerm,
-                            row12 = result.VS1[0, 1],
-                            zDe2 = z_de2,
-                            de2T2 = de2_t2,
-                            upwT2Term = row22UpwTerm,
-                            de2T2Term = row22DeTerm,
-                            us2T2Term = row22UsTerm,
-                            row22Transport,
-                            zCq2 = z_cq2,
-                            cq2T2 = cq2_t2,
-                            cq2T2Term = row22CqTerm,
-                            zCf2 = z_cf2,
-                            cf2T2 = cf2_t2,
-                            cf2T2Term = row22CfTerm,
-                            zHk2 = z_hk2,
-                            hk2T2 = hk2_t2,
-                            hk2T2Term = row22HkTerm,
-                            row22 = result.VS2[0, 1]
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq1_d_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            iteration = traceIteration,
-                            phase = canonicalTracePhase,
-                            ityp = bldifType,
-                            zD1 = z_d1,
-                            zUpw = z_upw,
-                            upwD1 = upw_d1,
-                            zDe1 = z_de1,
-                            de1D1 = de1_d1,
-                            zUs1 = z_us1,
-                            us1D1 = us1_d1,
-                            zCq1 = z_cq1,
-                            cq1D1 = cq1_d1,
-                            zCf1 = z_cf1,
-                            cf1D1 = cf1_d1,
-                            zHk1 = z_hk1,
-                            hk1D1 = hk1_d1,
-                            row13BaseTerm,
-                            row13UpwTerm,
-                            row13DeTerm,
-                            row13UsTerm,
-                            row13Transport,
-                            row13CqTerm,
-                            row13CfTerm,
-                            row13HkTerm,
-                            row13 = result.VS1[0, 2],
-                            zD2 = z_d2,
-                            upwD2 = upw_d2,
-                            zDe2 = z_de2,
-                            de2D2 = de2_d2,
-                            zUs2 = z_us2,
-                            us2D2 = us2_d2,
-                            zCq2 = z_cq2,
-                            cq2D2 = cq2_d2,
-                            zCf2 = z_cf2,
-                            cf2D2 = cf2_d2,
-                            zHk2 = z_hk2,
-                            hk2D2 = hk2_d2,
-                            row23BaseTerm,
-                            row23UpwTerm,
-                            row23DeTerm,
-                            row23UsTerm,
-                            row23Transport,
-                            row23CqTerm,
-                            row23CfTerm,
-                            row23HkTerm,
-                            row23 = result.VS2[0, 2]
-                        });
-                }
-            }
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq1_u_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            iteration = traceIteration,
-                            phase = canonicalTracePhase,
-                            ityp = bldifType,
-                            zU1 = row14BaseTerm,
-                            zUpw = z_upw,
-                            upwU1 = upw_u1,
-                            zDe1 = z_de1,
-                            de1U1 = de1_u1,
-                            zUs1 = z_us1,
-                            us1U1 = us1_u1,
-                            zCq1 = z_cq1,
-                            cq1U1 = cq1_u1,
-                            zCf1 = z_cf1,
-                            cf1U1 = cf1_u1,
-                            zHk1 = z_hk1,
-                            hk1U1 = hk1_u1,
-                            row14BaseTerm,
-                            row14UpwTerm,
-                            row14DeTerm,
-                            row14UsTerm,
-                            row14Transport,
-                            row14CqTerm,
-                            row14CfTerm,
-                            row14HkTerm,
-                            row14 = result.VS1[0, 3],
-                            zU2 = row24BaseTerm,
-                            upwU2 = upw_u2,
-                            zDe2 = z_de2,
-                            de2U2 = de2_u2,
-                            zUs2 = z_us2,
-                            us2U2 = us2_u2,
-                            zCq2 = z_cq2,
-                            cq2U2 = cq2_u2,
-                            zCf2 = z_cf2,
-                            cf2U2 = cf2_u2,
-                            zHk2 = z_hk2,
-                            hk2U2 = hk2_u2,
-                            row24BaseTerm,
-                            row24UpwTerm,
-                            row24DeTerm,
-                            row24UsTerm,
-                            row24Transport,
-                            row24CqTerm,
-                            row24CfTerm,
-                            row24HkTerm,
-                            row24 = result.VS2[0, 3]
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq1_rows",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            iteration = traceIteration,
-                            phase = canonicalTracePhase,
-                            ityp = bldifType,
-                            row11 = result.VS1[0, 0],
-                            row12 = result.VS1[0, 1],
-                            row13 = result.VS1[0, 2],
-                            row14 = result.VS1[0, 3],
-                            row21 = result.VS2[0, 0],
-                            row22 = result.VS2[0, 1],
-                            row23 = result.VS2[0, 2],
-                            row24 = result.VS2[0, 3]
-                        });
-                }
-            }
 
         }
 
@@ -3517,329 +2439,15 @@ public static class BoundaryLayerSystemAssembler
             result.VS2[1, 3] = eq2.VS2_24;
             result.VS2[1, 4] = eq2.VS2_X;
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_input_bundle",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            ityp = bldifType,
-                            x1,
-                            x2,
-                            u1,
-                            u2,
-                            t1,
-                            t2,
-                            dw1,
-                            dw2,
-                            h1,
-                            h1T1 = h1_t1,
-                            h1D1 = h1_d1,
-                            h2,
-                            h2T2 = h2_t2,
-                            h2D2 = h2_d2,
-                            m1 = m1v,
-                            m1U1 = m1_u1,
-                            m2 = m2v,
-                            m2U2 = m2_u2,
-                            cfm,
-                            cfmT1 = cfm_t1,
-                            cfmD1 = cfm_d1,
-                            cfmU1 = cfm_u1,
-                            cfmT2 = cfm_t2,
-                            cfmD2 = cfm_d2,
-                            cfmU2 = cfm_u2,
-                            cf1,
-                            cf1T1 = cf1_t1,
-                            cf1D1 = cf1_d1,
-                            cf1U1 = cf1_u1,
-                            cf2,
-                            cf2T2 = cf2_t2,
-                            cf2D2 = cf2_d2,
-                            cf2U2 = cf2_u2,
-                            xlog,
-                            ulog,
-                            tlog,
-                            ddlog,
-                            legacy = useLegacyPrecision
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_residual_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp = bldifType,
-                            ha = eq2.Ha,
-                            ma = eq2.Ma,
-                            xa = eq2.Xa,
-                            ta = eq2.Ta,
-                            hwa = eq2.Hwa,
-                            cfxCenter = eq2.CfxCenter,
-                            cfxPanels = eq2.CfxPanels,
-                            cfx = eq2.Cfx,
-                            btmp = eq2.Btmp,
-                            tlog = useLegacyPrecision ? (float)tlog : tlog,
-                            ulog = useLegacyPrecision ? (float)ulog : ulog,
-                            xlog = useLegacyPrecision ? (float)xlog : xlog,
-                            rezt = useLegacyPrecision ? (float)(-eq2.Residual) : -eq2.Residual
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_zt2_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            zTl = eq2.ZTl,
-                            t2 = useLegacyPrecision ? (float)t2 : t2,
-                            zCfx = eq2.ZCfx,
-                            cfxT2 = eq2.CfxT2,
-                            zHwa = eq2.ZHwa,
-                            dw2 = useLegacyPrecision ? (float)dw2 : dw2,
-                            zT2Log = useLegacyPrecision
-                                ? (float)((float)eq2.ZTl / (float)t2)
-                                : eq2.ZTl / t2,
-                            zT2Cfx = useLegacyPrecision
-                                ? (float)((float)eq2.ZCfx * (float)eq2.CfxT2)
-                                : eq2.ZCfx * eq2.CfxT2,
-                            zT2Hwa = useLegacyPrecision
-                                ? (float)((float)eq2.ZHwa * 0.5f * (-(float)dw2 / ((float)t2 * (float)t2)))
-                                : eq2.ZHwa * 0.5 * (-dw2 / (t2 * t2)),
-                            zT2 = eq2.ZT2
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_t1_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            zHaHalf = useLegacyPrecision ? (float)(0.5f * (float)eq2.ZHa) : 0.5 * eq2.ZHa,
-                            zCfm = eq2.ZCfm,
-                            zCf1 = eq2.ZCf1,
-                            zT1 = eq2.ZT1,
-                            h1T1 = useLegacyPrecision ? (float)h1_t1 : h1_t1,
-                            cfmT1 = useLegacyPrecision ? (float)cfm_t1 : cfm_t1,
-                            cf1T1 = useLegacyPrecision ? (float)cf1_t1 : cf1_t1,
-                            vs1Row22Ha = useLegacyPrecision
-                                ? (float)(0.5f * (float)eq2.ZHa * (float)h1_t1)
-                                : (0.5 * eq2.ZHa) * h1_t1,
-                            vs1Row22Cfm = useLegacyPrecision
-                                ? (float)((float)eq2.ZCfm * (float)cfm_t1)
-                                : eq2.ZCfm * cfm_t1,
-                            vs1Row22Cf = useLegacyPrecision
-                                ? (float)((float)eq2.ZCf1 * (float)cf1_t1)
-                                : eq2.ZCf1 * cf1_t1,
-                            vs1Row22 = eq2.VS1_22
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_d1_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            ityp = bldifType,
-                            zHaHalf = useLegacyPrecision ? (float)(0.5f * (float)eq2.ZHa) : 0.5 * eq2.ZHa,
-                            zCfm = eq2.ZCfm,
-                            zCf1 = eq2.ZCf1,
-                            h1D1 = useLegacyPrecision ? (float)h1_d1 : h1_d1,
-                            cfmD1 = useLegacyPrecision ? (float)cfm_d1 : cfm_d1,
-                            cf1D1 = useLegacyPrecision ? (float)cf1_d1 : cf1_d1,
-                            vs1Row23Ha = useLegacyPrecision
-                                ? (float)(0.5f * (float)eq2.ZHa * (float)h1_d1)
-                                : (0.5 * eq2.ZHa) * h1_d1,
-                            vs1Row23Cfm = useLegacyPrecision
-                                ? (float)((float)eq2.ZCfm * (float)cfm_d1)
-                                : eq2.ZCfm * cfm_d1,
-                            vs1Row23Cf = useLegacyPrecision
-                                ? (float)((float)eq2.ZCf1 * (float)cf1_d1)
-                                : eq2.ZCf1 * cf1_d1,
-                            vs1Row23 = eq2.VS1_23
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_t2_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            ityp = bldifType,
-                            zHaHalf = useLegacyPrecision ? (float)(0.5f * (float)eq2.ZHa) : 0.5 * eq2.ZHa,
-                            zCfm = eq2.ZCfm,
-                            zCf2 = eq2.ZCf2,
-                            zT2 = eq2.ZT2,
-                            h2T2 = useLegacyPrecision ? (float)h2_t2 : h2_t2,
-                            cfmT2 = useLegacyPrecision ? (float)cfm_t2 : cfm_t2,
-                            cf2T2 = useLegacyPrecision ? (float)cf2_t2 : cf2_t2,
-                            row22Ha = useLegacyPrecision
-                                ? (float)(0.5f * (float)eq2.ZHa * (float)h2_t2)
-                                : (0.5 * eq2.ZHa) * h2_t2,
-                            row22Cfm = useLegacyPrecision
-                                ? (float)((float)eq2.ZCfm * (float)cfm_t2)
-                                : eq2.ZCfm * cfm_t2,
-                            row22Cf = useLegacyPrecision
-                                ? (float)((float)eq2.ZCf2 * (float)cf2_t2)
-                                : eq2.ZCf2 * cf2_t2,
-                            row22 = eq2.VS2_22
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_d2_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            zHaHalf = useLegacyPrecision ? (float)(0.5f * (float)eq2.ZHa) : 0.5 * eq2.ZHa,
-                            zCfm = eq2.ZCfm,
-                            zCf2 = eq2.ZCf2,
-                            h2D2 = useLegacyPrecision ? (float)h2_d2 : h2_d2,
-                            cfmD2 = useLegacyPrecision ? (float)cfm_d2 : cfm_d2,
-                            cf2D2 = useLegacyPrecision ? (float)cf2_d2 : cf2_d2,
-                            row23Ha = useLegacyPrecision
-                                ? (float)(0.5f * (float)eq2.ZHa * (float)h2_d2)
-                                : (0.5 * eq2.ZHa) * h2_d2,
-                            row23Cfm = useLegacyPrecision
-                                ? (float)((float)eq2.ZCfm * (float)cfm_d2)
-                                : eq2.ZCfm * cfm_d2,
-                            row23Cf = useLegacyPrecision
-                                ? (float)((float)eq2.ZCf2 * (float)cf2_d2)
-                                : eq2.ZCf2 * cf2_d2,
-                            row23 = eq2.VS2_23
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_x_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            ityp = bldifType,
-                            zXl = eq2.ZXl,
-                            zCfx = eq2.ZCfx,
-                            zX1 = eq2.ZX1,
-                            zX2 = eq2.ZX2
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_x_breakdown",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            ityp = bldifType,
-                            cfxX1 = eq2.CfxX1,
-                            xLogTerm = eq2.ZX1XlogTerm,
-                            cfxTerm = eq2.ZX1CfxTerm,
-                            zX1 = eq2.ZX1,
-                            cfxX2 = eq2.CfxX2,
-                            x2LogTerm = eq2.ZX2XlogTerm,
-                            cfx2Term = eq2.ZX2CfxTerm,
-                            zX2 = eq2.ZX2
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq2_u_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            zCfx = eq2.ZCfx,
-                            cfxCfm = eq2.CfxCfm,
-                            cfxCf1 = eq2.CfxCf1,
-                            cfxCf2 = eq2.CfxCf2,
-                            zCfm = eq2.ZCfm,
-                            zCf1 = eq2.ZCf1,
-                            zCf2 = eq2.ZCf2,
-                            cfmU1 = useLegacyPrecision ? (float)cfm_u1 : cfm_u1,
-                            cfmU2 = useLegacyPrecision ? (float)cfm_u2 : cfm_u2,
-                            cf1U1 = useLegacyPrecision ? (float)cf1_u1 : cf1_u1,
-                            cf2U2 = useLegacyPrecision ? (float)cf2_u2 : cf2_u2,
-                            row14Ma = useLegacyPrecision
-                                ? (float)(0.5f * (float)eq2.ZMa * (float)m1_u1)
-                                : (0.5 * eq2.ZMa) * m1_u1,
-                            row14Cfm = useLegacyPrecision
-                                ? (float)((float)eq2.ZCfm * (float)cfm_u1)
-                                : eq2.ZCfm * cfm_u1,
-                            row14Cf = useLegacyPrecision
-                                ? (float)((float)eq2.ZCf1 * (float)cf1_u1)
-                                : eq2.ZCf1 * cf1_u1,
-                            row14U = eq2.ZU1,
-                            row14 = eq2.VS1_24,
-                            row24Ma = useLegacyPrecision
-                                ? (float)(0.5f * (float)eq2.ZMa * (float)m2_u2)
-                                : (0.5 * eq2.ZMa) * m2_u2,
-                            row24Cfm = useLegacyPrecision
-                                ? (float)((float)eq2.ZCfm * (float)cfm_u2)
-                                : eq2.ZCfm * cfm_u2,
-                            row24Cf = useLegacyPrecision
-                                ? (float)((float)eq2.ZCf2 * (float)cf2_u2)
-                                : eq2.ZCf2 * cf2_u2,
-                            row24U = eq2.ZU2,
-                            row24 = eq2.VS2_24
-                        });
-                }
-            }
         }
 
         // ================================================================
@@ -3974,30 +2582,6 @@ public static class BoundaryLayerSystemAssembler
                 }
                 result.Residual[2] = LegacyPrecisionMath.Negate(rezh, true);
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "bldif_eq3_residual_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                ityp = bldifType,
-                                hlog,
-                                btmp,
-                                ulog,
-                                btmpUlog,
-                                xlog,
-                                cfx,
-                                halfCfx,
-                                dix,
-                                transport,
-                                xlogTransport,
-                                rezh
-                            });
-                    }
-                }
 
                 float zCfx = (float)xlog * 0.5f;
                 float zDix = -(float)xlog;
@@ -4149,255 +2733,11 @@ public static class BoundaryLayerSystemAssembler
                 vs2_23 += 0.5f * (zHca * (float)hc2_u2);
                 vs2_23 += zUpw * (float)upw_u2;
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "bldif_eq3_t1_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                ityp = bldifType,
-                                x1 = x1f,
-                                x2 = x2f,
-                                t1 = t1f,
-                                t2 = t2f,
-                                u1 = (float)u1,
-                                u2 = (float)u2,
-                                upw = upwf,
-                                xot1,
-                                xot2,
-                                cf1 = cf1f,
-                                cf2 = cf2f,
-                                di1 = di1f,
-                                di2 = di2f,
-                                cf1xot1,
-                                cf2xot2,
-                                di1xot1,
-                                di2xot2,
-                                zTermCf1,
-                                zTermDi1,
-                                zT1Body,
-                                zT1Wake,
-                                zHs1,
-                                hs1T1 = (float)hs1_t1,
-                                zCf1,
-                                cf1T1 = (float)cf1_t1,
-                                zDi1,
-                                di1T1 = (float)di1_t1,
-                                baseHs = row32Vs1BaseHs,
-                                baseCf = row32Vs1BaseCf,
-                                baseDi = row32Vs1BaseDi,
-                                baseZT = zT1,
-                                extraH = row32Vs1ExtraH,
-                                zCfx,
-                                zDix,
-                                cfxUpw,
-                                dixUpw,
-                                zUpw,
-                                upwT = (float)upw_t1,
-                                extraUpw = row32Vs1ExtraUpw,
-                                baseStored32 = row32Vs1BaseStore,
-                                row32 = vs1_21
-                            });
-                    }
-                }
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "bldif_eq3_t2_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                ityp = bldifType,
-                                x1 = x1f,
-                                x2 = x2f,
-                                t1 = t1f,
-                                t2 = t2f,
-                                u1 = (float)u1,
-                                u2 = (float)u2,
-                                upw = upwf,
-                                xot1,
-                                xot2,
-                                cf1 = cf1f,
-                                cf2 = cf2f,
-                                di1 = di1f,
-                                di2 = di2f,
-                                cf1xot1,
-                                cf2xot2,
-                                di1xot1,
-                                di2xot2,
-                                zTermCf2,
-                                zTermDi2,
-                                zT2Body,
-                                zT2Wake,
-                                zHs2,
-                                hs2T2 = (float)hs2_t2,
-                                hs2T2Raw = hs2_t2,
-                                zCf2,
-                                cf2T2 = (float)cf2_t2,
-                                zDi2,
-                                di2T2 = (float)di2_t2,
-                                baseHs = row32BaseHs,
-                                baseHsWideFloatOperands = row32BaseHsWideFloatOperands,
-                                baseHsRawT = row32BaseHsRawT,
-                                baseCf = row32BaseCf,
-                                baseDi = row32BaseDi,
-                                baseZT = zT2,
-                                extraH = row32ExtraH,
-                                zCfx,
-                                zDix,
-                                cfxUpw,
-                                dixUpw,
-                                zUpw,
-                                upwT = (float)upw_t2,
-                                extraUpw = row32ExtraUpw,
-                                baseStored32 = row32BaseHs + row32BaseCf + row32BaseDi + zT2,
-                                row32 = vs2_21
-                            });
-                    }
-                }
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "bldif_eq3_s2_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                ityp = bldifType,
-                                zDi2,
-                                di2S2 = (float)di2_s2,
-                                di2S2Raw = di2_s2,
-                                row31WideFloatOperands = (float)((double)zDi2 * (double)(float)di2_s2),
-                                row31RawProduct = (float)((double)zDi2 * di2_s2),
-                                row31 = vs2_20
-                            });
-                    }
-                }
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "bldif_eq3_d1_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                ityp = bldifType,
-                                zHs1,
-                                hs1D1 = (float)hs1_d1,
-                                zCf1,
-                                cf1D1 = (float)cf1_d1,
-                                zDi1,
-                                di1D1 = (float)di1_d1,
-                                baseHs = row31BaseHs,
-                                baseCf = row31BaseCf,
-                                baseDi = row31BaseDi,
-                                extraH = row31ExtraH,
-                                xot1,
-                                xot2,
-                                cf1 = cf1f,
-                                cf2 = cf2f,
-                                di1 = di1f,
-                                di2 = di2f,
-                                zCfx,
-                                zDix,
-                                cfxUpw,
-                                dixUpw,
-                                zUpw,
-                                upwD = (float)upw_d1,
-                                extraUpw = row31ExtraUpw,
-                                baseStored33 = row31BaseHs + row31BaseCf + row31BaseDi,
-                                row33 = vs1_22
-                            });
-                    }
-                }
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "bldif_eq3_d2_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                ityp = bldifType,
-                                baseHs = row33BaseHs,
-                                baseCf = row33BaseCf,
-                                baseDi = row33BaseDi,
-                                extraH = row33ExtraH,
-                                xot1,
-                                xot2,
-                                cf1 = cf1f,
-                                cf2 = cf2f,
-                                di1 = di1f,
-                                di2 = di2f,
-                                zCfx,
-                                zDix,
-                                cfxUpw,
-                                dixUpw,
-                                zUpw,
-                                upwD = (float)upw_d2,
-                                extraUpw = row33ExtraUpw,
-                                baseStored33 = row33BaseHs + row33BaseCf + row33BaseDi,
-                                row33 = vs2_22
-                            });
-                    }
-                }
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "bldif_eq3_u2_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                ityp = bldifType,
-                                zHs2,
-                                hs2U2 = (float)hs2_u2,
-                                zCf2,
-                                cf2U2 = (float)cf2_u2,
-                                zDi2,
-                                di2U2 = (float)di2_u2,
-                                zU2,
-                                zHcaHalf = 0.5f * zHca,
-                                hc2U2 = (float)hc2_u2,
-                                zUpw,
-                                upwU2 = (float)upw_u2,
-                                baseHs = zHs2 * (float)hs2_u2,
-                                baseCf = zCf2 * (float)cf2_u2,
-                                baseDi = zDi2 * (float)di2_u2,
-                                baseZU = zU2,
-                                extraH = 0.5f * (zHca * (float)hc2_u2),
-                                extraUpw = zUpw * (float)upw_u2,
-                                baseStored34 = zHs2 * (float)hs2_u2 + zCf2 * (float)cf2_u2 + zDi2 * (float)di2_u2 + zU2,
-                                row34 = vs2_23
-                            });
-                    }
-                }
 
                 result.VS1[2, 0] = LegacyPrecisionMath.RoundToSingle(vs1_20, true);
                 result.VS1[2, 1] = LegacyPrecisionMath.RoundToSingle(vs1_21, true);
@@ -4527,30 +2867,6 @@ public static class BoundaryLayerSystemAssembler
             }
             result.Residual[2] = LegacyPrecisionMath.Negate(rezh, useLegacyPrecision);
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "bldif_eq3_residual_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                ityp = bldifType,
-                                hlog,
-                                btmp,
-                            ulog,
-                            btmpUlog,
-                            xlog,
-                            cfx,
-                            halfCfx,
-                            dix,
-                            transport,
-                            xlogTransport,
-                            rezh
-                        });
-                    }
-                }
 
             // Z-coefficients (Fortran lines 1918-1941)
             double z_cfx = xlog * 0.5;
@@ -4743,152 +3059,11 @@ public static class BoundaryLayerSystemAssembler
                 LegacyPrecisionMath.Multiply(z_upw, upw_u2, useLegacyPrecision),
                 useLegacyPrecision);
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq3_t1_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp = bldifType,
-                            x1,
-                            x2,
-                            t1,
-                            t2,
-                            u1,
-                            u2,
-                            upw,
-                            xot1,
-                            xot2,
-                            cf1,
-                            cf2,
-                            di1,
-                            di2,
-                            cf1xot1 = cf1 * xot1,
-                            cf2xot2 = cf2 * xot2,
-                            di1xot1 = di1 * xot1,
-                            di2xot2 = di2 * xot2,
-                            zTermCf1 = z_cfx * cf1,
-                            zTermDi1 = z_dix * di1,
-                            zT1Body = (1.0 - upw) * ((z_cfx * cf1) + (z_dix * di1)) * (-xot1 / t1),
-                            zT1Wake = z_hwa * 0.5 * (-dw1 / (t1 * t1)),
-                            zHs1 = z_hs1,
-                            hs1T1 = hs1_t1,
-                            zCf1 = z_cf1,
-                            cf1T1 = cf1_t1,
-                            zDi1 = z_di1,
-                            di1T1 = di1_t1,
-                            baseHs = z_hs1 * hs1_t1,
-                            baseCf = z_cf1 * cf1_t1,
-                            baseDi = z_di1 * di1_t1,
-                            baseZT = z_t1,
-                            extraH = 0.5 * ((z_hca * hc1_t1) + (z_ha * h1_t1)),
-                            zCfx = z_cfx,
-                            zDix = z_dix,
-                            cfxUpw = cfx_upw,
-                            dixUpw = dix_upw,
-                            zUpw = z_upw,
-                            upwT = upw_t1,
-                            extraUpw = z_upw * upw_t1,
-                            baseStored32 = eq3T1BaseStore,
-                            row32 = result.VS1[2, 1]
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq3_d1_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp = bldifType,
-                            zHs1 = z_hs1,
-                            hs1D1 = hs1_d1,
-                            zCf1 = z_cf1,
-                            cf1D1 = cf1_d1,
-                            zDi1 = z_di1,
-                            di1D1 = di1_d1,
-                            baseHs = z_hs1 * hs1_d1,
-                            baseCf = z_cf1 * cf1_d1,
-                            baseDi = z_di1 * di1_d1,
-                            extraH = 0.5 * (z_hca * hc1_d1 + z_ha * h1_d1),
-                            xot1,
-                            xot2,
-                            cf1,
-                            cf2,
-                            di1,
-                            di2,
-                            zCfx = z_cfx,
-                            zDix = z_dix,
-                            cfxUpw = cfx_upw,
-                            dixUpw = dix_upw,
-                            zUpw = z_upw,
-                            upwD = upw_d1,
-                            extraUpw = z_upw * upw_d1,
-                            row33 = result.VS1[2, 2]
-                        });
-                }
-            }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "bldif_eq3_d2_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp = bldifType,
-                            baseHs = z_hs2 * hs2_d2,
-                            baseCf = z_cf2 * cf2_d2,
-                            baseDi = z_di2 * di2_d2,
-                            extraH = 0.5 * (z_hca * hc2_d2 + z_ha * h2_d2),
-                            xot1,
-                            xot2,
-                            cf1,
-                            cf2,
-                            di1,
-                            di2,
-                            zCfx = z_cfx,
-                            zDix = z_dix,
-                            cfxUpw = cfx_upw,
-                            dixUpw = dix_upw,
-                            zUpw = z_upw,
-                            upwD = upw_d2,
-                            extraUpw = z_upw * upw_d2,
-                            row33 = result.VS2[2, 2]
-                        });
-                }
-            }
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "bldif_residual",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        station = traceStation,
-                        phase = canonicalTracePhase,
-                        ityp = bldifType,
-                        rez1 = result.Residual[0],
-                        rez2 = result.Residual[1],
-                        rez3 = result.Residual[2]
-                    });
-            }
-        }
 
         return result;
     }
@@ -6381,30 +4556,6 @@ public static class BoundaryLayerSystemAssembler
         double usDTermHk = MulP(usT_Hk, transitionKinematic.HK2_D2);
         double usDTermH = MulP(usT_H, hT_Dt);
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "transition_interval_us2_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        usT,
-                        usTHs = usT_Hs,
-                        usTHk = usT_Hk,
-                        usTH = usT_H,
-                        usTTermHs,
-                        usTTermHk,
-                        usTTermH,
-                        usDTermHs,
-                        usDTermHk,
-                        usDTermH,
-                        usTTt = usT_Tt,
-                        usTDt = usT_Dt
-                    });
-            }
-        }
 
         ComputeCqChains(
             transitionKinematic.HK2,
@@ -6516,200 +4667,8 @@ public static class BoundaryLayerSystemAssembler
             ? LegacyPrecisionMath.SumOfProducts(st_Tt, tt_XF, st_Dt, dt_XF, st_Ut, ut_XF, true)
             : Sop3(st_Tt, tt_XF, st_Dt, dt_XF, st_Ut, ut_XF);
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "transition_interval_st_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        hsT,
-                        hsTHk = hsT_Hk,
-                        hsTRt = hsT_Rt,
-                        hsTTt = hsT_Tt,
-                        hsTDt = hsT_Dt,
-                        hsTUt = hsT_Ut,
-                        usT,
-                        usTHs = usT_Hs,
-                        usTHk = usT_Hk,
-                        usTH = usT_H,
-                        usTTt = usT_Tt,
-                        usTDt = usT_Dt,
-                        usTUt = usT_Ut,
-                        usTTermHs,
-                        usTTermHk,
-                        usTTermH,
-                        usDTermHs,
-                        usDTermHk,
-                        usDTermH,
-                        hT,
-                        hTTt = hT_Tt,
-                        hTDt = hT_Dt,
-                        hk2 = transitionKinematic.HK2,
-                        rtT = transitionKinematic.RT2,
-                        rtTTt = transitionKinematic.RT2_T2,
-                        rtTUt = transitionKinematic.RT2_U2,
-                        m2 = transitionKinematic.M2,
-                        ctr,
-                        ctrHk2 = ctr_Hk,
-                        cqT,
-                        cqTTt = cqT_Tt,
-                        cqTDt = cqT_Dt,
-                        cqTUt = cqT_Ut,
-                        hk2Tt = transitionKinematic.HK2_T2,
-                        hk2Dt = transitionKinematic.HK2_D2,
-                        hk2Ut = transitionKinematic.HK2_U2,
-                        stTt = st_Tt,
-                        stDt = st_Dt,
-                        stUt = st_Ut,
-                        ttA1 = tt1[0],
-                        ttT1 = tt1[1],
-                        ttT2 = tt2[1],
-                        dtA1 = dt1[0],
-                        dtT1 = dt1[1],
-                        dtT2 = dt2[1],
-                        utA1 = ut1[0],
-                        utT1 = ut1[1],
-                        utT2 = ut2[1],
-                        stA1 = st1[0],
-                        stT1 = st1[1],
-                        stT2 = st2[1],
-                        ttU1 = tt1[3],
-                        ttU2 = tt2[3],
-                        dtU1 = dt1[3],
-                        dtU2 = dt2[3],
-                        utU1 = ut1[3],
-                        utU2 = ut2[3],
-                        ttX1 = tt1[4],
-                        ttX2 = tt2[4],
-                        dtX1 = dt1[4],
-                        dtX2 = dt2[4],
-                        utX1 = ut1[4],
-                        utX2 = ut2[4],
-                        stU1 = st1[3],
-                        stU2 = st2[3],
-                        stX1 = st1[4],
-                        stX2 = st2[4]
-                    });
-            }
-        }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "transition_interval_term_components",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        wf2,
-                        wf2Xt = wf2_Xt,
-                        wf1A1 = wf1_A1,
-                        wf1T1 = wf1_T1,
-                        wf1T2 = wf1_T2,
-                        wf2A1 = wf2_A1,
-                        wf2T1 = wf2_T1,
-                        wf2T2 = wf2_T2,
-                        wf2X1Term1 = wf2_X1Term1,
-                        wf2X1Term2 = wf2_X1Term2,
-                        wf2X2Term1 = wf2_X2Term1,
-                        wf2X2Term2 = wf2_X2Term2,
-                        ttA1Term1,
-                        ttA1Term2,
-                        dtA1Term1,
-                        dtA1Term2,
-                        dtT1Term1,
-                        dtT1Term2,
-                        dtT2Term1,
-                        dtT2Term2,
-                        utA1Term1,
-                        utA1Term2,
-                        utT1Term1,
-                        utT1Term2,
-                        utT2Term1,
-                        utT2Term2
-                    });
-            }
-        }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "transition_interval_inputs",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        station = traceStation,
-                        iteration = traceIteration,
-                        phase = tracePhase,
-                        x1 = point.Xt,
-                        x1Original = x1,
-                        x2,
-                        xt = point.Xt,
-                        t1 = tt,
-                        t1Original = t1,
-                        t2,
-                        d1 = dt,
-                        d1Original = d1,
-                        d2,
-                        s2Original = s2,
-                        u1 = ut,
-                        u1Original = u1,
-                        u2,
-                        xtA1 = point.Xt1[0],
-                        xtT1 = point.Xt1[1],
-                        xtT2 = point.Xt2[1],
-                        xtD1 = point.Xt1[2],
-                        xtD2 = point.Xt2[2],
-                        xtU1 = point.Xt1[3],
-                        xtU2 = point.Xt2[3],
-                        xtX1 = point.Xt1[4],
-                        xtX2 = point.Xt2[4],
-                        wf2A1 = wf2_A1,
-                        wf2T1 = wf2_T1,
-                        wf2T2 = wf2_T2,
-                        wf2D1 = wf2_D1,
-                        wf2D2 = wf2_D2,
-                        wf2U1 = wf2_U1,
-                        wf2U2 = wf2_U2,
-                        wf2X1 = wf2_X1,
-                        wf2X2 = wf2_X2,
-                        ttA1 = tt1[0],
-                        ttT1 = tt1[1],
-                        ttT2 = tt2[1],
-                        ttD1 = tt1[2],
-                        ttD2 = tt2[2],
-                        dtA1 = dt1[0],
-                        dtT1 = dt1[1],
-                        dtT2 = dt2[1],
-                        dtD1 = dt1[2],
-                        dtD2 = dt2[2],
-                        utA1 = ut1[0],
-                        utT1 = ut1[1],
-                        utT2 = ut2[1],
-                        utD1 = ut1[2],
-                        utD2 = ut2[2],
-                        utU1 = ut1[3],
-                        utU2 = ut2[3],
-                        st,
-                        stA1 = st1[0],
-                        stT1 = st1[1],
-                        stT2 = st2[1],
-                        stD1 = st1[2],
-                        stD2 = st2[2],
-                        stU1 = st1[3],
-                        stU2 = st2[3],
-                        stX1 = st1[4],
-                        stX2 = st2[4]
-                    });
-            }
-        }
 
         var kinematic2 = ComputeKinematicParameters(
             u2,
@@ -7097,33 +5056,6 @@ public static class BoundaryLayerSystemAssembler
                         + (turbulentPart.VS1[row, 2] * dt1[1])
                         + (turbulentPart.VS1[row, 3] * ut1[1])
                         + (turbulentPart.VS1[row, 4] * point.Xt1[1]);
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "transition_interval_bt1_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                row = row + 1,
-                                column = 2,
-                                stTerm = bt11StTerm,
-                                stBits = FloatBits(bt11StTerm),
-                                ttTerm = bt11TtTerm,
-                                ttBits = FloatBits(bt11TtTerm),
-                                dtTerm = bt11DtTerm,
-                                dtBits = FloatBits(bt11DtTerm),
-                                utTerm = bt11UtTerm,
-                                utBits = FloatBits(bt11UtTerm),
-                                xtTerm = bt11XtTerm,
-                                xtBits = FloatBits(bt11XtTerm),
-                                final = bt11,
-                                wideOriginalOperands = bt11WideOriginalOperands,
-                                finalBits = FloatBits(bt11)
-                            });
-                    }
-                }
             }
 
             double bt20 = turbulentPart.VS2[row, 0];
@@ -7681,164 +5613,6 @@ public static class BoundaryLayerSystemAssembler
                     double bt21TraceWideDtTerm = turbulentPart.VS1[row, 2] * dt2[1];
                     double bt21TraceWideUtTerm = turbulentPart.VS1[row, 3] * ut2[1];
                     double bt21TraceWideXtTerm = turbulentPart.VS1[row, 4] * point.Xt2[1];
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                                "transition_interval_bt2_terms",
-                                SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                row = row + 1,
-                                column = 2,
-                                baseVs2 = bt21Base,
-                                baseBits = FloatBits(bt21Base),
-                                source1 = turbulentPart.VS1[row, 0],
-                                source1Bits = FloatBits(turbulentPart.VS1[row, 0]),
-                                source2 = turbulentPart.VS1[row, 1],
-                                source2Bits = FloatBits(turbulentPart.VS1[row, 1]),
-                                source3 = turbulentPart.VS1[row, 2],
-                                source3Bits = FloatBits(turbulentPart.VS1[row, 2]),
-                                source4 = turbulentPart.VS1[row, 3],
-                                source4Bits = FloatBits(turbulentPart.VS1[row, 3]),
-                                source5 = turbulentPart.VS1[row, 4],
-                                source5Bits = FloatBits(turbulentPart.VS1[row, 4]),
-                                coeff1 = st2[1],
-                                coeff1Bits = FloatBits(st2[1]),
-                                coeff2 = tt2[1],
-                                coeff2Bits = FloatBits(tt2[1]),
-                                coeff3 = dt2[1],
-                                coeff3Bits = FloatBits(dt2[1]),
-                                coeff4 = ut2[1],
-                                coeff4Bits = FloatBits(ut2[1]),
-                                coeff5 = point.Xt2[1],
-                                coeff5Bits = FloatBits(point.Xt2[1]),
-                                stTerm = bt21StTerm,
-                                stBits = FloatBits(bt21StTerm),
-                                ttTerm = bt21TtTerm,
-                                ttBits = FloatBits(bt21TtTerm),
-                                dtTerm = bt21DtTerm,
-                                dtBits = FloatBits(bt21DtTerm),
-                                utTerm = bt21UtTerm,
-                                utBits = FloatBits(bt21UtTerm),
-                                xtTerm = bt21XtTerm,
-                                xtBits = FloatBits(bt21XtTerm),
-                                wideStTerm = bt21TraceWideStTerm,
-                                wideTtTerm = bt21TraceWideTtTerm,
-                                wideDtTerm = bt21TraceWideDtTerm,
-                                wideUtTerm = bt21TraceWideUtTerm,
-                                wideXtTerm = bt21TraceWideXtTerm,
-                                final = bt21,
-                                wideOriginalOperands = bt21WideOriginalOperands,
-                                wideOriginalOperandsBits = FloatBits(bt21WideOriginalOperands),
-                                finalBits = FloatBits(bt21)
-                            });
-                        }
-                    }
-                }
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "transition_interval_bt2_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                row = row + 1,
-                                column = 3,
-                                baseVs2 = bt22Base,
-                                baseBits = FloatBits(bt22Base),
-                                source1 = turbulentPart.VS1[row, 0],
-                                source1Bits = FloatBits(turbulentPart.VS1[row, 0]),
-                                source2 = turbulentPart.VS1[row, 1],
-                                source2Bits = FloatBits(turbulentPart.VS1[row, 1]),
-                                source3 = turbulentPart.VS1[row, 2],
-                                source3Bits = FloatBits(turbulentPart.VS1[row, 2]),
-                                source4 = turbulentPart.VS1[row, 3],
-                                source4Bits = FloatBits(turbulentPart.VS1[row, 3]),
-                                source5 = turbulentPart.VS1[row, 4],
-                                source5Bits = FloatBits(turbulentPart.VS1[row, 4]),
-                                coeff1 = st2[2],
-                                coeff1Bits = FloatBits(st2[2]),
-                                coeff2 = tt2[2],
-                                coeff2Bits = FloatBits(tt2[2]),
-                                coeff3 = dt2[2],
-                                coeff3Bits = FloatBits(dt2[2]),
-                                coeff4 = ut2[2],
-                                coeff4Bits = FloatBits(ut2[2]),
-                                coeff5 = point.Xt2[2],
-                                coeff5Bits = FloatBits(point.Xt2[2]),
-                                stTerm = bt22StTerm,
-                                stBits = FloatBits(bt22StTerm),
-                                ttTerm = bt22TtTerm,
-                                ttBits = FloatBits(bt22TtTerm),
-                                dtTerm = bt22DtTerm,
-                                dtBits = FloatBits(bt22DtTerm),
-                                utTerm = bt22UtTerm,
-                                utBits = FloatBits(bt22UtTerm),
-                                xtTerm = bt22XtTerm,
-                                xtBits = FloatBits(bt22XtTerm),
-                                wideStTerm = turbulentPart.VS1[row, 0] * st2[2],
-                                wideTtTerm = turbulentPart.VS1[row, 1] * tt2[2],
-                                wideDtTerm = turbulentPart.VS1[row, 2] * dt2[2],
-                                wideUtTerm = turbulentPart.VS1[row, 3] * ut2[2],
-                                wideXtTerm = turbulentPart.VS1[row, 4] * point.Xt2[2],
-                                final = bt22,
-                                wideOriginalOperands = bt22WideOriginalOperands,
-                                wideOriginalOperandsBits = FloatBits(bt22WideOriginalOperands),
-                                fusedSourceOrder = bt22FusedSourceOrder,
-                                fusedSourceOrderBits = FloatBits(bt22FusedSourceOrder),
-                                finalBits = FloatBits(bt22)
-                            });
-                    }
-                }
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "transition_interval_bt2_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                row = row + 1,
-                                column = 4,
-                                baseVs2 = turbulentPart.VS2[row, 3],
-                                baseBits = FloatBits(turbulentPart.VS2[row, 3]),
-                                stTerm = bt23StTerm,
-                                stBits = FloatBits(bt23StTerm),
-                                ttTerm = bt23TtTerm,
-                                ttBits = FloatBits(bt23TtTerm),
-                                dtTerm = bt23DtTerm,
-                                dtBits = FloatBits(bt23DtTerm),
-                                utTerm = bt23UtTerm,
-                                utBits = FloatBits(bt23UtTerm),
-                                xtTerm = bt23XtTerm,
-                                xtBits = FloatBits(bt23XtTerm),
-                                wideStTerm = turbulentPart.VS1[row, 0] * st2[3],
-                                wideTtTerm = turbulentPart.VS1[row, 1] * tt2[3],
-                                wideDtTerm = turbulentPart.VS1[row, 2] * dt2[3],
-                                wideUtTerm = turbulentPart.VS1[row, 3] * ut2[3],
-                                wideXtTerm = turbulentPart.VS1[row, 4] * point.Xt2[3],
-                                final = bt23,
-                                wideOriginalOperands = bt23WideOriginalOperands,
-                                finalBits = FloatBits(bt23)
-                            });
-                    }
                 }
 
                 if (row == 0)
@@ -7850,26 +5624,6 @@ public static class BoundaryLayerSystemAssembler
                                 bt22DtTerm),
                             bt22UtTerm),
                         bt22XtTerm);
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                            "transition_interval_bt2_d_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                baseVs2 = bt22Base,
-                                stTerm = bt22StTerm,
-                                ttTerm = bt22TtTerm,
-                                dtTerm = bt22DtTerm,
-                                utTerm = bt22UtTerm,
-                                xtTerm = bt22XtTerm,
-                                blend = bt22Blend,
-                                row13 = bt22
-                            });
-                        }
-                    }
                 }
             }
 
@@ -8166,102 +5920,6 @@ public static class BoundaryLayerSystemAssembler
                 row22TurbulentFinal = bt21;
                 row22CombinedFinal = result.VS2[row, 1];
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "transition_interval_final_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                row = row + 1,
-                                column = 2,
-                                laminarValue = laminarVs2Row1,
-                                laminarBits = FloatBits(laminarVs2Row1),
-                                turbulentValue = bt21,
-                                turbulentBits = FloatBits(bt21),
-                                final = result.VS2[row, 1],
-                                finalBits = FloatBits(result.VS2[row, 1])
-                            });
-                    }
-                }
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "transition_interval_final_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                row = row + 1,
-                                column = 3,
-                                laminarValue = laminarVs2Row2,
-                                laminarBits = FloatBits(laminarVs2Row2),
-                                turbulentValue = bt22,
-                                turbulentBits = FloatBits(bt22),
-                                final = result.VS2[row, 2],
-                                finalBits = FloatBits(result.VS2[row, 2])
-                            });
-                    }
-                }
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "transition_interval_final_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                row = row + 1,
-                                column = 4,
-                                laminarValue = laminarVs2Row3,
-                                laminarBits = FloatBits(laminarVs2Row3),
-                                turbulentValue = bt23,
-                                turbulentBits = FloatBits(bt23),
-                                final = result.VS2[row, 3],
-                                finalBits = FloatBits(result.VS2[row, 3])
-                            });
-                    }
-                }
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "transition_interval_final_terms",
-                            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                            new
-                            {
-                                side = traceSide,
-                                station = traceStation,
-                                iteration = traceIteration,
-                                phase = canonicalTracePhase,
-                                row = row + 1,
-                                column = 5,
-                                laminarValue = laminarVs2Row4,
-                                laminarBits = FloatBits(laminarVs2Row4),
-                                turbulentValue = bt24,
-                                turbulentBits = FloatBits(bt24),
-                                final = result.VS2[row, 4],
-                                finalBits = FloatBits(result.VS2[row, 4])
-                            });
-                    }
-                }
             }
 
             if (row == 2)
@@ -8282,68 +5940,6 @@ public static class BoundaryLayerSystemAssembler
         // TRDIF is currently the active parity boundary. Trace the interpolated
         // transition state plus the laminar/turbulent row-3 contributions so the
         // next mismatch can be located before the combined system is solved.
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "transition_interval_rows",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        x1 = point.Xt,
-                        x1Original = x1,
-                        x2,
-                        xt = point.Xt,
-                        wf1,
-                        wf2,
-                        tt,
-                        dt,
-                        ut,
-                        st,
-                        laminarResidual2 = laminarPart.Residual[1],
-                        laminarResidual3 = laminarPart.Residual[2],
-                        laminarVs1_31 = bl31,
-                        laminarVs1_32 = bl32,
-                        laminarVs1_33 = bl33,
-                        laminarVs1_34 = bl34,
-                        laminarVs1_35 = bl35,
-                        laminarVs2_31 = bl41,
-                        laminarVs2_22 = row22LaminarFinal,
-                        laminarVs2_32 = bl42,
-                        laminarVs2_33 = bl43,
-                        laminarVs2_34 = bl44,
-                        laminarVs2_35 = bl45,
-                        laminarVs2_14 = laminarPart.VS2[0, 3],
-                        laminarVs2_24 = laminarPart.VS2[1, 3],
-                        turbulentResidual1 = turbulentPart.Residual[0],
-                        turbulentResidual2 = turbulentPart.Residual[1],
-                        turbulentResidual3 = turbulentPart.Residual[2],
-                        turbulentVs1_31 = bt31,
-                        turbulentVs1_32 = bt32,
-                        turbulentVs1_33 = bt33,
-                        turbulentVs1_34 = bt34,
-                        turbulentVs1_35 = bt35,
-                        turbulentVs2_31 = bt41,
-                        turbulentVs2_22 = row22TurbulentFinal,
-                        turbulentVs2_32 = bt42,
-                        turbulentVs2_33 = bt43,
-                        turbulentVs2_34 = bt44,
-                        turbulentVs2_35 = bt45,
-                        turbulentVs2_14 = turbulentPart.VS2[0, 3],
-                        turbulentVs2_24 = turbulentPart.VS2[1, 3],
-                        finalVs2_14 = result.VS2[0, 3],
-                        finalVs2_22 = row22CombinedFinal,
-                        finalVs2_24 = result.VS2[1, 3],
-                        finalResidual3 = result.Residual[2],
-                        finalVs2_31 = result.VS2[2, 0],
-                        finalVs2_32 = result.VS2[2, 1],
-                        finalVs2_33 = result.VS2[2, 2],
-                        finalVs2_34 = result.VS2[2, 3],
-                        finalVs2_35 = result.VS2[2, 4]
-                    });
-            }
-        }
 
         if (useLegacyPrecision
             && DebugFlags.SetBlHex
@@ -8564,32 +6160,6 @@ public static class BoundaryLayerSystemAssembler
                     $" CQ={BitConverter.SingleToInt32Bits(cqf):X8}");
             }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "cq_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp,
-                            hk = hkf,
-                            hs = hsf,
-                            us = usf,
-                            h = hf,
-                            rt = rtf,
-                            hkc = hkcf,
-                            hkb = hkbf,
-                            usb = usbf,
-                            num = numf,
-                            den = denf,
-                            ratio = ratiof,
-                            cq = cqf,
-                            useLegacyPrecision = true
-                        });
-                }
-            }
 
             float cqHsf = ((((LegacyCtcon * hkbf) * hkcSqf) / denf) * halff) / cqf;
             float cqUsf = ((((numf / denf) / usbf) * halff)) / cqf;
@@ -8642,52 +6212,6 @@ public static class BoundaryLayerSystemAssembler
             cq_u = cqUBase + (cqRt2f * (float)rt_u);
             cq_ms = cqMsBase + (cqRt2f * (float)rt_ms);
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "cq_derivative_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            ityp,
-                            hk = hkf,
-                            hs = hsf,
-                            us = usf,
-                            h = hf,
-                            rt = rtf,
-                            cqHs = cqHsf,
-                            cqUs = cqUsf,
-                            cqHk = cqHkf,
-                            cqH = cqHf,
-                            cqRt = cqRt2f,
-                            cqHkTerm1,
-                            cqHkTerm2,
-                            cqHkTerm3,
-                            cqTermHsT,
-                            cqTermUsT,
-                            cqTermHkT,
-                            cqTermHT,
-                            cqTermRtT,
-                            cqTermHsD,
-                            cqTermUsD,
-                            cqTermHkD,
-                            cqTermHD,
-                            cqTermHsU,
-                            cqTermUsU,
-                            cqTermHkU,
-                            cqTermRtU,
-                            cqTermHsMs,
-                            cqTermUsMs,
-                            cqTermHkMs,
-                            cqTermRtMs,
-                            cqT = cq_t,
-                            cqD = cq_d,
-                            useLegacyPrecision = true
-                        });
-                }
-            }
             return;
         }
 
@@ -8714,32 +6238,6 @@ public static class BoundaryLayerSystemAssembler
         cq = Math.Sqrt(ratio);
         double half = 0.5;
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "cq_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        ityp,
-                        hk,
-                        hs,
-                        us,
-                        h,
-                        rt,
-                        hkc,
-                        hkb,
-                        usb,
-                        num,
-                        den,
-                        ratio,
-                        cq,
-                        useLegacyPrecision = false
-                    });
-            }
-        }
 
         // Partial derivatives wrt intermediate variables (Fortran lines 875-883)
         double cq_hs = ((CTCON * hkb * hkc * hkc / (usb * h * hk * hk)) * half) / cq;
@@ -8757,44 +6255,6 @@ public static class BoundaryLayerSystemAssembler
         cq_u = cq_hs * hs_u + cq_us * us_u + cq_hk * hk_u + cq_rt2 * rt_u;
         cq_ms = cq_hs * hs_ms + cq_us * us_ms + cq_hk * hk_ms + cq_rt2 * rt_ms;
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "cq_derivative_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        ityp,
-                        hk,
-                        hs,
-                        us,
-                        h,
-                        rt,
-                        cqHs = cq_hs,
-                        cqUs = cq_us,
-                        cqHk = cq_hk,
-                        cqH = cq_h,
-                        cqRt = cq_rt2,
-                        cqHkTerm1 = cq_hk_term1,
-                        cqHkTerm2 = cq_hk_term2,
-                        cqHkTerm3 = cq_hk_term3,
-                        cqTermHsT = cq_hs * hs_t,
-                        cqTermUsT = cq_us * us_t,
-                        cqTermHkT = cq_hk * hk_t,
-                        cqTermHT = cq_h * h_t,
-                        cqTermRtT = cq_rt2 * rt_t,
-                        cqTermHsD = cq_hs * hs_d,
-                        cqTermUsD = cq_us * us_d,
-                        cqTermHkD = cq_hk * hk_d,
-                        cqTermHD = cq_h * h_d,
-                        cqT = cq_t,
-                        cqD = cq_d,
-                        useLegacyPrecision = false
-                    });
-            }
-        }
     }
 
     // =====================================================================
@@ -9147,8 +6607,6 @@ public static class BoundaryLayerSystemAssembler
                 float dilTrace = 0.0f;
                 float dilHkTrace = 0.0f;
                 float dilRtTrace = 0.0f;
-                bool usedLaminarTrace = false;
-
             if (ityp == 1)
             {
                 var (dilRaw, dilHkRaw, dilRtRaw) =
@@ -9480,34 +6938,6 @@ public static class BoundaryLayerSystemAssembler
 
                 if (stationTraceIndex != 0)
                 {
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                                "blvar_outer_di_terms",
-                                SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                                new
-                                {
-                                    station = stationTraceIndex,
-                                    ityp,
-                                    hsT = hsTf,
-                                    usT = usTf,
-                                    rtT = rtTf,
-                                    dd = ddTrace,
-                                    ddHs = ddHsTrace,
-                                    ddUs = ddUsTrace,
-                                    ddS = ddS,
-                                    ddT = ddTTrace,
-                                    ddl = ddlTrace,
-                                    ddlHs = ddlHsTrace,
-                                    ddlUs = ddlUsTrace,
-                                    ddlRt = ddlRtTrace,
-                                    ddlT = ddlTTrace,
-                                    finalDiT = diTf
-                                });
-                        }
-                    }
                 }
             }
 
@@ -9525,7 +6955,6 @@ public static class BoundaryLayerSystemAssembler
                 {
                     dif = dil;
                     diSf = 0.0f;
-                    usedLaminarTrace = true;
                     diUf = (float)LegacyPrecisionMath.MultiplyAdd(
                         dilHk,
                         hkUf,
@@ -9592,106 +7021,7 @@ public static class BoundaryLayerSystemAssembler
                 di_ms = diMsf;
                 if (ityp == 2)
                 {
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                                "blvar_turbulent_d_update_terms",
-                                SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                                new
-                                {
-                                    station = stationTraceIndex,
-                                    s = sf,
-                                    sBits = unchecked((int)BitConverter.SingleToUInt32Bits(sf)),
-                                    diWallDPostDfac = diWallDPostDfacTrace,
-                                    diWallDPostDfacBits = unchecked((int)BitConverter.SingleToUInt32Bits(diWallDPostDfacTrace)),
-                                    ddHs = ddHsTrace,
-                                    ddHsBits = unchecked((int)BitConverter.SingleToUInt32Bits(ddHsTrace)),
-                                    hsHk = (float)hs_hk_trace,
-                                    hsHkBits = unchecked((int)BitConverter.SingleToUInt32Bits((float)hs_hk_trace)),
-                                    hkD = hkDf,
-                                    hkDBits = unchecked((int)BitConverter.SingleToUInt32Bits(hkDf)),
-                                    hsD = hsDf,
-                                    hsDBits = unchecked((int)BitConverter.SingleToUInt32Bits(hsDf)),
-                                    ddUs = ddUsTrace,
-                                    ddUsBits = unchecked((int)BitConverter.SingleToUInt32Bits(ddUsTrace)),
-                                    usD = usDf,
-                                    usDBits = unchecked((int)BitConverter.SingleToUInt32Bits(usDf)),
-                                    ddD = ddDTrace,
-                                    ddDBits = unchecked((int)BitConverter.SingleToUInt32Bits(ddDTrace)),
-                                    ddlHs = ddlHsTrace,
-                                    ddlHsBits = unchecked((int)BitConverter.SingleToUInt32Bits(ddlHsTrace)),
-                                    ddlUs = ddlUsTrace,
-                                    ddlUsBits = unchecked((int)BitConverter.SingleToUInt32Bits(ddlUsTrace)),
-                                    ddlD = ddlDTrace,
-                                    ddlDBits = unchecked((int)BitConverter.SingleToUInt32Bits(ddlDTrace)),
-                                    finalDiD = diDf,
-                                    finalDiDBits = unchecked((int)BitConverter.SingleToUInt32Bits(diDf))
-                                });
-                        }
-                    }
 
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                                "blvar_turbulent_di_terms",
-                                SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                                new
-                                {
-                                    station = stationTraceIndex,
-                                    s = sf,
-                                    sBits = unchecked((int)BitConverter.SingleToUInt32Bits(sf)),
-                                    hk = hkf,
-                                    hkBits = unchecked((int)BitConverter.SingleToUInt32Bits(hkf)),
-                                    hs = hsf,
-                                    us = usf,
-                                    rt = rtf,
-                                    rtBits = unchecked((int)BitConverter.SingleToUInt32Bits(rtf)),
-                                    cf2t = cf2tTrace,
-                                    cf2tHk = cf2tHkTrace,
-                                    cf2tRt = cf2tRtTrace,
-                                    cf2tM = cf2tMTrace,
-                                    cf2tD = cf2tDfTrace,
-                                    diWallRaw = diWallRawTrace,
-                                    diWallHs = diWallHsTrace,
-                                    diWallUs = diWallUsTrace,
-                                    diWallCf = diWallCfTrace,
-                                    diWallDPreDfac = diWallDPreDfacTrace,
-                                    grt = grtTrace,
-                                    hmin = hminTrace,
-                                    hmRt = hmRtTrace,
-                                    fl = flTrace,
-                                    dfac = dfacTrace,
-                                    dfHk = dfHkTrace,
-                                    dfRt = dfRtTrace,
-                                    dfTermD = dfTermDTrace,
-                                    diWallDPostDfac = diWallDPostDfacTrace,
-                                    diWallDPostDfacBits = unchecked((int)BitConverter.SingleToUInt32Bits(diWallDPostDfacTrace)),
-                                    dd = ddTrace,
-                                    ddHs = ddHsTrace,
-                                    ddUs = ddUsTrace,
-                                    ddD = ddDTrace,
-                                    ddDBits = unchecked((int)BitConverter.SingleToUInt32Bits(ddDTrace)),
-                                    ddl = ddlTrace,
-                                    ddlHs = ddlHsTrace,
-                                    ddlUs = ddlUsTrace,
-                                    ddlRt = ddlRtTrace,
-                                    ddlD = ddlDTrace,
-                                    ddlDBits = unchecked((int)BitConverter.SingleToUInt32Bits(ddlDTrace)),
-                                    dil = dilTrace,
-                                    dilHk = dilHkTrace,
-                                    dilRt = dilRtTrace,
-                                    usedLaminar = usedLaminarTrace,
-                                    finalDi = dif,
-                                    finalDiBits = unchecked((int)BitConverter.SingleToUInt32Bits(dif)),
-                                    finalDiD = diDf,
-                                    finalDiDBits = unchecked((int)BitConverter.SingleToUInt32Bits(diDf))
-                                });
-                        }
-                    }
                 }
                 return;
             }
@@ -9887,9 +7217,6 @@ public static class BoundaryLayerSystemAssembler
             dw2 = LegacyPrecisionMath.RoundToSingle(dw2);
         }
 
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-            new { cte, tte, dte, hk2, rt2, msq2, h2, s2, t2, d2, dw2 });
         var result = new BldifResult();
         result.Residual = new double[3];
         result.VS1 = new double[3, 5];
@@ -9917,14 +7244,6 @@ public static class BoundaryLayerSystemAssembler
             dw2,
             useLegacyPrecision);
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                "tesys_residual",
-                result.Residual,
-                new { kind = "tesys" });
-        }
         return result;
     }
 
@@ -10031,50 +7350,11 @@ public static class BoundaryLayerSystemAssembler
             reybl_ms = LegacyPrecisionMath.RoundToSingle(reybl_ms);
         }
 
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-            new
-            {
-                isWake,
-                isTurbOrTran,
-                isTran,
-                isSimi,
-                x1,
-                x2,
-                uei1,
-                uei2,
-                t1,
-                t2,
-                d1,
-                d2,
-                s1,
-                s2
-            });
         var result = new BlsysResult();
         result.Residual = new double[3];
         result.VS1 = new double[3, 5];
         result.VS2 = new double[3, 5];
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "blsys_trace_context",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        station = traceStation,
-                        iteration = traceIteration,
-                        phase = canonicalTracePhase,
-                        isWake,
-                        isTurbOrTran,
-                        isTran,
-                        isSimi
-                    });
-            }
-        }
 
         // Determine ITYP (Fortran BLSYS lines 604-614)
         int ityp;
@@ -10172,42 +7452,6 @@ public static class BoundaryLayerSystemAssembler
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "blsys_interval_inputs",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                    new
-                    {
-                        side = traceSide,
-                        station = traceStation,
-                        phase = canonicalTracePhase,
-                        ityp,
-                        wake = isWake,
-                        turb = isTurbOrTran,
-                        tran = isTran,
-                        simi = isSimi,
-                        x1,
-                        x2,
-                        u1,
-                        u2,
-                        t1,
-                        t2,
-                        d1 = d1ForSystem,
-                        d2 = d2ForSystem,
-                        s1,
-                        s2,
-                        dw1,
-                        dw2,
-                        ampl1,
-                        ampl2,
-                        m1 = msq1,
-                        m2 = msq2
-                    });
-            }
-        }
 
         double station2KinematicU = (useLegacyPrecision && station2PrimaryOverride is not null)
             ? station2PrimaryOverride.U
@@ -10427,40 +7671,6 @@ public static class BoundaryLayerSystemAssembler
         // Decision: Keep the explicit tracing and preserve the original combine order.
         if (isSimi)
         {
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "simi_precombine_rows",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                        new
-                        {
-                            side = traceSide,
-                            station = traceStation,
-                            eq2Vs1_22 = bldif.VS1[1, 1],
-                            eq2Vs2_22 = bldif.VS2[1, 1],
-                            eq2Combined22 = useLegacyPrecision
-                                ? (float)((float)bldif.VS1[1, 1] + (float)bldif.VS2[1, 1])
-                                : bldif.VS1[1, 1] + bldif.VS2[1, 1],
-                            eq2Vs1_24 = bldif.VS1[1, 3],
-                            eq2Vs2_24 = bldif.VS2[1, 3],
-                            eq2Combined24 = useLegacyPrecision
-                                ? (float)((float)bldif.VS1[1, 3] + (float)bldif.VS2[1, 3])
-                                : bldif.VS1[1, 3] + bldif.VS2[1, 3],
-                            eq3Vs1_32 = bldif.VS1[2, 1],
-                            eq3Vs2_32 = bldif.VS2[2, 1],
-                            eq3Combined32 = useLegacyPrecision
-                                ? (float)((float)bldif.VS1[2, 1] + (float)bldif.VS2[2, 1])
-                                : bldif.VS1[2, 1] + bldif.VS2[2, 1],
-                            eq3Vs1_33 = bldif.VS1[2, 2],
-                            eq3Vs2_33 = bldif.VS2[2, 2],
-                            eq3Combined33 = useLegacyPrecision
-                                ? (float)((float)bldif.VS1[2, 2] + (float)bldif.VS2[2, 2])
-                                : bldif.VS1[2, 2] + bldif.VS2[2, 2]
-                        });
-                }
-            }
 
             for (int k = 0; k < 3; k++)
                 for (int l = 0; l < 5; l++)
@@ -10504,14 +7714,6 @@ public static class BoundaryLayerSystemAssembler
             result.VS2[k, 3] = LegacyPrecisionMath.Multiply(resU2, u2_uei, useLegacyPrecision);
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                SolverTrace.ScopeName(typeof(BoundaryLayerSystemAssembler)),
-                "station_residual",
-                result.Residual,
-                new { isWake, isTurbOrTran, isTran, isSimi });
-        }
 
         if (useLegacyPrecision && isTran
             && DebugFlags.SetBlHex

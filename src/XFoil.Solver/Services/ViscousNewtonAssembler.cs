@@ -95,16 +95,6 @@ public static class ViscousNewtonAssembler
         // wakeGap[0] = WGAP(1) by ~2 ULP due to cubic (AA+BB) rounding.
         double anteRaw = 0.0)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-            new
-            {
-                nsys = newtonSystem.NSYS,
-                upperTe = blState.IBLTE[0],
-                lowerTe = blState.IBLTE[1],
-                isp,
-                nPanel
-            });
         s_buildCallCount++;
         int nsys = newtonSystem.NSYS;
         var va = newtonSystem.VA;
@@ -1023,37 +1013,6 @@ public static class ViscousNewtonAssembler
                         $" xiULE2={BitConverter.SingleToInt32Bits((float)xiUle2):X8}");
                 }
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "setbl_forcing_inputs",
-                            SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                            new
-                            {
-                                side = side + 1,
-                                station = ibl + 1,
-                                iv = iv + 1,
-                                uedgStation = blState.UEDG[ibl, side],
-                                usavStation = usav[ibl, side],
-                                d2_u2,
-                                due2,
-                                dds2,
-                                uedgLe1 = blState.UEDG[1, 0],
-                                usavLe1 = usav[1, 0],
-                                dule1,
-                                uedgLe2 = blState.UEDG[1, 1],
-                                usavLe2 = usav[1, 1],
-                                dule2,
-                                sstGo,
-                                sstGp,
-                                xiUle1,
-                                xiUle2,
-                                xiForcing
-                            });
-                    }
-                }
 
                 // Legacy block: xbl.f SETBL residual load into VDEL.
                 // Difference from legacy: The residual forcing terms are written with named `due/dds/xi` components rather than inline array algebra, but the resulting row construction follows the same VS1/VS2 coupling as SETBL.
@@ -1064,7 +1023,6 @@ public static class ViscousNewtonAssembler
                 // Fortran 1-based: col 3=D*, col 4=Ue => C# col 2=D*, col 3=Ue
                 for (int k = 0; k < 3; k++)
                 {
-                    double xiVsxTerm = 0.0;
                     if (useLegacyPrecision)
                     {
                         // Fortran SETBL: VSREZ(K) = VSREZ(K) + (VS1(K,4)*DUE1 + VS1(K,3)*DDS1
@@ -1162,128 +1120,9 @@ public static class ViscousNewtonAssembler
                     }
                     vdel[k, 1, iv] = 0.0;
 
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                                "setbl_vdel_terms",
-                                SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                                new
-                                {
-                                    side = side + 1,
-                                    station = ibl + 1,
-                                    iv = iv + 1,
-                                    row = k + 1,
-                                    residual = localResult.Residual[k],
-                                    due1,
-                                    due2,
-                                    dds1,
-                                    dds2,
-                                    xiForcing,
-                                    xiVsxTerm,
-                                    final_vdel = vdel[k, 0, iv]
-                                });
-                        }
-                    }
                 }
 
                 // Diagnostic dump: station BL state, VA/VB blocks, VDEL residuals
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "station_state",
-                            SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                            new
-                            {
-                                side = side + 1,
-                                station = ibl + 1,
-                                iv = iv + 1,
-                                xsi,
-                                uei,
-                                thi,
-                                dsi,
-                                mdi,
-                                due2,
-                                dds2,
-                                xiForcing
-                            });
-                    }
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VA_ROW1",
-                        new[] { va[0, 0, iv], va[0, 1, iv] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VA_ROW2",
-                        new[] { va[1, 0, iv], va[1, 1, iv] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VA_ROW3",
-                        new[] { va[2, 0, iv], va[2, 1, iv] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VB_ROW1",
-                        new[] { vb[0, 0, iv], vb[0, 1, iv] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VB_ROW2",
-                        new[] { vb[1, 0, iv], vb[1, 1, iv] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VB_ROW3",
-                        new[] { vb[2, 0, iv], vb[2, 1, iv] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VDEL_R",
-                        new[] { vdel[0, 0, iv], vdel[1, 0, iv], vdel[2, 0, iv] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VDEL_S",
-                        new[] { vdel[0, 1, iv], vdel[1, 1, iv], vdel[2, 1, iv] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                        "VSREZ",
-                        new[] { localResult.Residual[0], localResult.Residual[1], localResult.Residual[2] },
-                        new { side = side + 1, station = ibl + 1, iv = iv + 1 });
-                }
                 // GDB parity hex dump of raw VSREZ and VDEL
                 if (DebugFlags.SetBlHex)
                 {
@@ -1740,16 +1579,6 @@ public static class ViscousNewtonAssembler
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "newton_system_ready",
-                    SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                    new { rmsbl, residualCount = nResiduals });
-            }
-        }
 
         // Per-IV VM row hash AFTER full assembly at buildCall=2
         if (DebugFlags.SetBlHex
@@ -1794,15 +1623,6 @@ public static class ViscousNewtonAssembler
         TextWriter? debugWriter,
         bool useLegacyPrecision)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-            new
-            {
-                upperStations = blState.NBL[0],
-                lowerStations = blState.NBL[1],
-                isp,
-                nPanel
-            });
         double[,] usav = new double[blState.MaxStations, 2];
 
         // Legacy block: xbl.f UESET side/station reconstruction loops.
@@ -2008,31 +1828,6 @@ public static class ViscousNewtonAssembler
                                 airfoilContribution = LegacyPrecisionMath.Add(airfoilContribution, contribution, useLegacyPrecision);
                             }
 
-                            if (SolverTrace.IsActive)
-                            {
-                                if (SolverTrace.IsActive)
-                                {
-                                    SolverTrace.Event(
-                                        "predicted_edge_velocity_term",
-                                        SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                                        new
-                                        {
-                                            side = side + 1,
-                                            station = ibl + 1,
-                                            sourceSide = jSide + 1,
-                                            sourceStation = jbl + 1,
-                                            iPan = iPan + 1,
-                                            jPan = jPan + 1,
-                                            vtiI,
-                                            vtiJ,
-                                            dij = dijValue,
-                                            mass = massValue,
-                                            ueM,
-                                            contribution,
-                                            isWakeSource
-                                        });
-                                }
-                            }
                         }
                     }
                 }
@@ -2047,24 +1842,6 @@ public static class ViscousNewtonAssembler
                         $" UINV={BitConverter.SingleToInt32Bits((float)ueInvLocal):X8}" +
                         $" DUI={BitConverter.SingleToInt32Bits((float)dui):X8}" +
                         $" UEDG={BitConverter.SingleToInt32Bits((float)predicted):X8}");
-                }
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "predicted_edge_velocity",
-                            SolverTrace.ScopeName(typeof(ViscousNewtonAssembler)),
-                            new
-                            {
-                                side = side + 1,
-                                station = ibl + 1,
-                                ueInv = ueInvLocal,
-                                airfoilContribution,
-                                wakeContribution,
-                                predicted
-                            });
-                    }
                 }
 
                 if (debugWriter != null)

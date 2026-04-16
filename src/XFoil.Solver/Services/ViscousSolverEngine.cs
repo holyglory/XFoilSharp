@@ -173,17 +173,6 @@ public static class ViscousSolverEngine
         double alphaRadians,
         TextWriter? debugWriter = null)
     {
-        using var traceSession = SolverTrace.Begin(debugWriter);
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new
-            {
-                alphaRadians,
-                settings.PanelCount,
-                settings.ReynoldsNumber,
-                settings.MachNumber,
-                geometryPointCount = geometry.x.Length
-            });
 
         TraceBufferGeometry(geometry.x, geometry.y);
         if (DebugFlags.SetBlHex)
@@ -210,22 +199,6 @@ public static class ViscousSolverEngine
             alphaRadians, panel, inviscidState,
             settings.FreestreamVelocity, settings.MachNumber);
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "inviscid_result",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        inviscidResult.LiftCoefficient,
-                        inviscidResult.MomentCoefficient,
-                        inviscidResult.AngleOfAttackRadians,
-                        panel.NodeCount
-                    });
-            }
-        }
 
         // Step 2: Run viscous coupling iteration
         return SolveViscousFromInviscid(
@@ -312,9 +285,6 @@ public static class ViscousSolverEngine
     // Decision: Keep it as managed-only instrumentation.
     private static void TraceBufferGeometry(double[] x, double[] y)
     {
-        if (!SolverTrace.IsActive) return;
-        if (!SolverTrace.IsActive) return;  // fast-path: skip all allocations when tracing is off
-        string scope = SolverTrace.ScopeName(typeof(ViscousSolverEngine));
         int count = Math.Min(x.Length, y.Length);
         if (count == 0)
         {
@@ -330,37 +300,9 @@ public static class ViscousSolverEngine
             arc[i] = arc[i - 1] + Math.Sqrt((dx * dx) + (dy * dy));
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "buffer_geometry_x", x, new { count });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "buffer_geometry_y", y, new { count });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "buffer_geometry_s", arc, new { count });
-        }
 
         for (int i = 0; i < count; i++)
         {
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "buffer_node",
-                        scope,
-                        new
-                        {
-                            index = i + 1,
-                            x = x[i],
-                            y = y[i],
-                            arcLength = arc[i]
-                        });
-                }
-            }
         }
     }
 
@@ -382,18 +324,6 @@ public static class ViscousSolverEngine
         double alphaRadians,
         TextWriter? debugWriter = null)
     {
-        using var traceSession = SolverTrace.Begin(debugWriter);
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new
-            {
-                alphaRadians,
-                panel.NodeCount,
-                settings.ReynoldsNumber,
-                settings.MachNumber,
-                settings.MaxViscousIterations,
-                inviscidResult.LiftCoefficient
-            });
 
         PreNewtonSetupContext preNewton = PreparePreNewtonSetupFromInviscid(
             panel,
@@ -531,21 +461,6 @@ public static class ViscousSolverEngine
                         $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[iblF, sideF]):X8}" +
                         $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[iblF, sideF]):X8}" +
                         $" M={BitConverter.SingleToInt32Bits((float)blState.MASS[iblF, sideF]):X8}");
-                }
-            }
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "iteration_start",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            iteration = iter + 1,
-                            trustRadius,
-                            tolerance
-                        });
                 }
             }
             debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
@@ -1332,22 +1247,6 @@ public static class ViscousSolverEngine
                     "POST_UPDATE RMSBL={0,15:E8} RMXBL={1,15:E8} RLX={2,15:E8}",
                     rmsbl, rmsbl * 2.0, rlx));
             }
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "post_update",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            iteration = iter + 1,
-                            rmsbl,
-                            rlx,
-                            trustRadius
-                        });
-                }
-            }
 
             // f. STMOVE: Relocate stagnation point if it has moved
             // Convert UEDG back to panel speeds, then find stagnation by sign change
@@ -1372,19 +1271,6 @@ public static class ViscousSolverEngine
                     speedWindow[i] = currentSpeeds[windowStart + i];
                 }
 
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Array(
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        "stagnation_speed_window_post_update",
-                        speedWindow,
-                        new
-                        {
-                            iteration = iter + 1,
-                            isp = isp + 1,
-                            windowStart = windowStart + 1
-                        });
-                }
             }
             var (newIsp, newSst, newSstGo, newSstGp) = FindStagnationPointXFoil(
                 currentSpeeds,
@@ -1638,24 +1524,6 @@ public static class ViscousSolverEngine
                 debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
                     "POST_CALC CL={0,15:E8} CD={1,15:E8} CM={2,15:E8}", cl, cd, cm));
             }
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "iteration_end",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            iteration = iter + 1,
-                            rmsbl,
-                            cl,
-                            cd,
-                            cm,
-                            converged = rmsbl < tolerance
-                        });
-                }
-            }
 
             // Guard against NaN from transient numerical issues
             if (double.IsNaN(rmsbl) || double.IsInfinity(rmsbl))
@@ -1772,9 +1640,6 @@ public static class ViscousSolverEngine
         out double reybl, out double reybl_re, out double reybl_ms,
         bool useLegacyPrecision = false)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { mach, qinf, reinf });
         if (useLegacyPrecision)
         {
             // COMSET is part of the legacy data pipeline, so parity mode must build
@@ -1847,28 +1712,6 @@ public static class ViscousSolverEngine
             reybl_ms = reybl * ((1.5 / herat) - (1.0 / (herat + hvrat))) * herat_ms;
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "compressibility_parameters",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        tkbl,
-                        qinfbl,
-                        tkbl_ms,
-                        hstinv,
-                        hstinv_ms,
-                        rstbl,
-                        rstbl_ms,
-                        reybl,
-                        reybl_re,
-                        reybl_ms
-                    });
-            }
-        }
     }
 
     // Legacy mapping: none
@@ -2313,14 +2156,6 @@ public static class ViscousSolverEngine
         int nWake,
         WakeSeedData? wakeSeed = null)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new
-            {
-                nWake,
-                upperTe = blState.IBLTE[0],
-                lowerTe = blState.IBLTE[1]
-            });
         Array.Clear(ueInv);
 
         for (int side = 0; side < 2; side++)
@@ -2370,16 +2205,6 @@ public static class ViscousSolverEngine
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "baseline_updated",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new { nWake, hasWakeSeed = wakeSeed != null });
-            }
-        }
     }
 
     // ================================================================
@@ -2606,14 +2431,6 @@ public static class ViscousSolverEngine
 
         double[] qinv = new double[n];
         Array.Copy(inviscidState.InviscidSpeed, qinv, n);
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                "qinv",
-                qinv,
-                new { count = qinv.Length });
-        }
 
         var (isp, sst, initSstGo, initSstGp) = FindStagnationPointXFoil(
             qinv,
@@ -2789,22 +2606,6 @@ public static class ViscousSolverEngine
             }
             Console.Error.WriteLine($"C_DIJ hash={dijHash:X8} airfoil={airfoilHash:X8}");
         }
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "matrix_built",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        rows = dij.GetLength(0),
-                        cols = dij.GetLength(1),
-                        nWake
-                    },
-                    name: "dij");
-            }
-        }
 
         if (debugWriter != null)
         {
@@ -2936,19 +2737,6 @@ public static class ViscousSolverEngine
             inviscidState.VortexStrength[i] = gamma[i];
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                "gamma_current",
-                gamma,
-                new
-                {
-                    count = n,
-                    source = "qvis",
-                    useLegacyPrecision
-                });
-        }
     }
 
     /// <summary>
@@ -3006,9 +2794,6 @@ public static class ViscousSolverEngine
         int n,
         bool useLegacyPrecision)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { count = n, useLegacyPrecision });
         // Find where qinv changes from positive to negative (port of STFIND).
         // The C# linear vortex solver can produce spuriously large GAM values
         // at the TE nodes due to the zero-gap trailing edge singularity.
@@ -3030,34 +2815,6 @@ public static class ViscousSolverEngine
             if (qinv[i] >= 0.0 && qinv[i + 1] < 0.0)
             {
                 double mag = Math.Abs(qinv[i]) + Math.Abs(qinv[i + 1]);
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "stagnation_candidate",
-                            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                            useLegacyPrecision
-                                ? new
-                                {
-                                    index = i + 1,
-                                    gammaLeft = qinv[i],
-                                    gammaRight = qinv[i + 1],
-                                    panelArcLeft = panel.ArcLength[i],
-                                    panelArcRight = panel.ArcLength[i + 1]
-                                }
-                                : new
-                                {
-                                    index = i + 1,
-                                    gammaLeft = qinv[i],
-                                    gammaRight = qinv[i + 1],
-                                    panelArcLeft = panel.ArcLength[i],
-                                    panelArcRight = panel.ArcLength[i + 1],
-                                    magnitude = mag,
-                                    selected = false
-                                });
-                    }
-                }
 
                 if (useLegacyPrecision)
                 {
@@ -3088,18 +2845,6 @@ public static class ViscousSolverEngine
                 speedWindow[offset] = qinv[windowStart + offset];
             }
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Array(
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    "stagnation_speed_window",
-                    speedWindow,
-                    new
-                    {
-                        index = ist + 1,
-                        windowStart = windowStart + 1
-                    });
-            }
         }
 
         double sst;
@@ -3113,26 +2858,6 @@ public static class ViscousSolverEngine
             float ds = panelArcRight - panelArcLeft;
             bool usedLeftNode = gammaLeft < -gammaRight;
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "stagnation_interpolation",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            index = ist + 1,
-                            gammaLeft,
-                            gammaRight,
-                            dgam,
-                            ds,
-                            panelArcLeft,
-                            panelArcRight,
-                            usedLeftNode = usedLeftNode ? 1 : 0
-                        });
-                }
-            }
 
             if (usedLeftNode)
                 sst = panelArcLeft - ds * (gammaLeft / dgam);
@@ -3160,26 +2885,6 @@ public static class ViscousSolverEngine
             double ds = panel.ArcLength[ist + 1] - panel.ArcLength[ist];
             bool usedLeftNode = qinv[ist] < -qinv[ist + 1];
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "stagnation_interpolation",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            index = ist + 1,
-                            gammaLeft = qinv[ist],
-                            gammaRight = qinv[ist + 1],
-                            dgam,
-                            ds,
-                            panelArcLeft = panel.ArcLength[ist],
-                            panelArcRight = panel.ArcLength[ist + 1],
-                            usedLeftNode = usedLeftNode ? 1 : 0
-                        });
-                }
-            }
 
             if (usedLeftNode)
                 sst = panel.ArcLength[ist] - ds * (qinv[ist] / dgam);
@@ -3217,16 +2922,6 @@ public static class ViscousSolverEngine
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "stagnation_point",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new { isp = ist, sst, bestMag, sstGo, sstGp });
-            }
-        }
         return (ist, sst, sstGo, sstGp);
     }
 
@@ -3243,9 +2938,6 @@ public static class ViscousSolverEngine
     // Decision: Keep the explicit return values and preserve the original counting convention.
     private static (int[] iblte, int[] nbl) ComputeStationCountsXFoil(int n, int isp, int nWake)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { n, isp, nWake });
         int[] iblte = new int[2];
         int[] nbl = new int[2];
 
@@ -3260,22 +2952,6 @@ public static class ViscousSolverEngine
         iblte[1] = n - 1 - isp;
         nbl[1] = (n - 1 - isp) + 1 + nWake;
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "station_counts",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        upperTe = iblte[0],
-                        lowerTe = iblte[1],
-                        upperCount = nbl[0],
-                        lowerCount = nbl[1]
-                    });
-            }
-        }
         return (iblte, nbl);
     }
 
@@ -3324,19 +3000,6 @@ public static class ViscousSolverEngine
         bool initializeUedg = true,
         bool xssiOnly = false)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new
-            {
-                isp,
-                sst,
-                n,
-                nWake,
-                upperTe = blState.IBLTE[0],
-                lowerTe = blState.IBLTE[1],
-                hasWakeSeed = wakeSeed != null,
-                initializeUedg
-            });
         // Minimum XSSI near stagnation (XFEPS in Fortran)
         // Legacy block: xpanel.f :: XICALC REAL XSSI staging.
         // Difference: The managed path keeps doubles by default; parity mode rounds the arc-length differences through the explicit legacy REAL helpers.
@@ -3449,23 +3112,6 @@ public static class ViscousSolverEngine
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "station_mapping_initialized",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        upperTe = blState.IBLTE[0],
-                        lowerTe = blState.IBLTE[1],
-                        upperCount = blState.NBL[0],
-                        lowerCount = blState.NBL[1],
-                        hasWakeSeed = wakeSeed != null
-                    });
-            }
-        }
     }
 
     // Legacy mapping: legacy-derived from xpanel/xwake wake seeding concepts
@@ -3501,21 +3147,6 @@ public static class ViscousSolverEngine
                 inviscidState.VortexStrength[index] = currentGamma[index];
             }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "wake_seed_gamma_overlay",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            count = overlayIndices.Length,
-                            indices = overlayIndices.Select(index => index + 1).ToArray(),
-                            stagnationNode = isp + 1
-                        });
-                }
-            }
         }
 
         try
@@ -3657,14 +3288,6 @@ public static class ViscousSolverEngine
                 }
             }
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Array(
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    "wake_seed_qinv",
-                    rawSpeeds,
-                    new { nWake });
-            }
 
             double[] gapProfile = BuildWakeGapProfile(wakeGeometry, inviscidState, panel);
             // Raw TE normal gap for parity: Fortran's DTE = DSTR_TE1 + DSTR_TE2 + ANTE
@@ -3673,14 +3296,6 @@ public static class ViscousSolverEngine
             // for Selig airfoils whose TE orientation produces negative ANTE.
             double anteRaw = inviscidState.TrailingEdgeAngleNormal;
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Array(
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    "wake_gap_profile",
-                    gapProfile,
-                    new { nWake });
-            }
 
             return new WakeSeedData(wakeGeometry, rawSpeeds, gapProfile, anteRaw);
         }
@@ -3972,9 +3587,6 @@ public static class ViscousSolverEngine
     private static void InitializeBLThwaitesXFoil(
         BoundaryLayerSystemState blState, AnalysisSettings settings, double reinf)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { reinf, teGap = 0.0 });
         InitializeBLThwaitesXFoil(blState, settings, reinf, teGap: 0.0, wakeSeed: null);
     }
 
@@ -3988,9 +3600,6 @@ public static class ViscousSolverEngine
         double teGap,
         WakeSeedData? wakeSeed)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { reinf, teGap });
         double hvrat = GetHvRat(settings.UseLegacyBoundaryLayerInitialization);
         ComputeCompressibilityParameters(
             settings.MachNumber, settings.FreestreamVelocity, reinf, hvrat,
@@ -4003,16 +3612,6 @@ public static class ViscousSolverEngine
 
         for (int side = 0; side < 2; side++)
         {
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "surface_seed_start",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new { side = side + 1, teStation = blState.IBLTE[side] + 1 });
-                }
-            }
             // Thwaites at similarity station (station 1 = Fortran IBL=2)
             double xsi0 = Math.Max(blState.XSSI[1, side], 1e-10);
             double ue0 = Math.Max(Math.Abs(blState.UEDG[1, side]), 1e-10);
@@ -4293,21 +3892,6 @@ public static class ViscousSolverEngine
                     reybl_re,
                     reybl_ms);
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "surface_seed_complete",
-                            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                            new
-                            {
-                                side = side + 1,
-                                transitionStation = blState.ITRAN[side] + 1,
-                                teStation = blState.IBLTE[side] + 1
-                            });
-                    }
-                }
                 continue;
             }
 
@@ -4404,21 +3988,6 @@ public static class ViscousSolverEngine
                 }
             }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "surface_seed_complete",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            transitionStation = blState.ITRAN[side] + 1,
-                            teStation = blState.IBLTE[side] + 1
-                        });
-                }
-            }
         }
     }
 
@@ -4526,9 +4095,6 @@ public static class ViscousSolverEngine
         double reybl_re,
         double reybl_ms)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { side = side + 1, kind = "legacy_direct_surface_seed", startStation = startStation + 1 });
         double gm1 = LegacyPrecisionMath.GammaMinusOne(settings.UseLegacyBoundaryLayerInitialization);
 
         const int maxIterations = 25;
@@ -5081,52 +4647,6 @@ public static class ViscousSolverEngine
                     }
                 }
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "laminar_seed_system",
-                            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                            new
-                            {
-                                side = side + 1,
-                                station = ibl + 1,
-                                iteration = iter + 1,
-                                mode = directMode ? "direct" : "inverse",
-                                uei,
-                                theta,
-                                dstar,
-                                ampl,
-                                ctau,
-                                hk2,
-                                hk2_T2 = hk2T2,
-                                hk2_D2 = hk2D2,
-                                hk2_U2 = hk2U2,
-                                htarg = directMode ? 0.0 : inverseTargetHk,
-                                residual1 = rhs[0],
-                                residual2 = rhs[1],
-                                residual3 = rhs[2],
-                                residual4 = rhs[3],
-                                row11 = matrix[0, 0],
-                                row12 = matrix[0, 1],
-                                row13 = matrix[0, 2],
-                                row14 = matrix[0, 3],
-                                row21 = matrix[1, 0],
-                                row22 = matrix[1, 1],
-                                row23 = matrix[1, 2],
-                                row24 = matrix[1, 3],
-                                row31 = matrix[2, 0],
-                                row32 = matrix[2, 1],
-                                row33 = matrix[2, 2],
-                                row34 = matrix[2, 3],
-                                row41 = matrix[3, 0],
-                                row42 = matrix[3, 1],
-                                row43 = matrix[3, 2],
-                                row44 = matrix[3, 3]
-                            });
-                    }
-                }
 
                 // Trace wake station 82 BLSYS residuals and matrix
                 if (DebugFlags.SetBlHex
@@ -5289,37 +4809,6 @@ public static class ViscousSolverEngine
                         $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
                 }
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "laminar_seed_step",
-                            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                            new
-                            {
-                                side = side + 1,
-                                station = ibl + 1,
-                                iteration = iter + 1,
-                                mode = directMode ? "direct" : "inverse",
-                                uei,
-                                theta,
-                                dstar,
-                                ampl,
-                                deltaShear = stepMetrics.DeltaShear,
-                                deltaTheta = stepMetrics.DeltaTheta,
-                                deltaDstar = stepMetrics.DeltaDstar,
-                                deltaUe = stepMetrics.DeltaUe,
-                                ratioShear = stepMetrics.RatioShear,
-                                ratioTheta = stepMetrics.RatioTheta,
-                                ratioDstar = stepMetrics.RatioDstar,
-                                ratioUe = stepMetrics.RatioUe,
-                                dmax,
-                                rlx,
-                                residualNorm
-                            });
-                    }
-                }
 
                 if (directMode && ibl != blState.IBLTE[side] + 1)
                 {
@@ -5768,25 +5257,6 @@ public static class ViscousSolverEngine
                         preservedSecondary);
                 }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_seed_final",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            station = ibl + 1,
-                            theta,
-                            dstar,
-                            ampl,
-                            ctau,
-                            mass = blState.MASS[ibl, side]
-                        });
-                }
-            }
 
             if (ibl == blState.IBLTE[side])
             {
@@ -6057,24 +5527,6 @@ public static class ViscousSolverEngine
 
             usesShearState = ibl >= currentTransitionStation;
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_seed_iteration",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            station = ibl + 1,
-                            iteration = iter + 1,
-                            theta2,
-                            dstar2,
-                            ampl2
-                        });
-                }
-            }
 
             BoundaryLayerSystemAssembler.BlsysResult localResult;
             if (transitionInterval)
@@ -6341,104 +5793,10 @@ public static class ViscousSolverEngine
 
             if (transitionInterval)
             {
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "transition_seed_system",
-                            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                            new
-                            {
-                                side = side + 1,
-                                station = ibl + 1,
-                                iteration = iter + 1,
-                                mode = directMode ? "direct" : "inverse",
-                                xt = transitionXi,
-                                uei = uei2,
-                                theta = theta2,
-                                dstar = dstar2,
-                                ampl = ampl2,
-                                ctau = ctau2,
-                                hk2 = localResult.HK2,
-                                hk2_T2 = localResult.HK2_T2,
-                                hk2_D2 = localResult.HK2_D2,
-                                hk2_U2 = localResult.HK2_U2,
-                                htarg = directMode ? 0.0 : inverseTargetHk,
-                                residual1 = rhs[0],
-                                residual2 = rhs[1],
-                                residual3 = rhs[2],
-                                residual4 = rhs[3],
-                                row11 = matrix[0, 0],
-                                row12 = matrix[0, 1],
-                                row13 = matrix[0, 2],
-                                row14 = matrix[0, 3],
-                                row21 = matrix[1, 0],
-                                row22 = matrix[1, 1],
-                                row23 = matrix[1, 2],
-                                row24 = matrix[1, 3],
-                                row31 = matrix[2, 0],
-                                row32 = matrix[2, 1],
-                                row33 = matrix[2, 2],
-                                row34 = matrix[2, 3],
-                                row41 = matrix[3, 0],
-                                row42 = matrix[3, 1],
-                                row43 = matrix[3, 2],
-                                row44 = matrix[3, 3]
-                            });
-                    }
-                }
             }
 
             if (!transitionInterval)
             {
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "laminar_seed_system",
-                            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                            new
-                            {
-                                side = side + 1,
-                                station = ibl + 1,
-                                iteration = iter + 1,
-                                shearState = usesShearState,
-                                mode = directMode ? "direct" : "inverse",
-                                uei = uei2,
-                                theta = theta2,
-                                dstar = dstar2,
-                                ampl = ampl2,
-                                ctau = ctau2,
-                                hk2 = localResult.HK2,
-                                hk2_T2 = localResult.HK2_T2,
-                                hk2_D2 = localResult.HK2_D2,
-                                hk2_U2 = localResult.HK2_U2,
-                                htarg = directMode ? 0.0 : inverseTargetHk,
-                                residual1 = rhs[0],
-                                residual2 = rhs[1],
-                                residual3 = rhs[2],
-                                residual4 = rhs[3],
-                                row11 = matrix[0, 0],
-                                row12 = matrix[0, 1],
-                                row13 = matrix[0, 2],
-                                row14 = matrix[0, 3],
-                                row21 = matrix[1, 0],
-                                row22 = matrix[1, 1],
-                                row23 = matrix[1, 2],
-                                row24 = matrix[1, 3],
-                                row31 = matrix[2, 0],
-                                row32 = matrix[2, 1],
-                                row33 = matrix[2, 2],
-                                row34 = matrix[2, 3],
-                                row41 = matrix[3, 0],
-                                row42 = matrix[3, 1],
-                                row43 = matrix[3, 2],
-                                row44 = matrix[3, 3]
-                            });
-                    }
-                }
             }
 
             if (DebugFlags.SetBlHex
@@ -6695,37 +6053,6 @@ public static class ViscousSolverEngine
             double rlx = ComputeLegacySeedRelaxation(dmax, settings.UseLegacyBoundaryLayerInitialization);
             double stepNorm = stepMetrics.ResidualNorm;
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_seed_step",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            station = ibl + 1,
-                            iteration = iter + 1,
-                            mode = directMode ? "direct" : "inverse",
-                            residualNorm = stepNorm,
-                            uei = uei2,
-                            theta = theta2,
-                            dstar = dstar2,
-                            ampl = ampl2,
-                            deltaShear = stepMetrics.DeltaShear,
-                            deltaTheta = stepMetrics.DeltaTheta,
-                            deltaDstar = stepMetrics.DeltaDstar,
-                            deltaUe = stepMetrics.DeltaUe,
-                            ratioShear = stepMetrics.RatioShear,
-                            ratioTheta = stepMetrics.RatioTheta,
-                            ratioDstar = stepMetrics.RatioDstar,
-                            ratioUe = stepMetrics.RatioUe,
-                            dmax,
-                            rlx
-                        });
-                }
-            }
 
             if (directMode)
             {
@@ -6833,30 +6160,6 @@ public static class ViscousSolverEngine
                             useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization).HK2;
                     double inverseTargetHkRaw = LegacyPrecisionMath.Add(hk1, inverseTargetHkDelta, useLegacySeedPrecision);
                     inverseTargetHk = LegacyPrecisionMath.Max(inverseTargetHkRaw, hmax, useLegacySeedPrecision);
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                                "laminar_seed_inverse_target",
-                                SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                                new
-                                {
-                                    side = side + 1,
-                                    station = ibl + 1,
-                                    iteration = iter + 1,
-                                    hk1,
-                                    x1,
-                                    x2,
-                                    theta1,
-                                    transitionXi,
-                                    hkTest,
-                                    hmax,
-                                    htargRaw = inverseTargetHkRaw,
-                                    htarg = inverseTargetHk
-                                });
-                        }
-                    }
                     // Trace HTARG at side 2 station 4
                     if (DebugFlags.SetBlHex
                         && side == 1 && ibl == 3)
@@ -7324,25 +6627,6 @@ public static class ViscousSolverEngine
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "laminar_seed_final",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        side = side + 1,
-                        station = ibl + 1,
-                        theta = theta2,
-                        dstar = dstar2,
-                        ampl = ampl2,
-                        ctau = ctau2,
-                        mass = blState.MASS[ibl, side]
-                    });
-            }
-        }
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHUE inverse-target Hk relation
@@ -7430,9 +6714,6 @@ public static class ViscousSolverEngine
         double reybl_re,
         double reybl_ms)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { side = side + 1, station = 2 });
         double gm1 = LegacyPrecisionMath.GammaMinusOne(settings.UseLegacyBoundaryLayerInitialization);
         const int maxIterations = 25;
         const double seedTolerance = 1.0e-5;
@@ -7520,52 +6801,6 @@ public static class ViscousSolverEngine
                 rhs[3] = inverseTargetHk - localResult.HK2;
             }
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_seed_system",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            station = 2,
-                            iteration = iter + 1,
-                            mode = directMode ? "direct" : "inverse",
-                            uei,
-                            theta,
-                            dstar,
-                            ampl,
-                            ctau = seedCtau,
-                            hk2 = localResult.HK2,
-                            hk2_T2 = localResult.HK2_T2,
-                            hk2_D2 = localResult.HK2_D2,
-                            hk2_U2 = localResult.HK2_U2,
-                            htarg = directMode ? 0.0 : inverseTargetHk,
-                            residual1 = rhs[0],
-                            residual2 = rhs[1],
-                            residual3 = rhs[2],
-                            residual4 = rhs[3],
-                            row11 = matrix[0, 0],
-                            row12 = matrix[0, 1],
-                            row13 = matrix[0, 2],
-                            row14 = matrix[0, 3],
-                            row21 = matrix[1, 0],
-                            row22 = matrix[1, 1],
-                            row23 = matrix[1, 2],
-                            row24 = matrix[1, 3],
-                            row31 = matrix[2, 0],
-                            row32 = matrix[2, 1],
-                            row33 = matrix[2, 2],
-                            row34 = matrix[2, 3],
-                            row41 = matrix[3, 0],
-                            row42 = matrix[3, 1],
-                            row43 = matrix[3, 2],
-                            row44 = matrix[3, 3]
-                        });
-                }
-            }
 
             double[] delta;
             try
@@ -7598,37 +6833,6 @@ public static class ViscousSolverEngine
             double rlx = ComputeLegacySeedRelaxation(dmax, settings.UseLegacyBoundaryLayerInitialization);
             double stepNorm = stepMetrics.ResidualNorm;
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_seed_step",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            station = 2,
-                            iteration = iter + 1,
-                            mode = directMode ? "direct" : "inverse",
-                            uei,
-                            theta,
-                            dstar,
-                            ampl,
-                            deltaShear = stepMetrics.DeltaShear,
-                            deltaTheta = stepMetrics.DeltaTheta,
-                            deltaDstar = stepMetrics.DeltaDstar,
-                            deltaUe = stepMetrics.DeltaUe,
-                            ratioShear = stepMetrics.RatioShear,
-                            ratioTheta = stepMetrics.RatioTheta,
-                            ratioDstar = stepMetrics.RatioDstar,
-                            ratioUe = stepMetrics.RatioUe,
-                            dmax,
-                            rlx,
-                            residualNorm = stepNorm
-                        });
-                }
-            }
 
             if (directMode)
             {
@@ -7721,25 +6925,6 @@ public static class ViscousSolverEngine
             reybl_re,
             reybl_ms);
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "laminar_seed_final",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        side = side + 1,
-                        station = 2,
-                        theta,
-                        dstar,
-                        ampl,
-                        ctau = seedCtau,
-                        mass = blState.MASS[ibl, side]
-                    });
-            }
-        }
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHUE wake station Newton refinement
@@ -7971,9 +7156,6 @@ public static class ViscousSolverEngine
         double reybl_ms,
         ref double carriedCtau)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { side = side + 1, station = ibl + 1 });
         if (DebugFlags.SetBlHex
             && side == 0 && ibl + 1 == 58)
             Console.Error.WriteLine($"C_LAMREF stn=58 entered");
@@ -8165,25 +7347,6 @@ public static class ViscousSolverEngine
             // stays laminar. Using only the explicit AX*DX predictor here leaves
             // the station input behind the classic march before the Newton solve.
             ampl2 = Math.Max(transition.DownstreamAmplification, 0.0);
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_seed_iteration",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            station = ibl + 1,
-                            iteration = iter + 1,
-                            residualNorm,
-                            theta2,
-                            dstar2,
-                            ampl2
-                        });
-                }
-            }
             var localResult = AssembleLaminarStation(
                 x1, x2, uei1, uei2, theta1, theta2, dstar1, dstar2, ampl1, ampl2, settings,
                 tkbl, qinfbl, tkbl_ms,
@@ -8282,37 +7445,6 @@ public static class ViscousSolverEngine
 
             double dmax = stepMetrics.Dmax;
             double rlx = (dmax > maxNormalizedStep) ? maxNormalizedStep / dmax : 1.0;
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_seed_step",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            station = ibl + 1,
-                            iteration = iter + 1,
-                            mode = "direct",
-                            residualNorm,
-                            uei = uei2,
-                            theta = theta2,
-                            dstar = dstar2,
-                            ampl = ampl2,
-                            deltaShear = stepMetrics.DeltaShear,
-                            deltaTheta = stepMetrics.DeltaTheta,
-                            deltaDstar = stepMetrics.DeltaDstar,
-                            deltaUe = stepMetrics.DeltaUe,
-                            ratioShear = stepMetrics.RatioShear,
-                            ratioTheta = stepMetrics.RatioTheta,
-                            ratioDstar = stepMetrics.RatioDstar,
-                            ratioUe = stepMetrics.RatioUe,
-                            dmax,
-                            rlx
-                        });
-                }
-            }
             bool accepted = false;
 
             while (rlx >= 1e-3)
@@ -8428,25 +7560,6 @@ public static class ViscousSolverEngine
             reybl_re,
             reybl_ms);
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "laminar_seed_final",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        side = side + 1,
-                        station = ibl + 1,
-                        theta = theta2,
-                        dstar = dstar2,
-                        ampl = ampl2,
-                        ctau = initialCtau2,
-                        mass = blState.MASS[ibl, side]
-                    });
-            }
-        }
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHDU
@@ -8471,15 +7584,6 @@ public static class ViscousSolverEngine
         // Static call counter for MRCHDU debugging
         _mrchduCallCount++;
         int mrchduCall = _mrchduCallCount;
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new
-            {
-                mode = "legacy_direct_seed",
-                teGap,
-                upperTe = blState.IBLTE[0],
-                lowerTe = blState.IBLTE[1]
-            });
 
         if (DebugFlags.SetBlHex && _mrchduCallCount <= 3)
             Console.Error.WriteLine($"C_MRCHDU_ENTRY mc={_mrchduCallCount} ITRAN0={blState.ITRAN[0]} ITRAN1={blState.ITRAN[1]} IBLTE0={blState.IBLTE[0]}");
@@ -9675,7 +8779,6 @@ public static class ViscousSolverEngine
                                 $" c3={BitConverter.SingleToInt32Bits((float)vs2[row,3]):X8}");
                     }
 
-                    string constraintMode;
                     if (simi || (wake && ibl == blState.IBLTE[side] + 1))
                     {
                         // Classic MRCHDU keeps the similarity station and the first
@@ -9683,7 +8786,6 @@ public static class ViscousSolverEngine
                         // compressible state seen at this station.
                         matrix[3, 3] = currentU2Uei;
                         rhs[3] = ueref - currentU2;
-                        constraintMode = "direct";
                     }
                     else
                     {
@@ -9887,8 +8989,6 @@ public static class ViscousSolverEngine
                             rhs[3],
                             ueConstraint,
                             settings.UseLegacyBoundaryLayerInitialization);
-                        constraintMode = "inverse";
-
                         // n6h20 VS4 row 4 debug at IBL=66 mc=10
                         if (DebugFlags.SetBlHex
                             && side == 1 && ibl == 65 && mrchduCall == 10 && iter <= 2)
@@ -10115,42 +9215,6 @@ public static class ViscousSolverEngine
                     double[] delta;
                     try
                     {
-                        if (SolverTrace.IsActive)
-                        {
-                            if (SolverTrace.IsActive)
-                            {
-                                SolverTrace.Event(
-                                    "legacy_seed_final_system",
-                                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                                    new
-                                    {
-                                        side = side + 1,
-                                        station = ibl + 1,
-                                        iteration = iter + 1,
-                                        mode = constraintMode,
-                                        row11 = matrix[0, 0],
-                                        row12 = matrix[0, 1],
-                                        row13 = matrix[0, 2],
-                                        row14 = matrix[0, 3],
-                                        row21 = matrix[1, 0],
-                                        row22 = matrix[1, 1],
-                                        row23 = matrix[1, 2],
-                                        row24 = matrix[1, 3],
-                                        row31 = matrix[2, 0],
-                                        row32 = matrix[2, 1],
-                                        row33 = matrix[2, 2],
-                                        row34 = matrix[2, 3],
-                                        row41 = matrix[3, 0],
-                                        row42 = matrix[3, 1],
-                                        row43 = matrix[3, 2],
-                                        row44 = matrix[3, 3],
-                                        rhs1 = rhs[0],
-                                        rhs2 = rhs[1],
-                                        rhs3 = rhs[2],
-                                        rhs4 = rhs[3]
-                                    });
-                            }
-                        }
 
                         if (DebugFlags.SetBlHex
                             && side == 0 && (ibl + 1 == 3 || ibl + 1 == 4) && iter == 0)
@@ -10397,26 +9461,6 @@ public static class ViscousSolverEngine
                                 $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}");
                         }
 
-                        if (SolverTrace.IsActive)
-                        {
-                            if (SolverTrace.IsActive)
-                            {
-                                SolverTrace.Event(
-                                    "legacy_seed_final_delta",
-                                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                                    new
-                                    {
-                                        side = side + 1,
-                                        station = ibl + 1,
-                                        iteration = iter + 1,
-                                        mode = constraintMode,
-                                        delta1 = delta[0],
-                                        delta2 = delta[1],
-                                        delta3 = delta[2],
-                                        delta4 = delta[3]
-                                    });
-                            }
-                        }
                     }
                     catch (InvalidOperationException)
                     {
@@ -10478,56 +9522,7 @@ public static class ViscousSolverEngine
                             $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
                     }
 
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                                "legacy_seed_constraint",
-                                SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                                new
-                                {
-                                    side = side + 1,
-                                    station = ibl + 1,
-                                    iteration = iter + 1,
-                                    mode = constraintMode,
-                                    currentU2,
-                                    currentU2Uei,
-                                    hk2 = hk2Current,
-                                    hkref,
-                                    ueref,
-                                    sens,
-                                    senNew
-                                });
-                        }
-                    }
 
-                    if (SolverTrace.IsActive)
-                    {
-                        if (SolverTrace.IsActive)
-                        {
-                            SolverTrace.Event(
-                                "legacy_seed_iteration",
-                                SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                                new
-                                {
-                                    side = side + 1,
-                                    station = ibl + 1,
-                                    iteration = iter + 1,
-                                    wake,
-                                    turb,
-                                    tran,
-                                    dmax,
-                                    rlx,
-                                    uei,
-                                    theta,
-                                    dstar,
-                                    ctau,
-                                    ampl,
-                                    residualNorm = ComputeResidualNorm(residual)
-                                });
-                        }
-                    }
 
                     // n6h20 iter-10 MRCHDU delta trace: dump VSREZ at IBL=66 (C# 0-idx=65) mc=10
                     if (DebugFlags.SetBlHex
@@ -11072,25 +10067,6 @@ public static class ViscousSolverEngine
                                 $" ITRAN->{blState.ITRAN[side]+1}");
                         }
 
-                        if (SolverTrace.IsActive)
-                        {
-                            if (SolverTrace.IsActive)
-                            {
-                                SolverTrace.Event(
-                                    "legacy_seed_postcheck_transition",
-                                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                                    new
-                                    {
-                                        side = side + 1,
-                                        station = ibl + 1,
-                                        converged,
-                                        transitionOccurred = transition.TransitionOccurred,
-                                        transitionXi = transition.TransitionXi,
-                                        amplAtTransition = transition.AmplAtTransition,
-                                        transitionStation = blState.ITRAN[side] + 1
-                                    });
-                            }
-                        }
                     }
 
                     // Fortran: BLVAR/BLMID always run for non-converged stations
@@ -11502,31 +10478,6 @@ public static class ViscousSolverEngine
                 // the current iterate. So BLVAR(3) uses the TE junction's own
                 // kinematic, matching the C# currentKinematic path above.
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "legacy_seed_final",
-                            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                            new
-                            {
-                                side = side + 1,
-                                station = ibl + 1,
-                                wake,
-                                turb,
-                                tran,
-                                converged,
-                                uei,
-                                theta,
-                                dstar,
-                                ctau,
-                                ampl,
-                                transitionStation = blState.ITRAN[side] + 1,
-                                mass = blState.MASS[ibl, side]
-                            });
-                    }
-                }
 
                 sens = senNew;
                 if (DebugFlags.SetBlHex
@@ -11623,9 +10574,6 @@ public static class ViscousSolverEngine
         double reybl_re,
         double reybl_ms)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-            new { side = 2, kind = "legacy_wake_seed_direct" });
         double gm1 = LegacyPrecisionMath.GammaMinusOne(settings.UseLegacyBoundaryLayerInitialization);
 
         const int side = 1;
@@ -11654,8 +10602,6 @@ public static class ViscousSolverEngine
             double wakeGap = GetWakeGap(wakeSeed, teGap, ibl - blState.IBLTE[side]);
             bool directMode = true;
             double inverseTargetHk = 0.0;
-            bool converged = false;
-
             for (int iter = 0; iter < maxIterations; iter++)
             {
                 double prevTheta;
@@ -11930,35 +10876,11 @@ public static class ViscousSolverEngine
                     wakeGap,
                     settings.UseLegacyBoundaryLayerInitialization);
 
-                if (SolverTrace.IsActive)
-                {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "legacy_wake_seed_iteration",
-                            SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                            new
-                            {
-                                station = ibl + 1,
-                                iteration = iter + 1,
-                                mode = directMode ? "direct" : "inverse",
-                                uei,
-                                theta,
-                                dstar,
-                                ctau,
-                                dmax,
-                                rlx,
-                                hk2,
-                                htarg = inverseTargetHk
-                            });
-                    }
-                }
 
                 // Fortran xbl.f:3053: IF(DMAX.LE.DEPS) with REAL*4 DMAX and DEPS=5.0E-6.
                 // Must use float comparison to match exactly, not double.
                 if ((float)dmax <= (float)legacySeedTolerance)
                 {
-                    converged = true;
                     break;
                 }
             }
@@ -11972,25 +10894,6 @@ public static class ViscousSolverEngine
                 uei,
                 settings.UseLegacyBoundaryLayerInitialization);
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "legacy_wake_seed_final",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            station = ibl + 1,
-                            converged,
-                            uei,
-                            theta,
-                            dstar,
-                            ctau,
-                            mass = blState.MASS[ibl, side]
-                        });
-                }
-            }
         }
 
         SyncWakeMirror(blState);
@@ -12217,29 +11120,6 @@ public static class ViscousSolverEngine
     {
         if (!string.IsNullOrEmpty(traceLabel))
         {
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "legacy_carry_store",
-                        SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                        new
-                        {
-                            side = side + 1,
-                            station = ibl + 1,
-                            label = traceLabel,
-                            hasPrimary = primary != null,
-                            hasKinematic = kinematic != null,
-                            hasSecondary = secondary != null,
-                            secondaryCf = secondary?.Cf,
-                            secondaryCfD = secondary?.Cf_D,
-                            secondaryDe = secondary?.De,
-                            secondaryHsD = secondary?.Hs_D,
-                            secondaryUsT = secondary?.Us_T
-                        });
-                }
-            }
         }
 
         blState.LegacyPrimary[ibl, side] = primary?.Clone();
@@ -12302,7 +11182,6 @@ public static class ViscousSolverEngine
             return;
         }
 
-        using var traceSuspend = SolverTrace.Suspend();
         int ibm = ibl - 1;
         double gm1 = LegacyPrecisionMath.GammaMinusOne(true);
         double prevTheta = Math.Max(blState.THET[ibm, side], 1.0e-10);
@@ -12398,7 +11277,6 @@ public static class ViscousSolverEngine
             return;
         }
 
-        using var traceSuspend = SolverTrace.Suspend();
         double gm1 = LegacyPrecisionMath.GammaMinusOne(true);
         double dForSystem = LegacyPrecisionMath.Subtract(
             dstar,
@@ -12625,32 +11503,6 @@ public static class ViscousSolverEngine
         sumSquares += square2;
         double residualNorm = MathF.Sqrt(sumSquares);
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "laminar_seed_step_norm_terms",
-                    SolverTrace.ScopeName(typeof(ViscousSolverEngine)),
-                    new
-                    {
-                        side = traceSide,
-                        station = traceStation,
-                        iteration = traceIteration,
-                        mode = traceMode,
-                        deltaShear = delta0f,
-                        deltaTheta = delta1f,
-                        deltaDstar = delta2f,
-                        squareShear = square0,
-                        squareTheta = square1,
-                        squareDstar = square2,
-                        wideSumSquares,
-                        sumSquares,
-                        residualNorm,
-                        useLegacyPrecision
-                    });
-            }
-        }
 
         return new SeedStepMetrics(
             delta[0],
