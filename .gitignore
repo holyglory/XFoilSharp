@@ -5,4 +5,51 @@ src/**/bin/
 src/**/obj/
 tests/**/bin/
 tests/**/obj/
+tools/**/bin/
+tools/**/obj/
 runs/
+
+# Fortran build outputs
+f_xfoil/build/
+f_xfoil/build-*/
+f_xfoil/xfoil_*
+f_xfoil/*.o
+f_xfoil/*.a
+f_xfoil/fort.*
+f_xfoil/f_lu_matrix.bin
+f_xfoil/.claude/
+
+# Root-level artifacts from ad-hoc debugging
+*.o
+*.bin
+BLOF
+fort.*
+debug_*.txt
+debug_*.jsonl
+debug_dump.txt
+debug_trace.jsonl
+
+# GDB command scripts
+gdb_*.cmd
+
+# Stale per-case reference dumps (the shared selig/NACA vector files are
+# still tracked explicitly; only the huge adhoc/alpha/n####_* dirs are
+# excluded here).
+tools/fortran-debug/reference/adhoc_*/
+tools/fortran-debug/reference/alpha*/
+tools/fortran-debug/reference/n0012_*/
+tools/fortran-debug/reference/n0015_*/
+tools/fortran-debug/reference/n0003_*/
+tools/fortran-debug/reference/n0006_*/
+tools/fortran-debug/reference/n1412_*/
+tools/fortran-debug/reference/n2312_*/
+tools/fortran-debug/reference/n2412_*/
+tools/fortran-debug/reference/n4412_*/
+tools/fortran-debug/reference/n0012_re1e6_a0/
+
+# Local / editor / agent config
+.agents/
+.claude/
+.codex/
+.vs/
+.vscode/
