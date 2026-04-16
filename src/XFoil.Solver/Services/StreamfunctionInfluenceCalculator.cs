@@ -21,7 +21,6 @@ namespace XFoil.Solver.Services;
 /// </summary>
 public static class StreamfunctionInfluenceCalculator
 {
-    [ThreadStatic] private static int s_psilinDumpCount;
     /// <summary>
     /// Computes the streamfunction PSI and all sensitivity arrays at a single field point
     /// due to all panels, the TE panel, and the freestream.
@@ -303,22 +302,7 @@ public static class StreamfunctionInfluenceCalculator
                 x2i,
                 yyi);
 
-            if (DebugFlags.SetBlHex
-                && io == 80
-                && jo <= 2)
-            {
-                Console.Error.WriteLine(
-                    $"C_PSIPANEL io={io} jo={jo + 1} jp={jp + 1}" +
-                    $" x1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
-                    $" x2={BitConverter.SingleToInt32Bits((float)x2):X8}" +
-                    $" yy={BitConverter.SingleToInt32Bits((float)yy):X8}" +
-                    $" rs1={BitConverter.SingleToInt32Bits((float)rs1):X8}" +
-                    $" rs2={BitConverter.SingleToInt32Bits((float)rs2):X8}" +
-                    $" g1={BitConverter.SingleToInt32Bits((float)g1):X8}" +
-                    $" g2={BitConverter.SingleToInt32Bits((float)g2):X8}" +
-                    $" t1={BitConverter.SingleToInt32Bits((float)t1):X8}" +
-                    $" t2={BitConverter.SingleToInt32Bits((float)t2):X8}");
-            }
+            
 
             // Track last panel for TE treatment
             lastJo = jo;
@@ -427,11 +411,7 @@ public static class StreamfunctionInfluenceCalculator
         float seps = (float)((panel.ArcLength[n - 1] - panel.ArcLength[0]) * 1.0e-5);
         int io = fieldNodeIndex + 1;
 
-        if (fieldNodeIndex == 79 && DebugFlags.BldifDebug && s_psilinDumpCount == 0)
-        {
-            Console.Error.WriteLine($"PSILIN_ENTRY io={io} fieldX={fieldX:E15} fieldXf={(float)fieldX:E15}");
-            Console.Error.WriteLine($"PANEL_INDEX n={n} X[0]={(float)panel.X[0]:E10} X[1]={(float)panel.X[1]:E10} X[11]={(float)panel.X[11]:E10} X[12]={(float)panel.X[12]:E10} X[79]={(float)panel.X[79]:E10}");
-        }
+        
 
         float fieldXf = (float)fieldX;
         float fieldYf = (float)fieldY;
@@ -439,14 +419,7 @@ public static class StreamfunctionInfluenceCalculator
         float fieldNormalYf = (float)fieldNormalY;
         float cosa = (float)Math.Cos(angleOfAttackRadians);
         float sina = (float)Math.Sin(angleOfAttackRadians);
-        if (DebugFlags.SetBlHex
-            && io == n + 1 && fieldNormalXf > 0.5f)
-        {
-            Console.Error.WriteLine(
-                $"C_CSNI ALFA={BitConverter.SingleToInt32Bits((float)angleOfAttackRadians):X8}" +
-                $" COSA={BitConverter.SingleToInt32Bits(cosa):X8}" +
-                $" SINA={BitConverter.SingleToInt32Bits(sina):X8}");
-        }
+        
 
         var dzdg = new float[n];
         var dzdm = new float[n];
@@ -645,40 +618,7 @@ public static class StreamfunctionInfluenceCalculator
                 x2i,
                 yyi);
 
-            if (DebugFlags.SetBlHex
-                && io == 80
-                && jo <= 2)
-            {
-                Console.Error.WriteLine(
-                    $"C_PSISTAGE io={io} jo={jo + 1} jp={jp + 1}" +
-                    $" xJo={BitConverter.SingleToInt32Bits(xJo):X8}" +
-                    $" yJo={BitConverter.SingleToInt32Bits(yJo):X8}" +
-                    $" xJp={BitConverter.SingleToInt32Bits(xJp):X8}" +
-                    $" yJp={BitConverter.SingleToInt32Bits(yJp):X8}" +
-                    $" dx={BitConverter.SingleToInt32Bits(dxPanel):X8}" +
-                    $" dy={BitConverter.SingleToInt32Bits(dyPanel):X8}" +
-                    $" dso={BitConverter.SingleToInt32Bits(dso):X8}" +
-                    $" dsio={BitConverter.SingleToInt32Bits(dsio):X8}" +
-                    $" rx1={BitConverter.SingleToInt32Bits(rx1):X8}" +
-                    $" ry1={BitConverter.SingleToInt32Bits(ry1):X8}" +
-                    $" rx2={BitConverter.SingleToInt32Bits(rx2):X8}" +
-                    $" ry2={BitConverter.SingleToInt32Bits(ry2):X8}" +
-                    $" nx={BitConverter.SingleToInt32Bits(fieldNormalXf):X8}" +
-                    $" ny={BitConverter.SingleToInt32Bits(fieldNormalYf):X8}" +
-                    $" sx={BitConverter.SingleToInt32Bits(sx):X8}" +
-                    $" sy={BitConverter.SingleToInt32Bits(sy):X8}");
-                Console.Error.WriteLine(
-                    $"C_PSIPANEL io={io} jo={jo + 1} jp={jp + 1}" +
-                    $" x1={BitConverter.SingleToInt32Bits(x1):X8}" +
-                    $" x2={BitConverter.SingleToInt32Bits(x2):X8}" +
-                    $" yy={BitConverter.SingleToInt32Bits(yy):X8}" +
-                    $" rs1={BitConverter.SingleToInt32Bits(rs1):X8}" +
-                    $" rs2={BitConverter.SingleToInt32Bits(rs2):X8}" +
-                    $" g1={BitConverter.SingleToInt32Bits(g1):X8}" +
-                    $" g2={BitConverter.SingleToInt32Bits(g2):X8}" +
-                    $" t1={BitConverter.SingleToInt32Bits(t1):X8}" +
-                    $" t2={BitConverter.SingleToInt32Bits(t2):X8}");
-            }
+            
 
             lastJo = jo;
             lastJp = jp;
@@ -1371,22 +1311,9 @@ public static class StreamfunctionInfluenceCalculator
                 dzdg[jp] += dzJp;
 
                 // GDB: trace DZDG[0] accumulation at field node 33 (1-indexed)
-                if (io == 33 && (jo == 0 || jo == n - 2) && DebugFlags.SetBlHex)
-                {
-                    Console.Error.WriteLine(
-                        $"C_DZDG0 io={io} jo={jo + 1} dzdg0={BitConverter.SingleToInt32Bits(dzdg[0]):X8}" +
-                        $" dzJo={BitConverter.SingleToInt32Bits(dzJo):X8}" +
-                        $" dzJp={BitConverter.SingleToInt32Bits(dzJp):X8}" +
-                        $" psis={BitConverter.SingleToInt32Bits(psis):X8}" +
-                        $" psid={BitConverter.SingleToInt32Bits(psid):X8}");
-                }
+                
 
-                if (io == 80 && jp >= 12 && jp <= 13 && DebugFlags.BldifDebug)
-                {
-                    s_psilinDumpCount++;
-                    // Note: jo,jp are 0-based in C#, print as 1-based for Fortran comparison
-                    Console.Error.WriteLine($"PSI_CS #{s_psilinDumpCount} JO={jo+1} JP={jp+1} psis={BitConverter.SingleToInt32Bits(psis):X8} psid={BitConverter.SingleToInt32Bits(psid):X8} xJo={BitConverter.SingleToInt32Bits(xJo):X8} yJo={BitConverter.SingleToInt32Bits(yJo):X8} xJp={BitConverter.SingleToInt32Bits(xJp):X8} yJp={BitConverter.SingleToInt32Bits(yJp):X8}");
-                }
+                
 
                 // Fortran PSILIN vortex line 563:
                 // PSNI = FMAF_REAL(PSYY, YYI, FMAF_REAL(PSX1, X1I, PSX2*X2I))
@@ -1414,54 +1341,11 @@ public static class StreamfunctionInfluenceCalculator
                 float psiNiBefore = psiNi;
                 psiNi += psiNiDelta;
                 // Parity trace: per-panel psiNi accumulation at wake node 6
-                if (DebugFlags.SetBlHex
-                    && io == n + 6 && fieldNormalXf > 0.5f)
-                {
-                    if (jo + 1 >= 65 && jo + 1 <= 70)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_PSI6D jo={jo + 1,4}" +
-                            $" ni_b={BitConverter.SingleToInt32Bits(psiNiBefore):X8}" +
-                            $" delt={BitConverter.SingleToInt32Bits(psiNiDelta):X8}" +
-                            $" ni={BitConverter.SingleToInt32Bits(psiNi):X8}" +
-                            $" inner={BitConverter.SingleToInt32Bits(psiNiInner):X8}" +
-                            $" gsum={BitConverter.SingleToInt32Bits(gsum):X8}" +
-                            $" gdif={BitConverter.SingleToInt32Bits(gdif):X8}");
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine(
-                            $"C_PSI6X jo={jo + 1,4} ni={BitConverter.SingleToInt32Bits(psiNi):X8}");
-                    }
-                }
-                if (DebugFlags.ParityTrace
-                    && io == 81)
-                {
-                    Console.Error.WriteLine(
-                        $"CS_NI jo={jo + 1} ni=0x{BitConverter.SingleToInt32Bits(psiNi):X8}");
-                    if (jo + 1 == 6)
-                        Console.Error.WriteLine(
-                            $"CS_JO6 psni=0x{BitConverter.SingleToInt32Bits(psni):X8}" +
-                            $" pdni=0x{BitConverter.SingleToInt32Bits(pdni):X8}" +
-                            $" qvor=0x{BitConverter.SingleToInt32Bits(psiNiDelta):X8}" +
-                            $" gsum=0x{BitConverter.SingleToInt32Bits(gsum):X8}" +
-                            $" gdif=0x{BitConverter.SingleToInt32Bits(gdif):X8}" +
-                            $" psx1=0x{BitConverter.SingleToInt32Bits(psx1):X8}" +
-                            $" psx2=0x{BitConverter.SingleToInt32Bits(psx2):X8}" +
-                            $" psyy=0x{BitConverter.SingleToInt32Bits(psyy):X8}" +
-                            $" x1i=0x{BitConverter.SingleToInt32Bits(x1i):X8}" +
-                            $" x2i=0x{BitConverter.SingleToInt32Bits(x2i):X8}" +
-                            $" yyi=0x{BitConverter.SingleToInt32Bits(yyi):X8}");
-                }
+                
+                
                 // Trace psiNi at wake node 0 psiY call (io=161)
                 // Trace psiNi at wake node 0 — psiX (NX>0.5) and psiY (NY>0.5)
-                if (DebugFlags.SetBlHex
-                    && io == 161 && fieldNormalXf > 0.5f && jo >= 140)
-                {
-                    string dir = fieldNormalXf > 0.5f ? "X" : "Y";
-                    Console.Error.WriteLine(
-                        $"C_WK0{dir} jo={jo + 1,4} ni={BitConverter.SingleToInt32Bits(psiNi):X8}");
-                }
+                
                 TracePsilinAccumState(
                     traceScope,
                     io,
@@ -1537,33 +1421,7 @@ public static class StreamfunctionInfluenceCalculator
                     dqJo,
                     dqJp);
 
-                if (DebugFlags.SetBlHex
-                    && io == 80
-                    && jo <= 2)
-                {
-                    Console.Error.WriteLine(
-                        $"C_PSIVORTERMS io={io} jo={jo + 1} jp={jp + 1}" +
-                        $" psx1={BitConverter.SingleToInt32Bits(psx1):X8}" +
-                        $" psx2={BitConverter.SingleToInt32Bits(psx2):X8}" +
-                        $" psyy={BitConverter.SingleToInt32Bits(psyy):X8}" +
-                        $" pdx1={BitConverter.SingleToInt32Bits(pdx1):X8}" +
-                        $" pdx2={BitConverter.SingleToInt32Bits(pdx2):X8}" +
-                        $" pdyy={BitConverter.SingleToInt32Bits(pdyy):X8}" +
-                        $" x1i={BitConverter.SingleToInt32Bits(x1i):X8}" +
-                        $" x2i={BitConverter.SingleToInt32Bits(x2i):X8}" +
-                        $" yyi={BitConverter.SingleToInt32Bits(yyi):X8}");
-                    Console.Error.WriteLine(
-                        $"C_PSIVOR io={io} jo={jo + 1} jp={jp + 1}" +
-                        $" dxInv={BitConverter.SingleToInt32Bits(dxInv):X8}" +
-                        $" psis={BitConverter.SingleToInt32Bits(psis):X8}" +
-                        $" psid={BitConverter.SingleToInt32Bits(psid):X8}" +
-                        $" psni={BitConverter.SingleToInt32Bits(psni):X8}" +
-                        $" pdni={BitConverter.SingleToInt32Bits(pdni):X8}" +
-                        $" dzJo={BitConverter.SingleToInt32Bits(dzJo):X8}" +
-                        $" dzJp={BitConverter.SingleToInt32Bits(dzJp):X8}" +
-                        $" dqJo={BitConverter.SingleToInt32Bits(dqJo):X8}" +
-                        $" dqJp={BitConverter.SingleToInt32Bits(dqJp):X8}");
-                }
+                
             }
         }
 
@@ -1635,17 +1493,7 @@ public static class StreamfunctionInfluenceCalculator
             dzdg[lastJp] += dzJpTeGam;
 
             // GDB: trace DZDG[0] after TE correction at field node 33
-            if (io == 33 && DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_TE33 dzdg0={BitConverter.SingleToInt32Bits(dzdg[0]):X8}" +
-                    $" dzJpTeSig={BitConverter.SingleToInt32Bits(dzJpTeSig):X8}" +
-                    $" dzJpTeGam={BitConverter.SingleToInt32Bits(dzJpTeGam):X8}" +
-                    $" psig={BitConverter.SingleToInt32Bits(psig):X8}" +
-                    $" pgam={BitConverter.SingleToInt32Bits(pgam):X8}" +
-                    $" scs={BitConverter.SingleToInt32Bits(scs):X8}" +
-                    $" sds={BitConverter.SingleToInt32Bits(sds):X8}");
-            }
+            
 
             float psiNiTeTerm1 = psigni * sigte;
             float psiNiTeTerm2 = pgamni * gamte;
@@ -1655,14 +1503,7 @@ public static class StreamfunctionInfluenceCalculator
             float psiNiBeforeTe = psiNi;
             float psiNiTeDelta = hopi * psiNiTeInner;
             psiNi = psiNi + psiNiTeDelta;
-            if (DebugFlags.SetBlHex
-                && io == 161 && fieldNormalXf > 0.5f)
-            {
-                Console.Error.WriteLine(
-                    $"C_TE_NI_X b={BitConverter.SingleToInt32Bits(psiNiBeforeTe):X8}" +
-                    $" d={BitConverter.SingleToInt32Bits(psiNiTeDelta):X8}" +
-                    $" a={BitConverter.SingleToInt32Bits(psiNi):X8}");
-            }
+            
             TracePsilinAccumState(
                 traceScope,
                 io,

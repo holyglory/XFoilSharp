@@ -124,15 +124,7 @@ public static class CosineClusteringPanelDistributor
         {
             TraceBufferSplineNode(traceScope, i + 1, xb[i], yb[i], sb[i], xbp[i], ybp[i]);
         }
-        if (DebugFlags.SetBlHex)
-        {
-            for (int i = 0; i < nb; i++)
-                Console.Error.WriteLine(
-                    $"C_BUF_DRV i={i + 1,4}" +
-                    $" S={BitConverter.SingleToInt32Bits((float)double.CreateChecked(sb[i])):X8}" +
-                    $" XP={BitConverter.SingleToInt32Bits((float)double.CreateChecked(xbp[i])):X8}" +
-                    $" YP={BitConverter.SingleToInt32Bits((float)double.CreateChecked(ybp[i])):X8}");
-        }
+        
 
         T sbref = half * (sb[nb - 1] - sb[0]);
 
@@ -486,28 +478,10 @@ public static class CosineClusteringPanelDistributor
             {
                 TracePangenNewtonRow(traceScope, iter + 1, i + 1, snew[i], ww1[i], ww2[i], ww3[i], ww4[i]);
             }
-            if (DebugFlags.SetBlHex && iter <= 5)
-            {
-                uint sH = 0, w1H = 0, w2H = 0, w3H = 0, w4H = 0;
-                for (int i = 0; i < nn; i++)
-                {
-                    sH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(snew[i])));
-                    w1H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww1[i])));
-                    w2H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww2[i])));
-                    w3H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww3[i])));
-                    w4H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww4[i])));
-                }
-                Console.Error.WriteLine($"C_NW_HASH it={iter + 1} S={sH:X8} W1={w1H:X8} W2={w2H:X8} W3={w3H:X8} W4={w4H:X8}");
-            }
+            
 
             TridiagonalSolver.Solve(ww1, ww2, ww3, ww4, nn);
-            if (DebugFlags.SetBlHex && iter <= 5)
-            {
-                uint w4H = 0;
-                for (int i = 0; i < nn; i++)
-                    w4H ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)double.CreateChecked(ww4[i])));
-                Console.Error.WriteLine($"C_NW_HASH_POST it={iter + 1} W4={w4H:X8}");
-            }
+            
 
             for (int i = 0; i < nn; i++)
             {
@@ -568,12 +542,7 @@ public static class CosineClusteringPanelDistributor
         var xOut = new T[n];
         var yOut = new T[n];
 
-        if (DebugFlags.SetBlHex)
-        {
-            for (int i = 0; i < nn; i++)
-                Console.Error.WriteLine(
-                    $"C_SNEW i={i + 1,4} S={BitConverter.SingleToInt32Bits((float)double.CreateChecked(snew[i])):X8}");
-        }
+        
         for (int i = 0; i < n; i++)
         {
             int ind = Ipfac * i;

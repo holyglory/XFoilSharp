@@ -54,88 +54,18 @@ public static class LinearVortexInviscidSolver
         {
             CopyMatrixToSingle(state.StreamfunctionInfluence, state.LegacyStreamfunctionInfluenceFactors, systemSize);
             // GDB: dump AIJ row 32 (0-indexed = Fortran row 33) before LU
-            if (DebugFlags.SetBlHex)
-            {
-                var aij = state.LegacyStreamfunctionInfluenceFactors;
-                Console.Error.WriteLine(
-                    $"C_AIJ33 c1={BitConverter.SingleToInt32Bits(aij[32, 0]):X8}" +
-                    $" c2={BitConverter.SingleToInt32Bits(aij[32, 1]):X8}" +
-                    $" c3={BitConverter.SingleToInt32Bits(aij[32, 2]):X8}" +
-                    $" c80={BitConverter.SingleToInt32Bits(aij[32, 79]):X8}");
-                Console.Error.WriteLine(
-                    $"C_AIJ80 c1={BitConverter.SingleToInt32Bits(aij[79, 0]):X8}" +
-                    $" c2={BitConverter.SingleToInt32Bits(aij[79, 1]):X8}" +
-                    $" c3={BitConverter.SingleToInt32Bits(aij[79, 2]):X8}" +
-                    $" c80={BitConverter.SingleToInt32Bits(aij[79, 79]):X8}" +
-                    $" c81={BitConverter.SingleToInt32Bits(aij[79, 80]):X8}");
-                Console.Error.WriteLine(
-                    $"C_AIJ81 c1={BitConverter.SingleToInt32Bits(aij[80, 0]):X8}" +
-                    $" c2={BitConverter.SingleToInt32Bits(aij[80, 1]):X8}" +
-                    $" c3={BitConverter.SingleToInt32Bits(aij[80, 2]):X8}" +
-                    $" c80={BitConverter.SingleToInt32Bits(aij[80, 79]):X8}" +
-                    $" c81={BitConverter.SingleToInt32Bits(aij[80, 80]):X8}");
-            }
+            
             ScaledPivotLuSolver.Decompose(
                 state.LegacyStreamfunctionInfluenceFactors,
                 state.LegacyPivotIndices,
                 systemSize,
                 traceContext: "basis_aij_single");
             // GDB: dump FULL LU matrix to binary file
-            if (DebugFlags.SetBlHex)
-            {
-                var lu = state.LegacyStreamfunctionInfluenceFactors;
-                using var fs = new System.IO.FileStream("c_lu_matrix.bin", System.IO.FileMode.Create);
-                using var bw = new System.IO.BinaryWriter(fs);
-                for (int col = 0; col < systemSize; col++)
-                    for (int row = 0; row < systemSize; row++)
-                        bw.Write(lu[row, col]);
-                Console.Error.WriteLine($"C_LU_DUMP {systemSize * systemSize} entries to c_lu_matrix.bin");
-            }
+            
             TraceFactoredMatrix("basis_lu_aij", state.LegacyStreamfunctionInfluenceFactors, systemSize, "SingleKernel");
             TracePivotEntries("basis_lu_pivot", state.LegacyPivotIndices, systemSize, "SingleKernel");
-            if (DebugFlags.ParityTrace && systemSize == 81)
-            {
-                var piv = state.LegacyPivotIndices;
-                var lu = state.LegacyStreamfunctionInfluenceFactors;
-                var sbp = new System.Text.StringBuilder("C_PIVALL");
-                for (int pp = 0; pp < 81; pp++) sbp.Append($" {piv[pp]+1,3}");
-                Console.Error.WriteLine(sbp.ToString());
-                var sbd1 = new System.Text.StringBuilder("C_LUDIAG1_20");
-                for (int pp = 0; pp < 20; pp++) sbd1.Append($" {BitConverter.SingleToInt32Bits(lu[pp, pp]):X8}");
-                Console.Error.WriteLine(sbd1.ToString());
-                var sbd2 = new System.Text.StringBuilder("C_LUDIAG21_40");
-                for (int pp = 20; pp < 40; pp++) sbd2.Append($" {BitConverter.SingleToInt32Bits(lu[pp, pp]):X8}");
-                Console.Error.WriteLine(sbd2.ToString());
-                var sbd3 = new System.Text.StringBuilder("C_LUDIAG41_60");
-                for (int pp = 40; pp < 60; pp++) sbd3.Append($" {BitConverter.SingleToInt32Bits(lu[pp, pp]):X8}");
-                Console.Error.WriteLine(sbd3.ToString());
-                var sbd4 = new System.Text.StringBuilder("C_LUDIAG61_81");
-                for (int pp = 60; pp < 81; pp++) sbd4.Append($" {BitConverter.SingleToInt32Bits(lu[pp, pp]):X8}");
-                Console.Error.WriteLine(sbd4.ToString());
-            }
-            if (DebugFlags.BldifDebug)
-            {
-                var piv = state.LegacyPivotIndices;
-                Console.Error.WriteLine($"PIV_CS {piv[0]+1,4} {piv[1]+1,4} {piv[2]+1,4} {piv[3]+1,4} {piv[4]+1,4} {piv[5]+1,4} {piv[6]+1,4} {piv[7]+1,4} {piv[8]+1,4} {piv[9]+1,4}");
-                var lu = state.LegacyStreamfunctionInfluenceFactors;
-                // float -> double hex for comparison with Fortran (which casts REAL to DBLE)
-                long d1 = BitConverter.DoubleToInt64Bits((double)lu[0, 0]);
-                long d80 = BitConverter.DoubleToInt64Bits((double)lu[79, 79]);
-                long d81 = BitConverter.DoubleToInt64Bits((double)lu[80, 80]);
-                Console.Error.WriteLine($"LU_DIAG_CS {d1:X16} {d80:X16} {d81:X16}");
-                // Also dump pre-LU matrix at row 80 (before factoring)
-                // But the matrix is already factored in-place... we need to dump before.
-                // Instead dump a few LU elements around row 80 for detailed comparison
-                // Dump entire row 80 of LU in hex to find first divergence
-                {
-                    var sb = new System.Text.StringBuilder("LU80_CS");
-                    for (int cc = 0; cc < Math.Min(systemSize, 161); cc++)
-                    {
-                        sb.Append($" {BitConverter.SingleToInt32Bits(lu[79, cc]):X8}");
-                    }
-                    Console.Error.WriteLine(sb.ToString());
-                }
-            }
+            
+            
         }
         else
         {
@@ -230,15 +160,7 @@ public static class LinearVortexInviscidSolver
             }
 
             // Debug: dump full DZDG for i=79 (AIJ row 80 in 1-based)
-            if (i == 79 && DebugFlags.BldifDebug)
-            {
-                var sb = new System.Text.StringBuilder("DZDG80_CS");
-                for (int dbgJ = 0; dbgJ < n; dbgJ++)
-                {
-                    sb.Append($" {BitConverter.SingleToInt32Bits((float)state.StreamfunctionVortexSensitivity[dbgJ]):X8}");
-                }
-                Console.Error.WriteLine(sb.ToString());
-            }
+            
 
             state.StreamfunctionInfluence[i, n] = -1.0;
             state.BasisVortexStrength[i, 0] = -freestreamSpeed * panel.Y[i];
@@ -246,39 +168,13 @@ public static class LinearVortexInviscidSolver
         }
 
         // Debug: dump BIJ (SourceInfluence) at specific elements
-        if (DebugFlags.BldifDebug)
-        {
-            // BIJ[30,79] should match Fortran BIJ(31,80) = -DZDM(80) for i=31
-            int bij_hex = BitConverter.SingleToInt32Bits((float)state.SourceInfluence[30, 79]);
-            int bij2_hex = BitConverter.SingleToInt32Bits((float)state.SourceInfluence[30, 1]);
-            Console.Error.WriteLine($"BIJ_CS [30,79]={bij_hex:X8} [30,1]={bij2_hex:X8}");
-        }
+        
 
         // GDB-parity: dump raw AIJ row 12 and RHS (=Fortran row 13) before LU
-        if (DebugFlags.ParityTrace && n == 80)
-        {
-            Console.Error.WriteLine($"C_DIAG12_RHS12 {BitConverter.SingleToInt32Bits((float)state.StreamfunctionInfluence[12, 12]):X8} {BitConverter.SingleToInt32Bits((float)state.BasisVortexStrength[12, 0]):X8}");
-        }
+        
 
         // Debug: dump AIJ for comparison with Fortran
-        if (DebugFlags.BldifDebug)
-        {
-            // Dump full AIJ row 80 BEFORE LU factoring
-            {
-                var sb = new System.Text.StringBuilder("AIJ80_CS");
-                for (int cc = 0; cc < n + 1; cc++)
-                {
-                    sb.Append($" {BitConverter.SingleToInt32Bits((float)state.StreamfunctionInfluence[79, cc]):X8}");
-                }
-                Console.Error.WriteLine(sb.ToString());
-            }
-            long h12 = BitConverter.DoubleToInt64Bits(state.StreamfunctionInfluence[0, 1]);
-            long h180 = BitConverter.DoubleToInt64Bits(state.StreamfunctionInfluence[0, 79]);
-            long h801 = BitConverter.DoubleToInt64Bits(state.StreamfunctionInfluence[79, 0]);
-            long h8080 = BitConverter.DoubleToInt64Bits(state.StreamfunctionInfluence[79, 79]);
-            long h8081 = BitConverter.DoubleToInt64Bits(state.StreamfunctionInfluence[79, 80]);
-            Console.Error.WriteLine($"AIJ_CS {h12:X16} {h180:X16} {h801:X16} {h8080:X16} {h8081:X16}");
-        }
+        
 
         // Step 3: Kutta condition (row N): gamma[0] + gamma[N-1] = 0
         for (int j = 0; j < systemSize; j++)
@@ -490,45 +386,21 @@ public static class LinearVortexInviscidSolver
                 rhs1Single[i] = (float)state.BasisVortexStrength[i, 1];
             }
 
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_RHS0 r0={FormatSingleHex(rhs0Single, 0)}" +
-                    $" r1={FormatSingleHex(rhs0Single, 1)}" +
-                    $" rLast={FormatSingleHex(rhs0Single, systemSize - 1)}" +
-                    $" n={systemSize}");
-                Console.Error.Flush();
-            }
+            
             ScaledPivotLuSolver.BackSubstitute(
                 state.LegacyStreamfunctionInfluenceFactors,
                 state.LegacyPivotIndices,
                 rhs0Single,
                 systemSize,
                 traceContext: "basis_gamma_alpha0_single");
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_GAM0 g0={FormatSingleHex(rhs0Single, 0)}" +
-                    $" g1={FormatSingleHex(rhs0Single, 1)}" +
-                    $" g80={FormatSingleHex(rhs0Single, 80)}" +
-                    $" gLast={FormatSingleHex(rhs0Single, systemSize - 1)}" +
-                    $" n={systemSize}");
-                Console.Error.Flush();
-            }
+            
             ScaledPivotLuSolver.BackSubstitute(
                 state.LegacyStreamfunctionInfluenceFactors,
                 state.LegacyPivotIndices,
                 rhs1Single,
                 systemSize,
                 traceContext: "basis_gamma_alpha90_single");
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_GAM1 g0={FormatSingleHex(rhs1Single, 0)}" +
-                    $" g1={FormatSingleHex(rhs1Single, 1)}" +
-                    $" g80={FormatSingleHex(rhs1Single, 80)}" +
-                    $" gLast={FormatSingleHex(rhs1Single, systemSize - 1)}");
-            }
+            
 
             for (int i = 0; i < systemSize; i++)
             {
@@ -538,13 +410,7 @@ public static class LinearVortexInviscidSolver
                 state.BasisVortexStrength[i, 1] = rhs1Single[i];
             }
 
-            if (DebugFlags.ParityTrace && systemSize == 81)
-            {
-                var sbg = new System.Text.StringBuilder("C_GAMU9_15");
-                for (int gi = 9; gi < 16; gi++)
-                    sbg.Append($" {BitConverter.SingleToInt32Bits(rhs0Single[gi]):X8}");
-                Console.Error.WriteLine(sbg.ToString());
-            }
+            
         }
         else
         {
@@ -581,16 +447,7 @@ public static class LinearVortexInviscidSolver
 
 
 
-        if (DebugFlags.BldifDebug)
-        {
-            // Dump basis gamma at nodes 79-82 (stagnation area) for parity comparison
-            for (int dbg = 78; dbg <= 82 && dbg < systemSize; dbg++)
-            {
-                long h0 = BitConverter.DoubleToInt64Bits(rhs0[dbg]);
-                long h1 = BitConverter.DoubleToInt64Bits(rhs1[dbg]);
-                Console.Error.WriteLine($"GAMU_CS [{dbg+1,3}] a0={h0:X16} a90={h1:X16}");
-            }
-        }
+        
 
         if (SolverTrace.IsActive)
         {
@@ -767,17 +624,7 @@ public static class LinearVortexInviscidSolver
                 state.BasisVortexStrength[i, 1],
                 useLegacyPrecision);
         }
-        if (DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine(
-                $"C_GAMSUP cosa={BitConverter.SingleToInt32Bits((float)cosa):X8}" +
-                $" sina={BitConverter.SingleToInt32Bits((float)sina):X8}" +
-                $" b00={BitConverter.SingleToInt32Bits((float)state.BasisVortexStrength[0, 0]):X8}" +
-                $" b01={BitConverter.SingleToInt32Bits((float)state.BasisVortexStrength[0, 1]):X8}" +
-                $" g0={BitConverter.SingleToInt32Bits((float)state.VortexStrength[0]):X8}" +
-                $" g1={BitConverter.SingleToInt32Bits((float)state.VortexStrength[1]):X8}" +
-                $" g80={BitConverter.SingleToInt32Bits((float)state.VortexStrength[80]):X8}");
-        }
+        
 
         // Internal streamfunction is the N+1th entry
         state.InternalStreamfunction = SuperimposeBasisPair(
@@ -917,17 +764,7 @@ public static class LinearVortexInviscidSolver
                 state.BasisInviscidSpeed[i, 1],
                 useLegacyPrecision);
 
-            if (DebugFlags.SetBlHex
-                && i >= 79 && i <= 82)
-            {
-                Console.Error.WriteLine(
-                    $"C_QINV I={i + 1,4}" +
-                    $" Q={BitConverter.SingleToInt32Bits((float)state.InviscidSpeed[i]):X8}" +
-                    $" Q0={BitConverter.SingleToInt32Bits((float)state.BasisInviscidSpeed[i, 0]):X8}" +
-                    $" Q90={BitConverter.SingleToInt32Bits((float)state.BasisInviscidSpeed[i, 1]):X8}" +
-                    $" COS={BitConverter.SingleToInt32Bits((float)cosa):X8}" +
-                    $" SIN={BitConverter.SingleToInt32Bits((float)sina):X8}");
-            }
+            
         }
 
         if (SolverTrace.IsActive)

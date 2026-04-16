@@ -131,19 +131,7 @@ public static class BlockTridiagonalSolver
         T vacc3 = (vaccel * T.CreateChecked(2.0)) / span;
 
         // Dump pre-solve VDEL at call 14 to verify input matches
-        if (typeof(T) == typeof(float) && s_solveCallCount == 14
-            && DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine($"C_BLSOLV_PRE call={s_solveCallCount} nsys={nsys}");
-            for (int ivPre = 0; ivPre < Math.Min(5, nsys); ivPre++)
-            {
-                Console.Error.WriteLine(
-                    $"C_PRE14 iv={ivPre,3}" +
-                    $" V30={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[2, 0, ivPre])):X8}" +
-                    $" V10={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[0, 0, ivPre])):X8}" +
-                    $" V20={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[1, 0, ivPre])):X8}");
-            }
-        }
+        
         // Legacy block: xsolve.f BLSOLV forward elimination sweep.
         for (int iv = 0; iv < nsys; iv++)
         {
@@ -259,33 +247,14 @@ public static class BlockTridiagonalSolver
                     vtmp2, vdel[1, 1, iv],
                     vtmp3, vdel[2, 1, iv]);
                 // GDB: dump VB elimination inputs at IV=0, K=0
-                if (iv == 0 && k == 0 && typeof(T) == typeof(float)
-                    && DebugFlags.SetBlHex)
-                {
-                    Console.Error.WriteLine(
-                        $"C_VB_ELIM vtmp1={BitConverter.SingleToInt32Bits(float.CreateChecked(vtmp1)):X8}" +
-                        $" vtmp2={BitConverter.SingleToInt32Bits(float.CreateChecked(vtmp2)):X8}" +
-                        $" vtmp3={BitConverter.SingleToInt32Bits(float.CreateChecked(vtmp3)):X8}" +
-                        $" vd0={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[0, 0, iv])):X8}" +
-                        $" vd1={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[1, 0, iv])):X8}" +
-                        $" vd2={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[2, 0, iv])):X8}" +
-                        $" delta0={BitConverter.SingleToInt32Bits(float.CreateChecked(delta0)):X8}" +
-                        $" orig={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[k, 0, ivp])):X8}");
-                }
+                
                 vdel[k, 0, ivp] -= delta0;
                 vdel[k, 1, ivp] -= delta1;
                 // no trace
             }
 
             // GDB: dump V3nxt BEFORE VZ elimination at TE
-            if (iv == ivte1 && typeof(T) == typeof(float)
-                && DebugFlags.SetBlHex)
-            {
-                int nxtIdx = Math.Min(iv + 1, nsys - 1);
-                Console.Error.WriteLine(
-                    $"C_PRE_VZ V3nxt={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[2, 0, nxtIdx])):X8}" +
-                    $" ivte1={ivte1} ivz={ivz}");
-            }
+            
             if (iv == ivte1 && ivz >= 0 && ivz < nsys)
             {
                 for (int k = 0; k < 3; k++)
@@ -319,20 +288,7 @@ public static class BlockTridiagonalSolver
                 T vtmp3 = vm[2, iv, kv];
 
                 // GDB: dump vtmp at last system line for first step
-                if (typeof(T) == typeof(float) && DebugFlags.SetBlHex
-                    && iv == 0 && kv == nsys - 1)
-                {
-                    bool skip1 = !(T.Abs(vtmp1) > vacc1);
-                    bool skip2 = !(T.Abs(vtmp2) > vacc2);
-                    bool skip3 = !(T.Abs(vtmp3) > vacc3);
-                    Console.Error.WriteLine(
-                        $"C_LOWER_LAST iv=0 kv={kv}" +
-                        $" v3={BitConverter.SingleToInt32Bits(float.CreateChecked(vtmp3)):X8}" +
-                        $" vacc3={BitConverter.SingleToInt32Bits(float.CreateChecked(vacc3)):X8}" +
-                        $" skip3={skip3}" +
-                        $" v1={BitConverter.SingleToInt32Bits(float.CreateChecked(vtmp1)):X8} skip1={skip1}" +
-                        $" v2={BitConverter.SingleToInt32Bits(float.CreateChecked(vtmp2)):X8} skip2={skip2}");
-                }
+                
 
                 if (T.Abs(vtmp1) > vacc1)
                 {
@@ -369,35 +325,13 @@ public static class BlockTridiagonalSolver
             }
 
             // GDB: dump at end of each forward elimination step
-            if (typeof(T) == typeof(float)
-                && DebugFlags.SetBlHex
-                && (iv <= 2 || iv == 40 || iv == nsys - 1))
-            {
-                Console.Error.WriteLine(
-                    $"C_FWD_IV{iv,2} V3last={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[2, 0, nsys - 1])):X8}" +
-                    $" V3nxt={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[2, 0, Math.Min(iv + 1, nsys - 1)])):X8}" +
-                    $" V30={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[2, 0, 0])):X8}");
-            }
+            
         }
 
         WriteDebugRows(debugWriter, "BLSOLV_POST_FORWARD", "VDEL_FWD", "vdel_fwd", vdel, nsys);
 
         // Dump per-station VDEL[2,0] after forward elimination at call 14
-        if (typeof(T) == typeof(float) && s_solveCallCount == 14
-            && DebugFlags.SetBlHex)
-        {
-            for (int ivD = 0; ivD < nsys; ivD++)
-            {
-                Console.Error.WriteLine(
-                    $"C_FWD14 iv={ivD,3}" +
-                    $" V30={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[2, 0, ivD])):X8}" +
-                    $" V10={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[0, 0, ivD])):X8}" +
-                    $" V20={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[1, 0, ivD])):X8}");
-            }
-            // Also dump PRE-SOLVE reference for station 30 (jv=29)
-            Console.Error.WriteLine(
-                $"C_FWD14_30 V30_fwd={BitConverter.SingleToInt32Bits(float.CreateChecked(vdel[2, 0, 29])):X8}");
-        }
+        
 
         // Legacy block: xsolve.f BLSOLV back substitution.
         // Difference from legacy: Same reverse sweep, with explicit trace events and helper-based multiply-subtract updates instead of inlined REAL statements.

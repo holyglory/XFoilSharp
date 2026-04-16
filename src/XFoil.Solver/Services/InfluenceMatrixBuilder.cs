@@ -102,32 +102,7 @@ public static class InfluenceMatrixBuilder
 
         double[] rhs = new double[n + 1];
 
-        if (DebugFlags.SetBlHex)
-        {
-            int bijHash = 0;
-            for (int r = 0; r < n; r++)
-                for (int c = 0; c < n; c++)
-                    bijHash ^= BitConverter.SingleToInt32Bits((float)inviscidState.SourceInfluence[r, c]);
-            int luHash = 0;
-            if (inviscidState.UseLegacyKernelPrecision)
-            {
-                var lu = inviscidState.LegacyStreamfunctionInfluenceFactors;
-                for (int r = 0; r < n + 1; r++)
-                    for (int c = 0; c < n + 1; c++)
-                        luHash ^= BitConverter.SingleToInt32Bits(lu[r, c]);
-            }
-            // Hash just the first column of back-sub result
-            int col0Hash = 0;
-            var testRhs = new float[n + 1];
-            for (int i = 0; i < n; i++) testRhs[i] = (float)inviscidState.SourceInfluence[i, 0];
-            testRhs[n] = 0.0f;
-            ScaledPivotLuSolver.BackSubstitute(
-                inviscidState.LegacyStreamfunctionInfluenceFactors,
-                inviscidState.LegacyPivotIndices,
-                testRhs, n + 1);
-            for (int i = 0; i < n; i++) col0Hash ^= BitConverter.SingleToInt32Bits(testRhs[i]);
-            Console.Error.WriteLine($"C_BIJ hash={bijHash:X8} LU={luHash:X8} col0={col0Hash:X8}");
-        }
+        
         for (int j = 0; j < n; j++)
         {
             // SourceInfluence already stores the Fortran BIJ sign convention.
@@ -221,59 +196,9 @@ public static class InfluenceMatrixBuilder
         }
 
         // GDB parity: dump panel coordinates and angles at key indices first
-        if (DebugFlags.SetBlHex && n >= 80)
-        {
-            for (int idx = 0; idx < n; idx += Math.Max(1, n / 10))
-            {
-                Console.Error.WriteLine(
-                    $"C_PAN_XY i={idx + 1,4}" +
-                    $" X={BitConverter.SingleToInt32Bits((float)panelState.X[idx]):X8}" +
-                    $" Y={BitConverter.SingleToInt32Bits((float)panelState.Y[idx]):X8}" +
-                    $" A={BitConverter.SingleToInt32Bits((float)panelState.PanelAngle[idx]):X8}");
-            }
-            // Always dump endpoints
-            Console.Error.WriteLine(
-                $"C_PAN_XY i={n,4}" +
-                $" X={BitConverter.SingleToInt32Bits((float)panelState.X[n - 1]):X8}" +
-                $" Y={BitConverter.SingleToInt32Bits((float)panelState.Y[n - 1]):X8}" +
-                $" A={BitConverter.SingleToInt32Bits((float)panelState.PanelAngle[n - 1]):X8}");
-            // Dump full panel angle hash and ALL angles
-            uint angleHash = 0;
-            for (int idx = 0; idx < n; idx++)
-                angleHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)panelState.PanelAngle[idx]));
-            Console.Error.WriteLine($"C_PAN_AHASH={angleHash:X8}");
-            for (int idx = 0; idx < n; idx++)
-                Console.Error.WriteLine($"C_PAN_ANG i={idx + 1,4} A={BitConverter.SingleToInt32Bits((float)panelState.PanelAngle[idx]):X8}");
-            // Dump ALL panel X, Y for verification
-            for (int idx = 0; idx < n; idx++)
-                Console.Error.WriteLine($"C_PAN_FXY i={idx + 1,4} X={BitConverter.SingleToInt32Bits((float)panelState.X[idx]):X8} Y={BitConverter.SingleToInt32Bits((float)panelState.Y[idx]):X8}");
-        }
+        
         // GDB parity: dump DIJ at specific elements (1-based indices in output)
-        if (DebugFlags.SetBlHex && n >= 80)
-        {
-            Console.Error.WriteLine(
-                $"C_DIJ d11={BitConverter.SingleToInt32Bits((float)dij[0,0]):X8}" +
-                $" d1_40={BitConverter.SingleToInt32Bits((float)dij[0,39]):X8}" +
-                $" d40_1={BitConverter.SingleToInt32Bits((float)dij[39,0]):X8}" +
-                $" d40_40={BitConverter.SingleToInt32Bits((float)dij[39,39]):X8}");
-            Console.Error.WriteLine(
-                $"C_DIJ d1_80={BitConverter.SingleToInt32Bits((float)dij[0,79]):X8}" +
-                $" d80_1={BitConverter.SingleToInt32Bits((float)dij[79,0]):X8}" +
-                $" d80_80={BitConverter.SingleToInt32Bits((float)dij[79,79]):X8}" +
-                $" d41_1={BitConverter.SingleToInt32Bits((float)dij[40,0]):X8}");
-            // Wake DIJ columns
-            if (dij.GetLength(1) >= 92)
-            {
-                Console.Error.WriteLine(
-                    $"C_DIJ_W d41_82={BitConverter.SingleToInt32Bits((float)dij[40,81]):X8}" +
-                    $" d41_85={BitConverter.SingleToInt32Bits((float)dij[40,84]):X8}" +
-                    $" d41_92={BitConverter.SingleToInt32Bits((float)dij[40,91]):X8}");
-                Console.Error.WriteLine(
-                    $"C_DIJ_W d1_82={BitConverter.SingleToInt32Bits((float)dij[0,81]):X8}" +
-                    $" d1_85={BitConverter.SingleToInt32Bits((float)dij[0,84]):X8}" +
-                    $" d40_82={BitConverter.SingleToInt32Bits((float)dij[39,81]):X8}");
-            }
-        }
+        
 
         if (SolverTrace.IsActive)
         {
@@ -507,8 +432,7 @@ public static class InfluenceMatrixBuilder
         ComputeWakeSensitivitiesDelegate computeWakeSensitivities = useLegacyWakeSourceKernelPrecision
             ? ComputeWakeSourceSensitivitiesAtLegacyPrecision
             : ComputeWakeSourceSensitivitiesAt;
-        if (DebugFlags.ParityTrace)
-            Console.Error.WriteLine($"WAKE_KERNEL legacy={useLegacyWakeSourceKernelPrecision} n={n} nw={nWake}");
+        
 
         // QDCALC: assemble wake-source influence on the airfoil surface,
         // back-substitute through the factored airfoil system, and store the
@@ -531,13 +455,7 @@ public static class InfluenceMatrixBuilder
                 wakeSurfaceInfluence[i, jw] = -dzdmWake[jw];
             }
             // Parity trace: wake BIJ at LE row (i=40 for 80 panels)
-            if (DebugFlags.ParityTrace && i == 40)
-            {
-                Console.Error.WriteLine(
-                    $"CS_BIJ_WAKE_LE bij_41_82=0x{BitConverter.SingleToInt32Bits((float)wakeSurfaceInfluence[i, 0]):X8}" +
-                    $" bij_41_85=0x{BitConverter.SingleToInt32Bits((float)wakeSurfaceInfluence[i, 3]):X8}" +
-                    $" x={panelState.X[i]:E6} y={panelState.Y[i]:E6}");
-            }
+            
         }
 
         for (int jw = 0; jw < nWake; jw++)
@@ -588,23 +506,14 @@ public static class InfluenceMatrixBuilder
                 }
             }
 
-            if (jw == 0 && DebugFlags.ParityTrace)
-                Console.Error.WriteLine($"C_WBIJ_PRE rhs39={BitConverter.SingleToInt32Bits((float)rhs[39]):X8} rhs0={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}");
+            
 
             // Trace RHS at row 76 (0-based) before BAKSUB for each wake column
-            if (DebugFlags.SetBlHex && n > 76)
-            {
-                Console.Error.WriteLine(
-                    $"C_WBIJ jw={jw + 1,3}" +
-                    $" rhs77={BitConverter.SingleToInt32Bits((float)rhs[76]):X8}" +
-                    $" rhs1={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                    $" rhs40={BitConverter.SingleToInt32Bits((float)rhs[39]):X8}");
-            }
+            
 
             BackSubstituteWakeColumn(couplingState, legacyWakeContext, rhs, n + 1, jw + 1);
 
-            if (jw == 0 && DebugFlags.ParityTrace)
-                Console.Error.WriteLine($"C_WBIJ_POST rhs39={BitConverter.SingleToInt32Bits((float)rhs[39]):X8} col={column}");
+            
 
             for (int row = 0; row < n; row++)
             {
@@ -612,13 +521,7 @@ public static class InfluenceMatrixBuilder
             }
 
             // Trace wake DIJ at row 76 (0-based) for each wake column
-            if (DebugFlags.SetBlHex && n > 76)
-            {
-                Console.Error.WriteLine(
-                    $"C_WDIJ jw={jw + 1,3} col={column + 1,4}" +
-                    $" dij77={BitConverter.SingleToInt32Bits((float)dij[76, column]):X8}" +
-                    $" rhs77={BitConverter.SingleToInt32Bits((float)rhs[76]):X8}");
-            }
+            
 
             if (SolverTrace.IsActive)
             {
@@ -740,18 +643,7 @@ public static class InfluenceMatrixBuilder
             }
 
             // Trace FINAL wake row DIJ at key columns + wake diagonal
-            if (DebugFlags.SetBlHex
-                && iw == 4 && n > 77)
-            {
-                // Dump airfoil columns + wake diagonal + PSWLIN direct component
-                int wakeDiagCol = n + iw;
-                Console.Error.WriteLine(
-                    $"C_WROW5_FINAL" +
-                    $" c78={BitConverter.SingleToInt32Bits((float)dij[row, 77]):X8}" +
-                    $" wkDiag={BitConverter.SingleToInt32Bits((float)dij[row, wakeDiagCol]):X8}" +
-                    $" pswlin={BitConverter.SingleToInt32Bits((float)wakeSourceRow[iw]):X8}" +
-                    $" wkD_col={wakeDiagCol + 1}");
-            }
+            
         }
 
         // QDCALC forces the first wake point to match the TE velocity exactly.
@@ -1014,47 +906,10 @@ public static class InfluenceMatrixBuilder
             float sgn = fieldWakeIndex >= 0 ? 1f : MathF.CopySign(1f, yy);
 
             // Parity trace at LE for first wake panel
-            if (DebugFlags.ParityTrace
-                && fieldNodeIndex == 41 && jo == 0)
-            {
-                Console.Error.WriteLine(
-                    $"CS_DSO dso=0x{BitConverter.SingleToInt32Bits(dso):X8}" +
-                    $" dsio=0x{BitConverter.SingleToInt32Bits(dsio):X8}" +
-                    $" sy=0x{BitConverter.SingleToInt32Bits(sy):X8}" +
-                    $" dy=0x{BitConverter.SingleToInt32Bits(dyPanel):X8}");
-                Console.Error.WriteLine(
-                    $"CS_PSWLIN_INNER io={fieldNodeIndex} jo={jo}" +
-                    $" SX=0x{BitConverter.SingleToInt32Bits(sx):X8}" +
-                    $" SY=0x{BitConverter.SingleToInt32Bits(sy):X8}" +
-                    $" X1=0x{BitConverter.SingleToInt32Bits(x1):X8}" +
-                    $" X2=0x{BitConverter.SingleToInt32Bits(x2):X8}" +
-                    $" YY=0x{BitConverter.SingleToInt32Bits(yy):X8}" +
-                    $" RS1=0x{BitConverter.SingleToInt32Bits(rs1):X8}" +
-                    $" SGN=0x{BitConverter.SingleToInt32Bits(sgn):X8}");
-            }
+            
 
             // Trace PSWLIN at field 77, wake segment 1 (jo=1 → jw=2)
-            if (DebugFlags.SetBlHex
-                && fieldNodeIndex == 77 && jo == 1)
-            {
-                Console.Error.WriteLine(
-                    $"C_PSWLIN77 jo={jo}" +
-                    $" SX={BitConverter.SingleToInt32Bits(sx):X8}" +
-                    $" SY={BitConverter.SingleToInt32Bits(sy):X8}" +
-                    $" DX={BitConverter.SingleToInt32Bits(dxPanel):X8}" +
-                    $" DY={BitConverter.SingleToInt32Bits(dyPanel):X8}" +
-                    $" DSO={BitConverter.SingleToInt32Bits(dso):X8}" +
-                    $" DSIO={BitConverter.SingleToInt32Bits(dsio):X8}" +
-                    $" X1={BitConverter.SingleToInt32Bits(x1):X8}" +
-                    $" X2={BitConverter.SingleToInt32Bits(x2):X8}" +
-                    $" YY={BitConverter.SingleToInt32Bits(yy):X8}" +
-                    $" RS1={BitConverter.SingleToInt32Bits(rs1):X8}" +
-                    $" RS2={BitConverter.SingleToInt32Bits(rs2):X8}" +
-                    $" XJo={BitConverter.SingleToInt32Bits(xJo):X8}" +
-                    $" YJo={BitConverter.SingleToInt32Bits(yJo):X8}" +
-                    $" XJp={BitConverter.SingleToInt32Bits(xJp):X8}" +
-                    $" YJp={BitConverter.SingleToInt32Bits(yJp):X8}");
-            }
+            
             TracePswlinGeometry(
                 traceScope,
                 fieldNodeIndex,
@@ -1106,27 +961,9 @@ public static class InfluenceMatrixBuilder
             }
 
             // Parity trace: G/T terms at LE for first wake panel
-            if (DebugFlags.ParityTrace
-                && fieldNodeIndex == 41 && jo == 0)
-            {
-                Console.Error.WriteLine(
-                    $"CS_PSWLIN_GT G1=0x{BitConverter.SingleToInt32Bits(g1):X8}" +
-                    $" T1=0x{BitConverter.SingleToInt32Bits(t1):X8}" +
-                    $" G2=0x{BitConverter.SingleToInt32Bits(g2):X8}" +
-                    $" T2=0x{BitConverter.SingleToInt32Bits(t2):X8}");
-            }
+            
 
-            if (DebugFlags.SetBlHex
-                && fieldNodeIndex == 77 && jo == 1)
-            {
-                Console.Error.WriteLine(
-                    $"C_PSWLIN77_GT" +
-                    $" G1={BitConverter.SingleToInt32Bits(g1):X8}" +
-                    $" T1={BitConverter.SingleToInt32Bits(t1):X8}" +
-                    $" G2={BitConverter.SingleToInt32Bits(g2):X8}" +
-                    $" T2={BitConverter.SingleToInt32Bits(t2):X8}" +
-                    $" SGN={BitConverter.SingleToInt32Bits(sgn):X8}");
-            }
+            
             float x1i = LegacyWideProductSum(sx, fieldNormalXF, sy, fieldNormalYF);
             float x2i = x1i;
             float yyi = LegacyMixedProductDifference(sx, fieldNormalYF, sy, fieldNormalXF);
@@ -1137,16 +974,7 @@ public static class InfluenceMatrixBuilder
             // Parity: use LegacyLibm.Atan2 instead of MathF.Atan2.
             float t0 = LegacyLibm.Atan2(sgn * x0, sgn * yy) - ((0.5f - (0.5f * sgn)) * MathF.PI);
 
-            if (DebugFlags.ParityTrace
-                && fieldNodeIndex == 41 && jo == 0)
-            {
-                Console.Error.WriteLine(
-                    $"CS_PSWLIN_MID X0=0x{BitConverter.SingleToInt32Bits(x0):X8}" +
-                    $" RS0=0x{BitConverter.SingleToInt32Bits(rs0):X8}" +
-                    $" G0=0x{BitConverter.SingleToInt32Bits(g0):X8}" +
-                    $" T0=0x{BitConverter.SingleToInt32Bits(t0):X8}" +
-                    $" APAN=0x{BitConverter.SingleToInt32Bits(apan):X8}");
-            }
+            
 
             {
                 float dxInv = 1f / (x1 - x0);
@@ -1164,22 +992,7 @@ public static class InfluenceMatrixBuilder
                 float pdifNumerator = pdifAccum + pdifTerm4;
                 float pdif = pdifNumerator * dxInv;
                 // Parity trace: PSUM/PDIF for first half at LE, first wake panel
-                if (DebugFlags.ParityTrace
-                    && fieldNodeIndex == 41 && jo == 0)
-                {
-                    Console.Error.WriteLine(
-                        $"CS_PSUM_H1 psum=0x{BitConverter.SingleToInt32Bits(psum):X8}" +
-                        $" pdif=0x{BitConverter.SingleToInt32Bits(pdif):X8}" +
-                        $" dxInv=0x{BitConverter.SingleToInt32Bits(dxInv):X8}");
-                    Console.Error.WriteLine(
-                        $"CS_PDIF_TERMS t1=0x{BitConverter.SingleToInt32Bits(pdifTerm1):X8}" +
-                        $" t2=0x{BitConverter.SingleToInt32Bits(pdifTerm2):X8}" +
-                        $" t3=0x{BitConverter.SingleToInt32Bits(pdifTerm3):X8}" +
-                        $" t4=0x{BitConverter.SingleToInt32Bits(pdifTerm4):X8}" +
-                        $" base=0x{BitConverter.SingleToInt32Bits(pdifBase):X8}" +
-                        $" accum=0x{BitConverter.SingleToInt32Bits(pdifAccum):X8}" +
-                        $" num=0x{BitConverter.SingleToInt32Bits(pdifNumerator):X8}");
-                }
+                
 
                 TracePswlinHalfTerms(
                     traceScope,
@@ -1398,14 +1211,7 @@ public static class InfluenceMatrixBuilder
                 dqdmSingle[jp] += dqJp;
 
                 // Trace dqdmSingle[4] accumulation for PSWLIN at wake panel 5
-                if (DebugFlags.SetBlHex
-                    && fieldWakeIndex == 4 && (jm == 4 || jo == 4 || jp == 4))
-                {
-                    Console.Error.WriteLine(
-                        $"C_PSWQ5 seg={jo + 1}" +
-                        $" dq4={BitConverter.SingleToInt32Bits(dqdmSingle[4]):X8}" +
-                        $" via={(jm == 4 ? "jm" : jo == 4 ? "jo" : "jp")}");
-                }
+                
 
                 TracePswlinSegment(
                     traceScope,
@@ -1689,14 +1495,7 @@ public static class InfluenceMatrixBuilder
                 dqdmSingle[jq] += dqJq;
 
                 // Trace dqdmSingle[4] half-2 accumulation
-                if (DebugFlags.SetBlHex
-                    && fieldWakeIndex == 4 && (jo == 4 || jp == 4 || jq == 4))
-                {
-                    Console.Error.WriteLine(
-                        $"C_PSWQ5h2 seg={jo + 1}" +
-                        $" dq4={BitConverter.SingleToInt32Bits(dqdmSingle[4]):X8}" +
-                        $" via={(jo == 4 ? "jo" : jp == 4 ? "jp" : "jq")}");
-                }
+                
 
                 TracePswlinSegment(
                     traceScope,
@@ -1759,15 +1558,7 @@ public static class InfluenceMatrixBuilder
         }
 
         // Parity trace: final DZDM at LE
-        if (DebugFlags.ParityTrace && fieldNodeIndex == 41)
-        {
-            Console.Error.WriteLine(
-                $"CS_DZDM_FINAL io={fieldNodeIndex}" +
-                $" dzdm1=0x{BitConverter.SingleToInt32Bits(dzdmSingle[0]):X8}" +
-                $" dzdm2=0x{BitConverter.SingleToInt32Bits(dzdmSingle[1]):X8}" +
-                $" dzdm5=0x{BitConverter.SingleToInt32Bits(dzdmSingle[4]):X8}" +
-                $" dzdm12=0x{BitConverter.SingleToInt32Bits(dzdmSingle[nWake - 1]):X8}");
-        }
+        
 
         dzdm = new double[nWake];
         dqdm = new double[nWake];
@@ -2689,23 +2480,7 @@ public static class InfluenceMatrixBuilder
         nx[0] = n0x;
         ny[0] = n0y;
 
-        if (DebugFlags.ParityTrace)
-        {
-            Console.Error.WriteLine(
-                $"C_WK1 X={BitConverter.SingleToInt32Bits(float.CreateChecked(x[0])):X8}" +
-                $" Y={BitConverter.SingleToInt32Bits(float.CreateChecked(y[0])):X8}" +
-                $" NX={BitConverter.SingleToInt32Bits(float.CreateChecked(nx[0])):X8}" +
-                $" NY={BitConverter.SingleToInt32Bits(float.CreateChecked(ny[0])):X8}" +
-                $" teX={BitConverter.SingleToInt32Bits(float.CreateChecked(teX)):X8}" +
-                $" teY={BitConverter.SingleToInt32Bits(float.CreateChecked(teY)):X8}" +
-                $" n0x={BitConverter.SingleToInt32Bits(float.CreateChecked(n0x)):X8}" +
-                $" n0y={BitConverter.SingleToInt32Bits(float.CreateChecked(n0y)):X8}");
-            Console.Error.WriteLine(
-                $"C_WKTE sharp={inviscidState.IsSharpTrailingEdge}" +
-                $" gap={BitConverter.SingleToInt32Bits((float)inviscidState.TrailingEdgeGap):X8}" +
-                $" angN={BitConverter.SingleToInt32Bits((float)inviscidState.TrailingEdgeAngleNormal):X8}" +
-                $" angS={BitConverter.SingleToInt32Bits((float)inviscidState.TrailingEdgeAngleStreamwise):X8}");
-        }
+        
 
         if (nWake > 1)
         {
@@ -2732,29 +2507,8 @@ public static class InfluenceMatrixBuilder
             // walked wake nodes stay bitwise-aligned with classic XFoil.
             x[i] = LegacyPrecisionMath.FusedMultiplyAdd(-ds, ny[i], x[i - 1]);
             y[i] = LegacyPrecisionMath.FusedMultiplyAdd(ds, nx[i], y[i - 1]);
-            if (DebugFlags.SetBlHex && i <= 6)
-            {
-                Console.Error.WriteLine(
-                    $"C_WKM i={i + 1}" +
-                    $" ds={BitConverter.SingleToInt32Bits(float.CreateChecked(ds)):X8}" +
-                    $" nx={BitConverter.SingleToInt32Bits(float.CreateChecked(nx[i])):X8}" +
-                    $" ny={BitConverter.SingleToInt32Bits(float.CreateChecked(ny[i])):X8}" +
-                    $" xp={BitConverter.SingleToInt32Bits(float.CreateChecked(x[i-1])):X8}" +
-                    $" yp={BitConverter.SingleToInt32Bits(float.CreateChecked(y[i-1])):X8}" +
-                    $" xn={BitConverter.SingleToInt32Bits(float.CreateChecked(x[i])):X8}" +
-                    $" yn={BitConverter.SingleToInt32Bits(float.CreateChecked(y[i])):X8}");
-            }
-            if (DebugFlags.ParityTrace && i == 1)
-            {
-                Console.Error.WriteLine(
-                    $"CS_WAKE_MARCH i=1 ds=0x{BitConverter.SingleToInt32Bits(float.CreateChecked(ds)):X8}" +
-                    $" nx=0x{BitConverter.SingleToInt32Bits(float.CreateChecked(nx[i])):X8}" +
-                    $" ny=0x{BitConverter.SingleToInt32Bits(float.CreateChecked(ny[i])):X8}" +
-                    $" x_prev=0x{BitConverter.SingleToInt32Bits(float.CreateChecked(x[i-1])):X8}" +
-                    $" y_prev=0x{BitConverter.SingleToInt32Bits(float.CreateChecked(y[i-1])):X8}" +
-                    $" x_new=0x{BitConverter.SingleToInt32Bits(float.CreateChecked(x[i])):X8}" +
-                    $" y_new=0x{BitConverter.SingleToInt32Bits(float.CreateChecked(y[i])):X8}");
-            }
+            
+            
             if (SolverTrace.IsActive)
             {
                 SolverTrace.Event(
@@ -2868,13 +2622,7 @@ public static class InfluenceMatrixBuilder
             angleOfAttackRadians: angleOfAttackRadians);
 
         // Parity trace: PSI_X/PSI_Y at each wake node
-        if (DebugFlags.ParityTrace)
-        {
-            Console.Error.WriteLine(
-                $"C_WKPSI i={wakeNodeIndex + 1}" +
-                $" psiX={BitConverter.SingleToInt32Bits((float)psiX):X8}" +
-                $" psiY={BitConverter.SingleToInt32Bits((float)psiY):X8}");
-        }
+        
 
         T psiXT = T.CreateChecked(psiX);
         T psiYT = T.CreateChecked(psiY);
@@ -2909,18 +2657,7 @@ public static class InfluenceMatrixBuilder
             nextNormalY = -psiYT / mag;
         }
 
-        if (DebugFlags.ParityTrace)
-        {
-            Console.Error.WriteLine(
-                $"C_WKNORM i={wakeNodeIndex + 1}" +
-                $" X={BitConverter.SingleToInt32Bits(float.CreateChecked(x)):X8}" +
-                $" Y={BitConverter.SingleToInt32Bits(float.CreateChecked(y)):X8}" +
-                $" nx_n={BitConverter.SingleToInt32Bits(float.CreateChecked(nextNormalX)):X8}" +
-                $" ny_n={BitConverter.SingleToInt32Bits(float.CreateChecked(nextNormalY)):X8}" +
-                $" psiX={BitConverter.SingleToInt32Bits((float)psiX):X8}" +
-                $" psiY={BitConverter.SingleToInt32Bits((float)psiY):X8}" +
-                $" fb={usedFallback}");
-        }
+        
 
         if (SolverTrace.IsActive)
         {

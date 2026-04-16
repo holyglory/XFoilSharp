@@ -175,11 +175,7 @@ public static class ViscousSolverEngine
     {
 
         TraceBufferGeometry(geometry.x, geometry.y);
-        if (DebugFlags.SetBlHex)
-        {
-            for (int idx = 0; idx < geometry.x.Length; idx++)
-                Console.Error.WriteLine($"C_BUF_XY i={idx + 1,4} X={BitConverter.SingleToInt32Bits((float)geometry.x[idx]):X8} Y={BitConverter.SingleToInt32Bits((float)geometry.y[idx]):X8}");
-        }
+        
 
         // Step 1: Run inviscid analysis to get baseline
         int maxNodes = settings.PanelCount + 40;
@@ -393,12 +389,7 @@ public static class ViscousSolverEngine
         double legacyIncrementalCl = settings.UseLegacyBoundaryLayerInitialization
             ? (float)inviscidResult.LiftCoefficient
             : 0.0;
-        if (DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine(
-                $"C_INIT_CL inv={BitConverter.SingleToInt32Bits((float)inviscidResult.LiftCoefficient):X8}" +
-                $" legacy={BitConverter.SingleToInt32Bits((float)legacyIncrementalCl):X8}");
-        }
+        
 
         for (int iter = 0; iter < maxIter; iter++)
         {
@@ -441,28 +432,8 @@ public static class ViscousSolverEngine
                         $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, 1]):X8}");
                 }
             }
-            if (DebugFlags.SetBlHex && iter == 1)
-                Console.Error.WriteLine(
-                    $"C_XSSI it={iter + 1}" +
-                    $" X12_1={BitConverter.SingleToInt32Bits((float)blState.XSSI[11, 1]):X8}" +
-                    $" X13_1={BitConverter.SingleToInt32Bits((float)blState.XSSI[12, 1]):X8}" +
-                    $" T12_1={BitConverter.SingleToInt32Bits((float)blState.THET[11, 1]):X8}" +
-                    $" T13_1={BitConverter.SingleToInt32Bits((float)blState.THET[12, 1]):X8}" +
-                    $" M12_1={BitConverter.SingleToInt32Bits((float)blState.MASS[11, 1]):X8}");
-            if (XFoil.Solver.Diagnostics.DebugFlags.DumpFullBl && iter == 0)
-            {
-                for (int sideF = 0; sideF < 2; sideF++)
-                for (int iblF = 1; iblF < blState.NBL[sideF]; iblF++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_BL_PRE0 s={sideF + 1} i={iblF + 1,3}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)blState.THET[iblF, sideF]):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[iblF, sideF]):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[iblF, sideF]):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[iblF, sideF]):X8}" +
-                        $" M={BitConverter.SingleToInt32Bits((float)blState.MASS[iblF, sideF]):X8}");
-                }
-            }
+            
+            
             debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
                 "=== ITER {0} ===", iter + 1));
 
@@ -473,55 +444,12 @@ public static class ViscousSolverEngine
             // Fortran: `DO IBH=1, NBL(IS)` reads THET(1..NBL) = similarity + stations 2..NBL
             // C# has THET[1] = similarity (THET[0] is unused virtual stagnation duplicate).
             // To match Fortran, loop iH = 1..NBL-1 reading THET[iH..NBL-1] which is NBL values.
-            if (DebugFlags.SetBlHex)
-            {
-                unchecked {
-                uint blH = 0;
-                for (int sH = 0; sH < 2; sH++)
-                    for (int iH = 1; iH < blState.NBL[sH]; iH++)
-                    {
-                        blH += (uint)(BitConverter.SingleToInt32Bits((float)blState.THET[iH, sH]) & 0x7FFFFFFF);
-                        blH += (uint)(BitConverter.SingleToInt32Bits((float)blState.DSTR[iH, sH]) & 0x7FFFFFFF);
-                        blH += (uint)(BitConverter.SingleToInt32Bits((float)blState.UEDG[iH, sH]) & 0x7FFFFFFF);
-                    }
-                Console.Error.WriteLine($"C_BLS {iter + 1,2} H={blH:X8}");
-                // Also scan for NaN in MASS at iter start
-                if (iter >= 1 && iter <= 2)
-                {
-                    for (int sideScan = 0; sideScan < 2; sideScan++)
-                    {
-                        for (int iblScan = 1; iblScan < blState.NBL[sideScan]; iblScan++)
-                        {
-                            if (!double.IsFinite(blState.MASS[iblScan, sideScan]))
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_ITER_START_NAN it={iter + 1} s={sideScan + 1} i={iblScan + 1}" +
-                                    $" M={BitConverter.SingleToInt32Bits((float)blState.MASS[iblScan, sideScan]):X8}" +
-                                    $" T={BitConverter.SingleToInt32Bits((float)blState.THET[iblScan, sideScan]):X8}" +
-                                    $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[iblScan, sideScan]):X8}" +
-                                    $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[iblScan, sideScan]):X8}");
-                                break;
-                            }
-                        }
-                    }
-                }
-                }
-            }
+            
 
             if (settings.UseLegacyBoundaryLayerInitialization && iter > 0)
             {
                 // Pre-MRCHDU BL state dump (post-UPDATE)
-                if (iter <= 5 && DebugFlags.SetBlHex)
-                {
-                    for (int side = 0; side < 2; side++)
-                        for (int ibl = 1; ibl < blState.NBL[side]; ibl++)
-                        {
-                            float ft = (float)blState.THET[ibl, side];
-                            float fd = (float)blState.DSTR[ibl, side];
-                            float fu = (float)blState.UEDG[ibl, side];
-                            Console.Error.WriteLine($"C_PRE_MDU{iter} s={side + 1} i={ibl + 1,4} T={BitConverter.SingleToInt32Bits(ft):X8} D={BitConverter.SingleToInt32Bits(fd):X8} U={BitConverter.SingleToInt32Bits(fu):X8}");
-                        }
-                }
+                
                 RemarchBoundaryLayerLegacyDirect(
                     blState,
                     settings,
@@ -562,76 +490,18 @@ public static class ViscousSolverEngine
                     }
                 }
                 // n6h20 trace: ITRAN after MRCHDU
-                if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                    && iter <= 12)
-                {
-                    Console.Error.WriteLine(
-                        $"C_ITRAN_END iter={iter+1} ITRAN[0]={blState.ITRAN[0]} ITRAN[1]={blState.ITRAN[1]}");
-                }
+                
                 // n6h20 trace: BL state AFTER MRCHDU (matches F's BLDUMP at top of UPDATE)
-                if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                    && (iter == 1 || iter == 2 || iter == 8 || iter == 9 || iter == 10 || iter == 31 || iter == 32))
-                {
-                    for (int sns = 0; sns < 2; sns++)
-                    {
-                        int last = Math.Min(blState.NBL[sns] - 1, blState.MaxStations - 1);
-                        foreach (int ins in new[] { 1, 2, 3, last - 2, last - 1, last })
-                        {
-                            if (ins < 1 || ins >= blState.MaxStations) continue;
-                            Console.Error.WriteLine(
-                                $"C_POSTMDU iter={iter+1} s={sns+1} i={ins+1}" +
-                                $" T={BitConverter.SingleToInt32Bits((float)blState.THET[ins, sns]):X8}" +
-                                $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[ins, sns]):X8}");
-                        }
-                    }
-                }
+                
 
                 // DEBUG: scan for NaN after MRCHDU at iter > 0
-                if (DebugFlags.SetBlHex && iter >= 1 && iter <= 2)
-                {
-                    for (int sideScan = 0; sideScan < 2; sideScan++)
-                    {
-                        for (int iblScan = 1; iblScan < blState.NBL[sideScan]; iblScan++)
-                        {
-                            if (!double.IsFinite(blState.MASS[iblScan, sideScan])
-                                || !double.IsFinite(blState.THET[iblScan, sideScan])
-                                || !double.IsFinite(blState.DSTR[iblScan, sideScan])
-                                || !double.IsFinite(blState.UEDG[iblScan, sideScan]))
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_POST_MRCHDU_NAN it={iter + 1} s={sideScan + 1} i={iblScan + 1}" +
-                                    $" M={BitConverter.SingleToInt32Bits((float)blState.MASS[iblScan, sideScan]):X8}" +
-                                    $" T={BitConverter.SingleToInt32Bits((float)blState.THET[iblScan, sideScan]):X8}" +
-                                    $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[iblScan, sideScan]):X8}" +
-                                    $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[iblScan, sideScan]):X8}");
-                                break;
-                            }
-                        }
-                    }
-                }
+                
 
-                if (iter <= 5 && DebugFlags.SetBlHex)
-                {
-                    for (int side = 0; side < 2; side++)
-                        for (int ibl = 1; ibl < blState.NBL[side]; ibl++)
-                        {
-                            float ft = (float)blState.THET[ibl, side];
-                            float fd = (float)blState.DSTR[ibl, side];
-                            float fu = (float)blState.UEDG[ibl, side];
-                            float fc = (float)blState.CTAU[ibl, side];
-                            float fm = (float)(blState.DSTR[ibl, side] * blState.UEDG[ibl, side]);
-                            Console.Error.WriteLine($"C_PM{iter} s={side + 1} i={ibl + 1,4} T={BitConverter.SingleToInt32Bits(ft):X8} D={BitConverter.SingleToInt32Bits(fd):X8} U={BitConverter.SingleToInt32Bits(fu):X8} C={BitConverter.SingleToInt32Bits(fc):X8} M={BitConverter.SingleToInt32Bits(fm):X8}");
-                        }
-                }
+                
             }
 
             // Per-iteration theta at key stations for parity tracking
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine($"C_T24 it={iter + 1} T={BitConverter.SingleToInt32Bits((float)blState.THET[23, 0]):X8}");
-                Console.Error.WriteLine($"C_T25 it={iter + 1} T={BitConverter.SingleToInt32Bits((float)blState.THET[24, 0]):X8}");
-                Console.Error.WriteLine($"C_T27 it={iter + 1} T={BitConverter.SingleToInt32Bits((float)blState.THET[26, 0]):X8} D={BitConverter.SingleToInt32Bits((float)blState.DSTR[26, 0]):X8} C={BitConverter.SingleToInt32Bits((float)blState.CTAU[26, 0]):X8}");
-            }
+            
 
             // b. SETBL global assembly: build the Newton system from the current state.
             double rmsbl = ViscousNewtonAssembler.BuildNewtonSystem(
@@ -652,79 +522,9 @@ public static class ViscousSolverEngine
                 anteRaw: wakeSeed?.NormalGap ?? 0.0);
 
             // ITRAN trace for transition station debugging
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_ITRAN it={iter}" +
-                    $" s1={blState.ITRAN[0]}" +
-                    $" s2={blState.ITRAN[1]}");
-            }
+            
             // Compute XOR hash of system for parity check
-            if (DebugFlags.SetBlHex)
-            {
-                int nsH = newtonSystem.NSYS;
-                int vmH = 0, vaH = 0, vbH = 0, vdH = 0;
-                for (int iv = 0; iv < nsH; iv++)
-                {
-                    for (int jv = 0; jv < nsH; jv++)
-                        for (int kk = 0; kk < 3; kk++)
-                            vmH ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VM[kk, jv, iv]);
-                    for (int kk = 0; kk < 3; kk++)
-                    {
-                        vaH ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VA[kk, 0, iv]);
-                        vaH ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VA[kk, 1, iv]);
-                        vbH ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VB[kk, 0, iv]);
-                        vbH ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VB[kk, 1, iv]);
-                        vdH ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VDEL[kk, 0, iv]);
-                        vdH ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VDEL[kk, 1, iv]);
-                    }
-                }
-                // Additive checksums with sign bit masked (immune to sign-of-zero)
-                // Use unchecked int to match Fortran INTEGER*4 overflow behavior
-                int vmSum = 0, vd1Sum = 0, vd2Sum = 0;
-                unchecked {
-                for (int iv2 = 0; iv2 < nsH; iv2++)
-                {
-                    for (int jv2 = 0; jv2 < nsH; jv2++)
-                        for (int kk2 = 0; kk2 < 3; kk2++)
-                            vmSum += BitConverter.SingleToInt32Bits((float)newtonSystem.VM[kk2, jv2, iv2]) & 0x7FFFFFFF;
-                    for (int kk2 = 0; kk2 < 3; kk2++)
-                    {
-                        vd1Sum += BitConverter.SingleToInt32Bits((float)newtonSystem.VDEL[kk2, 0, iv2]) & 0x7FFFFFFF;
-                        vd2Sum += BitConverter.SingleToInt32Bits((float)newtonSystem.VDEL[kk2, 1, iv2]) & 0x7FFFFFFF;
-                    }
-                }
-                }
-                int vdSum = unchecked(vd1Sum + vd2Sum);
-                Console.Error.WriteLine(
-                    $"C_MHASH {iter + 1,2}" +
-                    $" VM={vmH:X8} VA={vaH:X8} VB={vbH:X8} VD={vdH:X8}" +
-                    $" VMs={vmSum:X8} VDs={vdSum:X8} VD1s={vd1Sum:X8} VD2s={vd2Sum:X8}");
-                // Per-station VM hash at iter 5 — disabled, already identified iv=77 row 3
-                if (iter == 2)
-                {
-                    for (int iv = 0; iv < nsH; iv++)
-                    {
-                        int vbStn = 0;
-                        for (int kk = 0; kk < 3; kk++)
-                        {
-                            vbStn ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VB[kk, 0, iv]);
-                            vbStn ^= BitConverter.SingleToInt32Bits((float)newtonSystem.VB[kk, 1, iv]);
-                        }
-                        Console.Error.WriteLine($"C_VB3_IV iv={iv+1} VB={vbStn:X8}");
-                    }
-                    // Detailed dump of iv=93 (1-based) = iv=92 (0-based)
-                    int ivT = 92;
-                    Console.Error.WriteLine(
-                        $"C_VB3_RAW iv=93" +
-                        $" v11={BitConverter.SingleToInt32Bits((float)newtonSystem.VB[0,0,ivT]):X8}" +
-                        $" v12={BitConverter.SingleToInt32Bits((float)newtonSystem.VB[0,1,ivT]):X8}" +
-                        $" v21={BitConverter.SingleToInt32Bits((float)newtonSystem.VB[1,0,ivT]):X8}" +
-                        $" v22={BitConverter.SingleToInt32Bits((float)newtonSystem.VB[1,1,ivT]):X8}" +
-                        $" v31={BitConverter.SingleToInt32Bits((float)newtonSystem.VB[2,0,ivT]):X8}" +
-                        $" v32={BitConverter.SingleToInt32Bits((float)newtonSystem.VB[2,1,ivT]):X8}");
-                }
-            }
+            
             if (iter == 0 && Environment.GetEnvironmentVariable("XFOIL_VDEL_IT1") == "1")
             {
                 var vdelP = newtonSystem.VDEL;
@@ -738,294 +538,24 @@ public static class ViscousSolverEngine
                 }
             }
             // Dump ALL VDEL system lines BEFORE BLSOLV (first iteration only)
-            if (iter == 0 && DebugFlags.SetBlHex)
-            {
-                var vdelPre = newtonSystem.VDEL;
-                int nsysLocal = newtonSystem.NSYS;
-                // Compute per-station column-2 XOR to find sign-flipped entry
-                int vd2Hash = 0;
-                for (int jv = 0; jv < nsysLocal; jv++)
-                {
-                    for (int kk = 0; kk < 3; kk++)
-                        vd2Hash ^= BitConverter.SingleToInt32Bits((float)vdelPre[kk, 1, jv]);
-                    // Check if this station has a sign-flipped column-2 entry
-                    bool hasSignFlip = false;
-                    for (int kk = 0; kk < 3; kk++)
-                    {
-                        int bits = BitConverter.SingleToInt32Bits((float)vdelPre[kk, 1, jv]);
-                        if (bits == 0x4647AAA9 || bits == unchecked((int)0xC647AAA9))
-                            hasSignFlip = true;
-                    }
-                    if (hasSignFlip)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_VDEL2_SIGN jv={jv + 1,4}" +
-                            $" c2_0={BitConverter.SingleToInt32Bits((float)vdelPre[0, 1, jv]):X8}" +
-                            $" c2_1={BitConverter.SingleToInt32Bits((float)vdelPre[1, 1, jv]):X8}" +
-                            $" c2_2={BitConverter.SingleToInt32Bits((float)vdelPre[2, 1, jv]):X8}");
-                    }
-                }
-                // Also compute column-1-only hash
-                int vd1Hash = 0;
-                for (int jv2 = 0; jv2 < nsysLocal; jv2++)
-                    for (int kk2 = 0; kk2 < 3; kk2++)
-                        vd1Hash ^= BitConverter.SingleToInt32Bits((float)vdelPre[kk2, 0, jv2]);
-                Console.Error.WriteLine($"C_VD2_HASH={vd2Hash:X8} VD1_HASH={vd1Hash:X8}");
-                for (int jv = 0; jv < nsysLocal; jv++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_VDEL it={iter} jv={jv + 1,4}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPre[0, 0, jv]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPre[1, 0, jv]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPre[2, 0, jv]):X8}");
-                    Console.Error.WriteLine(
-                        $"C_VDEL2 it={iter} jv={jv + 1,4}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPre[0, 1, jv]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPre[1, 1, jv]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPre[2, 1, jv]):X8}");
-                }
-            }
+            
             // Per-station VM sum at iteration 0 (first Newton step) — find divergent station
-            if (iter == 0 && DebugFlags.SetBlHex)
-            {
-                int nsI0 = newtonSystem.NSYS;
-                for (int iv2 = 0; iv2 < nsI0; iv2++)
-                {
-                    int stnXor = 0;
-                    int stnSum = 0;
-                    unchecked {
-                        for (int jv2 = 0; jv2 < nsI0; jv2++)
-                            for (int kk2 = 0; kk2 < 3; kk2++)
-                            {
-                                int b = BitConverter.SingleToInt32Bits((float)newtonSystem.VM[kk2, jv2, iv2]);
-                                stnXor ^= b;
-                                stnSum += b & 0x7FFFFFFF;
-                            }
-                    }
-                    Console.Error.WriteLine($"C_VMS1 iv={iv2 + 1,4} xor={stnXor:X8} sum={stnSum:X8}");
-                }
-            }
+            
             // Per-station additive checksum of VM at iteration 13
-            if (iter == 13 && DebugFlags.SetBlHex)
-            {
-                int nsI13 = newtonSystem.NSYS;
-                for (int iv2 = 0; iv2 < nsI13; iv2++)
-                {
-                    uint stnChk = 0;
-                    for (int jv2 = 0; jv2 < nsI13; jv2++)
-                        for (int kk2 = 0; kk2 < 3; kk2++)
-                            stnChk = unchecked(stnChk + (uint)BitConverter.SingleToInt32Bits((float)newtonSystem.VM[kk2, jv2, iv2]));
-                    // Only print non-matching candidates (stations with large VM values near band)
-                    Console.Error.WriteLine($"C_VMS13 iv={iv2 + 1,4} sum={stnChk:X8}");
-                }
-            }
+            
             // Per-station VM hash at iteration 5 (case 188 NACA 0009 a=-2 Nc=12)
-            if (iter == 4 && DebugFlags.SetBlHex)
-            {
-                int nsI5 = newtonSystem.NSYS;
-                for (int iv2 = 0; iv2 < nsI5; iv2++)
-                {
-                    int stnXor = 0;
-                    int stnSum = 0;
-                    unchecked {
-                        for (int jv2 = 0; jv2 < nsI5; jv2++)
-                            for (int kk2 = 0; kk2 < 3; kk2++)
-                            {
-                                int b = BitConverter.SingleToInt32Bits((float)newtonSystem.VM[kk2, jv2, iv2]);
-                                stnXor ^= b;
-                                stnSum += b & 0x7FFFFFFF;
-                            }
-                    }
-                    Console.Error.WriteLine($"C_VMS5 iv={iv2 + 1,4} xor={stnXor:X8} sum={stnSum:X8}");
-                }
-                // Dump VM[k, jv, iv=77] per jv for row-level divergence localization
-                int iv77 = 76; // 0-indexed for iv=77
-                for (int jv2 = 0; jv2 < nsI5; jv2++)
-                {
-                    int b0 = BitConverter.SingleToInt32Bits((float)newtonSystem.VM[0, jv2, iv77]);
-                    int b1 = BitConverter.SingleToInt32Bits((float)newtonSystem.VM[1, jv2, iv77]);
-                    int b2 = BitConverter.SingleToInt32Bits((float)newtonSystem.VM[2, jv2, iv77]);
-                    if (b0 != 0 || b1 != 0 || b2 != 0)
-                        Console.Error.WriteLine($"C_VM77 jv={jv2 + 1,4} r1={b0:X8} r2={b1:X8} r3={b2:X8}");
-                }
-                // Also dump VA, VB, VDEL at iv=77
-                var vmArrD = newtonSystem.VM;
-                var vaArrD = newtonSystem.VA;
-                var vbArrD = newtonSystem.VB;
-                var vdelD = newtonSystem.VDEL;
-                Console.Error.WriteLine(
-                    $"C_VABD77" +
-                    $" VA11={BitConverter.SingleToInt32Bits((float)vaArrD[0, 0, iv77]):X8}" +
-                    $" VA12={BitConverter.SingleToInt32Bits((float)vaArrD[0, 1, iv77]):X8}" +
-                    $" VA21={BitConverter.SingleToInt32Bits((float)vaArrD[1, 0, iv77]):X8}" +
-                    $" VA22={BitConverter.SingleToInt32Bits((float)vaArrD[1, 1, iv77]):X8}" +
-                    $" VA31={BitConverter.SingleToInt32Bits((float)vaArrD[2, 0, iv77]):X8}" +
-                    $" VA32={BitConverter.SingleToInt32Bits((float)vaArrD[2, 1, iv77]):X8}" +
-                    $" VB11={BitConverter.SingleToInt32Bits((float)vbArrD[0, 0, iv77]):X8}" +
-                    $" VB12={BitConverter.SingleToInt32Bits((float)vbArrD[0, 1, iv77]):X8}" +
-                    $" VB21={BitConverter.SingleToInt32Bits((float)vbArrD[1, 0, iv77]):X8}" +
-                    $" VB22={BitConverter.SingleToInt32Bits((float)vbArrD[1, 1, iv77]):X8}" +
-                    $" VB31={BitConverter.SingleToInt32Bits((float)vbArrD[2, 0, iv77]):X8}" +
-                    $" VB32={BitConverter.SingleToInt32Bits((float)vbArrD[2, 1, iv77]):X8}" +
-                    $" VD11={BitConverter.SingleToInt32Bits((float)vdelD[0, 0, iv77]):X8}" +
-                    $" VD21={BitConverter.SingleToInt32Bits((float)vdelD[1, 0, iv77]):X8}" +
-                    $" VD31={BitConverter.SingleToInt32Bits((float)vdelD[2, 0, iv77]):X8}");
-            }
+            
             // Dump ALL VDEL column-1 at iteration 13 for full comparison
-            if (iter == 13 && DebugFlags.SetBlHex)
-            {
-                var vdelI13 = newtonSystem.VDEL;
-                int nsI13 = newtonSystem.NSYS;
-                for (int jv = 0; jv < nsI13; jv++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_VD13 jv={jv + 1,4}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelI13[0, 0, jv]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelI13[1, 0, jv]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelI13[2, 0, jv]):X8}");
-                }
-            }
+            
 
             // Matrix hash comparison
-            if (iter == 0 && DebugFlags.SetBlHex)
-            {
-                var vmArr = newtonSystem.VM;
-                var vaArr3 = newtonSystem.VA;
-                var vbArr3 = newtonSystem.VB;
-                int nsysLocal2 = newtonSystem.NSYS;
-                uint vmH = 0, vaH = 0, vbH = 0;
-                for (int iv2 = 0; iv2 < nsysLocal2; iv2++)
-                {
-                    for (int jv2 = 0; jv2 < nsysLocal2; jv2++)
-                        for (int k2 = 0; k2 < 3; k2++)
-                            vmH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vmArr[k2, jv2, iv2]));
-                    for (int k2 = 0; k2 < 3; k2++)
-                    {
-                        vaH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vaArr3[k2, 0, iv2]));
-                        vaH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vaArr3[k2, 1, iv2]));
-                        vbH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vbArr3[k2, 0, iv2]));
-                        vbH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vbArr3[k2, 1, iv2]));
-                    }
-                }
-                Console.Error.WriteLine($"C_MATRIX_HASH VM={vmH:X8} VA={vaH:X8} VB={vbH:X8}");
-                // Running VA hash to find divergent station
-                uint vaRunning = 0;
-                for (int iv2r = 0; iv2r < nsysLocal2; iv2r++)
-                {
-                    uint stnH = 0;
-                    for (int k2r = 0; k2r < 3; k2r++)
-                    {
-                        stnH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vaArr3[k2r, 0, iv2r]));
-                        stnH ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vaArr3[k2r, 1, iv2r]));
-                        vaRunning ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vaArr3[k2r, 0, iv2r]));
-                        vaRunning ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vaArr3[k2r, 1, iv2r]));
-                    }
-                    // VB running hash
-                    if (iv2r >= 159 && iv2r <= 171)
-                    {
-                        uint vbRun = 0;
-                        for (int ivR = 0; ivR <= iv2r; ivR++)
-                            for (int kR = 0; kR < 3; kR++)
-                            {
-                                vbRun ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vbArr3[kR, 0, ivR]));
-                                vbRun ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vbArr3[kR, 1, ivR]));
-                            }
-                        Console.Error.WriteLine($"C_VB_HASH iv={iv2r+1} running={vbRun:X8} stn={stnH:X8}");
-                    }
-                }
-                // Dump VA at stations near TE for parity debugging
-                foreach (int ivD in new[] { 79, 80, 81 })
-                {
-                    if (ivD < nsysLocal2)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_VA{ivD+1}" +
-                            $" {BitConverter.SingleToInt32Bits((float)vaArr3[0,0,ivD]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)vaArr3[0,1,ivD]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)vaArr3[1,0,ivD]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)vaArr3[1,1,ivD]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)vaArr3[2,0,ivD]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)vaArr3[2,1,ivD]):X8}");
-                    }
-                }
-                // Trace VB at divergent stations IV=148,150,170
-                var vbD = newtonSystem.VB;
-                foreach (int ivB in new[] { 147, 149, 169 }) // 0-based
-                {
-                    if (ivB >= nsysLocal2)
-                    {
-                        continue;
-                    }
-
-                    Console.Error.WriteLine(
-                        $"C_VB_EL iv={ivB + 1}" +
-                        $" vb00={BitConverter.SingleToInt32Bits((float)vbD[0, 0, ivB]):X8}" +
-                        $" vb01={BitConverter.SingleToInt32Bits((float)vbD[0, 1, ivB]):X8}" +
-                        $" vb10={BitConverter.SingleToInt32Bits((float)vbD[1, 0, ivB]):X8}" +
-                        $" vb11={BitConverter.SingleToInt32Bits((float)vbD[1, 1, ivB]):X8}" +
-                        $" vb20={BitConverter.SingleToInt32Bits((float)vbD[2, 0, ivB]):X8}" +
-                        $" vb21={BitConverter.SingleToInt32Bits((float)vbD[2, 1, ivB]):X8}");
-                }
-                // Per-row VM hash at IV=167 (wake station 7, C# 0-based 166)
-                if (166 < nsysLocal2)
-                {
-                    for (int k3 = 0; k3 < 3; k3++)
-                    {
-                        uint rowHash = 0;
-                        for (int jv3 = 0; jv3 < nsysLocal2; jv3++)
-                            rowHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vmArr[k3, jv3, 166]));
-                        Console.Error.WriteLine($"C_VM167_ROW k={k3 + 1} hash={rowHash:X8}");
-                    }
-                }
-                // VS1/VS2 at wake station 90 (IS=2 IBL=90, C# side=1 ibl=89)
-                // The VM fill uses VS1/VS2 from BLDIF(3)
-                // Per-IV VM hash
-                for (int iv3 = 0; iv3 < nsysLocal2; iv3++)
-                {
-                    uint perIvHash = 0;
-                    for (int k3 = 0; k3 < 3; k3++)
-                        for (int jv3 = 0; jv3 < nsysLocal2; jv3++)
-                            perIvHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)vmArr[k3, jv3, iv3]));
-                    // Only output if non-standard (most will be checked by Fortran comparison)
-                    Console.Error.WriteLine($"C_VMH iv={iv3 + 1,4} h={perIvHash:X8}");
-                }
-            }
+            
 
             // Pre-BLSOLV aggregate checksum
-            if (DebugFlags.SetBlHex)
-            {
-                int nsAgg = newtonSystem.NSYS;
-                unchecked {
-                uint vmAgg = 0, vdAgg = 0;
-                for (int ivA = 0; ivA < nsAgg; ivA++)
-                    for (int kkA = 0; kkA < 3; kkA++)
-                    {
-                        for (int jvA = 0; jvA < nsAgg; jvA++)
-                            vmAgg += (uint)(BitConverter.SingleToInt32Bits((float)newtonSystem.VM[kkA, jvA, ivA]) & 0x7FFFFFFF);
-                        vdAgg += (uint)(BitConverter.SingleToInt32Bits((float)newtonSystem.VDEL[kkA, 0, ivA]) & 0x7FFFFFFF);
-                    }
-                Console.Error.WriteLine(
-                    $"C_PRE_BL {iter + 1,2} VM={vmAgg:X8} VD={vdAgg:X8}");
-                }
-            }
+            
 
             // Pre-solve VDEL dump for iter 0 (RHS of Newton system)
-            if (iter == 0 && XFoil.Solver.Diagnostics.DebugFlags.PreSolveDump)
-            {
-                var vdelPreS = newtonSystem.VDEL;
-                int nsysPre = newtonSystem.NSYS;
-                for (int jvPs = 0; jvPs < Math.Min(10, nsysPre); jvPs++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_VDEL_PRE it={iter + 1} jv={jvPs + 1,3}" +
-                        $" c1=[{BitConverter.SingleToInt32Bits((float)vdelPreS[0, 0, jvPs]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPreS[1, 0, jvPs]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPreS[2, 0, jvPs]):X8}]" +
-                        $" c2=[{BitConverter.SingleToInt32Bits((float)vdelPreS[0, 1, jvPs]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPreS[1, 1, jvPs]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelPreS[2, 1, jvPs]):X8}]");
-                }
-            }
+            
 
             if (Environment.GetEnvironmentVariable("XFOIL_AH79_VPRE") == "1"
                 && (iter == 31 || iter == 32))
@@ -1063,55 +593,11 @@ public static class ViscousSolverEngine
                 useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
 
             // Post-BLSOLV additive checksum
-            if (DebugFlags.SetBlHex)
-            {
-                int nsPost = newtonSystem.NSYS;
-                unchecked {
-                int solSum1 = 0, solSum2 = 0;
-                for (int ivP = 0; ivP < nsPost; ivP++)
-                    for (int kkP = 0; kkP < 3; kkP++)
-                    {
-                        solSum1 += BitConverter.SingleToInt32Bits((float)newtonSystem.VDEL[kkP, 0, ivP]) & 0x7FFFFFFF;
-                        solSum2 += BitConverter.SingleToInt32Bits((float)newtonSystem.VDEL[kkP, 1, ivP]) & 0x7FFFFFFF;
-                    }
-                Console.Error.WriteLine(
-                    $"C_BLSOLV {iter + 1,2} SOL1={solSum1:X8} SOL2={solSum2:X8}");
-                }
-            }
+            
             // Dump post-BLSOLV VDEL solution for ALL stations at iters 1-2
-            if (iter <= 1 && DebugFlags.SetBlHex)
-            {
-                var vdelSol = newtonSystem.VDEL;
-                int nsysSol = newtonSystem.NSYS;
-                int displayIter = iter + 1;
-                for (int jvs = 0; jvs < nsysSol; jvs++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_VDSOL it={displayIter} jv={jvs + 1,3}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelSol[0, 0, jvs]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelSol[1, 0, jvs]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelSol[2, 0, jvs]):X8}");
-                    Console.Error.WriteLine(
-                        $"C_VDSOL2 it={displayIter} jv={jvs + 1,3}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelSol[0, 1, jvs]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelSol[1, 1, jvs]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdelSol[2, 1, jvs]):X8}");
-                }
-            }
+            
             // Dump ALL post-BLSOLV VDEL for parity comparison
-            if (false && iter == 0 && DebugFlags.SetBlHex)
-            {
-                var vdel = newtonSystem.VDEL;
-                int nsysPost = newtonSystem.NSYS;
-                for (int jv = 0; jv < nsysPost; jv++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_SOLVED jv={jv + 1,4}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdel[0, 0, jv]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdel[1, 0, jv]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)vdel[2, 0, jv]):X8}");
-                }
-            }
+            
 
             // d. UPDATE: Apply Newton update (always, with relaxation from RLXBL).
             //    With correct Jacobians (reybl threading + DUE/DDS terms), Newton
@@ -1159,29 +645,12 @@ public static class ViscousSolverEngine
                 // Fortran UPDATE: CL = CL + RLX*DAC (for LALFA=true)
                 if (settings.UseLegacyBoundaryLayerInitialization)
                 {
-                    if (DebugFlags.SetBlHex)
-                    {
-                        float rd = (float)newtonRlx * (float)dac;
-                        Console.Error.WriteLine(
-                            $"C_CL_UPD it={iter}" +
-                            $" cl_pre={BitConverter.SingleToInt32Bits((float)legacyIncrementalCl):X8}" +
-                            $" rlx_dac={BitConverter.SingleToInt32Bits(rd):X8}" +
-                            $" rlx={BitConverter.SingleToInt32Bits((float)newtonRlx):X8}" +
-                            $" dac={BitConverter.SingleToInt32Bits((float)dac):X8}");
-                    }
+                    
                     legacyIncrementalCl = (float)((float)legacyIncrementalCl + (float)((float)newtonRlx * (float)dac));
                 }
                 trustRadius = newTrustRadius;
                 rlx = newtonRlx;
-                if (DebugFlags.SetBlHex)
-                {
-                    Console.Error.WriteLine(
-                        $"C_NEWTON_RLX it={iter}" +
-                        $" rlx={BitConverter.SingleToInt32Bits((float)newtonRlx):X8}" +
-                        $" dac={BitConverter.SingleToInt32Bits((float)dac):X8}" +
-                        $" cl={BitConverter.SingleToInt32Bits((float)legacyIncrementalCl):X8}" +
-                        $" rms={rmsbl:E4}");
-                }
+                
                 // The legacy parity path uses the UPDATE-style normalized
                 // DN1..DN4 residual returned by ApplyNewtonUpdate.
                 rmsbl = updatedRms;
@@ -1202,27 +671,7 @@ public static class ViscousSolverEngine
                 }
             }
 
-            if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                && iter >= 19 && iter <= 22)
-            {
-                // Airfoil + wake end stations
-                int[] targetsS1 = {1, 2, 3, 4};
-                int[] targetsS2 = {1, 2, 3, 4, 88, 89, 90, 91, 92, 93};
-                for (int sns = 0; sns < 2; sns++)
-                {
-                    int[] targets = sns == 0 ? targetsS1 : targetsS2;
-                    foreach (int ins in targets)
-                    {
-                        if (ins < blState.NBL[sns])
-                            Console.Error.WriteLine(
-                                $"C_POSTUPDATE it={iter + 1} s={sns + 1} i={ins + 1}" +
-                                $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[ins, sns]):X8}" +
-                                $" T={BitConverter.SingleToInt32Bits((float)blState.THET[ins, sns]):X8}" +
-                                $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[ins, sns]):X8}" +
-                                $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[ins, sns]):X8}");
-                    }
-                }
-            }
+            
 
             // e. QVFUE in XFoil only maps the updated UEDG field back to panel
             // tangential velocities. UPDATE already applies the DIJ-coupled Ue
@@ -1284,10 +733,8 @@ public static class ViscousSolverEngine
             if (Environment.GetEnvironmentVariable("XFOIL_DUMP_GAM_STAG") == "1" && iter <= 1)
                 Console.Error.WriteLine($"C_FINDSTAG it={iter+1} rawNewIsp={rawNewIsp} clampedNewIsp={newIsp} sst={BitConverter.SingleToInt32Bits((float)newSst):X8}");
             bool stagnationShifted = Math.Abs(newSst - sst) > 1.0e-12;
-            if (DebugFlags.SetBlHex)
-                Console.Error.WriteLine($"C_SSTVAL it={iter + 1} sst={BitConverter.SingleToInt32Bits((float)sst):X8} newSst={BitConverter.SingleToInt32Bits((float)newSst):X8}");
-            if (DebugFlags.SetBlHex)
-                Console.Error.WriteLine($"C_STMOVE it={iter + 1} isp={isp} newIsp={newIsp} shifted={stagnationShifted}");
+            
+            
             if (newIsp != isp)
             {
                 int oldUpperCount = blState.NBL[0];
@@ -1320,8 +767,7 @@ public static class ViscousSolverEngine
                     oldUpperCount,
                     oldLowerCount,
                     settings.UseLegacyBoundaryLayerInitialization);
-                if (DebugFlags.SetBlHex)
-                    Console.Error.WriteLine($"C_POST_SHIFT it={iter + 1} T27={BitConverter.SingleToInt32Bits((float)blState.THET[26, 0]):X8}");
+                
 
                 isp = newIsp;
                 sst = newSst;
@@ -1367,86 +813,11 @@ public static class ViscousSolverEngine
                 wakeGap = BuildWakeGapArray(wakeSeed, teGap, nWake);
             }
             // DEBUG: scan for NaN state after STMOVE for iter 0 (include MASS check)
-            if (DebugFlags.SetBlHex && iter == 0)
-            {
-                for (int sideScan = 0; sideScan < 2; sideScan++)
-                {
-                    for (int iblScan = 1; iblScan < blState.NBL[sideScan]; iblScan++)
-                    {
-                        if (!double.IsFinite(blState.THET[iblScan, sideScan])
-                            || !double.IsFinite(blState.DSTR[iblScan, sideScan])
-                            || !double.IsFinite(blState.UEDG[iblScan, sideScan])
-                            || !double.IsFinite(blState.MASS[iblScan, sideScan]))
-                        {
-                            Console.Error.WriteLine(
-                                $"C_POST_STMOVE_NAN it=0 s={sideScan + 1} i={iblScan + 1}" +
-                                $" T={BitConverter.SingleToInt32Bits((float)blState.THET[iblScan, sideScan]):X8}" +
-                                $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[iblScan, sideScan]):X8}" +
-                                $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[iblScan, sideScan]):X8}" +
-                                $" M={BitConverter.SingleToInt32Bits((float)blState.MASS[iblScan, sideScan]):X8}");
-                            break;
-                        }
-                    }
-                }
-            }
-            if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                && iter >= 19 && iter <= 22)
-            {
-                for (int sns = 0; sns < 2; sns++)
-                    for (int ins = 1; ins <= 4; ins++)
-                        Console.Error.WriteLine(
-                            $"C_NEARSST it={iter + 1} s={sns + 1} i={ins + 1}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)blState.THET[ins, sns]):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[ins, sns]):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[ins, sns]):X8}");
-            }
-            if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                && (iter == 0 || iter == 1 || (iter >= 6 && iter <= 10)))
-            {
-                // Hash all BL state for fast iter-10 divergence detection
-                // C# iter k POST state = F UPDATE_COUNT (k+2) START state
-                int hT = 0, hD = 0, hU = 0, hC = 0;
-                for (int sns = 0; sns < 2; sns++)
-                    for (int ins = 1; ins < blState.NBL[sns] - 1; ins++)
-                    {
-                        if (ins >= blState.MaxStations) break;
-                        hT ^= BitConverter.SingleToInt32Bits((float)blState.THET[ins, sns]);
-                        hD ^= BitConverter.SingleToInt32Bits((float)blState.DSTR[ins, sns]);
-                        hU ^= BitConverter.SingleToInt32Bits((float)blState.UEDG[ins, sns]);
-                        hC ^= BitConverter.SingleToInt32Bits((float)blState.CTAU[ins, sns]);
-                    }
-                // Also dump first 3 + last 3 stations per side to find divergence
-                if (iter == 0 || iter == 1 || iter == 7)
-                {
-                    for (int sns = 0; sns < 2; sns++)
-                    {
-                        int last = Math.Min(blState.NBL[sns] - 2, blState.MaxStations - 1);
-                        foreach (int ins in new[] { 1, 2, 3, last - 2, last - 1, last })
-                        {
-                            if (ins < 1 || ins >= blState.MaxStations) continue;
-                            Console.Error.WriteLine(
-                                $"C_BLDUMP cIter={iter+1} s={sns+1} i={ins+1}" +
-                                $" T={BitConverter.SingleToInt32Bits((float)blState.THET[ins, sns]):X8}" +
-                                $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[ins, sns]):X8}");
-                        }
-                    }
-                }
-                Console.Error.WriteLine(
-                    $"C_BLHASH cIter={iter + 1} mapsToFiter={iter + 2} hT={hT:X8} hD={hD:X8} hU={hU:X8} hC={hC:X8}");
-            }
+            
+            
+            
             // post-STMOVE trace for iter 11 wake stations 64-70 side 2 (C# iter=10 0-idx)
-            if (DebugFlags.SetBlHex && iter == 10)
-            {
-                for (int iblPs = 63; iblPs <= 69; iblPs++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_POST_STMOVE11 IBL={iblPs + 1,3}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)blState.THET[iblPs, 1]):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[iblPs, 1]):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[iblPs, 1]):X8}" +
-                        $" M={BitConverter.SingleToInt32Bits((float)blState.MASS[iblPs, 1]):X8}");
-                }
-            }
+            
 
             // f. CL/CD/CM and convergence check
             // Fortran: CALL CLCALC recomputes CL from circulation (QVFUE + CLCALC).
@@ -1464,59 +835,8 @@ public static class ViscousSolverEngine
                 legacyIncrementalCl = (float)cl;
             }
             double cd = EstimateDrag(blState, qinf, reinf);
-            if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace)
-            {
-                Console.Error.WriteLine(
-                    $"C_CLCALC it={iter + 1}" +
-                    $" CL={BitConverter.SingleToInt32Bits((float)cl):X8}" +
-                    $" CD={BitConverter.SingleToInt32Bits((float)cd):X8}");
-            }
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_ITER_CDCL it={iter}" +
-                    $" CD={BitConverter.SingleToInt32Bits((float)cd):X8}" +
-                    $" CL={BitConverter.SingleToInt32Bits((float)cl):X8}");
-                Console.Error.WriteLine(
-                    $"C_RMSBL it={iter}" +
-                    $" rmsbl={BitConverter.SingleToInt32Bits((float)rmsbl):X8}" +
-                    $" eps1={BitConverter.SingleToInt32Bits((float)tolerance):X8}");
-                // Trace wake end state per iteration to find where divergence enters
-                int wakeEndIdx = blState.NBL[1] - 1;
-                if (wakeEndIdx >= 1 && wakeEndIdx < blState.MaxStations)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WAKEEND it={iter}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)blState.THET[wakeEndIdx, 1]):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[wakeEndIdx, 1]):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[wakeEndIdx, 1]):X8}");
-                }
-                // Trace UEDG around stagnation point (stations 76-80 both sides)
-                for (int sideT = 0; sideT < 2; sideT++)
-                for (int iblT = 1; iblT <= 4 && iblT < blState.NBL[sideT]; iblT++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_NEARSST it={iter} s={sideT + 1} i={iblT + 1}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)blState.THET[iblT, sideT]):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[iblT, sideT]):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[iblT, sideT]):X8}");
-                }
-                // FULL BL state dump for iter-by-iter hex diff vs Fortran F_BL
-                if (XFoil.Solver.Diagnostics.DebugFlags.DumpFullBl)
-                {
-                    for (int sideF = 0; sideF < 2; sideF++)
-                    for (int iblF = 1; iblF < blState.NBL[sideF]; iblF++)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_BL it={iter} s={sideF + 1} i={iblF + 1,3}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)blState.THET[iblF, sideF]):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[iblF, sideF]):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[iblF, sideF]):X8}" +
-                            $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[iblF, sideF]):X8}" +
-                            $" M={BitConverter.SingleToInt32Bits((float)blState.MASS[iblF, sideF]):X8}");
-                    }
-                }
-            }
+            
+            
             double cm = ComputeViscousCM(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
 
             if (debugWriter != null)
@@ -1553,8 +873,7 @@ public static class ViscousSolverEngine
                 converged = true;
                 break;
             }
-            if (DebugFlags.SetBlHex && (iter == 6 || iter == 7))
-                Console.Error.WriteLine($"C_LOOP_END it={iter + 1} T27={BitConverter.SingleToInt32Bits((float)blState.THET[26, 0]):X8}");
+            
             if (Environment.GetEnvironmentVariable("XFOIL_AH79_ITRAN") == "1")
                 Console.Error.WriteLine($"C_ITRAN it={iter+1} s1={blState.ITRAN[0]} s2={blState.ITRAN[1]} nbl1={blState.NBL[0]} nbl2={blState.NBL[1]}");
         }
@@ -2250,16 +1569,7 @@ public static class ViscousSolverEngine
             float q1 = (float)qvis[0];
             float cginc1 = 1.0f - (q1 / fQinf) * (q1 / fQinf);
             float cpg1 = cginc1; // For M=0: BETA=1, BFAC=0 -> CPG = CGINC
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_CLCALC_Q q0={BitConverter.SingleToInt32Bits((float)qvis[0]):X8}" +
-                    $" q1={BitConverter.SingleToInt32Bits((float)qvis[1]):X8}" +
-                    $" q39={BitConverter.SingleToInt32Bits((float)qvis[39]):X8}" +
-                    $" q79={BitConverter.SingleToInt32Bits((float)qvis[79]):X8}" +
-                    $" q80={BitConverter.SingleToInt32Bits((float)qvis[80]):X8}" +
-                    $" qLast={BitConverter.SingleToInt32Bits((float)qvis[n-1]):X8}");
-            }
+            
 
             for (int i = 0; i < n; i++)
             {
@@ -2284,28 +1594,8 @@ public static class ViscousSolverEngine
                 float dxAg = LegacyPrecisionMath.RoundBarrier(dx * ag);
                 fCl = LegacyPrecisionMath.RoundBarrier(fCl + dxAg);
 
-                if (DebugFlags.SetBlHex && (i >= 80 && i <= 91))
-                {
-                    Console.Error.WriteLine(
-                        $"C_CL_STEP i={i,3} dx={BitConverter.SingleToInt32Bits(dx):X8}" +
-                        $" ag={BitConverter.SingleToInt32Bits(ag):X8}" +
-                        $" cpg1={BitConverter.SingleToInt32Bits(cpg1):X8}" +
-                        $" cpg2={BitConverter.SingleToInt32Bits(cpg2):X8}" +
-                        $" qip={BitConverter.SingleToInt32Bits(qip):X8}" +
-                        $" dxAg={BitConverter.SingleToInt32Bits(dxAg):X8}" +
-                        $" fCl={BitConverter.SingleToInt32Bits(fCl):X8}");
-                }
-                if (XFoil.Solver.Diagnostics.DebugFlags.DumpAllClStep)
-                {
-                    Console.Error.WriteLine(
-                        $"C_CL_ALL i={i,3} dx={BitConverter.SingleToInt32Bits(dx):X8}" +
-                        $" ag={BitConverter.SingleToInt32Bits(ag):X8}" +
-                        $" cpg1={BitConverter.SingleToInt32Bits(cpg1):X8}" +
-                        $" cpg2={BitConverter.SingleToInt32Bits(cpg2):X8}" +
-                        $" qip={BitConverter.SingleToInt32Bits(qip):X8}" +
-                        $" dxAg={BitConverter.SingleToInt32Bits(dxAg):X8}" +
-                        $" fCl={BitConverter.SingleToInt32Bits(fCl):X8}");
-                }
+                
+                
                 cpg1 = cpg2;
             }
 
@@ -2440,14 +1730,7 @@ public static class ViscousSolverEngine
                 || inviscidState.UseLegacyKernelPrecision
                 || inviscidState.UseLegacyPanelingPrecision);
         isp = Math.Max(1, Math.Min(n - 2, isp));
-        if (DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine(
-                $"C_ISP isp={isp + 1,4}" +
-                $" sst={BitConverter.SingleToInt32Bits((float)sst):X8}" +
-                $" qinv_isp={BitConverter.SingleToInt32Bits((float)qinv[isp]):X8}" +
-                $" n={n,4}");
-        }
+        
 
         var (iblte, nbl) = ComputeStationCountsXFoil(n, isp, nWake);
         int maxStations = Math.Max(nbl[0], nbl[1]) + nWake + 10;
@@ -2517,17 +1800,7 @@ public static class ViscousSolverEngine
         if (settings.UseLegacyBoundaryLayerInitialization)
         {
             // Dump post-MRCHUE state (before MRCHDU, which runs at each Newton iter)
-            if (DebugFlags.SetBlHex)
-            {
-                for (int side = 0; side < 2; side++)
-                    for (int ibl = 1; ibl < blState.NBL[side]; ibl++)
-                    {
-                        float ft = (float)blState.THET[ibl, side];
-                        float fd = (float)blState.DSTR[ibl, side];
-                        float fc = (float)blState.CTAU[ibl, side];
-                        Console.Error.WriteLine($"C_MUE s={side+1} i={ibl+1,4} T={BitConverter.SingleToInt32Bits(ft):X8} D={BitConverter.SingleToInt32Bits(fd):X8} C={BitConverter.SingleToInt32Bits(fc):X8}");
-                    }
-            }
+            
             // Fortran SETBL (xbl.f line 116): MRCHDU re-solves ALL stations
             // after MRCHUE, producing the definitive initialization state.
             RemarchBoundaryLayerLegacyDirect(
@@ -2547,18 +1820,7 @@ public static class ViscousSolverEngine
                 reybl_ms);
 
             // Dump post-init-MRCHDU for parity verification with Fortran F_PM traces
-            if (DebugFlags.SetBlHex)
-            {
-                for (int side = 0; side < 2; side++)
-                    for (int ibl = 1; ibl < blState.NBL[side]; ibl++)
-                    {
-                        float ft = (float)blState.THET[ibl, side];
-                        float fd = (float)blState.DSTR[ibl, side];
-                        float fu = (float)blState.UEDG[ibl, side];
-                        float fx = (float)blState.XSSI[ibl, side];
-                        Console.Error.WriteLine($"C_PM s={side+1} i={ibl+1,4} T={BitConverter.SingleToInt32Bits(ft):X8} D={BitConverter.SingleToInt32Bits(fd):X8} U={BitConverter.SingleToInt32Bits(fu):X8} X={BitConverter.SingleToInt32Bits(fx):X8}");
-                    }
-            }
+            
         }
 
         var (isysMap, nsys) = EdgeVelocityCalculator.MapStationsToSystemLines(iblte, nbl);
@@ -2592,20 +1854,7 @@ public static class ViscousSolverEngine
             alphaRadians,
             parityWakeGeometry,
             settings.UseLegacyWakeSourceKernelPrecision);
-        if (DebugFlags.SetBlHex)
-        {
-            int dijHash = 0, airfoilHash = 0;
-            for (int r = 0; r < dij.GetLength(0); r++)
-            {
-                for (int c = 0; c < dij.GetLength(1); c++)
-                {
-                    dijHash ^= BitConverter.SingleToInt32Bits((float)dij[r, c]);
-                    if (r < n && c < n)
-                        airfoilHash ^= BitConverter.SingleToInt32Bits((float)dij[r, c]);
-                }
-            }
-            Console.Error.WriteLine($"C_DIJ hash={dijHash:X8} airfoil={airfoilHash:X8}");
-        }
+        
 
         if (debugWriter != null)
         {
@@ -2690,14 +1939,7 @@ public static class ViscousSolverEngine
                         blState.VTI[ibl, side],
                         blState.UEDG[ibl, side],
                         useLegacyPrecision);
-                    if (DebugFlags.SetBlHex && iPan == 86)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_QVIS87 ibl={ibl+1} side={side+1} iPan={iPan+1}" +
-                            $" VTI={BitConverter.SingleToInt32Bits((float)blState.VTI[ibl, side]):X8}" +
-                            $" UEDG={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                            $" qvis={BitConverter.SingleToInt32Bits((float)qvis[iPan]):X8}");
-                    }
+                    
                     if (Environment.GetEnvironmentVariable("XFOIL_QVIS74") == "1" && iPan == 74)
                     {
                         Console.Error.WriteLine(
@@ -2865,16 +2107,7 @@ public static class ViscousSolverEngine
                 sst = panelArcRight - ds * (gammaRight / dgam);
 
             // Trace STFIND inputs and result
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_STFIND I={ist + 1,4}" +
-                    $" GI={BitConverter.SingleToInt32Bits(gammaLeft):X8}" +
-                    $" GIP={BitConverter.SingleToInt32Bits(gammaRight):X8}" +
-                    $" SI={BitConverter.SingleToInt32Bits(panelArcLeft):X8}" +
-                    $" SIP={BitConverter.SingleToInt32Bits(panelArcRight):X8}" +
-                    $" SST={BitConverter.SingleToInt32Bits((float)sst):X8}");
-            }
+            
 
             if (sst <= panelArcLeft) sst = panelArcLeft + 1.0e-7f;
             if (sst >= panelArcRight) sst = panelArcRight - 1.0e-7f;
@@ -3255,23 +2488,7 @@ public static class ViscousSolverEngine
                     // QISET: Q = Q1*cos + Q2*sin
                     rawSpeeds[iw] = LegacyPrecisionMath.SumOfProducts(
                         qtan1, cosA, qtan2, sinA, true);
-                    if (DebugFlags.SetBlHex
-                        && iw <= 12)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_WSPD iw={iw}" +
-                            $" q1={BitConverter.SingleToInt32Bits((float)qtan1):X8}" +
-                            $" q2={BitConverter.SingleToInt32Bits((float)qtan2):X8}" +
-                            $" cos={BitConverter.SingleToInt32Bits((float)cosA):X8}" +
-                            $" sin={BitConverter.SingleToInt32Bits((float)sinA):X8}" +
-                            $" rs={BitConverter.SingleToInt32Bits((float)rawSpeeds[iw]):X8}");
-                        Console.Error.WriteLine(
-                            $"C_WGEO iw={iw}" +
-                            $" X={BitConverter.SingleToInt32Bits((float)wakeGeometry.X[iw]):X8}" +
-                            $" Y={BitConverter.SingleToInt32Bits((float)wakeGeometry.Y[iw]):X8}" +
-                            $" NX={BitConverter.SingleToInt32Bits((float)wakeGeometry.NormalX[iw]):X8}" +
-                            $" NY={BitConverter.SingleToInt32Bits((float)wakeGeometry.NormalY[iw]):X8}");
-                    }
+                    
                 }
                 // Restore blended gamma
                 for (int i = 0; i <= n; i++)
@@ -3441,13 +2658,7 @@ public static class ViscousSolverEngine
             }
             wakeGapDerivative = WakeGapProfile.ComputeDerivativeFromTangentY(tangentY);
         }
-        if (DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine(
-                $"C_BUILD_WGAP useLegacy={useLegacy}" +
-                $" dwdx={BitConverter.SingleToInt32Bits((float)wakeGapDerivative):X8}" +
-                $" ANTE={BitConverter.SingleToInt32Bits((float)normalGap):X8}");
-        }
+        
         // Fortran XICALC (xpanel.f:2468-2473) accumulates XSSI in REAL*4:
         //   DXSSI = SQRT((X(I)-X(I-1))**2 + (Y(I)-Y(I-1))**2)
         //   XSSI(IBL) = XSSI(IBL-1) + DXSSI
@@ -3499,15 +2710,7 @@ public static class ViscousSolverEngine
                 wakeGapDerivative,
                 sharpTrailingEdge,
                 useLegacy);
-            if (DebugFlags.SetBlHex && iw <= 3)
-            {
-                Console.Error.WriteLine(
-                    $"C_WGAP_I iw={iw}" +
-                    $" X={BitConverter.SingleToInt32Bits((float)wakeGeometry.X[iw]):X8}" +
-                    $" Y={BitConverter.SingleToInt32Bits((float)wakeGeometry.Y[iw]):X8}" +
-                    $" distF={BitConverter.SingleToInt32Bits(distanceF):X8}" +
-                    $" wgap={BitConverter.SingleToInt32Bits((float)gapProfile[iw]):X8}");
-            }
+            
         }
 
         return gapProfile;
@@ -3655,14 +2858,7 @@ public static class ViscousSolverEngine
                 float dsif = (float)LegacyPrecisionMath.Multiply(2.2f, thif, true);
                 thi = thif;
                 dsi = dsif;
-                if (DebugFlags.SetBlHex && side == 0)
-                    Console.Error.WriteLine(
-                        $"C_THWAITES s=1 T={BitConverter.SingleToInt32Bits(thif):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits(dsif):X8}" +
-                        $" TSQ={BitConverter.SingleToInt32Bits(tsqf):X8}" +
-                        $" XSI={BitConverter.SingleToInt32Bits(xsi0f):X8}" +
-                        $" UE={BitConverter.SingleToInt32Bits(ue0f):X8}" +
-                        $" RE={BitConverter.SingleToInt32Bits(reinff):X8}");
+                
             }
             else
             {
@@ -3704,9 +2900,7 @@ public static class ViscousSolverEngine
             // Stations 2..IBLTE: march with Thwaites integral
             for (int ibl = 2; ibl <= blState.IBLTE[side]; ibl++)
             {
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 4)
-                    Console.Error.WriteLine($"C_LOOP_S2_I5 ITRAN={blState.ITRAN[side]} IBLTE={blState.IBLTE[side]}");
+                
                 double uei = Math.Abs(blState.UEDG[ibl, side]);
                 if (uei < 1e-10) uei = 1e-10;
                 double uePrev = Math.Max(Math.Abs(blState.UEDG[ibl - 1, side]), 1e-10);
@@ -3759,20 +2953,9 @@ public static class ViscousSolverEngine
                     WriteLegacyAmplificationCarry(blState, ibl, side, carriedAmplification);
                 }
 
-                if (DebugFlags.SetBlHex
-                    && side == 0 && (ibl == 2 || ibl == 57))
-                    Console.Error.WriteLine($"C_LOOP ibl={ibl} stn={ibl+1} ITRAN={blState.ITRAN[side]+1}");
+                
                 // Trace MRCHUE seed at side 2 station 4
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 3)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MUE_SEED24" +
-                        $" {BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)(Math.Max(Math.Abs(blState.UEDG[ibl, side]), 1e-10))):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)blState.CTAU[ibl, side]):X8}");
-                }
+                
                 if (settings.UseLegacyBoundaryLayerInitialization ||
                     blState.ITRAN[side] >= blState.IBLTE[side])
                 {
@@ -3954,9 +3137,7 @@ public static class ViscousSolverEngine
                     // with Newton to match the Fortran MRCHUE wake state.
                     if (settings.UseLegacyBoundaryLayerInitialization)
                     {
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl >= 81 && ibl <= 84)
-                            Console.Error.WriteLine($"C_WAKE_ENTER i={ibl+1} side={side+1}");
+                        
                         RefineWakeSeedStation(
                             blState, side, ibl, settings,
                             tkbl, qinfbl, tkbl_ms,
@@ -4231,105 +3412,15 @@ public static class ViscousSolverEngine
             for (int iter = 0; iter < maxIterations; iter++)
             {
                 // s1210 MRCHUE per-iter trace at station 65 side 2 (ibl=64)
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 64)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WMUE65 it={iter+1,2}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" CTI={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" T1={BitConverter.SingleToInt32Bits((float)blState.THET[ibm, side]):X8}" +
-                        $" D1={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibm, side]):X8}" +
-                        $" dir={directMode}");
-                }
+                
                 // NACA 0018 -4 Nc=5: MRCHUE per-iter trace at stn 90 s=2 (ibl=89, 2nd wake)
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 89)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WMUE90 it={iter+1,2}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" Td64={BitConverter.DoubleToInt64Bits(theta):X16}" +
-                        $" Dd64={BitConverter.DoubleToInt64Bits(dstar):X16}" +
-                        $" Ud64={BitConverter.DoubleToInt64Bits(uei):X16}");
-                }
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl == 80 && iter == 0)
-                {
-                    var sec1 = blState.LegacySecondary[ibm, side];
-                    var kin1 = blState.LegacyKinematic[ibm, side];
-                    Console.Error.WriteLine(
-                        $"C_STFLO_COM1 ibl={ibl+1} ibm={ibm+1}" +
-                        $" HK1={BitConverter.SingleToInt32Bits((float)(kin1?.HK2 ?? 0)):X8}" +
-                        $" RT1={BitConverter.SingleToInt32Bits((float)(kin1?.RT2 ?? 0)):X8}" +
-                        $" M21={BitConverter.SingleToInt32Bits((float)(kin1?.M2 ?? 0)):X8}" +
-                        $" CF1={BitConverter.SingleToInt32Bits((float)(sec1?.Cf ?? -1)):X8}" +
-                        $" DI1={BitConverter.SingleToInt32Bits((float)(sec1?.Di ?? -1)):X8}" +
-                        $" HS1={BitConverter.SingleToInt32Bits((float)(sec1?.Hs ?? -1)):X8}" +
-                        $" US1={BitConverter.SingleToInt32Bits((float)(sec1?.Us ?? -1)):X8}" +
-                        $" CQ1={BitConverter.SingleToInt32Bits((float)(sec1?.Cq ?? -1)):X8}" +
-                        $" DE1={BitConverter.SingleToInt32Bits((float)(sec1?.De ?? -1)):X8}" +
-                        $" T1={BitConverter.SingleToInt32Bits((float)blState.THET[ibm, side]):X8}" +
-                        $" D1={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibm, side]):X8}");
-                }
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl >= 79 && ibl <= 81)
-                {
-                    int iw = ibl - blState.IBLTE[side];
-                    Console.Error.WriteLine(
-                        $"C_STFLO_IT side={side} ibl={ibl+1} it={iter+1}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" Xs={BitConverter.SingleToInt32Bits((float)blState.XSSI[ibl, side]):X8}" +
-                        $" iw={iw} WG={BitConverter.SingleToInt32Bits((float)wakeGap):X8}");
-                }
+                
+                
+                
                 // NACA 0015 2M a=10: MRCHUE per-iter trace at stn 67 s=2 (ibl=66, 2nd wake)
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 66)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WMUE67 it={iter+1,2}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" CTI={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" T1={BitConverter.SingleToInt32Bits((float)blState.THET[ibm, side]):X8}" +
-                        $" D1={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibm, side]):X8}" +
-                        $" dir={directMode} wake={wake}");
-                }
+                
                 // NACA 0012 5K debug: MRCHUE per-iter trace at stn 68 s=2 (0-idx ibl=67)
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 67)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MUE68 it={iter+1,2}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" CTI={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" T1={BitConverter.SingleToInt32Bits((float)blState.THET[ibm, side]):X8}" +
-                        $" D1={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibm, side]):X8}" +
-                        $" dir={directMode}");
-                    var kin1 = blState.LegacyKinematic[ibm, side];
-                    var sec1 = blState.LegacySecondary[ibm, side];
-                    if (kin1 != null && sec1 != null)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MUE68_COM1 it={iter+1,2}" +
-                            $" HK1={BitConverter.SingleToInt32Bits((float)kin1.HK2):X8}" +
-                            $" HS1={BitConverter.SingleToInt32Bits((float)sec1.Hs):X8}" +
-                            $" CF1={BitConverter.SingleToInt32Bits((float)sec1.Cf):X8}" +
-                            $" DI1={BitConverter.SingleToInt32Bits((float)sec1.Di):X8}" +
-                            $" CQ1={BitConverter.SingleToInt32Bits((float)sec1.Cq):X8}" +
-                            $" US1={BitConverter.SingleToInt32Bits((float)sec1.Us):X8}");
-                    }
-                }
+                
                 double prevWakeGap = wake
                     ? GetWakeGap(wakeSeed, teGap, Math.Max(ibm - blState.IBLTE[side], 0))
                     : 0.0;
@@ -4422,17 +3513,7 @@ public static class ViscousSolverEngine
                     hk2D2 = currentKinematic.HK2_D2;
                     hk2U2 = currentKinematic.HK2_U2;
 
-                    if (DebugFlags.SetBlHex
-                        && wake && side == 1 && ibl == 82)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MUE83_KIN it={iter}" +
-                            $" HK={BitConverter.SingleToInt32Bits((float)currentKinematic.HK2):X8}" +
-                            $" RT={BitConverter.SingleToInt32Bits((float)currentKinematic.RT2):X8}" +
-                            $" M2={BitConverter.SingleToInt32Bits((float)currentKinematic.M2):X8}" +
-                            $" H2={BitConverter.SingleToInt32Bits((float)currentKinematic.H2):X8}" +
-                            $" U2={BitConverter.SingleToInt32Bits((float)currentU2):X8}");
-                    }
+                    
 
                     if (settings.UseLegacyBoundaryLayerInitialization)
                     {
@@ -4474,26 +3555,8 @@ public static class ViscousSolverEngine
                 {
                     useAcceptedSecondaryRefresh = false;
                     // Trace BLDIF inputs at station 83 wake
-                    if (DebugFlags.SetBlHex
-                        && wake && side == 1 && ibl == 82 && iter == 0)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_BLDIF83_IN" +
-                            $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                            $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                            $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D2={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U1={BitConverter.SingleToInt32Bits((float)Math.Max(Math.Abs(blState.UEDG[ibm, side]), 1e-10)):X8}" +
-                            $" U2={BitConverter.SingleToInt32Bits((float)uei):X8}");
-                    }
-                    if (DebugFlags.SetBlHex
-                        && wake && side == 1 && ibl == 82 && iter == 1)
-                    {
-                        var secPrev = blState.LegacySecondary[ibm, side];
-                        Console.Error.WriteLine(
-                            $"C_MRCHUE_DI1_83 DI1={BitConverter.SingleToInt32Bits((float)(secPrev?.Di ?? -1)):X8}" +
-                            $" src=MRCHUE iter={iter}");
-                    }
+                    
+                    
                     var localResult = BoundaryLayerSystemAssembler.AssembleStationSystem(
                         isWake: wake,
                         isTurbOrTran: turb || tran,
@@ -4538,23 +3601,7 @@ public static class ViscousSolverEngine
                         traceIteration: iter + 1,
                         tracePhase: "initialize_bl");
                     // Trace COM1 at station 83 wake
-                    if (DebugFlags.SetBlHex
-                        && wake && side == 1 && ibl == 82 && iter <= 1)
-                    {
-                        var sec1 = blState.LegacySecondary[ibm, side];
-                        var kin1 = blState.LegacyKinematic[ibm, side];
-                        Console.Error.WriteLine(
-                            $"C_COM1_83" +
-                            $" HK1={BitConverter.SingleToInt32Bits((float)(kin1?.HK2 ?? 0)):X8}" +
-                            $" RT1={BitConverter.SingleToInt32Bits((float)(kin1?.RT2 ?? 0)):X8}" +
-                            $" CF1={BitConverter.SingleToInt32Bits((float)(sec1?.Cf ?? -1)):X8}" +
-                            $" DI1={BitConverter.SingleToInt32Bits((float)(sec1?.Di ?? -1)):X8}" +
-                            $" HS1={BitConverter.SingleToInt32Bits((float)(sec1?.Hs ?? -1)):X8}" +
-                            $" US1={BitConverter.SingleToInt32Bits((float)(sec1?.Us ?? -1)):X8}" +
-                            $" CQ1={BitConverter.SingleToInt32Bits((float)(sec1?.Cq ?? -1)):X8}" +
-                            $" DE1={BitConverter.SingleToInt32Bits((float)(sec1?.De ?? -1)):X8}" +
-                            $" sec_null={sec1 == null}");
-                    }
+                    
                     residual = localResult.Residual;
                     vs2 = localResult.VS2;
                     hk2 = localResult.HK2;
@@ -4563,22 +3610,7 @@ public static class ViscousSolverEngine
                     hk2U2 = localResult.HK2_U2;
                     u2Uei = localResult.U2_UEI;
                     // Trace BLDIF(3) at wake station 83
-                    if (DebugFlags.SetBlHex
-                        && wake && side == 1 && ibl == 82
-                        && localResult.Secondary2Snapshot is not null)
-                    {
-                        var s2 = localResult.Secondary2Snapshot;
-                        Console.Error.WriteLine(
-                            $"C_BLDIF3_83" +
-                            $" R1={BitConverter.SingleToInt32Bits((float)residual[0]):X8}" +
-                            $" R2={BitConverter.SingleToInt32Bits((float)residual[1]):X8}" +
-                            $" R3={BitConverter.SingleToInt32Bits((float)residual[2]):X8}" +
-                            $" HK2={BitConverter.SingleToInt32Bits((float)localResult.HK2):X8}" +
-                            $" HS2={BitConverter.SingleToInt32Bits((float)s2.Hs):X8}" +
-                            $" CF2={BitConverter.SingleToInt32Bits((float)s2.Cf):X8}" +
-                            $" DI2={BitConverter.SingleToInt32Bits((float)s2.Di):X8}" +
-                            $" US2={BitConverter.SingleToInt32Bits((float)s2.Us):X8}");
-                    }
+                    
 
                     if (settings.UseLegacyBoundaryLayerInitialization)
                     {
@@ -4621,78 +3653,19 @@ public static class ViscousSolverEngine
                     matrix[3, 2] = hk2D2;
                     matrix[3, 3] = hk2U2;
                     rhs[3] = inverseTargetHk - hk2;
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 82 && iter <= 2)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_INV83_HT it={iter}" +
-                            $" HTARG={BitConverter.SingleToInt32Bits((float)inverseTargetHk):X8}" +
-                            $" HK2={BitConverter.SingleToInt32Bits((float)hk2):X8}" +
-                            $" R4={BitConverter.SingleToInt32Bits((float)rhs[3]):X8}");
-                    }
+                    
                 }
 
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && (ibl == 82 || ibl == 84) && iter < 6)
-                {
-                    for (int r = 0; r < 4; r++)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MUE{ibl+1}_SYS it={iter + 1,2} r{r}:" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                            $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                    }
-                }
+                
 
 
                 // Trace wake station 82 BLSYS residuals and matrix
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && ibl == 81 && iter == 0)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MRCHUE_WK82_SYS" +
-                        $" R0={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                        $" R1={BitConverter.SingleToInt32Bits((float)rhs[1]):X8}" +
-                        $" R2={BitConverter.SingleToInt32Bits((float)rhs[2]):X8}" +
-                        $" V22={BitConverter.SingleToInt32Bits((float)matrix[1, 1]):X8}" +
-                        $" V23={BitConverter.SingleToInt32Bits((float)matrix[1, 2]):X8}" +
-                        $" V32={BitConverter.SingleToInt32Bits((float)matrix[2, 1]):X8}" +
-                        $" V33={BitConverter.SingleToInt32Bits((float)matrix[2, 2]):X8}");
-                }
+                
 
                 // NACA 0018 -4 Nc=5: dump matrix+rhs+delta at stn 90 s=2 iter 3
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 89 && iter == 2)
-                {
-                    for (int r = 0; r < 4; r++)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MAT90 it=3 r{r}:" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                            $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                    }
-                }
+                
                 // NACA 0012 5K: dump matrix+rhs at stn 68 s=2 iter 1 (pre-Gauss)
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 67 && iter == 0)
-                {
-                    for (int r = 0; r < 4; r++)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MUE68_M r{r}:" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                            $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                    }
-                }
+                
                 double[] delta;
                 try
                 {
@@ -4704,41 +3677,9 @@ public static class ViscousSolverEngine
                 }
 
                 // Station 98: dump upstream kinematic snapshot
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 97)
-                {
-                    var kin1 = blState.LegacyKinematic[ibm, side];
-                    var sec1 = blState.LegacySecondary[ibm, side];
-                    if (kin1 != null && sec1 != null)
-                        Console.Error.WriteLine(
-                            $"C_COM1_98" +
-                            $" HK1={BitConverter.SingleToInt32Bits((float)kin1.HK2):X8}" +
-                            $" HS1={BitConverter.SingleToInt32Bits((float)sec1.Hs):X8}" +
-                            $" DI1={BitConverter.SingleToInt32Bits((float)sec1.Di):X8}" +
-                            $" US1={BitConverter.SingleToInt32Bits((float)sec1.Us):X8}" +
-                            $" RT1={BitConverter.SingleToInt32Bits((float)kin1.RT2):X8}");
-                }
+                
                 // Station 98 system dump for MRCHUE wake parity
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 97)
-                {
-                    for (int r = 0; r < 4; r++)
-                        Console.Error.WriteLine(
-                            $"C_MUE98 it={iter + 1} r{r}:" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                            $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                            $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                    Console.Error.WriteLine(
-                        $"C_MUE98D it={iter + 1}" +
-                        $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                        $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                        $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                        $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}");
-                }
+                
 
                 double shearScale = LegacyPrecisionMath.Max(
                     ctau,
@@ -4762,52 +3703,8 @@ public static class ViscousSolverEngine
                 double rlx = ComputeLegacySeedRelaxation(dmax, settings.UseLegacyBoundaryLayerInitialization);
                 double residualNorm = stepMetrics.ResidualNorm;
 
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && ibl == 84)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WK85_PRE c={_mrchduCallCount,2} it={iter + 1,2} D={(directMode ? 1 : 0)}" +
-                        $" T0={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D0={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U0={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" C0={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" RL={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                        $" DM={BitConverter.SingleToInt32Bits((float)dmax):X8}" +
-                        $" WG={BitConverter.SingleToInt32Bits((float)wakeGap):X8}");
-                    Console.Error.WriteLine(
-                        $"C_WK85_DEL c={_mrchduCallCount,2} it={iter + 1,2}" +
-                        $" R0={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                        $" R1={BitConverter.SingleToInt32Bits((float)rhs[1]):X8}" +
-                        $" R2={BitConverter.SingleToInt32Bits((float)rhs[2]):X8}" +
-                        $" R3={BitConverter.SingleToInt32Bits((float)rhs[3]):X8}" +
-                        $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                        $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                        $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                        $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-                }
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && ibl >= 86 && ibl <= 89 && iter < 6)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WK8790_PRE i={ibl + 1,3} it={iter + 1,2} D={(directMode ? 1 : 0)}" +
-                        $" T0={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D0={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U0={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" C0={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" RL={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                        $" DM={BitConverter.SingleToInt32Bits((float)dmax):X8}" +
-                        $" WG={BitConverter.SingleToInt32Bits((float)wakeGap):X8}");
-                    Console.Error.WriteLine(
-                        $"C_WK8790_DEL i={ibl + 1,3} it={iter + 1,2}" +
-                        $" R0={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                        $" R1={BitConverter.SingleToInt32Bits((float)rhs[1]):X8}" +
-                        $" R2={BitConverter.SingleToInt32Bits((float)rhs[2]):X8}" +
-                        $" R3={BitConverter.SingleToInt32Bits((float)rhs[3]):X8}" +
-                        $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                        $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                        $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                        $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-                }
+                
+                
 
 
                 if (directMode && ibl != blState.IBLTE[side] + 1)
@@ -4859,18 +3756,7 @@ public static class ViscousSolverEngine
                 mrchuePrevT = theta;
                 mrchuePrevD = dstar;
                 // Trace pre-update values at station 83 (ibl=82) side 2
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && ibl == 82)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MUE83_UPD" +
-                        $" T0={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D0={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" rlx={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                        $" r1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                        $" r2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                        $" r3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-                }
+                
                 theta = Math.Max(LegacyPrecisionMath.AddScaled(theta, rlx, delta[1], settings.UseLegacyBoundaryLayerInitialization), 1.0e-10);
                 dstar = Math.Max(LegacyPrecisionMath.AddScaled(dstar, rlx, delta[2], settings.UseLegacyBoundaryLayerInitialization), 1.0e-10);
                 if (!directMode)
@@ -4902,54 +3788,12 @@ public static class ViscousSolverEngine
                         ref ctau);
                 }
 
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && ibl == 84)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WK85_POST c={_mrchduCallCount,2} it={iter + 1,2}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" DSW={BitConverter.SingleToInt32Bits((float)dsw):X8}" +
-                        $" MSQ={BitConverter.SingleToInt32Bits((float)msq):X8}");
-                }
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && ibl >= 86 && ibl <= 89 && iter < 6)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WK8790_POST i={ibl + 1,3} it={iter + 1,2}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" DSW={BitConverter.SingleToInt32Bits((float)dsw):X8}" +
-                        $" MSQ={BitConverter.SingleToInt32Bits((float)msq):X8}");
-                }
+                
+                
                 // Wake station Newton trace for parity debugging
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && ibl >= 81 && ibl <= 83)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MRCHUE_WK s=2 i={ibl + 1,3} it={iter}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" DM={dmax:E4}");
-                }
+                
                 // NACA 1410 debug: wake stations 93-96 on side 2
-                if (DebugFlags.SetBlHex
-                    && wake && side == 1 && ibl >= 92 && ibl <= 95)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MUEW{ibl+1} it={iter}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" DM={BitConverter.SingleToInt32Bits((float)dmax):X8}" +
-                        $" RL={BitConverter.SingleToInt32Bits((float)rlx):X8}");
-                }
+                
                 if ((float)dmax <= (float)seedTolerance)
                 {
                     break;
@@ -5072,36 +3916,20 @@ public static class ViscousSolverEngine
             }
             if (settings.UseLegacyBoundaryLayerInitialization && !convergedFinalNewton)
             {
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl >= 79 && ibl <= 81)
-                {
-                    Console.Error.WriteLine($"C_STFLO_109_ENTER ibl={ibl+1} wake={wake}");
-                }
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl >= 79 && ibl <= 81)
-                {
-                    Console.Error.WriteLine($"C_STFLO_109_PRETRY ibl={ibl+1}");
-                }
+                
+                
                 try {
                 double finalDsw = dstar - wakeGap;
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl >= 79 && ibl <= 81)
-                {
-                    Console.Error.WriteLine($"C_STFLO_109_A reached ibl={ibl+1}");
-                }
+                
                 var (finalU2, finalU2Uei, finalU2Ms) = BoundaryLayerSystemAssembler.ConvertToCompressible(
                     uei, tkbl, qinfbl, tkbl_ms, useLegacyPrecision: true);
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl >= 79 && ibl <= 81)
-                    Console.Error.WriteLine($"C_STFLO_109_B finalU2={BitConverter.DoubleToInt64Bits(finalU2):X16}");
+                
                 var finalKin = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                     finalU2, theta, finalDsw, wakeGap,
                     hstinv, hstinv_ms, gm1, rstbl, rstbl_ms,
                     GetHvRat(true), reybl, reybl_re, reybl_ms,
                     useLegacyPrecision: true);
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl >= 79 && ibl <= 81)
-                    Console.Error.WriteLine($"C_STFLO_109_C HK={BitConverter.SingleToInt32Bits((float)finalKin.HK2):X8}");
+                
                 int blvarMode = wake ? 3 : (turb || tran ? 2 : 1);
                 // Fortran xbl.f label 109 calls BLVAR sequentially for wake stations:
                 // first BLVAR(2) (clamps HK to 1.05), then BLVAR(3). The 1.05 clamp
@@ -5117,9 +3945,7 @@ public static class ViscousSolverEngine
                 var finalSec = BoundaryLayerSystemAssembler.ComputeStationVariables(
                     blvarMode, effectiveHk, finalKin.RT2, finalKin.M2,
                     finalKin.H2, ctau, wakeGap, theta, finalDsw);
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl >= 79 && ibl <= 81)
-                    Console.Error.WriteLine($"C_STFLO_109_D mode={blvarMode} DI={BitConverter.SingleToInt32Bits((float)finalSec.Di):X8}");
+                
                 var finalSecSnapshot = new BoundaryLayerSystemAssembler.SecondaryStationResult
                 {
                     Hs = finalSec.Hs, Us = finalSec.Us, Cf = finalSec.Cf,
@@ -5133,17 +3959,7 @@ public static class ViscousSolverEngine
                         uei, theta, finalDsw, true),
                     finalKin, finalSecSnapshot,
                     traceLabel: "march_legacy_label109");
-                if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                    && side == 1 && ibl >= 79 && ibl <= 81)
-                {
-                    Console.Error.WriteLine(
-                        $"C_STFLO_109_DONE ibl={ibl+1}" +
-                        $" newDI={BitConverter.SingleToInt32Bits((float)finalSec.Di):X8}" +
-                        $" newHS={BitConverter.SingleToInt32Bits((float)finalSec.Hs):X8}" +
-                        $" newUS={BitConverter.SingleToInt32Bits((float)finalSec.Us):X8}" +
-                        $" newCQ={BitConverter.SingleToInt32Bits((float)finalSec.Cteq):X8}" +
-                        $" hk={BitConverter.SingleToInt32Bits((float)finalKin.HK2):X8}");
-                }
+                
                 if (Environment.GetEnvironmentVariable("XFOIL_S9104_TRACE") == "1"
                     && side == 1 && ibl >= 99 && ibl <= 101)
                 {
@@ -5175,16 +3991,7 @@ public static class ViscousSolverEngine
                 dstar,
                 uei,
                 settings.UseLegacyBoundaryLayerInitialization);
-            if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                && side == 1 && ibl >= 79 && ibl <= 82)
-            {
-                Console.Error.WriteLine(
-                    $"C_STFLO_MARCH side={side} ibl={ibl+1} wake={wake}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                    $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                    $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                    $" U={BitConverter.SingleToInt32Bits((float)uei):X8}");
-            }
+            
             // Store pre-update values for MRCHUE COM carry.
             if (settings.UseLegacyBoundaryLayerInitialization)
             {
@@ -5196,24 +4003,10 @@ public static class ViscousSolverEngine
                         mrchuePrevD, wakeGap, true);
                     primary.PreUpdateDFull = LegacyPrecisionMath.RoundToSingle(mrchuePrevD, true);
                 }
-                else if (DebugFlags.SetBlHex
-                         && side == 1 && ibl == 81)
-                {
-                    Console.Error.WriteLine("C_STORE_PREUPD ibl=82 primary_null!");
-                }
+                
             }
 
-            if (DebugFlags.SetBlHex
-                && wake && side == 1 && ibl >= 86 && ibl <= 89)
-            {
-                Console.Error.WriteLine(
-                    $"C_WK8790_ACPT i={ibl + 1,3}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                    $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                    $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                    $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                    $" M={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, side]):X8}");
-            }
+            
             // Fortran MRCHUE: AMI is updated at each station (AMI = AMPL2 after TRCHEK).
             // The carry must store the station-specific amplification (= ctau for
             // pre-transition stations), not the stale initial `ampl`.
@@ -5316,16 +4109,7 @@ public static class ViscousSolverEngine
             out double prevAmplStored);
         ampl1 = ReadLegacyAmplificationCarry(blState, ibm, side, prevAmplStored);
         ampl2 = ReadLegacyAmplificationCarry(blState, ibl, side, ampl2);
-        if (DebugFlags.SetBlHex
-            && side == 0 && ibl >= 7 && ibl <= 11)
-        {
-            Console.Error.WriteLine(
-                $"C_REFINE_AMPL s=1 i={ibl+1}" +
-                $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
-                $" A2={BitConverter.SingleToInt32Bits((float)ampl2):X8}" +
-                $" carry={BitConverter.SingleToInt32Bits((float)blState.LegacyAmplificationCarry[ibm, side]):X8}" +
-                $" ctau={BitConverter.SingleToInt32Bits((float)blState.CTAU[ibm, side]):X8}");
-        }
+        
 
         var solver = new DenseLinearSystemSolver();
         float lastDmaxFloat = 0.0f;
@@ -5351,18 +4135,14 @@ public static class ViscousSolverEngine
         // Legacy block: xbl.f MRCHUE transition-seed interval inputs.
         // Difference from legacy: The downstream station was already rounded to REAL here, but the upstream station feeding AXSET/TRCHEK2 was left in double precision.
         // Decision: Round the station-1 seed state as well in parity mode so both sides of the local transition interval replay the classic REAL staging.
-        if (DebugFlags.SetBlHex
-            && side == 1 && ibl == 4)
-            Console.Error.WriteLine($"C_PRE_PREC uei1={BitConverter.SingleToInt32Bits((float)uei1):X8} uei2={BitConverter.SingleToInt32Bits((float)uei2):X8}");
+        
         ApplyLegacySeedPrecision(
             settings.UseLegacyBoundaryLayerInitialization,
             ref uei1,
             ref theta1,
             ref dstar1,
             ref ampl1);
-        if (DebugFlags.SetBlHex
-            && side == 1 && ibl == 4)
-            Console.Error.WriteLine($"C_POST_PREC uei1={BitConverter.SingleToInt32Bits((float)uei1):X8} uei2={BitConverter.SingleToInt32Bits((float)uei2):X8}");
+        
         thetaSeed = LegacyPrecisionMath.RoundToSingle(thetaSeed, settings.UseLegacyBoundaryLayerInitialization);
         dstarSeed = LegacyPrecisionMath.RoundToSingle(dstarSeed, settings.UseLegacyBoundaryLayerInitialization);
         bool usesShearState = ibl >= blState.ITRAN[side];
@@ -5381,9 +4161,7 @@ public static class ViscousSolverEngine
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 4 && iter == 0)
-                Console.Error.WriteLine($"C_REFINE_LOOP side={side} ibl={ibl} iter={iter} maxIter={maxIterations}");
+            
             // Fortran MRCHUE calls BLPRV+BLKIN at the top of each Newton iteration,
             // giving fresh HK2/RT2 from the CURRENT iterate state. The transition
             // check (TRCHEK) then uses this fresh kinematic. Compute fresh kinematic
@@ -5436,14 +4214,7 @@ public static class ViscousSolverEngine
                     qinfbl,
                     tkbl_ms,
                     useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
-                if (DebugFlags.SetBlHex
-                    && side == 0 && ibl == 10)
-                {
-                    Console.Error.WriteLine(
-                        $"C_TRC11 it={iter}" +
-                        $" T2={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                        $" D2={BitConverter.SingleToInt32Bits((float)dstar2):X8}");
-                }
+                
                 // Fortran TRCHEK uses COM1.T1/D1 from the LAST Newton iterate at
                 // the upstream station, NOT the extrapolated values stored in THET/DSTR.
                 // After non-convergence extrapolation, blState.THET differs from COM1.T1.
@@ -5454,16 +4225,7 @@ public static class ViscousSolverEngine
                     : null;
                 double trTheta1 = theta1;
                 double trDstar1 = dstar1;
-                if (DebugFlags.SetBlHex
-                    && side == 0 && ibl == 11 && iter == 0)
-                {
-                    Console.Error.WriteLine(
-                        $"C_TR12_FIX T1={BitConverter.SingleToInt32Bits((float)theta1):X8}" +
-                        $" trT1={BitConverter.SingleToInt32Bits((float)trTheta1):X8}" +
-                        $" kinT2={BitConverter.SingleToInt32Bits((float)(upstreamKin?.InputT2 ?? 0)):X8}" +
-                        $" D1={BitConverter.SingleToInt32Bits((float)dstar1):X8}" +
-                        $" trD1={BitConverter.SingleToInt32Bits((float)trDstar1):X8}");
-                }
+                
                 var transitionPoint = TransitionModel.ComputeTransitionPoint(
                     x1,
                     x2,
@@ -5686,57 +4448,12 @@ public static class ViscousSolverEngine
             }
 
             // Trace MRCHUE station 4 side 2 residual for parity debugging
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 3 && iter < 25)
-            {
-                Console.Error.WriteLine(
-                    $"C_MUE_RES24 it={iter}" +
-                    $" R0={BitConverter.SingleToInt32Bits((float)localResult.Residual[0]):X8}" +
-                    $" R1={BitConverter.SingleToInt32Bits((float)localResult.Residual[1]):X8}" +
-                    $" R2={BitConverter.SingleToInt32Bits((float)localResult.Residual[2]):X8}" +
-                    $" T2={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" D2={BitConverter.SingleToInt32Bits((float)dstar2):X8}");
-            }
+            
 
             if (settings.UseLegacyBoundaryLayerInitialization)
             {
                 // Trace BLVAR secondary at station 58 iteration 3 for parity
-                if (DebugFlags.SetBlHex
-                    && side == 0 && ibl == 57 && iter == 2
-                    && localResult.Secondary2Snapshot is not null
-                    && localResult.Kinematic2Snapshot is not null)
-                {
-                    var kin = localResult.Kinematic2Snapshot;
-                    var sec = localResult.Secondary2Snapshot;
-                    Console.Error.WriteLine(
-                        $"C_S58_BLVAR3" +
-                        $" CF2={BitConverter.SingleToInt32Bits((float)sec.Cf):X8}" +
-                        $" DI2={BitConverter.SingleToInt32Bits((float)sec.Di):X8}" +
-                        $" HS2={BitConverter.SingleToInt32Bits((float)sec.Hs):X8}" +
-                        $" US2={BitConverter.SingleToInt32Bits((float)sec.Us):X8}" +
-                        $" CQ2={BitConverter.SingleToInt32Bits((float)sec.Cq):X8}" +
-                        $" DE2={BitConverter.SingleToInt32Bits((float)sec.De):X8}" +
-                        $" HK2={BitConverter.SingleToInt32Bits((float)kin.HK2):X8}" +
-                        $" RT2={BitConverter.SingleToInt32Bits((float)kin.RT2):X8}" +
-                        $" R0={BitConverter.SingleToInt32Bits((float)localResult.Residual[0]):X8}" +
-                        $" R1={BitConverter.SingleToInt32Bits((float)localResult.Residual[1]):X8}" +
-                        $" R2={BitConverter.SingleToInt32Bits((float)localResult.Residual[2]):X8}");
-                    // Full VS2 matrix for GAUSS solve comparison
-                    Console.Error.WriteLine(
-                        $"C_S58_VS2_3" +
-                        $" V11={BitConverter.SingleToInt32Bits((float)localResult.VS2[0,0]):X8}" +
-                        $" V12={BitConverter.SingleToInt32Bits((float)localResult.VS2[0,1]):X8}" +
-                        $" V13={BitConverter.SingleToInt32Bits((float)localResult.VS2[0,2]):X8}" +
-                        $" V14={BitConverter.SingleToInt32Bits((float)localResult.VS2[0,3]):X8}" +
-                        $" V21={BitConverter.SingleToInt32Bits((float)localResult.VS2[1,0]):X8}" +
-                        $" V22={BitConverter.SingleToInt32Bits((float)localResult.VS2[1,1]):X8}" +
-                        $" V23={BitConverter.SingleToInt32Bits((float)localResult.VS2[1,2]):X8}" +
-                        $" V24={BitConverter.SingleToInt32Bits((float)localResult.VS2[1,3]):X8}" +
-                        $" V31={BitConverter.SingleToInt32Bits((float)localResult.VS2[2,0]):X8}" +
-                        $" V32={BitConverter.SingleToInt32Bits((float)localResult.VS2[2,1]):X8}" +
-                        $" V33={BitConverter.SingleToInt32Bits((float)localResult.VS2[2,2]):X8}" +
-                        $" V34={BitConverter.SingleToInt32Bits((float)localResult.VS2[2,3]):X8}");
-                }
+                
                 // Every parity seed helper must carry the accepted station-2
                 // BLKIN/BLVAR snapshot forward. Missing this storage lets the
                 // next interval rebuild station 1 instead of replaying COM1.
@@ -5774,17 +4491,7 @@ public static class ViscousSolverEngine
                     inverseTargetHk,
                     localResult.HK2,
                     settings.UseLegacyBoundaryLayerInitialization);
-                if (DebugFlags.SetBlHex
-                    && side == 0 && ibl + 1 == 58)
-                {
-                    Console.Error.WriteLine(
-                        $"C_INV58i{iter}" +
-                        $" {BitConverter.SingleToInt32Bits((float)localResult.HK2_T2):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)localResult.HK2_D2):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)localResult.HK2_U2):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)inverseTargetHk):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)rhs[3]):X8}");
-                }
+                
             }
             else
             {
@@ -5799,161 +4506,19 @@ public static class ViscousSolverEngine
             {
             }
 
-            if (DebugFlags.SetBlHex
-                && side == 0 && ibl + 1 == 58 && iter == 2)
-            {
-                for (int r = 0; r < 4; r++)
-                    Console.Error.WriteLine(
-                        $"C_GSYS58 r{r}:" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,0]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,1]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,2]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,3]):X8}" +
-                        $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-            }
-            if (DebugFlags.SetBlHex
-                && side == 0 && (ibl + 1 == 58 || ibl + 1 == 59) && iter <= 1)
-            {
-                for (int r = 0; r < 4; r++)
-                    Console.Error.WriteLine(
-                        $"C_MUE{ibl+1}i{iter} r{r}:" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,0]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,1]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,2]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,3]):X8}" +
-                        $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-            }
-            if (DebugFlags.SetBlHex
-                && side == 0 && ibl + 1 == 58 && iter == 0)
-                Console.Error.WriteLine($"C_GAUSS_ENTRY stn=58 iter=0");
+            
+            
+            
             // Dump full 4x4 system at side 2 station 4 inverse iterations
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 3 && (iter == 7 || iter == 8))
-            {
-                for (int r = 0; r < 4; r++)
-                    Console.Error.WriteLine(
-                        $"C_SYS24 it={iter} r{r}:" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,0]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,1]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,2]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r,3]):X8}" +
-                        $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-            }
+            
             // Station 3 trace moved to after update
             // Targeted MUE5 trace for station 5 side 2
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 4 && iter <= 2)
-            {
-                Console.Error.WriteLine(
-                    $"C_MUE5 it={iter + 1}" +
-                    $" T2={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" D2={BitConverter.SingleToInt32Bits((float)dstar2):X8}" +
-                    $" U2={BitConverter.SingleToInt32Bits((float)uei2):X8}" +
-                    $" HK2={BitConverter.SingleToInt32Bits((float)localResult.HK2):X8}" +
-                    $" RT2={BitConverter.SingleToInt32Bits((float)(localResult.Kinematic2Snapshot?.RT2 ?? 0)):X8}");
-                Console.Error.WriteLine(
-                    $"C_MUE5b it={iter + 1}" +
-                    $" T1={BitConverter.SingleToInt32Bits((float)theta1):X8}" +
-                    $" D1={BitConverter.SingleToInt32Bits((float)dstar1):X8}" +
-                    $" U1={BitConverter.SingleToInt32Bits((float)uei1):X8}" +
-                    $" HK1={BitConverter.SingleToInt32Bits((float)(blState.LegacyKinematic[ibl - 1, side]?.HK2 ?? 0)):X8}" +
-                    $" RT1={BitConverter.SingleToInt32Bits((float)(blState.LegacyKinematic[ibl - 1, side]?.RT2 ?? 0)):X8}");
-                Console.Error.WriteLine(
-                    $"C_MUE5c it={iter + 1}" +
-                    $" X1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
-                    $" X2={BitConverter.SingleToInt32Bits((float)x2):X8}" +
-                    $" AMI={BitConverter.SingleToInt32Bits((float)ampl2):X8}" +
-                    $" THI={BitConverter.SingleToInt32Bits((float)theta2):X8}");
-                Console.Error.WriteLine(
-                    $"C_MUE5_RHS it={iter + 1}" +
-                    $" R0={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                    $" R1={BitConverter.SingleToInt32Bits((float)rhs[1]):X8}" +
-                    $" R2={BitConverter.SingleToInt32Bits((float)rhs[2]):X8}" +
-                    $" R3={BitConverter.SingleToInt32Bits((float)rhs[3]):X8}");
-                var sec1Snap = blState.LegacySecondary[ibl - 1, side];
-                var sec2Snap = localResult.Secondary2Snapshot;
-                if (sec1Snap != null)
-                    Console.Error.WriteLine(
-                        $"C_MUE5_SEC1 it={iter + 1}" +
-                        $" CF1={BitConverter.SingleToInt32Bits((float)sec1Snap.Cf):X8}" +
-                        $" HS1={BitConverter.SingleToInt32Bits((float)sec1Snap.Hs):X8}" +
-                        $" DI1={BitConverter.SingleToInt32Bits((float)sec1Snap.Di):X8}" +
-                        $" US1={BitConverter.SingleToInt32Bits((float)sec1Snap.Us):X8}" +
-                        $" CQ1={BitConverter.SingleToInt32Bits((float)sec1Snap.Cq):X8}");
-                else
-                    Console.Error.WriteLine($"C_MUE5_SEC1 it={iter + 1} NULL");
-                if (sec2Snap != null)
-                    Console.Error.WriteLine(
-                        $"C_MUE5_SEC2 it={iter + 1}" +
-                        $" CF2={BitConverter.SingleToInt32Bits((float)sec2Snap.Cf):X8}" +
-                        $" HS2={BitConverter.SingleToInt32Bits((float)sec2Snap.Hs):X8}" +
-                        $" DI2={BitConverter.SingleToInt32Bits((float)sec2Snap.Di):X8}" +
-                        $" US2={BitConverter.SingleToInt32Bits((float)sec2Snap.Us):X8}" +
-                        $" CQ2={BitConverter.SingleToInt32Bits((float)sec2Snap.Cq):X8}" +
-                        $" CTI={BitConverter.SingleToInt32Bits((float)ctau2):X8}");
-            }
-            if (DebugFlags.SetBlHex
-                && side == 0 && ibl == 10 && iter <= 1)
-            {
-                for (int r = 0; r < 4; r++)
-                    Console.Error.WriteLine(
-                        $"C_SYS11 it={iter} r{r}:" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                        $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-            }
+            
+            
             // NACA 1408 a=2 Nc=12 debug: station 71 end of iteration (BLVAR output)
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 70
-                && localResult.Secondary2Snapshot != null
-                && localResult.Kinematic2Snapshot != null)
-            {
-                var k2 = localResult.Kinematic2Snapshot;
-                var s2 = localResult.Secondary2Snapshot;
-                Console.Error.WriteLine(
-                    $"C_MUE71END it={iter + 1} tr_int={transitionInterval} uss={usesShearState}" +
-                    $" HK2={BitConverter.SingleToInt32Bits((float)k2.HK2):X8}" +
-                    $" RT2={BitConverter.SingleToInt32Bits((float)k2.RT2):X8}" +
-                    $" CF2={BitConverter.SingleToInt32Bits((float)s2.Cf):X8}" +
-                    $" DI2={BitConverter.SingleToInt32Bits((float)s2.Di):X8}" +
-                    $" HS2={BitConverter.SingleToInt32Bits((float)s2.Hs):X8}" +
-                    $" US2={BitConverter.SingleToInt32Bits((float)s2.Us):X8}" +
-                    $" CQ2={BitConverter.SingleToInt32Bits((float)s2.Cq):X8}" +
-                    $" DE2={BitConverter.SingleToInt32Bits((float)s2.De):X8}");
-            }
+            
             // NACA 1408 a=2 Nc=12 debug: station 72 s=2 first post-transition station
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 71 && iter <= 2)
-            {
-                Console.Error.WriteLine(
-                    $"C_MUE72 it={iter + 1}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" D={BitConverter.SingleToInt32Bits((float)dstar2):X8}" +
-                    $" U={BitConverter.SingleToInt32Bits((float)uei2):X8}" +
-                    $" C={BitConverter.SingleToInt32Bits((float)ctau2):X8}");
-                for (int r = 0; r < 4; r++)
-                    Console.Error.WriteLine(
-                        $"C_MUE72M it={iter + 1} r{r}:" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                        $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                var kin1mue = blState.LegacyKinematic[ibl - 1, side];
-                var sec1mue = blState.LegacySecondary[ibl - 1, side];
-                if (kin1mue != null && sec1mue != null)
-                    Console.Error.WriteLine(
-                        $"C_MUE72_COM1 it={iter + 1}" +
-                        $" HK1={BitConverter.SingleToInt32Bits((float)kin1mue.HK2):X8}" +
-                        $" RT1={BitConverter.SingleToInt32Bits((float)kin1mue.RT2):X8}" +
-                        $" CF1={BitConverter.SingleToInt32Bits((float)sec1mue.Cf):X8}" +
-                        $" DI1={BitConverter.SingleToInt32Bits((float)sec1mue.Di):X8}" +
-                        $" HS1={BitConverter.SingleToInt32Bits((float)sec1mue.Hs):X8}" +
-                        $" US1={BitConverter.SingleToInt32Bits((float)sec1mue.Us):X8}" +
-                        $" CQ1={BitConverter.SingleToInt32Bits((float)sec1mue.Cq):X8}");
-            }
+            
             double[] delta;
             try
             {
@@ -5961,76 +4526,18 @@ public static class ViscousSolverEngine
             }
             catch (InvalidOperationException)
             {
-                if (DebugFlags.SetBlHex)
-                    Console.Error.WriteLine($"C_SINGULAR stn={ibl+1} iter={iter} side={side}");
+                
                 break;
             }
-            if (DebugFlags.SetBlHex
-                && side == 0 && ibl == 10 && iter <= 1)
-            {
-                Console.Error.WriteLine(
-                    $"C_DLT11 it={iter}" +
-                    $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                    $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                    $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                    $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-            }
+            
             // Station 98 system dump for MRCHUE parity
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 97)
-            {
-                for (int r = 0; r < 4; r++)
-                    Console.Error.WriteLine(
-                        $"C_MUE98 it={iter + 1} r{r}:" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                        $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                Console.Error.WriteLine(
-                    $"C_MUE98D it={iter + 1}" +
-                    $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                    $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                    $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                    $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, side]):X8}" +
-                    $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, side]):X8}");
-            }
+            
             // Station 5 delta trace
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 4 && iter <= 2)
-            {
-                Console.Error.WriteLine(
-                    $"C_MUE5_DLT it={iter + 1}" +
-                    $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                    $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                    $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                    $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-            }
+            
 
             // Dump delta at side 2 station 4 inverse iterations
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 3 && (iter == 7 || iter == 8))
-            {
-                Console.Error.WriteLine(
-                    $"C_DELTA24 it={iter}" +
-                    $" {BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-            }
-            if (DebugFlags.SetBlHex
-                && side == 0 && ibl + 1 == 58 && iter <= 4)
-            {
-                Console.Error.WriteLine(
-                    $"C_DINV58i{iter}" +
-                    $" {BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" D={BitConverter.SingleToInt32Bits((float)dstar2):X8}");
-            }
+            
+            
             double shearScale = usesShearState
                 ? LegacyPrecisionMath.Max(ctau2, minCtau, settings.UseLegacyBoundaryLayerInitialization)
                 : 10.0;
@@ -6075,26 +4582,8 @@ public static class ViscousSolverEngine
                     ? (usesShearState ? (float)legacyTransitionHkLimit : (float)legacyLaminarHkLimit)
                     : (usesShearState ? legacyTransitionHkLimit : legacyLaminarHkLimit);
                 // Trace mode switch at side 2 station 4
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 3)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MODE24 it={iter}" +
-                        $" D={directMode}" +
-                        $" HKT={BitConverter.SingleToInt32Bits((float)hkTest):X8}" +
-                        $" HMAX={BitConverter.SingleToInt32Bits((float)hmax):X8}" +
-                        $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}");
-                }
-                if (DebugFlags.SetBlHex
-                    && side == 0 && (ibl == 9 || ibl == 10))
-                {
-                    Console.Error.WriteLine(
-                        $"C_HK{ibl+1} it={iter}" +
-                        $" HKT={BitConverter.SingleToInt32Bits((float)hkTest):X8}" +
-                        $" HMX={BitConverter.SingleToInt32Bits((float)hmax):X8}" +
-                        $" DM={BitConverter.SingleToInt32Bits((float)dmax):X8}" +
-                        $" D={directMode} USS={usesShearState}");
-                }
+                
+                
                 if (hkTest >= hmax)
                 {
                     double thetaFloor = LegacyPrecisionMath.Max(theta1, 1.0e-30, useLegacySeedPrecision);
@@ -6161,16 +4650,7 @@ public static class ViscousSolverEngine
                     double inverseTargetHkRaw = LegacyPrecisionMath.Add(hk1, inverseTargetHkDelta, useLegacySeedPrecision);
                     inverseTargetHk = LegacyPrecisionMath.Max(inverseTargetHkRaw, hmax, useLegacySeedPrecision);
                     // Trace HTARG at side 2 station 4
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 3)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_HTARG24 it={iter}" +
-                            $" HTARG={BitConverter.SingleToInt32Bits((float)inverseTargetHk):X8}" +
-                            $" HK1={BitConverter.SingleToInt32Bits((float)hk1):X8}" +
-                            $" HTRAW={BitConverter.SingleToInt32Bits((float)inverseTargetHkRaw):X8}" +
-                            $" T1={BitConverter.SingleToInt32Bits((float)theta1):X8}");
-                    }
+                    
                     directMode = false;
                     continue;
                 }
@@ -6182,41 +4662,18 @@ public static class ViscousSolverEngine
             }
 
             // Trace pre-update at side 2 station 4 inverse iterations
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 3 && (iter == 7 || iter == 8))
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD24_PRE it={iter}" +
-                    $" {BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)dstar2):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)dmax):X8}");
-            }
+            
             preUpdateTheta2 = theta2;
             preUpdateDstar2 = dstar2;
             theta2 = Math.Max(LegacyPrecisionMath.AddScaled(theta2, rlx, delta[1], settings.UseLegacyBoundaryLayerInitialization), 1.0e-10);
             dstar2 = Math.Max(LegacyPrecisionMath.AddScaled(dstar2, rlx, delta[2], settings.UseLegacyBoundaryLayerInitialization), 1.0e-10);
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 2)
-                Console.Error.WriteLine(
-                    $"C_MUE3 it={iter + 1}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                    $" rlx={BitConverter.SingleToInt32Bits((float)rlx):X8}");
+            
             if (!directMode)
             {
                 uei2 = Math.Max(LegacyPrecisionMath.AddScaled(uei2, rlx, delta[3], settings.UseLegacyBoundaryLayerInitialization), 1.0e-10);
             }
             // Trace post-update at side 2 station 4 inverse iterations
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 3 && (iter == 7 || iter == 8))
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD24_POST it={iter}" +
-                    $" {BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)dstar2):X8}" +
-                    $" {BitConverter.SingleToInt32Bits((float)uei2):X8}");
-            }
+            
 
             double msq = 0.0;
             if (hstinv > 0.0)
@@ -6299,17 +4756,7 @@ public static class ViscousSolverEngine
                     $"C_REFINE51_EXTRAP dmax={BitConverter.SingleToInt32Bits(dmaxF):X8}" +
                     $" ibl={ibl} ITRAN[1]={blState.ITRAN[side]} fires={dmaxF > 0.1f}");
             }
-            if (XFoil.Solver.Diagnostics.DebugFlags.StfloTrace
-                && side == 1 && ibl >= 79 && ibl <= 82)
-            {
-                Console.Error.WriteLine(
-                    $"C_STFLO_END side={side} ibl={ibl+1} dmax={BitConverter.SingleToInt32Bits(dmaxF):X8}" +
-                    $" extrap={dmaxF > 0.1f}" +
-                    $" T2={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" D2={BitConverter.SingleToInt32Bits((float)dstar2):X8}" +
-                    $" C2={BitConverter.SingleToInt32Bits((float)ctau2):X8}" +
-                    $" U2={BitConverter.SingleToInt32Bits((float)uei2):X8}");
-            }
+            
             if (dmaxF > 0.1f && ibl > 2)
             {
                 // Fortran xbl.f:2298-2299:
@@ -6560,15 +5007,7 @@ public static class ViscousSolverEngine
         }
 
         // Trace station 58-60 side 1 converged store for parity comparison
-        if (DebugFlags.SetBlHex
-            && side == 0 && ibl >= 57 && ibl <= 59)
-        {
-            Console.Error.WriteLine(
-                $"C_STORE s=1 i={ibl+1,3}" +
-                $" T={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                $" D={BitConverter.SingleToInt32Bits((float)dstar2):X8}" +
-                $" C={BitConverter.SingleToInt32Bits((float)(usesShearState ? ctau2 : ampl2)):X8}");
-        }
+        
         blState.UEDG[ibl, side] = uei2;
         blState.THET[ibl, side] = theta2;
         blState.DSTR[ibl, side] = dstar2;
@@ -6576,10 +5015,7 @@ public static class ViscousSolverEngine
         // Fortran MRCHUE carries CTI across stations as a local variable.
         // Output the converged ctau2 so the caller can carry it to the next station.
         carriedCtauOut = ctau2;
-        if (DebugFlags.SetBlHex
-            && side == 0 && ibl >= 9 && ibl <= 12)
-            Console.Error.WriteLine(
-                $"C_WRITE_AMPL s=1 i={ibl+1} A2={BitConverter.SingleToInt32Bits((float)ampl2):X8} USS={usesShearState}");
+        
         WriteLegacyAmplificationCarry(blState, ibl, side, ampl2);
         blState.MASS[ibl, side] = settings.UseLegacyBoundaryLayerInitialization
             ? LegacyPrecisionMath.Multiply(dstar2, uei2, useLegacyPrecision: true)
@@ -7056,26 +5492,7 @@ public static class ViscousSolverEngine
             }
 
             // Station 98 system dump for MRCHUE parity
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 97)
-            {
-                for (int r = 0; r < 4; r++)
-                    Console.Error.WriteLine(
-                        $"C_MUE98 it={iter + 1} r{r}:" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                        $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                Console.Error.WriteLine(
-                    $"C_MUE98D it={iter + 1}" +
-                    $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                    $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                    $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                    $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                    $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}");
-            }
+            
 
             double dmax = Math.Max(
                 Math.Max(Math.Abs(delta[1] / Math.Max(theta, 1e-10)),
@@ -7110,19 +5527,7 @@ public static class ViscousSolverEngine
                     traceLabel: "wake_seed_refine");
             }
 
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl >= 81 && ibl <= 84)
-            {
-                Console.Error.WriteLine(
-                    $"C_WAKE_REF s=2 i={ibl+1,3} it={iter}" +
-                    $" dmax={dmax:E4}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                    $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                    $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                    $" R0={BitConverter.SingleToInt32Bits((float)residual[0]):X8}" +
-                    $" R1={BitConverter.SingleToInt32Bits((float)residual[1]):X8}" +
-                    $" R2={BitConverter.SingleToInt32Bits((float)residual[2]):X8}");
-            }
+            
             if (dmax <= seedTolerance)
                 break;
         }
@@ -7156,9 +5561,7 @@ public static class ViscousSolverEngine
         double reybl_ms,
         ref double carriedCtau)
     {
-        if (DebugFlags.SetBlHex
-            && side == 0 && ibl + 1 == 58)
-            Console.Error.WriteLine($"C_LAMREF stn=58 entered");
+        
         double gm1 = LegacyPrecisionMath.GammaMinusOne(settings.UseLegacyBoundaryLayerInitialization);
         const int maxIterations = 8;
         const double maxNormalizedStep = 0.20;
@@ -7187,24 +5590,13 @@ public static class ViscousSolverEngine
         // Fortran MRCHUE carries CTI as a local variable across stations.
         // Use the carried value instead of resetting to 0.03 every station.
         double initialCtau2 = carriedCtau > 0 ? carriedCtau : LegacyLaminarShearSeed;
-        if (DebugFlags.SetBlHex
-            && side == 1 && (ibl == 3 || ibl == 4))
-            Console.Error.WriteLine($"C_CTI_CARRY s=2 i={ibl+1} carriedCtau={BitConverter.SingleToInt32Bits((float)carriedCtau):X8} init={BitConverter.SingleToInt32Bits((float)initialCtau2):X8}");
+        
 
         double thetaSeed = theta2;
         double dstarSeed = dstar2;
         double ncrit = settings.GetEffectiveNCrit(side);
         double? forcedTransitionXi = GetLegacyParityForcedTransitionXi(blState, settings, side);
-        if (DebugFlags.SetBlHex
-            && side == 0 && ibl >= 9 && ibl <= 11)
-        {
-            Console.Error.WriteLine(
-                $"C_SEED_S10 ibl={ibl+1}" +
-                $" T2={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                $" D2={BitConverter.SingleToInt32Bits((float)dstar2):X8}" +
-                $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
-                $" A2={BitConverter.SingleToInt32Bits((float)ampl2):X8}");
-        }
+        
 
         if (settings.UseLegacyBoundaryLayerInitialization)
         {
@@ -7229,22 +5621,7 @@ public static class ViscousSolverEngine
                 // Use the carried CTI from the previous station instead.
                 initialCtau2 = carriedCtau > 0 ? carriedCtau : LegacyLaminarShearSeed;
             }
-            if (DebugFlags.SetBlHex
-                && side == 1 && ibl == 4)
-            {
-                Console.Error.WriteLine(
-                    $"C_ENTRY_REFINE s=2 i=5" +
-                    $" T1={BitConverter.SingleToInt32Bits((float)theta1):X8}" +
-                    $" T2={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                    $" D1={BitConverter.SingleToInt32Bits((float)dstar1):X8}" +
-                    $" D2={BitConverter.SingleToInt32Bits((float)dstar2):X8}" +
-                    $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
-                    $" A2={BitConverter.SingleToInt32Bits((float)ampl2):X8}" +
-                    $" UEI1={BitConverter.SingleToInt32Bits((float)uei1):X8}" +
-                    $" UEI2={BitConverter.SingleToInt32Bits((float)uei2):X8}" +
-                    $" UEDG3={BitConverter.SingleToInt32Bits((float)blState.UEDG[3, 1]):X8}" +
-                    $" UEDG4={BitConverter.SingleToInt32Bits((float)blState.UEDG[4, 1]):X8}");
-            }
+            
             RefineLegacySeedStation(
                 blState,
                 side,
@@ -7585,43 +5962,8 @@ public static class ViscousSolverEngine
         _mrchduCallCount++;
         int mrchduCall = _mrchduCallCount;
 
-        if (DebugFlags.SetBlHex && _mrchduCallCount <= 3)
-            Console.Error.WriteLine($"C_MRCHDU_ENTRY mc={_mrchduCallCount} ITRAN0={blState.ITRAN[0]} ITRAN1={blState.ITRAN[1]} IBLTE0={blState.IBLTE[0]}");
-        if ((XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                && _mrchduCallCount >= 21 && _mrchduCallCount <= 23)
-            || (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                && _mrchduCallCount >= 9 && _mrchduCallCount <= 11))
-        {
-            Console.Error.WriteLine(
-                $"C_COMP mc={_mrchduCallCount}" +
-                $" TKBL={BitConverter.SingleToInt32Bits((float)tkbl):X8}" +
-                $" QINFBL={BitConverter.SingleToInt32Bits((float)qinfbl):X8}" +
-                $" REYBL={BitConverter.SingleToInt32Bits((float)reybl):X8}" +
-                $" HSTINV={BitConverter.SingleToInt32Bits((float)hstinv):X8}" +
-                $" RSTBL={BitConverter.SingleToInt32Bits((float)rstbl):X8}");
-            uint hX = 0, hC = 0, hM = 0, hT = 0, hD = 0, hU = 0;
-            for (int sd = 0; sd < 2; sd++)
-                for (int i = 1; i < blState.NBL[sd]; i++)
-                {
-                    hX ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.XSSI[i, sd]));
-                    hC ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.CTAU[i, sd]));
-                    hM ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.MASS[i, sd]));
-                    hT ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.THET[i, sd]));
-                    hD ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.DSTR[i, sd]));
-                    hU ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.UEDG[i, sd]));
-                }
-            Console.Error.WriteLine($"C_MDU_IN_HASH mc={_mrchduCallCount} X={hX:X8} C={hC:X8} M={hM:X8} T={hT:X8} D={hD:X8} U={hU:X8}");
-            // Per-station CTAU at MDU entry for stations near transition
-            if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                && _mrchduCallCount == 10)
-            {
-                for (int i = 64; i <= 73; i++)
-                    if (i < blState.MaxStations)
-                        Console.Error.WriteLine(
-                            $"C_MDU_IN_CTAU mc=10 i={i+1}" +
-                            $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[i, 1]):X8}");
-            }
-        }
+        
+        
         var solver = new DenseLinearSystemSolver();
         double gm1 = LegacyPrecisionMath.GammaMinusOne(settings.UseLegacyBoundaryLayerInitialization);
         const double legacySeedTolerance = 5.0e-6;
@@ -7668,55 +6010,11 @@ public static class ViscousSolverEngine
                 double theta = Math.Max(blState.THET[ibl, side], 1e-10);
                 double dstar = Math.Max(blState.DSTR[ibl, side], 1e-10);
                 // n6h20 trace: COM1 (= ibm secondary) at start of i=72 across calls 7-11
-                if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                    && mrchduCall >= 7 && mrchduCall <= 11 && side == 1 && ibl == 71)
-                {
-                    var sec = blState.LegacySecondary[ibm, side];
-                    var kin = blState.LegacyKinematic[ibm, side];
-                    Console.Error.WriteLine(
-                        $"C_MDU{mrchduCall}_COM1 ibl={ibl+1} ibm={ibm+1}" +
-                        $" T1={BitConverter.SingleToInt32Bits((float)blState.THET[ibm, side]):X8}" +
-                        $" D1={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibm, side]):X8}" +
-                        $" U1={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibm, side]):X8}" +
-                        $" HK1={BitConverter.SingleToInt32Bits((float)(kin?.HK2 ?? 0)):X8}" +
-                        $" RT1={BitConverter.SingleToInt32Bits((float)(kin?.RT2 ?? 0)):X8}" +
-                        $" CF1={BitConverter.SingleToInt32Bits((float)(sec?.Cf ?? -1)):X8}" +
-                        $" HS1={BitConverter.SingleToInt32Bits((float)(sec?.Hs ?? -1)):X8}" +
-                        $" DI1={BitConverter.SingleToInt32Bits((float)(sec?.Di ?? -1)):X8}" +
-                        $" US1={BitConverter.SingleToInt32Bits((float)(sec?.Us ?? -1)):X8}" +
-                        $" CQ1={BitConverter.SingleToInt32Bits((float)(sec?.Cq ?? -1)):X8}" +
-                        $" DE1={BitConverter.SingleToInt32Bits((float)(sec?.De ?? -1)):X8}");
-                }
-                if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                    && side == 0 && mrchduCall >= 18 && mrchduCall <= 21 && ibl >= 2 && ibl <= 10)
-                {
-                    Console.Error.WriteLine(
-                        $"C_PFCM_IN mc={mrchduCall} ibl={ibl+1}" +
-                        $" X={BitConverter.SingleToInt32Bits((float)xsi):X8}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, side]):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, side]):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[ibl, side]):X8}");
-                }
-                if (DebugFlags.SetBlHex
-                    && side == 1 && (ibl == 84 || ibl == 89) && mrchduCall == 1)
-                {
-                    Console.Error.WriteLine(
-                        $"C_INIT{ibl+1} UEI={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" THI={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" DSI={BitConverter.SingleToInt32Bits((float)dstar):X8}");
-                    Console.Error.Flush();
-                }
+                
+                
+                
                 // Trace MRCHDU input at station 2 side 1 for all calls
-                if (DebugFlags.SetBlHex
-                    && side == 0 && ibl == 1)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MDU_S2_IN {mrchduCall,2}" +
-                        $" {BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)uei):X8}");
-                }
+                
                 InitializeLegacySeedStoredShear(
                     blState.CTAU[ibl, side],
                     ibl,
@@ -7748,10 +6046,6 @@ public static class ViscousSolverEngine
                 double wakeGap = wake
                     ? GetWakeGap(wakeSeed, teGap, ibl - blState.IBLTE[side])
                     : 0.0;
-                bool traceWake84Call3 = DebugFlags.SetBlHex
-                    && side == 1
-                    && ibl == 83
-                    && (mrchduCall == 3 || mrchduCall == 7);
                 // Fortran: 1.02000 and 1.00005 are REAL constants → float multiply
                 double hklim = wake ? 1.00005 : 1.02;
                 if (settings.UseLegacyBoundaryLayerInitialization)
@@ -7763,37 +6057,6 @@ public static class ViscousSolverEngine
                 else
                 {
                     dstar = Math.Max(dstar - wakeGap, hklim * theta) + wakeGap;
-                }
-                if (traceWake84Call3)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MRCHDU_SEED IS=2 IBL= 84" +
-                        $" DSI={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" DSWAKI={BitConverter.SingleToInt32Bits((float)wakeGap):X8}" +
-                        $" DSI-DW={BitConverter.SingleToInt32Bits((float)(dstar - wakeGap)):X8}");
-                }
-
-                // Trace seed at s2 stn5 for MRCHDU call 2
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 4 && mrchduCall == 2)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MDU_TR5" +
-                        $" {BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" tran={tran} turb={turb}");
-                }
-                // Trace seed values at side 2 station 4 for init MRCHDU
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 3 && mrchduCall == 1)
-                {
-                    Console.Error.WriteLine(
-                        $"C_SEED24" +
-                        $" {BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)ctau):X8}");
                 }
 
                 double ueref = 0.0;
@@ -7808,70 +6071,16 @@ public static class ViscousSolverEngine
                 float lastDmaxForExtrapolation = 0.0f;
                 for (int iter = 0; iter < 25; iter++)
                 {
-                    if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                        && side == 1 && ibl == 23 && mrchduCall == 22)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU22_24 it={iter+1}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" A={BitConverter.SingleToInt32Bits((float)ampl):X8}");
-                    }
+                    
                     // NACA 0021 a10 nc12 debug: MRCHDU iter 12 stations 65-68 side 2
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl >= 64 && ibl <= 67 && mrchduCall == 12)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU12_IBL{ibl + 1,4} it={iter + 1,2}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" CTI={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" AMI={BitConverter.SingleToInt32Bits((float)ampl):X8}");
-                    }
+                    
                     // NACA 0012 5K debug: dump per-iter state at stn 69 s=2 mc=1
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 68 && mrchduCall == 1)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU69 it={iter+1,2}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                            $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                            $" CTI={BitConverter.SingleToInt32Bits((float)ctau):X8}");
-                    }
+                    
                     // Station 93/98: state at TOP of iteration (POST-DSLIM from prev iter)
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && (ibl == 92 || ibl == 97) && mrchduCall <= 3)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDUI{ibl + 1} mc={mrchduCall} it={iter + 1}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}");
-                    }
+                    
                     // Trace MRCHDU iter at every wake station IS=2 IBL>=90 in mc=3
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl >= 89 && ibl <= 98 && mrchduCall == 3)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU3 i={ibl + 1,4} it={iter + 1,2}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                            $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}");
-                    }
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 49 && iter == 0)
-                    {
-                        Console.Error.WriteLine($"C_ITER50 mdu={mrchduCall} iter={iter} tran={tran} turb={turb}");
-                        Console.Error.Flush();
-                    }
+                    
+                    
                     // clarkv transition station trace (side 2 ibl=50 0-based = station 51 1-based)
                     if (Environment.GetEnvironmentVariable("XFOIL_MDU51_TRACE") == "1"
                         && side == 1 && ibl == 50 && mrchduCall == 1)
@@ -7899,31 +6108,7 @@ public static class ViscousSolverEngine
                             $" tran={tran} turb={turb}");
                     }
                     // Trace station 83 init MRCHDU inputs
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 82 && mrchduCall == 1 && iter == 0)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_STN83_IN" +
-                            $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D2={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U2={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" S2={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                            $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                            $" DW2={BitConverter.SingleToInt32Bits((float)wakeGap):X8}");
-                        var k1 = blState.LegacyKinematic[ibm, side];
-                        var s1 = blState.LegacySecondary[ibm, side];
-                        if (k1 != null && s1 != null)
-                            Console.Error.WriteLine(
-                                $"C_STN83_COM1" +
-                                $" HK={BitConverter.SingleToInt32Bits((float)k1.HK2):X8}" +
-                                $" RT={BitConverter.SingleToInt32Bits((float)k1.RT2):X8}" +
-                                $" CF={BitConverter.SingleToInt32Bits((float)s1.Cf):X8}" +
-                                $" DI={BitConverter.SingleToInt32Bits((float)s1.Di):X8}" +
-                                $" HS={BitConverter.SingleToInt32Bits((float)s1.Hs):X8}" +
-                                $" US={BitConverter.SingleToInt32Bits((float)s1.Us):X8}" +
-                                $" CQ={BitConverter.SingleToInt32Bits((float)s1.Cq):X8}");
-                    }
+                    
                     if (wake && ibl == blState.IBLTE[side] + 1)
                     {
                         // Fortran line 354: DTE uses raw ANTE, not WGAP(1).
@@ -7935,19 +6120,7 @@ public static class ViscousSolverEngine
                             out prevTheta,
                             out prevDstar,
                             out prevCtau);
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && mrchduCall == 1)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_MDU_CTE mc={mrchduCall}" +
-                                $" CTE={BitConverter.SingleToInt32Bits((float)prevCtau):X8}" +
-                                $" TTE={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                                $" DTE={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                                $" C1={BitConverter.SingleToInt32Bits((float)blState.CTAU[blState.IBLTE[0], 0]):X8}" +
-                                $" T1={BitConverter.SingleToInt32Bits((float)blState.THET[blState.IBLTE[0], 0]):X8}" +
-                                $" C2={BitConverter.SingleToInt32Bits((float)blState.CTAU[blState.IBLTE[1], 1]):X8}" +
-                                $" T2={BitConverter.SingleToInt32Bits((float)blState.THET[blState.IBLTE[1], 1]):X8}");
-                        }
+                        
                         // prevWakeGap is used as DSWAKI in BLPRV for the previous
                         // station; that's WGAP(1) (cubic-evaluated), not ANTE.
                         prevWakeGap = GetWakeGap(wakeSeed, teGap, 1);
@@ -7976,12 +6149,7 @@ public static class ViscousSolverEngine
                     }
 
                     TransitionModel.TransitionPointResult? trchekFullPoint = null;
-                    if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                        && side == 1 && ibl == 23 && mrchduCall == 22)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU22_FLAGS it={iter+1} simi={simi} turb={turb} tran={tran} willCallTRCHEK={!simi && !turb}");
-                    }
+                    
                     // Fortran: IF((.NOT.SIMI) .AND. (.NOT.TURB)) CALL TRCHEK
                     // Note: Fortran does NOT check TRAN — TRCHEK runs at every
                     // Newton iteration even after transition is detected. This
@@ -8031,22 +6199,7 @@ public static class ViscousSolverEngine
 
                         // Use CheckTransitionExact for legacy mode to match
                         // Fortran TRCHEK which recomputes HKT/RTT from BLKIN.
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl >= 48 && ibl <= 50 && iter == 0)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_MDU_TR S=2 I={ibl+1,3}" +
-                                $" A1={BitConverter.SingleToInt32Bits((float)prevAmpl):X8}" +
-                                $" A2={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                                $" HK1={BitConverter.SingleToInt32Bits((float)hk1):X8}" +
-                                $" HK2={BitConverter.SingleToInt32Bits((float)hk2):X8}" +
-                                $" X1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
-                                $" X2={BitConverter.SingleToInt32Bits((float)xsi):X8}" +
-                                $" T1={BitConverter.SingleToInt32Bits((float)theta1):X8}" +
-                                $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" D1={BitConverter.SingleToInt32Bits((float)dstar1):X8}" +
-                                $" D2={BitConverter.SingleToInt32Bits((float)dstar):X8}");
-                        }
+                        
                         var transition = settings.UseLegacyBoundaryLayerInitialization
                             ? TransitionModel.CheckTransitionExact(
                                 x1, xsi,
@@ -8088,16 +6241,7 @@ public static class ViscousSolverEngine
                             : Math.Max(transition.AmplAtTransition, 0.0);
                         // Save AMI equivalent (pre-Newton TRCHEK value)
                         trchekAmpl = ampl;
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl >= 48 && ibl <= 50 && iter == 0)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_MDU_XT S=2 I={ibl+1,3}" +
-                                $" T={transition.TransitionOccurred}" +
-                                $" XT={BitConverter.SingleToInt32Bits((float)transition.TransitionXi):X8}" +
-                                $" A2={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                                $" A1={BitConverter.SingleToInt32Bits((float)prevAmpl):X8}");
-                        }
+                        
                         // Fortran reevaluates TRAN on every Newton iteration.
                         // Do not latch a prior true result across later
                         // iterations, or downstream stations will start in
@@ -8111,23 +6255,9 @@ public static class ViscousSolverEngine
                         {
                             blState.ITRAN[side] = Math.Min(ibl + 2, blState.NBL[side]);
                         }
-                        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                            && side == 0 && mrchduCall == 20 && ibl >= 2 && ibl <= 10)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_PFCM_TR mc=20 ibl={ibl+1} iter={iter+1} tran={tran}" +
-                                $" A1={BitConverter.SingleToInt32Bits((float)prevAmpl):X8}" +
-                                $" A2={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                                $" XT={BitConverter.SingleToInt32Bits((float)transition.TransitionXi):X8}" +
-                                $" ITRAN->{blState.ITRAN[side]+1}");
-                        }
+                        
                     }
-                    else if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                        && side == 0 && mrchduCall == 20 && ibl >= 2 && ibl <= 10 && iter == 0)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_PFCM_SKIP mc=20 ibl={ibl+1} turb={turb} ITRAN={blState.ITRAN[side]+1}");
-                    }
+                    
 
                     double[] residual;
                     double[,] vs2;
@@ -8187,19 +6317,6 @@ public static class ViscousSolverEngine
                         hk2T2 = currentKinematic.HK2_T2;
                         hk2D2 = currentKinematic.HK2_D2;
                         hk2U2 = currentKinematic.HK2_U2;
-                        if (traceWake84Call3 && iter < 3)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_BLKIN_H2 D2={BitConverter.SingleToInt32Bits((float)wakeStrippedDstar):X8}" +
-                                $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" H2={BitConverter.SingleToInt32Bits((float)currentKinematic.H2):X8}");
-                            Console.Error.WriteLine(
-                                $"C_MRCHDU_RAW IS=2 IBL= 84" +
-                                $" R0={BitConverter.SingleToInt32Bits((float)residual[0]):X8}" +
-                                $" R1={BitConverter.SingleToInt32Bits((float)residual[1]):X8}" +
-                                $" R2={BitConverter.SingleToInt32Bits((float)residual[2]):X8}" +
-                                $" HK={BitConverter.SingleToInt32Bits((float)currentKinematic.HK2):X8}");
-                        }
 
                         if (settings.UseLegacyBoundaryLayerInitialization)
                         {
@@ -8214,15 +6331,6 @@ public static class ViscousSolverEngine
                             sec.Hs = wakeSec.Hs; sec.Us = wakeSec.Us; sec.Cf = wakeSec.Cf;
                             sec.Di = wakeSec.Di; sec.Cq = wakeSec.Cteq; sec.De = wakeSec.De;
                             sec.Hc = wakeSec.Hc;
-                            if (traceWake84Call3 && iter < 3)
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_MRCHDU_BLV IS=2 IBL= 84" +
-                                    $" HS={BitConverter.SingleToInt32Bits((float)sec.Hs):X8}" +
-                                    $" CF={BitConverter.SingleToInt32Bits((float)sec.Cf):X8}" +
-                                    $" CQ={BitConverter.SingleToInt32Bits((float)sec.Cq):X8}" +
-                                    $" US={BitConverter.SingleToInt32Bits((float)sec.Us):X8}");
-                            }
                             blState.LegacySecondary[ibl, side] = sec;
 
                             StoreLegacyCarrySnapshots(
@@ -8248,196 +6356,16 @@ public static class ViscousSolverEngine
                     else
                     {
                         // COM1 trace for station 7/50/85/86 side 2, + wake stn103 call 3
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ((ibl == 6 || ibl == 49 || ibl == 84 || ibl == 85) && iter == 0 && mrchduCall == 2
-                                          || ibl == 102 && iter == 5 && mrchduCall == 3))
-                        {
-                            var kin1 = blState.LegacyKinematic[ibm, side];
-                            var sec1 = blState.LegacySecondary[ibm, side];
-                            if (kin1 != null && sec1 != null)
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_COM1_50" +
-                                    $" HK1={BitConverter.SingleToInt32Bits((float)kin1.HK2):X8}" +
-                                    $" RT1={BitConverter.SingleToInt32Bits((float)kin1.RT2):X8}" +
-                                    $" CF1={BitConverter.SingleToInt32Bits((float)sec1.Cf):X8}" +
-                                    $" DI1={BitConverter.SingleToInt32Bits((float)sec1.Di):X8}" +
-                                    $" HS1={BitConverter.SingleToInt32Bits((float)sec1.Hs):X8}" +
-                                    $" US1={BitConverter.SingleToInt32Bits((float)sec1.Us):X8}" +
-                                    $" CQ1={BitConverter.SingleToInt32Bits((float)sec1.Cq):X8}");
-                            }
-                            else
-                            {
-                                Console.Error.WriteLine($"C_COM1_50 kin1={kin1 != null} sec1={sec1 != null}");
-                            }
-                        }
+                        
                         // MRCHDU BLSYS trace
-                        if (DebugFlags.SetBlHex
-                            && tran && side == 1 && ibl >= 49 && ibl <= 51 && iter == 0)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_MRCHDU_BLSYS s={side+1} i={ibl+1} it={iter}" +
-                                $" tran={tran} turb={turb}" +
-                                $" ampl={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                                $" prevAmpl={BitConverter.SingleToInt32Bits((float)prevAmpl):X8}" +
-                                $" ctau={BitConverter.SingleToInt32Bits((float)ctau):X8}");
-                        }
+                        
                         // Trace BLKIN inputs at side 2 station 4 for parity debugging
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 3 && iter == 0 && mrchduCall == 1)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_BLKIN24" +
-                                $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" D2={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                $" U2={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                                $" X1={BitConverter.SingleToInt32Bits((float)blState.XSSI[ibm, side]):X8}" +
-                                $" X2={BitConverter.SingleToInt32Bits((float)xsi):X8}" +
-                                $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                                $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}");
-                        }
+                        
                         // Trace ALL inputs at station 16 call 4 iter 1
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 15 && mrchduCall == 4 && iter == 0)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_IN16C4" +
-                                $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                                $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                                $" U1={BitConverter.SingleToInt32Bits((float)Math.Max(Math.Abs(blState.UEDG[ibm, side]), 1e-10)):X8}" +
-                                $" S1={BitConverter.SingleToInt32Bits((float)prevCtau):X8}" +
-                                $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" D2={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                $" U2={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                                $" S2={BitConverter.SingleToInt32Bits((float)ctau):X8}");
-                            Console.Error.WriteLine(
-                                $"C_IN16C4b" +
-                                $" A1={BitConverter.SingleToInt32Bits((float)prevAmpl):X8}" +
-                                $" A2={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                                $" X1={BitConverter.SingleToInt32Bits((float)blState.XSSI[ibm, side]):X8}" +
-                                $" X2={BitConverter.SingleToInt32Bits((float)xsi):X8}" +
-                                $" DW1={BitConverter.SingleToInt32Bits((float)prevWakeGap):X8}" +
-                                $" DW2={BitConverter.SingleToInt32Bits((float)wakeGap):X8}" +
-                                $" tran={tran} turb={turb} wake={wake}");
-                            var kin15 = blState.LegacyKinematic[ibm, side];
-                            var sec15 = blState.LegacySecondary[ibm, side];
-                            if (kin15 != null)
-                                Console.Error.WriteLine(
-                                    $"C_KIN15" +
-                                    $" HK={BitConverter.SingleToInt32Bits((float)kin15.HK2):X8}" +
-                                    $" HKT={BitConverter.SingleToInt32Bits((float)kin15.HK2_T2):X8}" +
-                                    $" HKD={BitConverter.SingleToInt32Bits((float)kin15.HK2_D2):X8}" +
-                                    $" RT={BitConverter.SingleToInt32Bits((float)kin15.RT2):X8}" +
-                                    $" RTT={BitConverter.SingleToInt32Bits((float)kin15.RT2_T2):X8}" +
-                                    $" M2={BitConverter.SingleToInt32Bits((float)kin15.M2):X8}" +
-                                    $" H2={BitConverter.SingleToInt32Bits((float)kin15.H2):X8}" +
-                                    $" H2T={BitConverter.SingleToInt32Bits((float)kin15.H2_T2):X8}" +
-                                    $" H2D={BitConverter.SingleToInt32Bits((float)kin15.H2_D2):X8}");
-                            if (sec15 != null)
-                            {
-                                // Hash ALL 25 secondary derivative fields
-                                uint sh = 0;
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Hs_T));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Hs_D)) << 1;
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Hs_U));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Hs_MS)) << 2;
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Cf_T));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Cf_D)) << 3;
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Cf_U));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Cf_MS));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Di_T)) << 4;
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Di_D));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Di_U)) << 5;
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Di_MS));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Us_T));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Us_D)) << 6;
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Us_U));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Us_MS));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Cq_T)) << 7;
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Cq_D));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Cq_U));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Cq_MS));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.De));
-                                sh ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec15.Hc));
-                                Console.Error.WriteLine(
-                                    $"C_SEC15 deriv_hash={sh:X8}" +
-                                    $" HS={BitConverter.SingleToInt32Bits((float)sec15.Hs):X8}" +
-                                    $" CF={BitConverter.SingleToInt32Bits((float)sec15.Cf):X8}" +
-                                    $" DI={BitConverter.SingleToInt32Bits((float)sec15.Di):X8}" +
-                                    $" US={BitConverter.SingleToInt32Bits((float)sec15.Us):X8}" +
-                                    $" CQ={BitConverter.SingleToInt32Bits((float)sec15.Cq):X8}");
-                            }
-                        }
+                        
                         // Dump ALL BLSYS inputs at station 103 call 3 iters 1+6 + secondary hash
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 102 && mrchduCall == 3 && (iter == 0 || iter == 5))
-                        {
-                            Console.Error.WriteLine(
-                                $"C_BLSYS_IN103 it={iter+1}" +
-                                $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                                $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                                $" U1={BitConverter.SingleToInt32Bits((float)Math.Max(Math.Abs(blState.UEDG[ibm, side]), 1e-10)):X8}" +
-                                $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" D2={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                $" U2={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                                $" S1={BitConverter.SingleToInt32Bits((float)prevCtau):X8}" +
-                                $" S2={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                                $" DW1={BitConverter.SingleToInt32Bits((float)prevWakeGap):X8}" +
-                                $" DW2={BitConverter.SingleToInt32Bits((float)wakeGap):X8}" +
-                                $" A1={BitConverter.SingleToInt32Bits((float)prevAmpl):X8}" +
-                                $" A2={BitConverter.SingleToInt32Bits((float)ampl):X8}");
-                            // Hash ALL secondary override fields to detect any difference
-                            var sec = blState.LegacySecondary[ibm, side];
-                            if (sec != null)
-                            {
-                                uint secHash = 0;
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Hs));
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Hs_T)) << 1;
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Hs_D));
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Us)) << 2;
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Us_T));
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Cq)) << 3;
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Cq_T));
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Cf));
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Di));
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.De));
-                                secHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)sec.Hc));
-                                Console.Error.WriteLine($"C_SEC_HASH103 it={iter+1} hash={secHash:X8}");
-                            }
-                            var kin = blState.LegacyKinematic[ibm, side];
-                            if (kin != null)
-                            {
-                                Console.Error.WriteLine($"C_KIN_HASH103 it={iter+1}" +
-                                    $" HK={BitConverter.SingleToInt32Bits((float)kin.HK2):X8}" +
-                                    $" HK_T={BitConverter.SingleToInt32Bits((float)kin.HK2_T2):X8}" +
-                                    $" HK_D={BitConverter.SingleToInt32Bits((float)kin.HK2_D2):X8}" +
-                                    $" HK_U={BitConverter.SingleToInt32Bits((float)kin.HK2_U2):X8}" +
-                                    $" RT={BitConverter.SingleToInt32Bits((float)kin.RT2):X8}" +
-                                    $" M2={BitConverter.SingleToInt32Bits((float)kin.M2):X8}");
-                            }
-                        }
-                        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                            && side == 1 && ibl == 23 && mrchduCall == 22 && iter == 3)
-                        {
-                            var k1 = blState.LegacyKinematic[ibm, side];
-                            var sc1 = blState.LegacySecondary[ibm, side];
-                            if (k1 != null)
-                                Console.Error.WriteLine(
-                                    $"C_MDU22_KIN1 it=4 HK1={BitConverter.SingleToInt32Bits((float)k1.HK2):X8}" +
-                                    $" RT1={BitConverter.SingleToInt32Bits((float)k1.RT2):X8}" +
-                                    $" HK_T={BitConverter.SingleToInt32Bits((float)k1.HK2_T2):X8}" +
-                                    $" HK_D={BitConverter.SingleToInt32Bits((float)k1.HK2_D2):X8}");
-                            if (sc1 != null)
-                                Console.Error.WriteLine(
-                                    $"C_MDU22_SEC1 it=4 CF1={BitConverter.SingleToInt32Bits((float)sc1.Cf):X8}" +
-                                    $" DI1={BitConverter.SingleToInt32Bits((float)sc1.Di):X8}" +
-                                    $" HS1={BitConverter.SingleToInt32Bits((float)sc1.Hs):X8}" +
-                                    $" US1={BitConverter.SingleToInt32Bits((float)sc1.Us):X8}" +
-                                    $" CQ1={BitConverter.SingleToInt32Bits((float)sc1.Cq):X8}");
-                            Console.Error.WriteLine(
-                                $"C_MDU22_TR1 it=4 hasOvr={trchekFullPoint != null}" +
-                                $" tran={tran} ibm={ibm}");
-                        }
+                        
+                        
                         var localResult = BoundaryLayerSystemAssembler.AssembleStationSystem(
                             isWake: wake,
                             isTurbOrTran: turb || tran,
@@ -8481,160 +6409,16 @@ public static class ViscousSolverEngine
                         residual = localResult.Residual;
                         vs2 = localResult.VS2;
                         // n6h20 SEC trace at IBL=66 mc=10
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 65 && mrchduCall == 10 && iter <= 2)
-                        {
-                            var sec = localResult.Secondary2Snapshot;
-                            if (sec != null)
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_SEC10_66 it={iter + 1,2}" +
-                                    $" CF2={BitConverter.SingleToInt32Bits((float)sec.Cf):X8}" +
-                                    $" DI2={BitConverter.SingleToInt32Bits((float)sec.Di):X8}" +
-                                    $" HS2={BitConverter.SingleToInt32Bits((float)sec.Hs):X8}" +
-                                    $" US2={BitConverter.SingleToInt32Bits((float)sec.Us):X8}" +
-                                    $" CQ2={BitConverter.SingleToInt32Bits((float)sec.Cq):X8}" +
-                                    $" DE2={BitConverter.SingleToInt32Bits((float)sec.De):X8}");
-                                Console.Error.WriteLine(
-                                    $"C_SECDRV10_66 it={iter + 1,2}" +
-                                    $" HST={BitConverter.SingleToInt32Bits((float)sec.Hs_T):X8}" +
-                                    $" HSD={BitConverter.SingleToInt32Bits((float)sec.Hs_D):X8}" +
-                                    $" CFT={BitConverter.SingleToInt32Bits((float)sec.Cf_T):X8}" +
-                                    $" CFD={BitConverter.SingleToInt32Bits((float)sec.Cf_D):X8}" +
-                                    $" DIT={BitConverter.SingleToInt32Bits((float)sec.Di_T):X8}" +
-                                    $" DID={BitConverter.SingleToInt32Bits((float)sec.Di_D):X8}" +
-                                    $" UST={BitConverter.SingleToInt32Bits((float)sec.Us_T):X8}" +
-                                    $" USD={BitConverter.SingleToInt32Bits((float)sec.Us_D):X8}" +
-                                    $" CQT={BitConverter.SingleToInt32Bits((float)sec.Cq_T):X8}" +
-                                    $" CQD={BitConverter.SingleToInt32Bits((float)sec.Cq_D):X8}");
-                            }
-                            // Also dump prev station (ibm=64) state at iter 10
-                            if (iter == 1)
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_PREV_65 T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                                    $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                                    $" S1={BitConverter.SingleToInt32Bits((float)prevCtau):X8}" +
-                                    $" A1={BitConverter.SingleToInt32Bits((float)prevAmpl):X8}");
-                            }
-                        }
+                        
                         // Compare BLSYS secondary2 vs stale LegacySecondary at last surface station
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 79 && _mrchduCallCount <= 1 && iter == 0)
-                        {
-                            var s2 = localResult.Secondary2Snapshot;
-                            var stale = blState.LegacySecondary[ibl, side];
-                            Console.Error.WriteLine(
-                                $"C_SEC80 B: HS={BitConverter.SingleToInt32Bits((float)(s2?.Hs ?? 0)):X8}" +
-                                $" CF={BitConverter.SingleToInt32Bits((float)(s2?.Cf ?? 0)):X8}" +
-                                $" DI={BitConverter.SingleToInt32Bits((float)(s2?.Di ?? 0)):X8}" +
-                                $" US={BitConverter.SingleToInt32Bits((float)(s2?.Us ?? 0)):X8}");
-                            Console.Error.WriteLine(
-                                $"C_SEC80 S: HS={BitConverter.SingleToInt32Bits((float)(stale?.Hs ?? 0)):X8}" +
-                                $" CF={BitConverter.SingleToInt32Bits((float)(stale?.Cf ?? 0)):X8}" +
-                                $" DI={BitConverter.SingleToInt32Bits((float)(stale?.Di ?? 0)):X8}" +
-                                $" US={BitConverter.SingleToInt32Bits((float)(stale?.Us ?? 0)):X8}");
-                        }
-                        if (traceWake84Call3 && iter < 3)
-                        {
-                            var sec84 = localResult.Secondary2Snapshot;
-                            Console.Error.WriteLine(
-                                $"C_MRCHDU_RAW IS=2 IBL= 84" +
-                                $" R0={BitConverter.SingleToInt32Bits((float)residual[0]):X8}" +
-                                $" R1={BitConverter.SingleToInt32Bits((float)residual[1]):X8}" +
-                                $" R2={BitConverter.SingleToInt32Bits((float)residual[2]):X8}" +
-                                $" HK={BitConverter.SingleToInt32Bits((float)localResult.HK2):X8}");
-                            if (sec84 is not null)
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_MRCHDU_BLV IS=2 IBL= 84" +
-                                    $" HS={BitConverter.SingleToInt32Bits((float)sec84.Hs):X8}" +
-                                    $" CF={BitConverter.SingleToInt32Bits((float)sec84.Cf):X8}" +
-                                    $" CQ={BitConverter.SingleToInt32Bits((float)sec84.Cq):X8}" +
-                                    $" US={BitConverter.SingleToInt32Bits((float)sec84.Us):X8}");
-                            }
-                        }
+                        
                         // Trace BLKIN at station 5 side 2 for all MRCHDU calls/iters
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 4)
-                        {
-                            var sec2 = localResult.Secondary2Snapshot;
-                            Console.Error.WriteLine(
-                                $"C_BK5 mdu={mrchduCall} it={iter}" +
-                                $" HK={BitConverter.SingleToInt32Bits((float)localResult.HK2):X8}" +
-                                $" RT={BitConverter.SingleToInt32Bits((float)(sec2?.Cf_RE != 0 ? localResult.Kinematic2Snapshot?.RT2 ?? 0 : 0)):X8}" +
-                                $" HS={BitConverter.SingleToInt32Bits((float)(sec2?.Hs ?? 0)):X8}" +
-                                $" CF={BitConverter.SingleToInt32Bits((float)(sec2?.Cf ?? 0)):X8}" +
-                                $" DI={BitConverter.SingleToInt32Bits((float)(sec2?.Di ?? 0)):X8}" +
-                                $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" D2={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                $" U2={BitConverter.SingleToInt32Bits((float)uei):X8}");
-                        }
+                        
                         // Trace Newton iter at key stations
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ((ibl == 4 || ibl == 5 || ibl == 6) && mrchduCall == 2
-                                          || ibl == 102 && mrchduCall == 3
-                                          || ibl == 4 && mrchduCall == 4
-                                          || (ibl == 15 && mrchduCall == 4)) && iter < 25)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_NW{ibl+1}_{iter+1,2}" +
-                                $" {BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)ctau):X8}");
-                            // VS2 dump at station 16 call 4 iter 1
-                            if (ibl == 15 && mrchduCall == 4 && iter == 0)
-                            {
-                                var vs2t = localResult.VS2;
-                                var res = localResult.Residual;
-                                for (int r = 0; r < 3; r++)
-                                    Console.Error.WriteLine(
-                                        $"C_VS2_16 r{r}:" +
-                                        $" {BitConverter.SingleToInt32Bits((float)vs2t[r,0]):X8}" +
-                                        $" {BitConverter.SingleToInt32Bits((float)vs2t[r,1]):X8}" +
-                                        $" {BitConverter.SingleToInt32Bits((float)vs2t[r,2]):X8}" +
-                                        $" {BitConverter.SingleToInt32Bits((float)vs2t[r,3]):X8}" +
-                                        $" | {BitConverter.SingleToInt32Bits((float)res[r]):X8}");
-                            }
-                            // BLVAR output trace at stn103 call 3 iters 1+6
-                            if (ibl == 102 && mrchduCall == 3 && (iter == 0 || iter == 5))
-                            {
-                                var secSnap = localResult.Secondary2Snapshot;
-                                if (secSnap != null)
-                                    Console.Error.WriteLine(
-                                        $"C_BLV103_{iter+1}" +
-                                        $" HK={BitConverter.SingleToInt32Bits((float)localResult.HK2):X8}" +
-                                        $" HS={BitConverter.SingleToInt32Bits((float)secSnap.Hs):X8}" +
-                                        $" US={BitConverter.SingleToInt32Bits((float)secSnap.Us):X8}" +
-                                        $" CQ={BitConverter.SingleToInt32Bits((float)secSnap.Cq):X8}" +
-                                        $" CF={BitConverter.SingleToInt32Bits((float)secSnap.Cf):X8}" +
-                                        $" DI={BitConverter.SingleToInt32Bits((float)secSnap.Di):X8}");
-                            }
-                        }
+                        
                         // Dump VS2 at s2 stn7 call 2 iter 0 for parity comparison
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && (ibl == 5 || ibl == 6) && mrchduCall == 2 && iter == 0)
-                        {
-                            for (int r = 0; r < 3; r++)
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_VS2_R{r+1}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)localResult.VS2[r,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)localResult.VS2[r,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)localResult.VS2[r,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)localResult.VS2[r,3]):X8}");
-                            }
-                        }
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 49 && iter == 0)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_BLSYS_R0 mdu={mrchduCall}" +
-                                $" R0={BitConverter.SingleToInt32Bits((float)residual[0]):X8}" +
-                                $" tran={tran}");
-                            Console.Error.Flush();
-                        }
+                        
+                        
                         vs2 = localResult.VS2;
                         currentU2 = localResult.U2;
                         currentU2Uei = localResult.U2_UEI;
@@ -8652,17 +6436,7 @@ public static class ViscousSolverEngine
                         hk2U2 = localResult.HK2_U2;
 
                         // MRCHDU per-station trace for hex comparison
-                        if (DebugFlags.SetBlHex
-                            && ((side == 0 && ibl >= 2 && ibl <= 4) || (side == 1 && (ibl == 9 || (ibl >= 49 && ibl <= 51) || (ibl >= 81 && ibl <= 84)))) && iter == 0)
-                        {
-                            Console.Error.Write($"C_MRCHDU s=1 i={ibl+1,3} it={iter}");
-                            for (int rr = 0; rr < 3; rr++)
-                                Console.Error.Write($" R{rr+1}={BitConverter.SingleToInt32Bits((float)residual[rr]):X8}");
-                            for (int rr = 0; rr < 3; rr++)
-                                for (int cc = 0; cc < 4; cc++)
-                                    Console.Error.Write($" V{rr+1}{cc+1}={BitConverter.SingleToInt32Bits((float)vs2[rr, cc]):X8}");
-                            Console.Error.WriteLine();
-                        }
+                        
 
                         if (settings.UseLegacyBoundaryLayerInitialization)
                         {
@@ -8685,22 +6459,7 @@ public static class ViscousSolverEngine
                                 localResult.Secondary2Snapshot,
                                 traceLabel: "legacy_direct_remarch");
                             // Trace stored secondary at IBL=91 mc=3 every iter
-                            if (DebugFlags.SetBlHex
-                                && side == 1 && ibl == 90 && mrchduCall == 3)
-                            {
-                                var sStored = localResult.Secondary2Snapshot;
-                                if (sStored != null)
-                                    Console.Error.WriteLine(
-                                        $"C_STORE91 it={iter+1,2}" +
-                                        $" CF={BitConverter.SingleToInt32Bits((float)sStored.Cf):X8}" +
-                                        $" DI={BitConverter.SingleToInt32Bits((float)sStored.Di):X8}" +
-                                        $" HS={BitConverter.SingleToInt32Bits((float)sStored.Hs):X8}" +
-                                        $" US={BitConverter.SingleToInt32Bits((float)sStored.Us):X8}" +
-                                        $" CQ={BitConverter.SingleToInt32Bits((float)sStored.Cq):X8}" +
-                                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}");
-                            }
+                            
                         }
                     }
 
@@ -8753,31 +6512,8 @@ public static class ViscousSolverEngine
 
                         rhs[row] = residual[row];
                     }
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 49 && iter == 0)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_RHS50_RAW R0={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                            $" R1={BitConverter.SingleToInt32Bits((float)rhs[1]):X8}" +
-                            $" R2={BitConverter.SingleToInt32Bits((float)rhs[2]):X8}" +
-                            $" R3={BitConverter.SingleToInt32Bits((float)rhs[3]):X8}");
-                    }
-                    if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                        && mrchduCall == 10 && side == 1 && ibl == 65 && iter <= 2)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU10_N66_RHS it={iter+1}" +
-                            $" R0={BitConverter.SingleToInt32Bits((float)residual[0]):X8}" +
-                            $" R1={BitConverter.SingleToInt32Bits((float)residual[1]):X8}" +
-                            $" R2={BitConverter.SingleToInt32Bits((float)residual[2]):X8}");
-                        for (int row = 0; row < 3; row++)
-                            Console.Error.WriteLine(
-                                $"C_MDU10_N66_VS2 it={iter+1} row={row}" +
-                                $" c0={BitConverter.SingleToInt32Bits((float)vs2[row,0]):X8}" +
-                                $" c1={BitConverter.SingleToInt32Bits((float)vs2[row,1]):X8}" +
-                                $" c2={BitConverter.SingleToInt32Bits((float)vs2[row,2]):X8}" +
-                                $" c3={BitConverter.SingleToInt32Bits((float)vs2[row,3]):X8}");
-                    }
+                    
+                    
 
                     if (simi || (wake && ibl == blState.IBLTE[side] + 1))
                     {
@@ -8818,31 +6554,9 @@ public static class ViscousSolverEngine
                             settings.UseLegacyBoundaryLayerInitialization);
                         characteristicRhs[3] = 1.0;
                         // Dump probe matrix at s2 stn5 call2 iter 5
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 4 && mrchduCall == 2 && iter == 5)
-                        {
-                            for (int pr = 0; pr < 4; pr++)
-                                Console.Error.WriteLine(
-                                    $"C_PROBE r{pr}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)characteristicMatrix[pr,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)characteristicMatrix[pr,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)characteristicMatrix[pr,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)characteristicMatrix[pr,3]):X8}" +
-                                    $" | {BitConverter.SingleToInt32Bits((float)characteristicRhs[pr]):X8}");
-                        }
+                        
 
-                        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                            && side == 1 && ibl == 23 && mrchduCall == 22 && iter == 3)
-                        {
-                            for (int rr = 0; rr < 4; rr++)
-                                Console.Error.WriteLine(
-                                    $"C_MDU22_PMAT it=4 r{rr}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)characteristicMatrix[rr,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)characteristicMatrix[rr,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)characteristicMatrix[rr,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)characteristicMatrix[rr,3]):X8}" +
-                                    $" | {BitConverter.SingleToInt32Bits((float)characteristicRhs[rr]):X8}");
-                        }
+                        
                         double[] characteristicDelta;
                         try
                         {
@@ -8854,41 +6568,12 @@ public static class ViscousSolverEngine
                         }
                         catch (InvalidOperationException)
                         {
-                            if (DebugFlags.SetBlHex)
-                                Console.Error.WriteLine($"C_GAUSS_FAIL s={side+1} i={ibl+1} it={iter}");
+                            
                             break;
                         }
 
                         // n6h20 SENS debug: trace characteristicDelta[3] and SENS at IBL=66 (C# 0-idx=65) mc=10
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 65 && mrchduCall == 10 && iter <= 2)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_CHAR10_66 it={iter + 1,2}" +
-                                $" VZ4={BitConverter.SingleToInt32Bits((float)characteristicDelta[3]):X8}" +
-                                $" HKREF={BitConverter.SingleToInt32Bits((float)hkref):X8}" +
-                                $" UEREF={BitConverter.SingleToInt32Bits((float)ueref):X8}");
-                            Console.Error.WriteLine(
-                                $"C_HK10_66 it={iter + 1,2}" +
-                                $" HK2_T2={BitConverter.SingleToInt32Bits((float)hk2T2):X8}" +
-                                $" HK2_D2={BitConverter.SingleToInt32Bits((float)hk2D2):X8}" +
-                                $" HK2_U2={BitConverter.SingleToInt32Bits((float)hk2U2):X8}" +
-                                $" U2_UEI={BitConverter.SingleToInt32Bits((float)currentU2Uei):X8}" +
-                                $" HK2={BitConverter.SingleToInt32Bits((float)hk2Current):X8}");
-                            Console.Error.WriteLine(
-                                $"C_CHRHS10_66 it={iter + 1,2}" +
-                                $" R0={BitConverter.SingleToInt32Bits((float)characteristicRhs[0]):X8}" +
-                                $" R1={BitConverter.SingleToInt32Bits((float)characteristicRhs[1]):X8}" +
-                                $" R2={BitConverter.SingleToInt32Bits((float)characteristicRhs[2]):X8}" +
-                                $" R3={BitConverter.SingleToInt32Bits((float)characteristicRhs[3]):X8}");
-                            for (int r = 0; r < 4; r++)
-                                Console.Error.WriteLine(
-                                    $"C_CHMAT10_66 it={iter + 1,2} r{r}" +
-                                    $" M0={BitConverter.SingleToInt32Bits((float)characteristicMatrix[r,0]):X8}" +
-                                    $" M1={BitConverter.SingleToInt32Bits((float)characteristicMatrix[r,1]):X8}" +
-                                    $" M2={BitConverter.SingleToInt32Bits((float)characteristicMatrix[r,2]):X8}" +
-                                    $" M3={BitConverter.SingleToInt32Bits((float)characteristicMatrix[r,3]):X8}");
-                        }
+                        
 
                         double senNumerator = LegacyPrecisionMath.Multiply(
                             legacySeedSensitivityWeight,
@@ -8906,28 +6591,10 @@ public static class ViscousSolverEngine
                         // iterations overwrite SENS with the latest response.
                         sens = senNew;
 
-                        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                            && side == 1 && ibl == 23 && mrchduCall == 22)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_MDU22_SENS it={iter+1}" +
-                                $" senNew={BitConverter.SingleToInt32Bits((float)senNew):X8}" +
-                                $" cDelta3={BitConverter.SingleToInt32Bits((float)characteristicDelta[3]):X8}" +
-                                $" hkref={BitConverter.SingleToInt32Bits((float)hkref):X8}" +
-                                $" ueref={BitConverter.SingleToInt32Bits((float)ueref):X8}" +
-                                $" hk2C={BitConverter.SingleToInt32Bits((float)hk2Current):X8}" +
-                                $" cu2={BitConverter.SingleToInt32Bits((float)currentU2):X8}");
-                        }
+                        
 
                         // n6h20 SENS trace: dump SENS after update
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 65 && mrchduCall == 10 && iter <= 2)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_SENS10_66 it={iter + 1,2}" +
-                                $" SENNEW={BitConverter.SingleToInt32Bits((float)senNew):X8}" +
-                                $" SENS={BitConverter.SingleToInt32Bits((float)sens):X8}");
-                        }
+                        
 
                         // Fortran MRCHDU line 1750: VS2(4,1) = 0.
                         matrix[3, 0] = 0;
@@ -8990,17 +6657,7 @@ public static class ViscousSolverEngine
                             ueConstraint,
                             settings.UseLegacyBoundaryLayerInitialization);
                         // n6h20 VS4 row 4 debug at IBL=66 mc=10
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 65 && mrchduCall == 10 && iter <= 2)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_VS4_10_66 it={iter + 1,2}" +
-                                $" VS41={BitConverter.SingleToInt32Bits((float)matrix[3, 0]):X8}" +
-                                $" VS42={BitConverter.SingleToInt32Bits((float)matrix[3, 1]):X8}" +
-                                $" VS43={BitConverter.SingleToInt32Bits((float)matrix[3, 2]):X8}" +
-                                $" VS44={BitConverter.SingleToInt32Bits((float)matrix[3, 3]):X8}" +
-                                $" VSR4={BitConverter.SingleToInt32Bits((float)rhs[3]):X8}");
-                        }
+                        
                     }
 
                     // Hex patches disabled — they were calibrated for a lost code state.
@@ -9216,140 +6873,15 @@ public static class ViscousSolverEngine
                     try
                     {
 
-                        if (DebugFlags.SetBlHex
-                            && side == 0 && (ibl + 1 == 3 || ibl + 1 == 4) && iter == 0)
-                        {
-                            for (int r = 0; r < 4; r++)
-                                Console.Error.WriteLine(
-                                    $"C_S{ibl+1}i{iter} r{r}:" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,3]):X8}" +
-                                    $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                        }
-                        if (DebugFlags.SetBlHex
-                            && ((side == 0 && ibl + 1 >= 3 && ibl + 1 <= 5 && iter == 0) || (side == 1 && ibl + 1 == 83 && iter == 0) || (side == 1 && ibl >= 49 && ibl <= 51 && iter == 0) || (side == 1 && ibl == 9 && iter == 0)))
-                        {
-                            // Dump upstream carry state
-                            var k1 = blState.LegacyKinematic[ibl - 1, side];
-                            var s1 = blState.LegacySecondary[ibl - 1, side];
-                            Console.Error.WriteLine($"C_CARRY83 k1={k1 != null} s1={s1 != null} ibl={ibl} side={side}");
-                            if (k1 != null && s1 != null)
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_BLV{ibl+1}_1" +
-                                    $" {BitConverter.SingleToInt32Bits((float)k1.HK2):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)s1.Cf):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)s1.Hs):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)s1.Di):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)s1.Us):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)s1.Cq):X8}");
-                            }
-                            for (int r = 0; r < 4; r++)
-                                Console.Error.WriteLine(
-                                    $"C_DU{ibl+1} r{r}:" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,3]):X8}" +
-                                    $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                        }
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && (ibl == 49 || ibl == 85) && iter == 0)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_M mdu={mrchduCall} I={ibl+1}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[0,0]):X8}" +
-                                $" tran={tran}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[0,1]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[0,2]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[0,3]):X8}" +
-                                $" | {BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)rhs[1]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)rhs[2]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)rhs[3]):X8}");
-                            Console.Error.WriteLine(
-                                $"C_M50r3: {BitConverter.SingleToInt32Bits((float)matrix[3,0]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[3,1]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[3,2]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[3,3]):X8}");
-                        }
+                        
+                        
+                        
                         // Pre-GAUSS trace at wake station 83 side 2 for init MRCHDU
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 82 && _mrchduCallCount <= 1)
-                        {
-                            for (int r = 0; r < 4; r++)
-                                Console.Error.WriteLine(
-                                    $"C_G5 it={iter} r{r}:" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,3]):X8}" +
-                                    $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                        }
+                        
                         // Iter 12 station 66 matrix + RHS trace (NACA 0021 α=10 Nc=12 debug)
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 65 && mrchduCall == 12 && iter == 0)
-                        {
-                            for (int r = 0; r < 4; r++)
-                                Console.Error.WriteLine(
-                                    $"C_MAT66_12 r{r}:" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,3]):X8}" +
-                                    $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                            // Also dump residual (pre-row4) and key kinematic+COM1 values
-                            Console.Error.WriteLine(
-                                $"C_IN66_12" +
-                                $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                                $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                                $" U1={BitConverter.SingleToInt32Bits((float)Math.Max(Math.Abs(blState.UEDG[ibm, side]), 1e-10)):X8}" +
-                                $" S1={BitConverter.SingleToInt32Bits((float)prevCtau):X8}" +
-                                $" T2={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" D2={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                $" U2={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                                $" S2={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                                $" DW1={BitConverter.SingleToInt32Bits((float)prevWakeGap):X8}" +
-                                $" DW2={BitConverter.SingleToInt32Bits((float)wakeGap):X8}");
-                            Console.Error.WriteLine(
-                                $"C_IN66_12_R" +
-                                $" R0={BitConverter.SingleToInt32Bits((float)residual[0]):X8}" +
-                                $" R1={BitConverter.SingleToInt32Bits((float)residual[1]):X8}" +
-                                $" R2={BitConverter.SingleToInt32Bits((float)residual[2]):X8}" +
-                                $" HK2={BitConverter.SingleToInt32Bits((float)hk2Current):X8}" +
-                                $" HKT={BitConverter.SingleToInt32Bits((float)hk2T2):X8}" +
-                                $" HKD={BitConverter.SingleToInt32Bits((float)hk2D2):X8}" +
-                                $" HKU={BitConverter.SingleToInt32Bits((float)hk2U2):X8}");
-                            var kin1 = blState.LegacyKinematic[ibm, side];
-                            var sec1 = blState.LegacySecondary[ibm, side];
-                            if (kin1 != null && sec1 != null)
-                                Console.Error.WriteLine(
-                                    $"C_COM1_66" +
-                                    $" HK1={BitConverter.SingleToInt32Bits((float)kin1.HK2):X8}" +
-                                    $" RT1={BitConverter.SingleToInt32Bits((float)kin1.RT2):X8}" +
-                                    $" CF1={BitConverter.SingleToInt32Bits((float)sec1.Cf):X8}" +
-                                    $" DI1={BitConverter.SingleToInt32Bits((float)sec1.Di):X8}" +
-                                    $" HS1={BitConverter.SingleToInt32Bits((float)sec1.Hs):X8}" +
-                                    $" US1={BitConverter.SingleToInt32Bits((float)sec1.Us):X8}" +
-                                    $" CQ1={BitConverter.SingleToInt32Bits((float)sec1.Cq):X8}");
-                        }
+                        
                         delta = SolveSeedLinearSystem(solver, matrix, rhs, useLegacyPrecision: true);
-                        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                            && side == 1 && ibl == 23 && mrchduCall == 22)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_MDU22_DELTA it={iter+1}" +
-                                $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                                $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                                $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                                $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                                $" rhs0={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                                $" rhs1={BitConverter.SingleToInt32Bits((float)rhs[1]):X8}" +
-                                $" rhs2={BitConverter.SingleToInt32Bits((float)rhs[2]):X8}" +
-                                $" rhs3={BitConverter.SingleToInt32Bits((float)rhs[3]):X8}");
-                        }
+                        
                         // Guard: if MRCHDU local Newton produces non-finite delta,
                         // abort iteration for this station. Keep previous finite
                         // state instead of propagating NaN to all downstream
@@ -9365,101 +6897,15 @@ public static class ViscousSolverEngine
                             lastDmaxForExtrapolation = 1.0f;
                             break;
                         }
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 65 && mrchduCall == 12 && iter == 0)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_DEL66_12" +
-                                $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                                $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                                $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                                $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-                        }
+                        
                         // Post-solve delta at station 93 (all iterations)
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 92 && mrchduCall == 2)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_DEL93 it={iter + 1}" +
-                                $" D0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                                $" D1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                                $" D2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                                $" D3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-                        }
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 102 && mrchduCall == 3 && (iter == 0 || iter == 5))
-                        {
-                            for (int r = 0; r < 3; r++)
-                                Console.Error.WriteLine(
-                                    $"C_RAW103 r{r}:" +
-                                    $" {BitConverter.SingleToInt32Bits((float)vs2[r,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)vs2[r,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)vs2[r,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)vs2[r,3]):X8}" +
-                                    $" | {BitConverter.SingleToInt32Bits((float)residual[r]):X8}");
-                            // (BLV trace moved to NW trace block)
-                        }
-                        if (traceWake84Call3 && iter < 3)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_MRCHDU_DEL IS=2 IBL= 84" +
-                                $" D0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                                $" D1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                                $" D2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                                $" D3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-                        }
+                        
+                        
                         // Trace delta at wake stn103 call 3 iter 6
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 102 && mrchduCall == 3 && iter >= 5 && iter <= 7)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_WD103_{iter+1,2}" +
-                                $" {BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                                $" SENS={BitConverter.SingleToInt32Bits((float)sens):X8}");
-                            // Dump the full 4x4 matrix and rhs
-                            for (int r = 0; r < 4; r++)
-                                Console.Error.WriteLine(
-                                    $"C_WM103_{iter+1} r{r}:" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,0]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,1]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,2]):X8}" +
-                                    $" {BitConverter.SingleToInt32Bits((float)matrix[r,3]):X8}" +
-                                    $" | {BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                        }
+                        
                         // Trace delta at s2 stn5+6 call 2
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && (ibl == 4 || ibl == 5 || ibl == 6) && mrchduCall == 2 && iter < 5)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_D{ibl+1}_{iter+1,2}" +
-                                $" {BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)sens):X8}");
-                            Console.Error.WriteLine(
-                                $"C_HK5 {iter+1,2}" +
-                                $" {BitConverter.SingleToInt32Bits((float)hk2T2):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)hk2D2):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)(hk2U2 * currentU2Uei)):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)hkref):X8}");
-                        }
-                        if (DebugFlags.SetBlHex
-                            && ((side == 0 && ibl + 1 >= 3 && ibl + 1 <= 5) || (side == 1 && (ibl == 9 || ibl == 49 || ibl == 85))) && iter == 0)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_DEL s={side+1} i={ibl+1} it={iter}" +
-                                $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                                $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                                $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                                $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                                $" ampl={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                                $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}");
-                        }
+                        
+                        
 
                     }
                     catch (InvalidOperationException)
@@ -9493,50 +6939,16 @@ public static class ViscousSolverEngine
                         }
                     }
 
-                    if (DebugFlags.SetBlHex
-                        && side == 0 && (ibl + 1 == 4 || ibl + 1 == 3) && iter <= 2)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_DMAX{ibl+1} it={iter+1} dm={BitConverter.SingleToInt32Bits((float)dmax):X8}");
-                    }
+                    
 
                     double rlx = ComputeLegacySeedRelaxation(dmax, settings.UseLegacyBoundaryLayerInitialization);
 
-                    if (DebugFlags.SetBlHex
-                        && wake && side == 1 && ibl == 84)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_RM85_PRE c={mrchduCall,2} it={iter + 1,2}" +
-                            $" T0={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D0={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U0={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" C0={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" RL={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                            $" DM={BitConverter.SingleToInt32Bits((float)dmax):X8}" +
-                            $" WG={BitConverter.SingleToInt32Bits((float)wakeGap):X8}");
-                        Console.Error.WriteLine(
-                            $"C_RM85_DEL c={mrchduCall,2} it={iter + 1,2}" +
-                            $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                            $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                            $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                            $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}");
-                    }
+                    
 
 
 
                     // n6h20 iter-10 MRCHDU delta trace: dump VSREZ at IBL=66 (C# 0-idx=65) mc=10
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 65 && mrchduCall == 10 && iter <= 2)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_VSREZ10_66 it={iter + 1,2}" +
-                            $" R0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                            $" R1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                            $" R2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                            $" R3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                            $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                            $" DMAX={BitConverter.SingleToInt32Bits((float)dmax):X8}");
-                    }
+                    
                     if (ibl < blState.ITRAN[side])
                     {
                         ampl = Math.Max(LegacyPrecisionMath.AddScaled(ampl, rlx, delta[0], settings.UseLegacyBoundaryLayerInitialization), 0.0);
@@ -9549,191 +6961,26 @@ public static class ViscousSolverEngine
                     theta = Math.Max(LegacyPrecisionMath.AddScaled(theta, rlx, delta[1], settings.UseLegacyBoundaryLayerInitialization), 1.0e-10);
                     dstar = Math.Max(LegacyPrecisionMath.AddScaled(dstar, rlx, delta[2], settings.UseLegacyBoundaryLayerInitialization), 1.0e-10);
                     uei = Math.Max(LegacyPrecisionMath.AddScaled(uei, rlx, delta[3], settings.UseLegacyBoundaryLayerInitialization), 1.0e-10);
-                    if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                        && mrchduCall == 10 && side == 1 && ibl == 65 && (iter == 0 || iter == 1))
-                    {
-                        var kin2 = blState.LegacyKinematic[ibl, side];
-                        var sec2 = blState.LegacySecondary[ibl, side];
-                        Console.Error.WriteLine(
-                            $"C_MDU10_N66_COM2 it={iter+1}" +
-                            $" HK2={BitConverter.SingleToInt32Bits((float)(kin2?.HK2 ?? 0)):X8}" +
-                            $" RT2={BitConverter.SingleToInt32Bits((float)(kin2?.RT2 ?? 0)):X8}" +
-                            $" M2={BitConverter.SingleToInt32Bits((float)(kin2?.M2 ?? 0)):X8}" +
-                            $" H2={BitConverter.SingleToInt32Bits((float)(kin2?.H2 ?? 0)):X8}" +
-                            $" CF2={BitConverter.SingleToInt32Bits((float)(sec2?.Cf ?? 0)):X8}" +
-                            $" HS2={BitConverter.SingleToInt32Bits((float)(sec2?.Hs ?? 0)):X8}" +
-                            $" US2={BitConverter.SingleToInt32Bits((float)(sec2?.Us ?? 0)):X8}" +
-                            $" DI2={BitConverter.SingleToInt32Bits((float)(sec2?.Di ?? 0)):X8}" +
-                            $" CQ2={BitConverter.SingleToInt32Bits((float)(sec2?.Cq ?? 0)):X8}");
-                        var kin1 = blState.LegacyKinematic[ibm, side];
-                        var sec1 = blState.LegacySecondary[ibm, side];
-                        Console.Error.WriteLine(
-                            $"C_MDU10_N66_COM1 it={iter+1}" +
-                            $" T1={BitConverter.SingleToInt32Bits((float)blState.THET[ibm, side]):X8}" +
-                            $" D1={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibm, side]):X8}" +
-                            $" U1={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibm, side]):X8}" +
-                            $" HK1={BitConverter.SingleToInt32Bits((float)(kin1?.HK2 ?? 0)):X8}" +
-                            $" RT1={BitConverter.SingleToInt32Bits((float)(kin1?.RT2 ?? 0)):X8}" +
-                            $" CF1={BitConverter.SingleToInt32Bits((float)(sec1?.Cf ?? 0)):X8}" +
-                            $" HS1={BitConverter.SingleToInt32Bits((float)(sec1?.Hs ?? 0)):X8}" +
-                            $" US1={BitConverter.SingleToInt32Bits((float)(sec1?.Us ?? 0)):X8}" +
-                            $" DI1={BitConverter.SingleToInt32Bits((float)(sec1?.Di ?? 0)):X8}" +
-                            $" CQ1={BitConverter.SingleToInt32Bits((float)(sec1?.Cq ?? 0)):X8}");
-                    }
-                    if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                        && mrchduCall == 10 && side == 1 && ibl == 65)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU10_N66 it={iter+1}" +
-                            $" CTI={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" THI={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" DSI={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" UEI={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" VSREZ1={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                            $" VSREZ2={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                            $" VSREZ3={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                            $" VSREZ4={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                            $" SENS={BitConverter.SingleToInt32Bits((float)sens):X8}" +
-                            $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}");
-                    }
+                    
+                    
 
                     // Watch THET[26,0] during MRCHDU mc=9
-                    if (DebugFlags.SetBlHex
-                        && side == 0 && mrchduCall == 9 && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)blState.THET[26, 0]) != 0x392C5739)
-                        Console.Error.WriteLine(
-                            $"C_WATCH27 ibl={ibl} it={iter} T26_0={BitConverter.SingleToInt32Bits((float)blState.THET[26, 0]):X8}");
+                    
                     // SENS trace at wake stations
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl >= 83 && ibl <= 92 && mrchduCall == 2
-                        && iter == 0)
-                        Console.Error.WriteLine($"C_SENS i={ibl + 1,3} S={BitConverter.SingleToInt32Bits((float)sens):X8}");
+                    
                     // Stations 84..93: full 4x4 system at iter 1 to find first divergence
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl >= 83 && ibl <= 92 && mrchduCall == 2
-                        && iter == 0)
-                    {
-                        for (int r = 0; r < 4; r++)
-                            Console.Error.WriteLine(
-                                $"C_MATW{ibl + 1} it={iter + 1} r{r}:" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                                $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                    }
+                    
                     // Station 92 IS=2 mc=3 iter 1: full system + post-solve delta
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 91 && mrchduCall == 3 && iter == 0)
-                    {
-                        for (int r = 0; r < 4; r++)
-                            Console.Error.WriteLine(
-                                $"C_M92C3 r{r}:" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                                $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                        Console.Error.WriteLine(
-                            $"C_M92C3_REF" +
-                            $" HKREF={BitConverter.SingleToInt32Bits((float)hkref):X8}" +
-                            $" UEREF={BitConverter.SingleToInt32Bits((float)ueref):X8}" +
-                            $" SENS={BitConverter.SingleToInt32Bits((float)sens):X8}" +
-                            $" HK2={BitConverter.SingleToInt32Bits((float)hk2Current):X8}" +
-                            $" U2={BitConverter.SingleToInt32Bits((float)currentU2):X8}");
-                        var k1 = blState.LegacyKinematic[ibm, side];
-                        var s1 = blState.LegacySecondary[ibm, side];
-                        if (k1 != null)
-                            Console.Error.WriteLine(
-                                $"C_M92C3_COM1" +
-                                $" T1={BitConverter.SingleToInt32Bits((float)prevTheta):X8}" +
-                                $" D1={BitConverter.SingleToInt32Bits((float)prevDstar):X8}" +
-                                $" U1={BitConverter.SingleToInt32Bits((float)Math.Max(Math.Abs(blState.UEDG[ibm, side]), 1e-10)):X8}" +
-                                $" HK1={BitConverter.SingleToInt32Bits((float)k1.HK2):X8}" +
-                                $" RT1={BitConverter.SingleToInt32Bits((float)k1.RT2):X8}" +
-                                $" M1={BitConverter.SingleToInt32Bits((float)k1.M2):X8}" +
-                                $" H1={BitConverter.SingleToInt32Bits((float)k1.H2):X8}");
-                        if (s1 != null)
-                            Console.Error.WriteLine(
-                                $"C_M92C3_SEC1" +
-                                $" CF1={BitConverter.SingleToInt32Bits((float)s1.Cf):X8}" +
-                                $" DI1={BitConverter.SingleToInt32Bits((float)s1.Di):X8}" +
-                                $" HS1={BitConverter.SingleToInt32Bits((float)s1.Hs):X8}" +
-                                $" US1={BitConverter.SingleToInt32Bits((float)s1.Us):X8}" +
-                                $" CQ1={BitConverter.SingleToInt32Bits((float)s1.Cq):X8}" +
-                                $" HC1={BitConverter.SingleToInt32Bits((float)s1.Hc):X8}" +
-                                $" DE1={BitConverter.SingleToInt32Bits((float)s1.De):X8}");
-                    }
+                    
                     // Station 93: per-iteration FULL 4x4 system (iter 1, 5-7)
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 92 && mrchduCall == 2
-                        && (iter == 0 || iter == 5 || iter == 6))
-                    {
-                        for (int r = 0; r < 4; r++)
-                            Console.Error.WriteLine(
-                                $"C_SYS93 it={iter + 1} r{r}:" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 0]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 1]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 2]):X8}" +
-                                $" {BitConverter.SingleToInt32Bits((float)matrix[r, 3]):X8}" +
-                                $" |{BitConverter.SingleToInt32Bits((float)rhs[r]):X8}");
-                    }
+                    
                     // Station 12 side 2 MRCHDU trace at mc=2
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 11 && mrchduCall == 2)
-                        Console.Error.WriteLine(
-                            $"C_MDU12 it={iter + 1}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" dm={BitConverter.SingleToInt32Bits((float)dmax):X8}");
+                    
                     // Station 3 side 2 MRCHDU trace at mc=1 (init)
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 2 && mrchduCall == 1)
-                        Console.Error.WriteLine(
-                            $"C_MDU3 it={iter + 1}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" dm={BitConverter.SingleToInt32Bits((float)lastDmaxForExtrapolation):X8}");
+                    
                     // Station 27 MRCHDU seed trace at mc=9 (=Fortran oi=8)
-                    if (DebugFlags.SetBlHex
-                        && side == 0 && ibl == 26 && mrchduCall == 9 && iter == 0)
-                        Console.Error.WriteLine(
-                            $"C_SEED27 ibl={ibl} T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" raw={BitConverter.SingleToInt32Bits((float)blState.THET[26, 0]):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" rawD={BitConverter.SingleToInt32Bits((float)blState.DSTR[26, 0]):X8}" +
-                            $" NBL0={blState.NBL[0]} ITRAN={blState.ITRAN[0]}");
-                    if (DebugFlags.SetBlHex
-                        && side == 0 && ibl == 26
-                        && mrchduCall == 8)
-                    {
-                        unchecked {
-                        uint vsH = 0;
-                        for (int r27 = 0; r27 < 3; r27++)
-                            for (int c27 = 0; c27 < 4; c27++)
-                                vsH += (uint)(BitConverter.SingleToInt32Bits((float)matrix[r27, c27]) & 0x7FFFFFFF);
-                        Console.Error.WriteLine(
-                            $"C_BL27 it={iter + 1}" +
-                            $" R0={BitConverter.SingleToInt32Bits((float)rhs[0]):X8}" +
-                            $" R1={BitConverter.SingleToInt32Bits((float)rhs[1]):X8}" +
-                            $" R2={BitConverter.SingleToInt32Bits((float)rhs[2]):X8}" +
-                            $" VS={vsH:X8}" +
-                            $" R3={BitConverter.SingleToInt32Bits((float)rhs[3]):X8}" +
-                            $" M41={BitConverter.SingleToInt32Bits((float)matrix[3, 0]):X8}" +
-                            $" M42={BitConverter.SingleToInt32Bits((float)matrix[3, 1]):X8}" +
-                            $" M43={BitConverter.SingleToInt32Bits((float)matrix[3, 2]):X8}" +
-                            $" M44={BitConverter.SingleToInt32Bits((float)matrix[3, 3]):X8}");
-                        Console.Error.WriteLine(
-                            $"C_DLT27 it={iter + 1}" +
-                            $" d0={BitConverter.SingleToInt32Bits((float)delta[0]):X8}" +
-                            $" d1={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                            $" d2={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                            $" d3={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                            $" rlx={BitConverter.SingleToInt32Bits((float)rlx):X8}");
-                        }
-                    }
+                    
+                    
 
                     double msq = 0.0;
                     if (hstinv > 0.0)
@@ -9796,64 +7043,17 @@ public static class ViscousSolverEngine
                         }
                     }
 
-                    if (DebugFlags.SetBlHex
-                        && wake && side == 1 && ibl == 84)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_RM85_POST c={mrchduCall,2} it={iter + 1,2}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" C={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" DSW={BitConverter.SingleToInt32Bits((float)dsw):X8}" +
-                            $" MSQ={BitConverter.SingleToInt32Bits((float)msq):X8}");
-                    }
+                    
 
                     // Trace MRCHDU Newton at transition station 5 side 2 (C# ibl=4 side=1)
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 4)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU5 mdu={_mrchduCallCount} it={iter}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" R2={BitConverter.SingleToInt32Bits((float)delta[1]):X8}" +
-                            $" R3={BitConverter.SingleToInt32Bits((float)delta[2]):X8}" +
-                            $" R4={BitConverter.SingleToInt32Bits((float)delta[3]):X8}" +
-                            $" RX={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" DM={dmax:E4}");
-                    }
+                    
                     // Trace MRCHDU Newton at station 98 side 2 (C# ibl=97 side=1)
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 97 && iter < 5)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU98 it={iter}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" DM={dmax:E4}");
-                    }
+                    
                     // Trace MRCHDU Newton at wake stations 82-84 (init call)
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl >= 81 && ibl <= 83 && mrchduCall == 1)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_WK83 I={ibl+1,3} it={iter + 1,2}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" DM={dmax:E3}");
-                    }
+                    
                     // Fortran: IF(DMAX.LE.DEPS) — both REAL (float) comparison
                     lastDmaxForExtrapolation = (float)dmax;
-                    if (DebugFlags.SetBlHex
-                        && side == 1 && ibl == 90 && mrchduCall == 3)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_DMAX91 it={iter+1,2} dmax={BitConverter.SingleToInt32Bits((float)dmax):X8}" +
-                            $" tol={BitConverter.SingleToInt32Bits((float)legacySeedTolerance):X8}");
-                    }
+                    
                     if ((float)dmax <= (float)legacySeedTolerance)
                     {
                         converged = true;
@@ -9861,27 +7061,14 @@ public static class ViscousSolverEngine
                     }
                 }
 
-                if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                    && mrchduCall == 3 && side == 1 && ibl >= 90 && ibl <= 94)
-                {
-                    Console.Error.WriteLine(
-                        $"C_NEWTON_END mc=19 ibl={ibl+1} conv={converged}" +
-                        $" dmax={BitConverter.SingleToInt32Bits((float)lastDmaxForExtrapolation):X8}");
-                }
+                
                 // Fortran MRCHDU lines 1934-1957: handle non-convergence
                 // If DMAX <= 0.1: keep the last iterate (reasonable solution)
                 // If DMAX > 0.1 and IBL > 3: extrapolate from upstream values
                 if (!converged && settings.UseLegacyBoundaryLayerInitialization)
                 {
                     float dmaxF = lastDmaxForExtrapolation;
-                    if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                        && mrchduCall == 3 && side == 1 && ibl >= 90 && ibl <= 94)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_NCONV mc=19 side={side+1} ibl={ibl+1} conv={converged}" +
-                            $" dmax={BitConverter.SingleToInt32Bits(dmaxF):X8}" +
-                            $" fire={(dmaxF > 0.1f && ibl > 2)}");
-                    }
+                    
                     if (dmaxF > 0.1f && ibl > 2)  // Fortran IBL>3 → C# ibl>2
                     {
                         if (ibl <= blState.IBLTE[side])
@@ -9897,16 +7084,7 @@ public static class ViscousSolverEngine
                             theta = (float)blState.THET[ibm, side] * sqrtRatioF;
                             dstar = (float)blState.DSTR[ibm, side] * sqrtRatioF;
                             uei = blState.UEDG[ibm, side];
-                            if (DebugFlags.SetBlHex
-                                && side == 0 && ibl >= 12 && ibl <= 18 && mrchduCall == 2)
-                            {
-                                Console.Error.WriteLine(
-                                    $"C_EXTRAP s=1 i={ibl + 1,3} mc={mrchduCall}" +
-                                    $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                    $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                    $" xR={BitConverter.SingleToInt32Bits(xRatioF):X8}" +
-                                    $" sqR={BitConverter.SingleToInt32Bits(sqrtRatioF):X8}");
-                            }
+                            
                         }
                         else if (ibl == blState.IBLTE[side] + 1)
                         {
@@ -9940,11 +7118,7 @@ public static class ViscousSolverEngine
                 // BLVAR/BLMID always run (with ityp depending on laminar/turb/wake).
                 // The secondary refresh must happen for ALL non-converged stations,
                 // not just laminar ones.
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl == 90 && mrchduCall == 3)
-                {
-                    Console.Error.WriteLine($"C_NCONV91 simi={simi} converged={converged}");
-                }
+                
                 if (!simi && !converged)
                 {
                     // Fortran: TRCHEK only when !SIMI && !TURB (line 1963)
@@ -10056,16 +7230,7 @@ public static class ViscousSolverEngine
                         {
                             blState.ITRAN[side] = Math.Min(ibl + 2, blState.NBL[side]);
                         }
-                        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-                            && side == 0 && mrchduCall == 20 && ibl >= 2 && ibl <= 10)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_PFCM_POST mc=20 ibl={ibl+1} tran={tran}" +
-                                $" A1={BitConverter.SingleToInt32Bits((float)prevAmpl):X8}" +
-                                $" A2={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                                $" XT={BitConverter.SingleToInt32Bits((float)transition.TransitionXi):X8}" +
-                                $" ITRAN->{blState.ITRAN[side]+1}");
-                        }
+                        
 
                     }
 
@@ -10127,20 +7292,7 @@ public static class ViscousSolverEngine
                             localResult.Kinematic2Snapshot,
                             localResult.Secondary2Snapshot,
                             traceLabel: "legacy_seed_postcheck");
-                        if (DebugFlags.SetBlHex
-                            && side == 1 && ibl == 90 && mrchduCall == 3)
-                        {
-                            var s = localResult.Secondary2Snapshot;
-                            Console.Error.WriteLine(
-                                $"C_NCREF91 T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                                $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                                $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                                $" CF={BitConverter.SingleToInt32Bits((float)(s?.Cf ?? 0)):X8}" +
-                                $" DI={BitConverter.SingleToInt32Bits((float)(s?.Di ?? 0)):X8}" +
-                                $" HS={BitConverter.SingleToInt32Bits((float)(s?.Hs ?? 0)):X8}" +
-                                $" US={BitConverter.SingleToInt32Bits((float)(s?.Us ?? 0)):X8}" +
-                                $" CQ={BitConverter.SingleToInt32Bits((float)(s?.Cq ?? 0)):X8}");
-                        }
+                        
                     }
                 }
 
@@ -10323,70 +7475,16 @@ public static class ViscousSolverEngine
                 }
 
                 // MRCHDU final-store trace
-                if (DebugFlags.SetBlHex
-                    && ((side == 0 && ibl >= 2 && ibl <= 5) || (side == 1 && ibl >= 1 && ibl <= 52)
-                        || (side == 1 && ibl >= 81 && ibl <= 84 && mrchduCall == 1)
-                        || (side == 1 && ibl >= 63 && ibl <= 75 && mrchduCall == 1)))
-                {
-                    double displayCtau = (ibl < blState.ITRAN[side]) ? trchekAmpl : ctau;
-                    Console.Error.WriteLine(
-                        $"C_MRCHDU_STORE s={side+1} i={ibl+1,3}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)displayCtau):X8}" +
-                        $" carry={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                        $" tran={tran} turb={turb} ITRAN={blState.ITRAN[side]+1}" +
-                        $" converged={converged}");
-                }
+                
                 blState.THET[ibl, side] = theta;
                 blState.DSTR[ibl, side] = dstar;
                 blState.UEDG[ibl, side] = uei;
                 // Trace MRCHDU output for calls 2-4 (both sides)
-                if (DebugFlags.SetBlHex
-                    && (mrchduCall >= 2 && mrchduCall <= 4 || mrchduCall == 14))
-                {
-                    Console.Error.WriteLine(
-                        $"C_MDU S={side+1} C={mrchduCall} I={ibl+1,3}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)uei):X8}");
-                }
+                
                 // n6h20 trace: per-station MRCHDU output incl CTAU at call 10 side 1
-                if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                    && mrchduCall == 10 && side == 1 && ibl >= 64 && ibl <= 73)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MDU10_STORE ibl={ibl+1}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[ibl, side]):X8}");
-                }
-                if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                    && mrchduCall == 10 && side == 1 && ibl >= 65)
-                {
-                    int iw = ibl - blState.IBLTE[side];
-                    double wgVal = (iw > 0 && wakeSeed != null) ? GetWakeGap(wakeSeed, teGap, iw) : 0.0;
-                    double wgPrev = (iw > 1 && wakeSeed != null) ? GetWakeGap(wakeSeed, teGap, iw - 1) : 0.0;
-                    Console.Error.WriteLine(
-                        $"C_MDU10S2 ibl={ibl+1}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" wake={(ibl > blState.IBLTE[side])}" +
-                        $" tran={tran}" +
-                        $" iw={iw} WG={BitConverter.SingleToInt32Bits((float)wgVal):X8}" +
-                        $" WGm1={BitConverter.SingleToInt32Bits((float)wgPrev):X8}");
-                }
-                if (DebugFlags.SetBlHex
-                    && side == 0 && ibl == 1)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MDU_S2_OUT {mrchduCall,2}" +
-                        $" {BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" {BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" conv={converged}");
-                }
+                
+                
+                
                 // The accepted laminar CTAU word must match the amplification word
                 // that the next station and the later SETBL rebuild consume. The
                 // focused lower-side station-3 trace shows the managed march was
@@ -10397,24 +7495,7 @@ public static class ViscousSolverEngine
                 blState.CTAU[ibl, side] = (ibl < blState.ITRAN[side])
                     ? LegacyPrecisionMath.RoundToSingle(ampl, settings.UseLegacyBoundaryLayerInitialization)
                     : LegacyPrecisionMath.RoundToSingle(ctau, settings.UseLegacyBoundaryLayerInitialization);
-                if (XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                    && mrchduCall == 10 && side == 1 && ibl >= 64 && ibl <= 73)
-                {
-                    var kin = blState.LegacyKinematic[ibl, side];
-                    var sec = blState.LegacySecondary[ibl, side];
-                    Console.Error.WriteLine(
-                        $"C_MDU10_STORE2 ibl={ibl+1}" +
-                        $" ITRAN={blState.ITRAN[side]+1}" +
-                        $" ampl={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                        $" ctau={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" stored={BitConverter.SingleToInt32Bits((float)blState.CTAU[ibl, side]):X8}" +
-                        $" HK2={BitConverter.SingleToInt32Bits((float)(kin?.HK2 ?? 0)):X8}" +
-                        $" RT2={BitConverter.SingleToInt32Bits((float)(kin?.RT2 ?? 0)):X8}" +
-                        $" HS2={BitConverter.SingleToInt32Bits((float)(sec?.Hs ?? 0)):X8}" +
-                        $" US2={BitConverter.SingleToInt32Bits((float)(sec?.Us ?? 0)):X8}" +
-                        $" CQ2={BitConverter.SingleToInt32Bits((float)(sec?.Cq ?? 0)):X8}" +
-                        $" lam={(ibl < blState.ITRAN[side])}");
-                }
+                
                 WriteLegacyAmplificationCarry(blState, ibl, side, ampl);
                 // Fortran carries COM2.AMPL2 (= Newton-updated) to the next station
                 // via the COM2→COM1 shift. Carry the post-Newton ampl forward.
@@ -10423,36 +7504,10 @@ public static class ViscousSolverEngine
                     dstar,
                     uei,
                     settings.UseLegacyBoundaryLayerInitialization);
-                if (DebugFlags.SetBlHex
-                    && side == 0 && ibl == 4)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MRCHDU_MASS5" +
-                        $" D_double={dstar:E15}" +
-                        $" D_float={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" U_float={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" MASS={BitConverter.SingleToInt32Bits((float)massVal):X8}");
-                }
+                
                 blState.MASS[ibl, side] = massVal;
-                if (traceWake84Call3)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MRCHDU_WK IS= 2 IBL= 84" +
-                        $" THET={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                        $" DSTR={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" UEDG={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" MASS={BitConverter.SingleToInt32Bits((float)massVal):X8}");
-                }
                 // Temporary wake MASS parity trace
-                if (DebugFlags.SetBlHex
-                    && side == 1 && ibl >= 80 && ibl <= 102)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WAKE_MASS s=2 i={ibl+1,3}" +
-                        $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, side]):X8}" +
-                        $" DSTR={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                        $" UEDG={BitConverter.SingleToInt32Bits((float)uei):X8}");
-                }
+                
 
                 RefreshLegacyKinematicSnapshot(
                     blState,
@@ -10480,9 +7535,7 @@ public static class ViscousSolverEngine
 
 
                 sens = senNew;
-                if (DebugFlags.SetBlHex
-                    && side == 0 && ibl >= 22 && ibl <= 28 && mrchduCall <= 2)
-                    Console.Error.WriteLine($"C_TURB_LATCH s=1 i={ibl+1} tran={tran} turb={turb} ITRAN={blState.ITRAN[side]} IBLTE={blState.IBLTE[side]}");
+                
                 if (tran || ibl == blState.IBLTE[side])
                 {
                     turb = true;
@@ -10493,66 +7546,14 @@ public static class ViscousSolverEngine
 
         SyncWakeMirror(blState);
 
-        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-            && mrchduCall >= 21 && mrchduCall <= 23)
-        {
-            for (int sd = 0; sd < 2; sd++)
-            {
-                uint h = 0;
-                for (int i = 1; i < blState.NBL[sd]; i++)
-                    h ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.THET[i, sd]));
-                Console.Error.WriteLine($"C_MDU_OUT_SIDE mc={mrchduCall} s={sd+1} T={h:X8}");
-            }
-        }
+        
 
-        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-            && mrchduCall == 22)
-        {
-            int sd = 1; // side 2 (0-based)
-            for (int i = 1; i < blState.NBL[sd]; i++)
-                Console.Error.WriteLine(
-                    $"C_MDU22_S2 ibl={i+1}" +
-                    $" T={BitConverter.SingleToInt32Bits((float)blState.THET[i, sd]):X8}" +
-                    $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[i, sd]):X8}" +
-                    $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[i, sd]):X8}");
-        }
+        
 
-        if (XFoil.Solver.Diagnostics.DebugFlags.PfcmTrace
-            && mrchduCall == 3)
-        {
-            Console.Error.WriteLine(
-                $"C_NBL mc=3 NBL0={blState.NBL[0]} NBL1={blState.NBL[1]} IBLTE0={blState.IBLTE[0]} IBLTE1={blState.IBLTE[1]}");
-            uint hT = 0, hD = 0, hU = 0, hC = 0, hM = 0, hX = 0;
-            for (int sd = 0; sd < 2; sd++)
-                for (int i = 1; i < blState.NBL[sd]; i++)
-                {
-                    hT ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.THET[i, sd]));
-                    hD ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.DSTR[i, sd]));
-                    hU ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.UEDG[i, sd]));
-                    hC ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.CTAU[i, sd]));
-                    hM ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.MASS[i, sd]));
-                    hX ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.XSSI[i, sd]));
-                }
-            Console.Error.WriteLine(
-                $"C_MDU3_HASH T={hT:X8} D={hD:X8} U={hU:X8} C={hC:X8} M={hM:X8} X={hX:X8}");
-            for (int sd = 0; sd < 2; sd++)
-                for (int i = 1; i < blState.NBL[sd]; i++)
-                    Console.Error.WriteLine(
-                        $"C_PFCM_OUT mc=3 s={sd+1} ibl={i+1}" +
-                        $" T={BitConverter.SingleToInt32Bits((float)blState.THET[i, sd]):X8}" +
-                        $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[i, sd]):X8}" +
-                        $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[i, sd]):X8}");
-        }
+        
 
         // Post-MRCHDU hash trace for parity debugging
-        if (DebugFlags.SetBlHex)
-        {
-            uint tHash = 0;
-            for (int s = 0; s < 2; s++)
-                for (int i = 1; i < blState.NBL[s]; i++)
-                    tHash ^= unchecked((uint)BitConverter.SingleToInt32Bits((float)blState.THET[i, s]));
-            Console.Error.WriteLine($"C_MDU_HASH call={mrchduCall} T_hash={tHash:X8}");
-        }
+        
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHUE/MRCHDU wake continuation
@@ -11135,15 +8136,7 @@ public static class ViscousSolverEngine
                 $" DI={(secondary==null?"null":BitConverter.SingleToInt32Bits((float)secondary.Di).ToString("X8"))}" +
                 $" US={(secondary==null?"null":BitConverter.SingleToInt32Bits((float)secondary.Us).ToString("X8"))}");
         }
-        if (DebugFlags.SetBlHex
-            && side == 1 && (ibl == 81 || ibl == 80) && secondary != null)
-        {
-            Console.Error.WriteLine(
-                $"C_STORE_DI s=2 i={ibl + 1}" +
-                $" DI={BitConverter.SingleToInt32Bits((float)secondary.Di):X8}" +
-                $" CF={BitConverter.SingleToInt32Bits((float)secondary.Cf):X8}" +
-                $" label={traceLabel}");
-        }
+        
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHUE/MRCHDU downstream BLKIN refresh
@@ -11715,35 +8708,11 @@ public static class ViscousSolverEngine
             }
         }
 
-        if (DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine(
-                $"C_DWDXTE" +
-                $" XP1={BitConverter.SingleToInt32Bits((float)panel.XDerivative[0]):X8}" +
-                $" YP1={BitConverter.SingleToInt32Bits((float)panel.YDerivative[0]):X8}" +
-                $" XPN={BitConverter.SingleToInt32Bits((float)panel.XDerivative[n - 1]):X8}" +
-                $" YPN={BitConverter.SingleToInt32Bits((float)panel.YDerivative[n - 1]):X8}" +
-                $" DWDXTE={BitConverter.SingleToInt32Bits(dwdxte):X8}" +
-                $" N={n}");
-        }
+        
         dwdxte = Math.Max(dwdxte, -3.0f / telrat);
         dwdxte = Math.Min(dwdxte, 3.0f / telrat);
 
-        if (DebugFlags.SetBlHex)
-        {
-            for (int idx = 0; idx < n; idx++)
-            {
-                int fi = idx + 1; // Fortran 1-based
-                if (fi == 1 || fi == 2 || fi == 3 || fi == 80 || fi == 81 || fi == 82 || fi == 158 || fi == 159 || fi == 160)
-                {
-                    Console.Error.WriteLine(
-                        $"C_ARC i={fi,3}" +
-                        $" S={BitConverter.SingleToInt32Bits((float)panel.ArcLength[idx]):X8}" +
-                        $" X={BitConverter.SingleToInt32Bits((float)panel.X[idx]):X8}" +
-                        $" XP={BitConverter.SingleToInt32Bits((float)panel.XDerivative[idx]):X8}");
-                }
-            }
-        }
+        
 
         float aa = 3.0f + telrat * dwdxte;
         float bb = -2.0f - telrat * dwdxte;
@@ -11765,16 +8734,7 @@ public static class ViscousSolverEngine
             // different float result than `* (zn*zn)`.
             float znSq = zn * zn;
             float wgapVal = (zn >= 0.0f) ? antef * (aa + bb * zn) * znSq : 0.0f;
-            if (DebugFlags.SetBlHex && iw < 3)
-            {
-                Console.Error.WriteLine(
-                    $"C_WGAP_XSSI iw={iw}" +
-                    $" ibl={ibl}" +
-                    $" XSSI={BitConverter.SingleToInt32Bits((float)blState.XSSI[ibl, side]):X8}" +
-                    $" XSSI_TE={BitConverter.SingleToInt32Bits((float)xssiTe):X8}" +
-                    $" ZN={BitConverter.SingleToInt32Bits(zn):X8}" +
-                    $" WGAP={BitConverter.SingleToInt32Bits(wgapVal):X8}");
-            }
+            
             wakeSeed.GapProfile[iw] = wgapVal;
         }
     }
@@ -11835,13 +8795,7 @@ public static class ViscousSolverEngine
                 int source = Math.Min(iw - 1, wakeSeed.GapProfile.Length - 1);
                 wakeGap[iw] = wakeSeed.GapProfile[source];
             }
-            if (DebugFlags.SetBlHex)
-            {
-                for (int i = 0; i < Math.Min(4, wakeGap.Length); i++)
-                    Console.Error.WriteLine(
-                        $"C_BWGA i={i} gp={BitConverter.SingleToInt32Bits((float)wakeGap[i]):X8}" +
-                        $" src={BitConverter.SingleToInt32Bits((float)(i > 0 ? wakeSeed.GapProfile[Math.Min(i - 1, wakeSeed.GapProfile.Length - 1)] : wakeSeed.GapProfile[0])):X8}");
-            }
+            
 
             return wakeGap;
         }

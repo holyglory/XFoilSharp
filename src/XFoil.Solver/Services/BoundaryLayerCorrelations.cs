@@ -851,12 +851,7 @@ public static class BoundaryLayerCorrelations
                         });
                 }
             }
-            if (DebugFlags.SetBlHex
-                && BitConverter.SingleToInt32Bits(hkf) == 0x417A3700)
-                Console.Error.WriteLine(
-                    $"C_DIL hk={BitConverter.SingleToInt32Bits(hkf):X8} rt={BitConverter.SingleToInt32Bits(rtf):X8}" +
-                    $" di={BitConverter.SingleToInt32Bits(di32):X8} hkb={BitConverter.SingleToInt32Bits(hkbTrace):X8}" +
-                    $" num={BitConverter.SingleToInt32Bits(numeratorTrace):X8}");
+            
             return (di32, diHk32, diRt32);
         }
 

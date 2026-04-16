@@ -224,29 +224,7 @@ public static class DragCalculator
             cd = 2.0 * thwake * Math.Pow(uewake / qinf, 0.5 * (5.0 + shwake));
         }
 
-        if (DebugFlags.SetBlHex)
-        {
-            float fThw = (float)thwake;
-            float fDst = (float)dsWake;
-            float fUeg = (float)ueWake;
-            float fShw = (float)shwake;
-            float fUew = (float)uewake;
-            float fQinf = (float)qinf;
-            float fCd = (float)cd;
-            Console.Error.WriteLine($"C_CDCALC_INPUTS THW={BitConverter.SingleToInt32Bits(fThw):X8} DST={BitConverter.SingleToInt32Bits(fDst):X8} UEG={BitConverter.SingleToInt32Bits(fUeg):X8} SHW={BitConverter.SingleToInt32Bits(fShw):X8} UEW={BitConverter.SingleToInt32Bits(fUew):X8} QINF={BitConverter.SingleToInt32Bits(fQinf):X8} CD={BitConverter.SingleToInt32Bits(fCd):X8}");
-            // Dump all BL stations for parity comparison
-            for (int side = 0; side < 2; side++)
-            {
-                int fortSide = side + 1;
-                for (int ibl = 2; ibl < blState.NBL[side]; ibl++)
-                {
-                    float ft = (float)blState.THET[ibl, side];
-                    float fd = (float)blState.DSTR[ibl, side];
-                    float fu = (float)blState.UEDG[ibl, side];
-                    Console.Error.WriteLine($"C_BL s={fortSide} i={ibl + 1,4} T={BitConverter.SingleToInt32Bits(ft):X8} D={BitConverter.SingleToInt32Bits(fd):X8} U={BitConverter.SingleToInt32Bits(fu):X8}");
-                }
-            }
-        }
+        
 
         SolverTrace.Event(
             "squire_young_wake",

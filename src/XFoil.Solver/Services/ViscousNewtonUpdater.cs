@@ -126,23 +126,7 @@ public static class ViscousNewtonUpdater
         double rmsAccum = 0.0;
 
         // Verify BL state and VDEL at RLXBL scan entry for iteration 14
-        if (useLegacyPrecision && s_updateCallCount == 14
-            && DebugFlags.SetBlHex)
-        {
-            // Dump VDEL at Fortran IBL=31 IS=1 (find the correct jv)
-            for (int jvScan = 0; jvScan < nsys; jvScan++)
-            {
-                if (isys[jvScan, 0] + 1 == 31 && isys[jvScan, 1] == 0)
-                {
-                    Console.Error.WriteLine(
-                        $"C_VDEL31 jv={jvScan}" +
-                        $" V30={BitConverter.SingleToInt32Bits((float)vdel[2, 0, jvScan]):X8}" +
-                        $" V30d={vdel[2, 0, jvScan]:E15}" +
-                        $" isFloat={(vdel[2, 0, jvScan] == (double)(float)vdel[2, 0, jvScan])}");
-                    break;
-                }
-            }
-        }
+        
 
         // Fortran UPDATE: DCLMAX/DCLMIN clamp on RLX*DAC (xbl.f lines 2641-2789)
         // This limits the CL change per Newton iteration to ±0.5.
@@ -219,51 +203,8 @@ public static class ViscousNewtonUpdater
 
             double dn4 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Abs(duedg, useLegacyPrecision), 0.25, useLegacyPrecision);
 
-            if (useLegacyPrecision
-                && XFoil.Solver.Diagnostics.DebugFlags.N6H20Trace
-                && s_updateCallCount == 9
-                && side == 1
-                && ibl >= 84)
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD_SCAN U={s_updateCallCount} S={side+1} I={ibl+1}" +
-                    $" V10={BitConverter.SingleToInt32Bits((float)vdel[0,0,jv]):X8}" +
-                    $" V11={BitConverter.SingleToInt32Bits((float)vdel[0,1,jv]):X8}" +
-                    $" V20={BitConverter.SingleToInt32Bits((float)vdel[1,0,jv]):X8}" +
-                    $" V21={BitConverter.SingleToInt32Bits((float)vdel[1,1,jv]):X8}" +
-                    $" V30={BitConverter.SingleToInt32Bits((float)vdel[2,0,jv]):X8}" +
-                    $" V31={BitConverter.SingleToInt32Bits((float)vdel[2,1,jv]):X8}" +
-                    $" DAC={BitConverter.SingleToInt32Bits((float)coupling.Dac):X8}" +
-                    $" DC={BitConverter.SingleToInt32Bits((float)dctau):X8}" +
-                    $" DT={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" DM={BitConverter.SingleToInt32Bits((float)dmass):X8}" +
-                    $" DU={BitConverter.SingleToInt32Bits((float)duedg):X8}");
-            }
-            if (useLegacyPrecision
-                && DebugFlags.SetBlHex
-                && s_updateCallCount == 1
-                && side == 1
-                && ibl >= 1 && ibl <= 3)
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD_SCAN s={side + 1} i={ibl + 1,3}" +
-                    $" V10={BitConverter.SingleToInt32Bits((float)vdel[0, 0, jv]):X8}" +
-                    $" V11={BitConverter.SingleToInt32Bits((float)vdel[0, 1, jv]):X8}" +
-                    $" V20={BitConverter.SingleToInt32Bits((float)vdel[1, 0, jv]):X8}" +
-                    $" V21={BitConverter.SingleToInt32Bits((float)vdel[1, 1, jv]):X8}" +
-                    $" V30={BitConverter.SingleToInt32Bits((float)vdel[2, 0, jv]):X8}" +
-                    $" V31={BitConverter.SingleToInt32Bits((float)vdel[2, 1, jv]):X8}" +
-                    $" DAC={BitConverter.SingleToInt32Bits((float)coupling.Dac):X8}" +
-                    $" DC={BitConverter.SingleToInt32Bits((float)dctau):X8}" +
-                    $" DT={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" DM={BitConverter.SingleToInt32Bits((float)dmass):X8}" +
-                    $" DU={BitConverter.SingleToInt32Bits((float)duedg):X8}" +
-                    $" DD={BitConverter.SingleToInt32Bits((float)ddstr):X8}" +
-                    $" DN1={BitConverter.SingleToInt32Bits((float)dn1):X8}" +
-                    $" DN2={BitConverter.SingleToInt32Bits((float)dn2):X8}" +
-                    $" DN3={BitConverter.SingleToInt32Bits((float)dn3):X8}" +
-                    $" DN4={BitConverter.SingleToInt32Bits((float)dn4):X8}");
-            }
+            
+            
 
             if (useLegacyPrecision)
             {
@@ -326,37 +267,10 @@ public static class ViscousNewtonUpdater
             if (rdn4 > dhi && dn4 != 0) rlx = LegacyPrecisionMath.Divide(dhi, dn4, useLegacyPrecision);
             if (rdn4 < dlo && dn4 != 0) rlx = LegacyPrecisionMath.Divide(dlo, dn4, useLegacyPrecision);
             // DEBUG: trace RLX evolution per-station at iter 0
-            if (useLegacyPrecision && DebugFlags.SetBlHex && s_updateCallCount == 1)
-            {
-                Console.Error.WriteLine(
-                    $"C_RLX_SCAN jv={jv} ibl={ibl+1} s={side+1}" +
-                    $" DN1={BitConverter.SingleToInt32Bits((float)dn1):X8}" +
-                    $" DN2={BitConverter.SingleToInt32Bits((float)dn2):X8}" +
-                    $" DN3={BitConverter.SingleToInt32Bits((float)dn3):X8}" +
-                    $" DN4={BitConverter.SingleToInt32Bits((float)dn4):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}");
-            }
+            
 
             // Track per-station at Fortran IBL=31 IS=1 at iteration 14
-            if (useLegacyPrecision
-                && DebugFlags.SetBlHex
-                && s_updateCallCount == 14 && ibl + 1 == 31 && side == 0)
-            {
-                Console.Error.WriteLine(
-                    $"C_DN3_31 DN3={BitConverter.SingleToInt32Bits((float)dn3):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                    $" DDSTR={BitConverter.SingleToInt32Bits((float)ddstr):X8}" +
-                    $" DSTR={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, side]):X8}" +
-                    $" DUEDG={BitConverter.SingleToInt32Bits((float)duedg):X8}" +
-                    $" DMASS={BitConverter.SingleToInt32Bits((float)dmass):X8}" +
-                    $" UEDG={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                    $" DTHET={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" THET={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, side]):X8}" +
-                    $" DN1={BitConverter.SingleToInt32Bits((float)dn1):X8}" +
-                    $" DN2={BitConverter.SingleToInt32Bits((float)dn2):X8}" +
-                    $" DN4={BitConverter.SingleToInt32Bits((float)dn4):X8}" +
-                    $" DAC={BitConverter.SingleToInt32Bits((float)coupling.Dac):X8}");
-            }
+            
         }
 
         // Match XFoil UPDATE: no artificial lower bound, only cap at 1.0.
@@ -384,32 +298,7 @@ public static class ViscousNewtonUpdater
 
 
         // GDB: dump RLX, DAC, RMSBL and max-delta station
-        if (DebugFlags.SetBlHex)
-        {
-            // Find station with max normalized delta (same as the one that limits RLX)
-            int maxIbl = -1, maxSide = -1;
-            double maxDn = 0;
-            string maxType = "";
-            for (int jvMax = 0; jvMax < nsys; jvMax++)
-            {
-                int iblM = isys[jvMax, 0];
-                int sideM = isys[jvMax, 1];
-                double dctauM = LegacyPrecisionMath.Subtract(vdel[0, 0, jvMax], LegacyPrecisionMath.Multiply(coupling.Dac, vdel[0, 1, jvMax], useLegacyPrecision), useLegacyPrecision);
-                double dthetM = LegacyPrecisionMath.Subtract(vdel[1, 0, jvMax], LegacyPrecisionMath.Multiply(coupling.Dac, vdel[1, 1, jvMax], useLegacyPrecision), useLegacyPrecision);
-                double dmassM = LegacyPrecisionMath.Subtract(vdel[2, 0, jvMax], LegacyPrecisionMath.Multiply(coupling.Dac, vdel[2, 1, jvMax], useLegacyPrecision), useLegacyPrecision);
-                double duedgM = coupling.Duedg[jvMax];
-                double dn1M = (iblM < blState.ITRAN[sideM]) ? dctauM / 10.0 : (Math.Abs(blState.CTAU[iblM, sideM]) > 1e-30 ? dctauM / blState.CTAU[iblM, sideM] : 0);
-                double dn2M = Math.Abs(blState.THET[iblM, sideM]) > 1e-30 ? dthetM / blState.THET[iblM, sideM] : 0;
-                double dn4M = Math.Abs(duedgM) / 0.25;
-                if (Math.Abs(dn1M) > Math.Abs(maxDn)) { maxDn = dn1M; maxIbl = iblM; maxSide = sideM; maxType = "C"; }
-                if (Math.Abs(dn2M) > Math.Abs(maxDn)) { maxDn = dn2M; maxIbl = iblM; maxSide = sideM; maxType = "T"; }
-                if (Math.Abs(dn4M) > Math.Abs(maxDn)) { maxDn = dn4M; maxIbl = iblM; maxSide = sideM; maxType = "U"; }
-            }
-            Console.Error.WriteLine(
-                $"C_UPDATE RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                $" DAC={BitConverter.SingleToInt32Bits((float)coupling.Dac):X8}" +
-                $" MAX={maxDn:E4} at {maxType} {maxIbl + 1} {maxSide + 1}");
-        }
+        
 
         // Second pass: apply the relaxed update
         ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, coupling, debugWriter, useLegacyPrecision);
@@ -662,35 +551,13 @@ public static class ViscousNewtonUpdater
                 ueSum = LegacyPrecisionMath.Add(ueSum, LegacyPrecisionMath.Multiply(ueM, dMassValue, useLegacyPrecision), useLegacyPrecision);
                 ueControl = LegacyPrecisionMath.Add(ueControl, LegacyPrecisionMath.Multiply(ueM, dMassControl, useLegacyPrecision), useLegacyPrecision);
                 // GDB: per-term DUI at TE station side 0 (first 3 + last 2 terms)
-                if (useLegacyPrecision && ibl == blState.IBLTE[0] && iside == 0
-                    && DebugFlags.SetBlHex
-                    && (jv < 3 || jv >= nsys - 2))
-                {
-                    Console.Error.WriteLine(
-                        $"C_DUI_TERM jv={jv,3} jbl={jbl + 1} js={jside + 1}" +
-                        $" dMass={BitConverter.SingleToInt32Bits((float)dMassValue):X8}" +
-                        $" ueSum={BitConverter.SingleToInt32Bits((float)ueSum):X8}");
-                    if (jv == 0)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_DUI_DETAIL MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[jbl, jside]):X8}" +
-                            $" VDEL={BitConverter.SingleToInt32Bits((float)vdel[2, 0, jv]):X8}");
-                    }
-                }
+                
             }
 
             uNew[ibl, iside] = useLegacyPrecision
                 ? (float)((float)context.UeInv[ibl, iside] + (float)ueSum)
                 : context.UeInv[ibl, iside] + ueSum;
-            if (DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_VDEL3 iv={iv,3} s={iside+1} i={ibl+1,4}" +
-                    $" CL={BitConverter.SingleToInt32Bits((float)context.CurrentCl):X8}" +
-                    $" V30={BitConverter.SingleToInt32Bits((float)vdel[2, 0, iv]):X8}" +
-                    $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, iside]):X8}" +
-                    $" DUI={BitConverter.SingleToInt32Bits((float)ueSum):X8}");
-            }
+            
             // In the alpha-prescribed legacy UPDATE path UINV_AC is zero, but the
             // stored control velocity still passes through REAL assignment rounding.
             uAc[ibl, iside] = useLegacyPrecision
@@ -698,42 +565,16 @@ public static class ViscousNewtonUpdater
                 : ueControl;
 
             // Trace UPDATE DUI at station 2 side 1 first iteration
-            if (useLegacyPrecision && DebugFlags.SetBlHex
-                && ibl == 1 && iside == 0 && s_updateCallCount <= 2)
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD_DUI s={iside+1} i={ibl+1}" +
-                    $" DUI={BitConverter.SingleToInt32Bits((float)ueSum):X8}" +
-                    $" UINV={BitConverter.SingleToInt32Bits((float)context.UeInv[ibl, iside]):X8}" +
-                    $" UNEW={BitConverter.SingleToInt32Bits((float)uNew[ibl, iside]):X8}" +
-                    $" call={s_updateCallCount}");
-            }
+            
 
             // GDB: dump URELAX at TE stations (side 0 last, side 1 last)
-            if (useLegacyPrecision && DebugFlags.SetBlHex
-                && ibl == blState.IBLTE[iside])
-            {
-                Console.Error.WriteLine(
-                    $"C_URELAX IS={iside + 1} IBL={ibl + 1}" +
-                    $" ueSum={BitConverter.SingleToInt32Bits((float)ueSum):X8}" +
-                    $" ueInv={BitConverter.SingleToInt32Bits((float)context.UeInv[ibl, iside]):X8}" +
-                    $" uNew={BitConverter.SingleToInt32Bits((float)uNew[ibl, iside]):X8}" +
-                    $" iPan={iPan}");
-            }
+            
 
             if (iPan >= 0 && iPan < n && ibl <= blState.IBLTE[iside])
             {
                 qNew[iPan] = LegacyPrecisionMath.Multiply(vtiI, uNew[ibl, iside], useLegacyPrecision);
                 qAc[iPan] = LegacyPrecisionMath.Multiply(vtiI, uAc[ibl, iside], useLegacyPrecision);
-                if (DebugFlags.SetBlHex)
-                {
-                    Console.Error.WriteLine(
-                        $"C_QNEW s={iside + 1} i={ibl + 1,4} p={iPan,4}" +
-                        $" CL={BitConverter.SingleToInt32Bits((float)context.CurrentCl):X8}" +
-                        $" UN={BitConverter.SingleToInt32Bits((float)uNew[ibl, iside]):X8}" +
-                        $" QN={BitConverter.SingleToInt32Bits((float)qNew[iPan]):X8}" +
-                        $" UINV={BitConverter.SingleToInt32Bits((float)context.UeInv[ibl, iside]):X8}");
-                }
+                
             }
         }
 
@@ -817,15 +658,7 @@ public static class ViscousNewtonUpdater
         }
 
         // GDB: dump CL coupling details
-        if (DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine(
-                $"C_CL CLNEW={BitConverter.SingleToInt32Bits((float)clNew):X8}" +
-                $" CL={BitConverter.SingleToInt32Bits((float)context.CurrentCl):X8}" +
-                $" CL_AC={BitConverter.SingleToInt32Bits((float)clAc):X8}" +
-                $" qNew0={BitConverter.SingleToInt32Bits((float)qNew[0]):X8}" +
-                $" qNew39={BitConverter.SingleToInt32Bits((float)qNew[39]):X8}");
-        }
+        
 
         double dac;
         if (useLegacyPrecision)
@@ -912,65 +745,13 @@ public static class ViscousNewtonUpdater
             double oldUedg = blState.UEDG[ibl, side];
 
             // Trace UPDATE at station 2 side 1 first call
-            if (useLegacyPrecision && ibl == 1 && side == 0 && s_updateCallCount <= 2
-                && DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD_DETAIL call={s_updateCallCount}" +
-                    $" DTHET={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" DDSTR={BitConverter.SingleToInt32Bits((float)0):X8}" +
-                    $" DUEDG={BitConverter.SingleToInt32Bits((float)duedg):X8}" +
-                    $" DMASS={BitConverter.SingleToInt32Bits((float)dmass):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                    $" THET={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, side]):X8}" +
-                    $" DSTR={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, side]):X8}" +
-                    $" UEDG={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                    $" DAC={BitConverter.SingleToInt32Bits((float)coupling.Dac):X8}");
-            }
+            
 
             // Trace UPDATE at station 5 side 2 for 3rd call
-            if (useLegacyPrecision && ibl == 4 && side == 1 && s_updateCallCount == 3
-                && DebugFlags.SetBlHex)
-            {
-                float dacF = (float)coupling.Dac;
-                float v10 = (float)vdel[1, 0, jv];
-                float v11 = (float)vdel[1, 1, jv];
-                float dacV11 = dacF * v11;
-                float dthetManual = v10 - dacV11;
-                Console.Error.WriteLine(
-                    $"C_UPD5_DT" +
-                    $" V10={BitConverter.SingleToInt32Bits(v10):X8}" +
-                    $" V11={BitConverter.SingleToInt32Bits(v11):X8}" +
-                    $" DAC={BitConverter.SingleToInt32Bits(dacF):X8}" +
-                    $" DAC_d={coupling.Dac:E15}" +
-                    $" DACxV11={BitConverter.SingleToInt32Bits(dacV11):X8}" +
-                    $" DT_manual={BitConverter.SingleToInt32Bits(dthetManual):X8}" +
-                    $" DT_legacy={BitConverter.SingleToInt32Bits((float)dthet):X8}");
-            }
+            
             // Trace UPDATE at station 27 side 1 for iterations 7-8
-            if (useLegacyPrecision && side == 1 && ibl == 11
-                && s_updateCallCount == 1
-                && DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD12 OT={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, side]):X8}" +
-                    $" DT={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                    $" NT={BitConverter.SingleToInt32Bits((float)LegacyPrecisionMath.AddScaled(blState.THET[ibl, side], rlx, dthet, true)):X8}");
-            }
-            if (useLegacyPrecision && side == 0 && ibl == 26
-                && (s_updateCallCount == 7 || s_updateCallCount == 8)
-                && DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD27 u={s_updateCallCount}" +
-                    $" OT={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, side]):X8}" +
-                    $" DT={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                    $" V20={BitConverter.SingleToInt32Bits((float)vdel[1, 0, jv]):X8}" +
-                    $" OC={BitConverter.SingleToInt32Bits((float)blState.CTAU[ibl, side]):X8}" +
-                    $" DC={BitConverter.SingleToInt32Bits((float)dctau):X8}");
-            }
+            
+            
             // Apply relaxed changes
             blState.CTAU[ibl, side] = LegacyPrecisionMath.AddScaled(blState.CTAU[ibl, side], rlx, dctau, useLegacyPrecision);
             blState.THET[ibl, side] = LegacyPrecisionMath.AddScaled(blState.THET[ibl, side], rlx, dthet, useLegacyPrecision);
@@ -982,42 +763,8 @@ public static class ViscousNewtonUpdater
                     blState.UEDG[ibl, side],
                     useLegacyPrecision)
                 : 0.0;
-            if (useLegacyPrecision
-                && DebugFlags.SetBlHex
-                && s_updateCallCount == 1
-                && side == 1
-                && (ibl >= 80 && ibl <= 90))
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD_WAKE s={side + 1} i={ibl + 1,3}" +
-                    $" OT={BitConverter.SingleToInt32Bits((float)oldTheta):X8}" +
-                    $" OD={BitConverter.SingleToInt32Bits((float)oldDstr):X8}" +
-                    $" OU={BitConverter.SingleToInt32Bits((float)oldUedg):X8}" +
-                    $" DT={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" DM={BitConverter.SingleToInt32Bits((float)dmass):X8}" +
-                    $" DU={BitConverter.SingleToInt32Bits((float)duedg):X8}" +
-                    $" DD={BitConverter.SingleToInt32Bits((float)ddstr):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}");
-            }
-            if (useLegacyPrecision
-                && DebugFlags.SetBlHex
-                && s_updateCallCount == 1
-                && side == 1
-                && ibl >= 1 && ibl <= 3)
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD_APPLY0 s={side + 1} i={ibl + 1,3}" +
-                    $" OC={BitConverter.SingleToInt32Bits((float)oldCtau):X8}" +
-                    $" OT={BitConverter.SingleToInt32Bits((float)oldTheta):X8}" +
-                    $" OD={BitConverter.SingleToInt32Bits((float)oldDstr):X8}" +
-                    $" OU={BitConverter.SingleToInt32Bits((float)oldUedg):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)rlx):X8}" +
-                    $" DC={BitConverter.SingleToInt32Bits((float)dctau):X8}" +
-                    $" DT={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" DM={BitConverter.SingleToInt32Bits((float)dmass):X8}" +
-                    $" DU={BitConverter.SingleToInt32Bits((float)duedg):X8}" +
-                    $" DD={BitConverter.SingleToInt32Bits((float)ddstr):X8}");
-            }
+            
+            
             blState.DSTR[ibl, side] = LegacyPrecisionMath.AddScaled(blState.DSTR[ibl, side], rlx, ddstr, useLegacyPrecision);
             blState.UEDG[ibl, side] = LegacyPrecisionMath.AddScaled(blState.UEDG[ibl, side], rlx, duedg, useLegacyPrecision);
 
@@ -1064,59 +811,12 @@ public static class ViscousNewtonUpdater
             // Update mass defect (nonlinear update)
             blState.MASS[ibl, side] = LegacyPrecisionMath.Multiply(blState.DSTR[ibl, side], blState.UEDG[ibl, side], useLegacyPrecision);
 
-            if (useLegacyPrecision
-                && DebugFlags.SetBlHex
-                && s_updateCallCount == 11
-                && side == 1
-                && ibl >= 63 && ibl <= 69)
-            {
-                Console.Error.WriteLine(
-                    $"C_POST_UPD11 IBL={ibl + 1,3}" +
-                    $" NT={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, side]):X8}" +
-                    $" ND={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, side]):X8}" +
-                    $" NU={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                    $" NM={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, side]):X8}" +
-                    $" DT={BitConverter.SingleToInt32Bits((float)dthet):X8}" +
-                    $" DD={BitConverter.SingleToInt32Bits((float)ddstr):X8}" +
-                    $" DU={BitConverter.SingleToInt32Bits((float)duedg):X8}");
-            }
+            
 
-            if (useLegacyPrecision
-                && DebugFlags.SetBlHex
-                && s_updateCallCount == 1
-                && side == 1
-                && ibl >= 1 && ibl <= 3)
-            {
-                Console.Error.WriteLine(
-                    $"C_UPD_APPLY1 s={side + 1} i={ibl + 1,3}" +
-                    $" NC={BitConverter.SingleToInt32Bits((float)blState.CTAU[ibl, side]):X8}" +
-                    $" NT={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, side]):X8}" +
-                    $" ND={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, side]):X8}" +
-                    $" NU={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                    $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, side]):X8}" +
-                    $" DSW={BitConverter.SingleToInt32Bits((float)dsw):X8}");
-            }
+            
 
-            if (side == 1 && ibl + 1 == 81 && DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_SETBL_WK81" +
-                    $" DSTR={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, side]):X8}" +
-                    $" UEDG={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                    $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, side]):X8}" +
-                    $" DDSTR={BitConverter.SingleToInt32Bits((float)ddstr):X8}" +
-                    $" DUEDG={BitConverter.SingleToInt32Bits((float)duedg):X8}");
-            }
-            if (side == 1 && ibl + 1 == 82 && DebugFlags.SetBlHex)
-            {
-                Console.Error.WriteLine(
-                    $"C_SETBL_TE82" +
-                    $" DSTR={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, side]):X8}" +
-                    $" UEDG={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                    $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, side]):X8}" +
-                    $" DDSTR={BitConverter.SingleToInt32Bits((float)ddstr):X8}" +
-                    $" DUEDG={BitConverter.SingleToInt32Bits((float)duedg):X8}");
-            }
+            
+            
 
 
             if (debugWriter != null)

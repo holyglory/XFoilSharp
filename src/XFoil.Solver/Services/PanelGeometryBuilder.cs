@@ -91,23 +91,7 @@ public static class PanelGeometryBuilder
             panel.XDerivative[i] = double.CreateChecked(xDerivative[i]);
             panel.YDerivative[i] = double.CreateChecked(yDerivative[i]);
 
-            if (typeof(T) == typeof(float)
-                && DebugFlags.SetBlHex
-                && (i < 5 || i == 79))
-            {
-                float xf = float.CreateChecked(x[i]);
-                float yf = float.CreateChecked(y[i]);
-                float sf = float.CreateChecked(s[i]);
-                float xpf = float.CreateChecked(xDerivative[i]);
-                float ypf = float.CreateChecked(yDerivative[i]);
-                Console.Error.WriteLine(
-                    $"C_SPLN i={i + 1}" +
-                    $" x={BitConverter.SingleToInt32Bits(xf):X8}" +
-                    $" y={BitConverter.SingleToInt32Bits(yf):X8}" +
-                    $" s={BitConverter.SingleToInt32Bits(sf):X8}" +
-                    $" xp={BitConverter.SingleToInt32Bits(xpf):X8}" +
-                    $" yp={BitConverter.SingleToInt32Bits(ypf):X8}");
-            }
+            
         }
 
         // Compute outward normals from tangent rotation: normal = (dY/dS, -dX/dS) / magnitude
@@ -121,25 +105,7 @@ public static class PanelGeometryBuilder
             panel.NormalX[i] = double.CreateChecked(sx / magnitude);
             panel.NormalY[i] = double.CreateChecked(sy / magnitude);
 
-            if (typeof(T) == typeof(float)
-                && DebugFlags.SetBlHex
-                && (i < 5 || i == 79))
-            {
-                float sxf = float.CreateChecked(sx);
-                float syf = float.CreateChecked(sy);
-                float magnitudeSquaredf = float.CreateChecked(magnitudeSquared);
-                float magnitudef = float.CreateChecked(magnitude);
-                float normalXf = float.CreateChecked(panel.NormalX[i]);
-                float normalYf = float.CreateChecked(panel.NormalY[i]);
-                Console.Error.WriteLine(
-                    $"C_NCALC i={i + 1}" +
-                    $" sx={BitConverter.SingleToInt32Bits(sxf):X8}" +
-                    $" sy={BitConverter.SingleToInt32Bits(syf):X8}" +
-                    $" mag2={BitConverter.SingleToInt32Bits(magnitudeSquaredf):X8}" +
-                    $" mag={BitConverter.SingleToInt32Bits(magnitudef):X8}" +
-                    $" nx={BitConverter.SingleToInt32Bits(normalXf):X8}" +
-                    $" ny={BitConverter.SingleToInt32Bits(normalYf):X8}");
-            }
+            
         }
 
         // Average normal vectors at corner points (where arc-length values are identical)
@@ -324,15 +290,7 @@ public static class PanelGeometryBuilder
         state.TrailingEdgeAngleStreamwise = double.CreateChecked((dxS * dxTE) + (dyS * dyTE));
 
         // GDB: dump ANTE inputs
-        if (DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine(
-                $"C_ANTE DXS={BitConverter.SingleToInt32Bits((float)double.CreateChecked(dxS)):X8}" +
-                $" DYS={BitConverter.SingleToInt32Bits((float)double.CreateChecked(dyS)):X8}" +
-                $" DXTE={BitConverter.SingleToInt32Bits((float)double.CreateChecked(dxTE)):X8}" +
-                $" DYTE={BitConverter.SingleToInt32Bits((float)double.CreateChecked(dyTE)):X8}" +
-                $" ANTE={BitConverter.SingleToInt32Bits((float)state.TrailingEdgeAngleNormal):X8}");
-        }
+        
 
         // Total TE gap magnitude
         T gap = T.Sqrt((dxTE * dxTE) + (dyTE * dyTE));

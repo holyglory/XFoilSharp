@@ -90,25 +90,12 @@ internal static class WakeSpacing
 
         int segmentCount = pointCount - 1;
         float ratio = SolveGeometricRatioLegacyFloat(firstSpacing, maxDistance, segmentCount);
-        if (DebugFlags.SetBlHex)
-        {
-            Console.Error.WriteLine(
-                $"C_SETEXP_R ratio={BitConverter.SingleToInt32Bits(ratio):X8}" +
-                $" ds1={BitConverter.SingleToInt32Bits(firstSpacing):X8}" +
-                $" nn={pointCount}" +
-                $" smax={BitConverter.SingleToInt32Bits(maxDistance):X8}");
-        }
+        
         float step = firstSpacing;
         for (int index = 1; index < pointCount; index++)
         {
             result[index] = result[index - 1] + step;
-            if (DebugFlags.SetBlHex && index < 8)
-            {
-                Console.Error.WriteLine(
-                    $"C_SETEXP n={index + 1}" +
-                    $" s={BitConverter.SingleToInt32Bits(result[index]):X8}" +
-                    $" ds={BitConverter.SingleToInt32Bits(step):X8}");
-            }
+            
             step *= ratio;
         }
 

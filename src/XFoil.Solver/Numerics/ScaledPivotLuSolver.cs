@@ -160,15 +160,7 @@ public static class ScaledPivotLuSolver
                         sumBefore,
                         sum);
                     // GDB: trace LU elimination at diagonal j=159 (1-indexed: j=160)
-                    if (i == j && j == size - 2 && typeof(T) == typeof(float)
-                        && DebugFlags.SetBlHex
-                        && (k == 119 || k == 129 || k == 139 || k == 149 || k >= 153))
-                    {
-                        Console.Error.WriteLine(
-                            $"C_LU159 k={k,4} sum={BitConverter.SingleToInt32Bits(float.CreateChecked(sum)):X8}" +
-                            $" L={BitConverter.SingleToInt32Bits(float.CreateChecked(leftValue)):X8}" +
-                            $" R={BitConverter.SingleToInt32Bits(float.CreateChecked(rightValue)):X8}");
-                    }
+                    
                 }
 
                 matrix[i, j] = sum;
