@@ -216,7 +216,7 @@ var lines = File.ReadAllLines(vectorFile)
 
 Console.Error.WriteLine($"Loaded {lines.Length} vectors from {vectorFile}");
 
-int passed = 0, failed = 0, skipped = 0, bitExact = 0;
+int passed = 0, failed = 0, skipped = 0, bitExact = 0, finiteResults = 0;
 double maxCdRelError = 0;
 string worstCase = "";
 var failDetails = new ConcurrentBag<string>();
@@ -228,6 +228,8 @@ bool breakAtFirstUnparity = args.Contains("--break-at-first-unparity") || args.C
 // in registers when convergence failed. Bit-exact matching them would require iter-by-iter
 // arithmetic mimicry of F's chaotic trajectory, which is impractical.
 bool skipDegenerate = args.Contains("--skip-degenerate");
+bool standardBranch = args.Contains("--standard");
+if (standardBranch) Console.Error.WriteLine("STANDARD BRANCH (modern solver, no legacy precision)");
 int firstUnparityFound = 0; // 0 = not found, 1 = found
 
 int processed = 0;
@@ -331,20 +333,35 @@ Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxP
             // values are kept and compared bit-exact against Fortran. The user's
             // requirement is that the legacy parity branch produce IDENTICAL
             // results to Fortran whether the case converges or diverges.
-            var settings = new AnalysisSettings(
-                panelCount: 160,
-                reynoldsNumber: re,
-                criticalAmplificationFactor: ncrit,
-                inviscidSolverType: InviscidSolverType.LinearVortex,
-                useExtendedWake: false,
-                useLegacyBoundaryLayerInitialization: true,
-                useLegacyPanelingPrecision: true,
-                useLegacyStreamfunctionKernelPrecision: true,
-                useLegacyWakeSourceKernelPrecision: true,
-                useModernTransitionCorrections: false, // Fortran IDAMP=0
-                maxViscousIterations: 80,
-                viscousConvergenceTolerance: 1e-4, // Match Fortran EPS1
-                viscousSolverMode: XFoil.Solver.Models.ViscousSolverMode.XFoilRelaxation);
+            var settings = standardBranch
+                ? new AnalysisSettings(
+                    panelCount: 160,
+                    reynoldsNumber: re,
+                    criticalAmplificationFactor: ncrit,
+                    inviscidSolverType: InviscidSolverType.LinearVortex,
+                    useExtendedWake: false,
+                    useLegacyBoundaryLayerInitialization: false,
+                    useLegacyPanelingPrecision: false,
+                    useLegacyStreamfunctionKernelPrecision: false,
+                    useLegacyWakeSourceKernelPrecision: false,
+                    useModernTransitionCorrections: false,
+                    maxViscousIterations: 80,
+                    viscousConvergenceTolerance: 1e-4,
+                    viscousSolverMode: XFoil.Solver.Models.ViscousSolverMode.XFoilRelaxation)
+                : new AnalysisSettings(
+                    panelCount: 160,
+                    reynoldsNumber: re,
+                    criticalAmplificationFactor: ncrit,
+                    inviscidSolverType: InviscidSolverType.LinearVortex,
+                    useExtendedWake: false,
+                    useLegacyBoundaryLayerInitialization: true,
+                    useLegacyPanelingPrecision: true,
+                    useLegacyStreamfunctionKernelPrecision: true,
+                    useLegacyWakeSourceKernelPrecision: true,
+                    useModernTransitionCorrections: false,
+                    maxViscousIterations: 80,
+                    viscousConvergenceTolerance: 1e-4,
+                    viscousSolverMode: XFoil.Solver.Models.ViscousSolverMode.XFoilRelaxation);
 
             var result = service.AnalyzeViscous(geometry, alpha, settings);
             double cd = result.DragDecomposition.CD;
@@ -371,6 +388,10 @@ Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxP
             if (cdUlp == 0 && clUlp == 0)
             {
                 Interlocked.Increment(ref bitExact);
+            }
+            if (double.IsFinite(cd) && double.IsFinite(cl))
+            {
+                Interlocked.Increment(ref finiteResults);
             }
 
             if (cdRelError < 0.01)
@@ -439,6 +460,7 @@ Console.WriteLine($"=== Polar Parity Results ===");
 Console.WriteLine($"Total vectors: {lines.Length}");
 Console.WriteLine($"Converged: {converged} ({passed} within 1% CD, {failed} outside)");
 Console.WriteLine($"Bit-exact (0 ULP in CD AND CL): {bitExact} / {converged} ({(converged > 0 ? (double)bitExact / converged : 0):P1})");
+Console.WriteLine($"Finite CD+CL: {finiteResults} / {converged} ({(converged > 0 ? (double)finiteResults / converged : 0):P1})");
 Console.WriteLine($"Skipped/diverged: {skipped}");
 Console.WriteLine($"Pass rate (within 1% CD): {passRate:P1}");
 Console.WriteLine($"Max CD relative error: {maxCdRelError:P4}");
