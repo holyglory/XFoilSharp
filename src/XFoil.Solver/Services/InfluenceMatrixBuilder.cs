@@ -1,7 +1,6 @@
 using System;
 using System.Numerics;
 using XFoil.Core.Numerics;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
@@ -19,6 +18,8 @@ namespace XFoil.Solver.Services;
 /// </summary>
 public static class InfluenceMatrixBuilder
 {
+    private const string traceScope = nameof(InfluenceMatrixBuilder);
+
     /// <summary>
     /// Builds the analytical DIJ matrix from the LU-factored inviscid system.
     /// For each panel j, constructs RHS from SourceInfluence (BIJ) column j,
@@ -80,17 +81,6 @@ public static class InfluenceMatrixBuilder
         WakeGeometryData? wakeGeometry,
         bool useLegacyWakeSourceKernelPrecision = false)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-            new
-            {
-                inviscidState.NodeCount,
-                nWake,
-                freestreamSpeed,
-                angleOfAttackRadians,
-                useLegacyWakeSourceKernelPrecision,
-                hasWakeGeometry = wakeGeometry != null
-            });
         int n = inviscidState.NodeCount;
         int totalSize = n + nWake;
         var dij = new double[totalSize, totalSize];
@@ -113,34 +103,9 @@ public static class InfluenceMatrixBuilder
             }
             rhs[n] = 0.0;
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Array(
-                    SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                    "airfoil_rhs_column",
-                    rhs,
-                    new
-                    {
-                        sourceIndex = j + 1,
-                        precisionMode = inviscidState.UseLegacyKernelPrecision ? "legacy" : "precise"
-                    });
-            }
 
             for (int row = 0; row < n + 1; row++)
             {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "airfoil_rhs_column_entry",
-                        SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                        new
-                        {
-                            sourceIndex = j + 1,
-                            row = row + 1,
-                            value = rhs[row],
-                            precisionMode = inviscidState.UseLegacyKernelPrecision ? "legacy" : "precise"
-                        });
-                }
             }
 
             BackSubstituteAirfoilColumn(inviscidState, rhs, n + 1);
@@ -151,34 +116,9 @@ public static class InfluenceMatrixBuilder
                 dij[i, j] = rhs[i];
             }
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Array(
-                    SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                    "airfoil_sol_column",
-                    rhs,
-                    new
-                    {
-                        sourceIndex = j + 1,
-                        precisionMode = inviscidState.UseLegacyKernelPrecision ? "legacy" : "precise"
-                    });
-            }
 
             for (int row = 0; row < n + 1; row++)
             {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "airfoil_sol_column_entry",
-                        SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                        new
-                        {
-                            sourceIndex = j + 1,
-                            row = row + 1,
-                            value = rhs[row],
-                            precisionMode = inviscidState.UseLegacyKernelPrecision ? "legacy" : "precise"
-                        });
-                }
             }
         }
 
@@ -200,13 +140,6 @@ public static class InfluenceMatrixBuilder
         // GDB parity: dump DIJ at specific elements (1-based indices in output)
         
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "dij_ready",
-                SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                new { rows = dij.GetLength(0), cols = dij.GetLength(1), nWake });
-        }
         return dij;
     }
 
@@ -399,17 +332,6 @@ public static class InfluenceMatrixBuilder
         WakeGeometryData? wakeGeometry,
         bool useLegacyWakeSourceKernelPrecision)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-            new
-            {
-                inviscidState.NodeCount,
-                nWake,
-                freestreamSpeed,
-                angleOfAttackRadians,
-                useLegacyWakeSourceKernelPrecision,
-                hasWakeGeometry = wakeGeometry != null
-            });
         int n = inviscidState.NodeCount;
         LegacyWakeSolveContext? legacyWakeContext = useLegacyWakeSourceKernelPrecision
             ? (inviscidState.UseLegacyKernelPrecision
@@ -476,34 +398,9 @@ public static class InfluenceMatrixBuilder
                 rhs[n - 1] = 0.0;
             }
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Array(
-                    SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                    "wake_rhs_column",
-                    rhs,
-                    new
-                    {
-                        sourceIndex = jw + 1,
-                        precisionMode = useLegacyWakeSourceKernelPrecision ? "legacy" : "precise"
-                    });
-            }
 
             for (int row = 0; row < n + 1; row++)
             {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "wake_rhs_column_entry",
-                        SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                        new
-                        {
-                            sourceIndex = jw + 1,
-                            row = row + 1,
-                            value = rhs[row],
-                            precisionMode = useLegacyWakeSourceKernelPrecision ? "legacy" : "precise"
-                        });
-                }
             }
 
             
@@ -523,43 +420,11 @@ public static class InfluenceMatrixBuilder
             // Trace wake DIJ at row 76 (0-based) for each wake column
             
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Array(
-                    SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                    "wake_sol_column",
-                    rhs,
-                    new
-                    {
-                        sourceIndex = jw + 1,
-                        precisionMode = useLegacyWakeSourceKernelPrecision ? "legacy" : "precise"
-                    });
-            }
 
             for (int row = 0; row < n + 1; row++)
             {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "wake_sol_column_entry",
-                        SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                        new
-                        {
-                            sourceIndex = jw + 1,
-                            row = row + 1,
-                            value = rhs[row],
-                            precisionMode = useLegacyWakeSourceKernelPrecision ? "legacy" : "precise"
-                        });
-                }
             }
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "wake_column_ready",
-                    SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                    new { wakeColumn = column + 1, sourceIndex = jw + 1 });
-            }
         }
 
         // QDCALC: build wake rows from direct source influence plus the effect of
@@ -715,13 +580,6 @@ public static class InfluenceMatrixBuilder
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "legacy_wake_coupling_state_ready",
-                SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                new { size, freestreamSpeed, angleOfAttackRadians });
-        }
         return new LegacyWakeSolveContext(legacyState, luFactors, (int[])legacyState.LegacyPivotIndices.Clone());
     }
 
@@ -829,10 +687,6 @@ public static class InfluenceMatrixBuilder
         out double[] dzdm,
         out double[] dqdm)
     {
-        string traceScope = SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder));
-        using var scope = SolverTrace.Scope(
-            traceScope,
-            new { fieldNodeIndex, fieldX, fieldY, fieldWakeIndex, wakeCount = wake.Count });
 
         const float qopi = 1f / (4f * MathF.PI);
         const float tiny = 1e-30f;
@@ -846,23 +700,6 @@ public static class InfluenceMatrixBuilder
         float fieldNormalXF = (float)fieldNormalX;
         float fieldNormalYF = (float)fieldNormalY;
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "pswlin_field",
-                traceScope,
-                new
-                {
-                    fieldIndex = fieldNodeIndex,
-                    fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                    fieldX,
-                    fieldY,
-                    fieldNormalX,
-                    fieldNormalY,
-                    precision = nameof(Single),
-                    wakeCount = nWake
-                });
-        }
 
         for (int jo = 0; jo < nWake - 1; jo++)
         {
@@ -1065,71 +902,14 @@ public static class InfluenceMatrixBuilder
                 dzdmSingle[jm] += dzJm;
                 if (jm == 0)
                 {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "wake_source_accum",
-                            traceScope,
-                            new
-                            {
-                                fieldIndex = fieldNodeIndex,
-                                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                                wakeSegment = jo + 1,
-                                half = 1,
-                                targetIndex = 1,
-                                precision = nameof(Single),
-                                quantity = "dzdm",
-                                term = "jm",
-                                delta = dzJm,
-                                total = dzdmSingle[jm]
-                            });
-                    }
                 }
                 dzdmSingle[jo] += dzJo;
                 if (jo == 0)
                 {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "wake_source_accum",
-                            traceScope,
-                            new
-                            {
-                                fieldIndex = fieldNodeIndex,
-                                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                                wakeSegment = jo + 1,
-                                half = 1,
-                                targetIndex = 1,
-                                precision = nameof(Single),
-                                quantity = "dzdm",
-                                term = "jo",
-                                delta = dzJo,
-                                total = dzdmSingle[jo]
-                            });
-                    }
                 }
                 dzdmSingle[jp] += dzJp;
                 if (jp == 0)
                 {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "wake_source_accum",
-                            traceScope,
-                            new
-                            {
-                                fieldIndex = fieldNodeIndex,
-                                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                                wakeSegment = jo + 1,
-                                half = 1,
-                                targetIndex = 1,
-                                precision = nameof(Single),
-                                quantity = "dzdm",
-                                term = "jp",
-                                delta = dzJp,
-                                total = dzdmSingle[jp]
-                            });
-                    }
                 }
 
                 // Native Arm64 XFoil contracts these three-product REAL sums as a
@@ -1183,29 +963,6 @@ public static class InfluenceMatrixBuilder
                 float dqJo = LegacyPrecisionMath.RoundBarrier(qopi * dqJoInner);
                 float dqJpInner = LegacyWideProductSum(psni, dsio + dsim, pdni, dsio - dsim);
                 float dqJp = qopi * dqJpInner;
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "pswlin_recurrence",
-                        traceScope,
-                        new
-                        {
-                            fieldIndex = fieldNodeIndex,
-                            fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                            wakeSegment = jo + 1,
-                            half = 1,
-                            precision = nameof(Single),
-                            dzJoLeft = LegacyPrecisionMath.RoundBarrier((-psum) * dsio),
-                            dzJoRight = LegacyPrecisionMath.RoundBarrier(pdif * dsio),
-                            dzJoInner,
-                            dzJo,
-                            dqJoLeft,
-                            dqJoRight,
-                            dqJoInner,
-                            dqJo,
-                            qopi
-                        });
-                }
                 dqdmSingle[jm] += dqJm;
                 dqdmSingle[jo] += dqJo;
                 dqdmSingle[jp] += dqJp;
@@ -1344,71 +1101,14 @@ public static class InfluenceMatrixBuilder
                 dzdmSingle[jo] += dzJo;
                 if (jo == 0)
                 {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "wake_source_accum",
-                            traceScope,
-                            new
-                            {
-                                fieldIndex = fieldNodeIndex,
-                                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                                wakeSegment = jo + 1,
-                                half = 2,
-                                targetIndex = 1,
-                                precision = nameof(Single),
-                                quantity = "dzdm",
-                                term = "jo",
-                                delta = dzJo,
-                                total = dzdmSingle[jo]
-                            });
-                    }
                 }
                 dzdmSingle[jp] += dzJp;
                 if (jp == 0)
                 {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "wake_source_accum",
-                            traceScope,
-                            new
-                            {
-                                fieldIndex = fieldNodeIndex,
-                                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                                wakeSegment = jo + 1,
-                                half = 2,
-                                targetIndex = 1,
-                                precision = nameof(Single),
-                                quantity = "dzdm",
-                                term = "jp",
-                                delta = dzJp,
-                                total = dzdmSingle[jp]
-                            });
-                    }
                 }
                 dzdmSingle[jq] += dzJq;
                 if (jq == 0)
                 {
-                    if (SolverTrace.IsActive)
-                    {
-                        SolverTrace.Event(
-                            "wake_source_accum",
-                            traceScope,
-                            new
-                            {
-                                fieldIndex = fieldNodeIndex,
-                                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                                wakeSegment = jo + 1,
-                                half = 2,
-                                targetIndex = 1,
-                                precision = nameof(Single),
-                                quantity = "dzdm",
-                                term = "jq",
-                                delta = dzJq,
-                                total = dzdmSingle[jq]
-                            });
-                    }
                 }
 
                 float xSum = x1i + x2i;
@@ -1466,30 +1166,6 @@ public static class InfluenceMatrixBuilder
                 float dqJqRight = LegacyPrecisionMath.RoundBarrier(pdni * dsip);
                 float dqJqInner = LegacyWideProductSum(psni, dsip, pdni, dsip);
                 float dqJq = LegacyPrecisionMath.RoundBarrier(qopi * dqJqInner);
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "pswlin_recurrence",
-                        traceScope,
-                        new
-                        {
-                            fieldIndex = fieldNodeIndex,
-                            fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                            wakeSegment = jo + 1,
-                            half = 2,
-                            precision = nameof(Single),
-                            dzJoLeft = LegacyPrecisionMath.RoundBarrier((-psum) * (dsip + dsio)),
-                            dzJoRight = LegacyPrecisionMath.RoundBarrier(pdif * (dsip - dsio)),
-                            dzJoInner,
-                            dzJo,
-                            dqJoLeft,
-                            dqJoRight,
-                            dqJoInner,
-                            dqJo,
-                            dqJp,
-                            qopi
-                        });
-                }
                 dqdmSingle[jo] += dqJo;
                 dqdmSingle[jp] += dqJp;
                 dqdmSingle[jq] += dqJq;
@@ -1567,49 +1243,8 @@ public static class InfluenceMatrixBuilder
             dzdm[i] = dzdmSingle[i];
             dqdm[i] = dqdmSingle[i];
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "wake_source_entry",
-                    traceScope,
-                    new
-                    {
-                        fieldIndex = fieldNodeIndex,
-                        fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                        index = i + 1,
-                        precision = nameof(Single),
-                        dzdm = dzdm[i],
-                        dqdm = dqdm[i]
-                    });
-            }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                traceScope,
-                "wake_source_dzdm",
-                dzdm,
-                new
-                {
-                    fieldIndex = fieldNodeIndex,
-                    fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                    precision = nameof(Single)
-                });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                traceScope,
-                "wake_source_dqdm",
-                dqdm,
-                new
-                {
-                    fieldIndex = fieldNodeIndex,
-                    fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                    precision = nameof(Single)
-                });
-        }
     }
 
     // Legacy mapping: f_xfoil/src/xpanel.f :: PSWLIN wake-source kernel (typed managed core).
@@ -1627,10 +1262,6 @@ public static class InfluenceMatrixBuilder
         out double[] dqdm)
         where T : struct, IFloatingPointIeee754<T>
     {
-        string traceScope = SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder));
-        using var scope = SolverTrace.Scope(
-            traceScope,
-            new { fieldNodeIndex, fieldX, fieldY, fieldWakeIndex, wakeCount = wake.Count });
 
         T qopi = T.One / (T.CreateChecked(4.0) * T.Pi);
         T half = T.CreateChecked(0.5);
@@ -1646,23 +1277,6 @@ public static class InfluenceMatrixBuilder
         T fieldNormalXT = T.CreateChecked(fieldNormalX);
         T fieldNormalYT = T.CreateChecked(fieldNormalY);
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "pswlin_field",
-                traceScope,
-                new
-                {
-                    fieldIndex = fieldNodeIndex,
-                    fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                    fieldX,
-                    fieldY,
-                    fieldNormalX,
-                    fieldNormalY,
-                    precision = typeof(T).Name,
-                    wakeCount = nWake
-                });
-        }
 
         for (int jo = 0; jo < nWake - 1; jo++)
         {
@@ -2036,49 +1650,8 @@ public static class InfluenceMatrixBuilder
             dzdm[i] = double.CreateChecked(dzdmTyped[i]);
             dqdm[i] = double.CreateChecked(dqdmTyped[i]);
 
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "wake_source_entry",
-                    traceScope,
-                    new
-                    {
-                        fieldIndex = fieldNodeIndex,
-                        fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                        index = i + 1,
-                        precision = typeof(T).Name,
-                        dzdm = dzdm[i],
-                        dqdm = dqdm[i]
-                    });
-            }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                traceScope,
-                "wake_source_dzdm",
-                dzdm,
-                new
-                {
-                    fieldIndex = fieldNodeIndex,
-                    fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                    precision = typeof(T).Name
-                });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                traceScope,
-                "wake_source_dqdm",
-                dqdm,
-                new
-                {
-                    fieldIndex = fieldNodeIndex,
-                    fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                    precision = typeof(T).Name
-                });
-        }
     }
 
     // Legacy mapping: none; managed-only trace helper family around QDCALC/PSWLIN wake diagnostics.
@@ -2106,31 +1679,6 @@ public static class InfluenceMatrixBuilder
         T ry2)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pswlin_geometry",
-            scope,
-            new
-            {
-                fieldIndex = fieldNodeIndex,
-                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                wakeSegment = wakeSegmentIndex + 1,
-                precision,
-                xJo = double.CreateChecked(xJo),
-                yJo = double.CreateChecked(yJo),
-                xJp = double.CreateChecked(xJp),
-                yJp = double.CreateChecked(yJp),
-                dxPanel = double.CreateChecked(dxPanel),
-                dyPanel = double.CreateChecked(dyPanel),
-                dso = double.CreateChecked(dso),
-                dsio = double.CreateChecked(dsio),
-                sx = double.CreateChecked(sx),
-                sy = double.CreateChecked(sy),
-                rx1 = double.CreateChecked(rx1),
-                ry1 = double.CreateChecked(ry1),
-                rx2 = double.CreateChecked(rx2),
-                ry2 = double.CreateChecked(ry2)
-            });
     }
 
     private static void TracePswlinPdx0Terms<T>(
@@ -2149,25 +1697,6 @@ public static class InfluenceMatrixBuilder
         T pdx0)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pswlin_pdx0_terms",
-            scope,
-            new
-            {
-                fieldIndex = fieldNodeIndex,
-                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                wakeSegment = wakeSegmentIndex + 1,
-                half = halfIndex,
-                precision,
-                pdx0Term1 = double.CreateChecked(pdx0Term1),
-                pdx0Term2 = double.CreateChecked(pdx0Term2),
-                pdx0Term3 = double.CreateChecked(pdx0Term3),
-                pdx0Accum1 = double.CreateChecked(pdx0Accum1),
-                pdx0Accum2 = double.CreateChecked(pdx0Accum2),
-                pdx0Numerator = double.CreateChecked(pdx0Numerator),
-                pdx0 = double.CreateChecked(pdx0)
-            });
     }
 
     private static float LegacySingleLength(float dx, float dy)
@@ -2252,75 +1781,6 @@ public static class InfluenceMatrixBuilder
         T? dqJq)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        static double? ConvertOptional<TValue>(TValue? value)
-            where TValue : struct, IFloatingPointIeee754<TValue>
-            => value.HasValue ? double.CreateChecked(value.Value) : null;
-
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "pswlin_segment",
-                scope,
-                new
-                {
-                    fieldIndex = fieldNodeIndex,
-                    fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                    wakeSegment = wakeSegmentIndex + 1,
-                    half = halfIndex,
-                    precision,
-                    jm = jm + 1,
-                    jo = jo + 1,
-                    jp = jp + 1,
-                    jq = jq + 1,
-                    x1 = double.CreateChecked(x1),
-                    x2 = double.CreateChecked(x2),
-                    yy = double.CreateChecked(yy),
-                    sgn = double.CreateChecked(sgn),
-                    panelAngle = double.CreateChecked(panelAngle),
-                    x1i = double.CreateChecked(x1i),
-                    x2i = double.CreateChecked(x2i),
-                    yyi = double.CreateChecked(yyi),
-                    rs0 = double.CreateChecked(rs0),
-                    rs1 = double.CreateChecked(rs1),
-                    rs2 = double.CreateChecked(rs2),
-                    g0 = double.CreateChecked(g0),
-                    g1 = double.CreateChecked(g1),
-                    g2 = double.CreateChecked(g2),
-                    t0 = double.CreateChecked(t0),
-                    t1 = double.CreateChecked(t1),
-                    t2 = double.CreateChecked(t2),
-                    dso = double.CreateChecked(dso),
-                    dsio = double.CreateChecked(dsio),
-                    dsm = ConvertOptional(dsm),
-                    dsim = ConvertOptional(dsim),
-                    dsp = ConvertOptional(dsp),
-                    dsip = ConvertOptional(dsip),
-                    dxInv = double.CreateChecked(dxInv),
-                    ssum = ConvertOptional(ssum),
-                    sdif = ConvertOptional(sdif),
-                    psum = double.CreateChecked(psum),
-                    pdif = double.CreateChecked(pdif),
-                    psx0 = double.CreateChecked(psx0),
-                    psx1 = ConvertOptional(psx1),
-                    psx2 = ConvertOptional(psx2),
-                    psyy = double.CreateChecked(psyy),
-                    pdx0 = double.CreateChecked(pdx0),
-                    pdx1 = ConvertOptional(pdx1),
-                    pdx2 = ConvertOptional(pdx2),
-                    pdyy = double.CreateChecked(pdyy),
-                    psni = double.CreateChecked(psni),
-                    pdni = double.CreateChecked(pdni),
-                    dzJm = ConvertOptional(dzJm),
-                    dzJo = double.CreateChecked(dzJo),
-                    dzJp = double.CreateChecked(dzJp),
-                    dzJq = ConvertOptional(dzJq),
-                    dqJm = ConvertOptional(dqJm),
-                    dqJo = double.CreateChecked(dqJo),
-                    dqJp = double.CreateChecked(dqJp),
-                    dqJq = ConvertOptional(dqJq)
-                });
-        }
     }
 
     private static void TracePswlinHalfTerms<T>(
@@ -2346,32 +1806,6 @@ public static class InfluenceMatrixBuilder
         T pdif)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pswlin_half_terms",
-            scope,
-            new
-            {
-                fieldIndex = fieldNodeIndex,
-                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                wakeSegment = wakeSegmentIndex + 1,
-                half = halfIndex,
-                precision,
-                x0 = double.CreateChecked(x0),
-                psumTerm1 = double.CreateChecked(psumTerm1),
-                psumTerm2 = double.CreateChecked(psumTerm2),
-                psumTerm3 = double.CreateChecked(psumTerm3),
-                psumAccum = double.CreateChecked(psumAccum),
-                psum = double.CreateChecked(psum),
-                pdifTerm1 = double.CreateChecked(pdifTerm1),
-                pdifTerm2 = double.CreateChecked(pdifTerm2),
-                pdifTerm3 = double.CreateChecked(pdifTerm3),
-                pdifTerm4 = double.CreateChecked(pdifTerm4),
-                pdifBase = double.CreateChecked(pdifBase),
-                pdifAccum = double.CreateChecked(pdifAccum),
-                pdifNumerator = double.CreateChecked(pdifNumerator),
-                pdif = double.CreateChecked(pdif)
-            });
     }
 
     private static void TracePswlinNiTerms(
@@ -2398,34 +1832,6 @@ public static class InfluenceMatrixBuilder
         float pdAccum12,
         float pdni)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pswlin_ni_terms",
-            scope,
-            new
-            {
-                fieldIndex = fieldNodeIndex,
-                fieldWakeIndex = fieldWakeIndex >= 0 ? fieldWakeIndex + 1 : -1,
-                wakeSegment = wakeSegmentIndex + 1,
-                half = halfIndex,
-                precision,
-                xSum,
-                xHalf,
-                psLeadRaw,
-                psLeadScaled,
-                psTerm1,
-                psTerm2,
-                psTerm3,
-                psAccum12,
-                psni,
-                pdLeadRaw,
-                pdLeadScaled,
-                pdTerm1,
-                pdTerm2,
-                pdTerm3,
-                pdAccum12,
-                pdni
-            });
     }
 
     // Legacy mapping: f_xfoil/src/xpanel.f :: XYWAKE.
@@ -2451,16 +1857,6 @@ public static class InfluenceMatrixBuilder
         double angleOfAttackRadians)
         where T : struct, IFloatingPointIeee754<T>
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-            new
-            {
-                panelState.NodeCount,
-                nWake,
-                freestreamSpeed,
-                angleOfAttackRadians,
-                precision = typeof(T).Name
-            });
         var x = new T[nWake];
         var y = new T[nWake];
         var nx = new T[nWake];
@@ -2509,26 +1905,6 @@ public static class InfluenceMatrixBuilder
             y[i] = LegacyPrecisionMath.FusedMultiplyAdd(ds, nx[i], y[i - 1]);
             
             
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "wake_step_terms",
-                    SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                    new
-                    {
-                        // Legacy XYWAKE traces the marched node as the global wake-array
-                        // index offset (I-N+1), so the first downstream step is index=3.
-                        index = i + 2,
-                        ds = double.CreateChecked(ds),
-                        previousX = double.CreateChecked(x[i - 1]),
-                        previousY = double.CreateChecked(y[i - 1]),
-                        normalX = double.CreateChecked(nx[i]),
-                        normalY = double.CreateChecked(ny[i]),
-                        x = double.CreateChecked(x[i]),
-                        y = double.CreateChecked(y[i]),
-                        precision = typeof(T).Name
-                    });
-            }
 
             if (i < nWake - 1)
             {
@@ -2558,21 +1934,6 @@ public static class InfluenceMatrixBuilder
             ToDoubleArray(ny),
             ToDoubleArray(panelAngle));
         TraceWakeGeometry(geometry.X, geometry.Y, geometry.NormalX, geometry.NormalY, geometry.PanelAngle);
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "wake_geometry_ready",
-                SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                new
-                {
-                    nWake,
-                    precision = typeof(T).Name,
-                    firstX = geometry.X[0],
-                    firstY = geometry.Y[0],
-                    lastX = geometry.X[^1],
-                    lastY = geometry.Y[^1]
-                });
-        }
         return geometry;
     }
 
@@ -2659,28 +2020,6 @@ public static class InfluenceMatrixBuilder
 
         
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "wake_panel_state",
-                SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                new
-                {
-                    index = wakeNodeIndex + 1,
-                    fieldIndex = fieldNodeIndex + 1,
-                    x,
-                    y,
-                    psiX,
-                    psiY,
-                    magnitude = magDouble,
-                    usedFallback = usedFallback ? 1 : 0,
-                    panelAngle = double.CreateChecked(panelAngle),
-                    currentNormalX = double.CreateChecked(fallbackNormalX),
-                    currentNormalY = double.CreateChecked(fallbackNormalY),
-                    nextNormalX = double.CreateChecked(nextNormalX),
-                    nextNormalY = double.CreateChecked(nextNormalY)
-                });
-        }
     }
 
     private static T EstimateFirstWakeSpacing<T>(LinearVortexPanelState panelState)
@@ -2715,23 +2054,6 @@ public static class InfluenceMatrixBuilder
             ? T.CreateChecked(0.5) * upper
             : T.CreateChecked(0.5) * (upper + lower);
         T tracedLower = singlePrecisionWakeTrace ? T.Zero : lower;
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "wake_spacing_input",
-                SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder)),
-                new
-                {
-                    precision = typeof(T).Name,
-                    upperStart = panelState.ArcLength[0],
-                    upperEnd = panelState.ArcLength[1],
-                    lowerStart = panelState.ArcLength[n - 2],
-                    lowerEnd = panelState.ArcLength[n - 1],
-                    upperDelta = double.CreateChecked(upper),
-                    lowerDelta = double.CreateChecked(tracedLower),
-                    ds1 = double.CreateChecked(ds1)
-                });
-        }
         return T.Max(ds1, T.CreateChecked(1.0e-4));
     }
 
@@ -2783,28 +2105,6 @@ public static class InfluenceMatrixBuilder
         IReadOnlyList<double> ny,
         IReadOnlyList<double> panelAngle)
     {
-        if (!SolverTrace.IsActive) return;
-        string scope = SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder));
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "wake_geometry_x", x, new { count = x.Count });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "wake_geometry_y", y, new { count = y.Count });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "wake_geometry_nx", nx, new { count = nx.Count });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "wake_geometry_ny", ny, new { count = ny.Count });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "wake_geometry_panel_angle", panelAngle, new { count = panelAngle.Count });
-        }
 
         int panelCount = panelAngle.Count;
         for (int index = 0; index < x.Count; index++)
@@ -2812,21 +2112,6 @@ public static class InfluenceMatrixBuilder
             // Legacy full-trace packets emit a terminal 0.0 angle for the last
             // wake node even though the wake-panel array has only nWake-1 entries.
             double tracedPanelAngle = index < panelCount ? panelAngle[index] : 0.0;
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "wake_node",
-                    scope,
-                    new
-                    {
-                        index = index + 1,
-                        x = x[index],
-                        y = y[index],
-                        nx = nx[index],
-                        ny = ny[index],
-                        panelAngle = tracedPanelAngle
-                    });
-            }
         }
     }
 
@@ -2834,29 +2119,10 @@ public static class InfluenceMatrixBuilder
         IReadOnlyList<double> distances,
         double firstSpacing)
     {
-        if (!SolverTrace.IsActive) return;
-        string scope = SolverTrace.ScopeName(typeof(InfluenceMatrixBuilder));
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(scope, "wake_spacing_distance", distances, new { count = distances.Count, firstSpacing });
-        }
 
         for (int index = 0; index < distances.Count; index++)
         {
             double delta = index == 0 ? 0.0 : distances[index] - distances[index - 1];
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "wake_spacing",
-                    scope,
-                    new
-                    {
-                        index = index + 1,
-                        distance = distances[index],
-                        delta,
-                        firstSpacing
-                    });
-            }
         }
     }
 

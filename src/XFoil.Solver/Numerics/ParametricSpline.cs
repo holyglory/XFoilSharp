@@ -5,7 +5,6 @@
 // Differences: The algorithms remain aligned with the legacy spline.f family, but the managed port packages boundary conditions as a typed value, shares float/double/generic paths, and adds structured tracing instead of relying on implicit work arrays and ad hoc debugging.
 // Decision: Keep the managed spline utility because it preserves the spline.f algorithms while making precision, boundary conditions, and tracing explicit.
 using System.Numerics;
-using XFoil.Solver.Diagnostics;
 
 namespace XFoil.Solver.Numerics;
 
@@ -698,35 +697,6 @@ public static class ParametricSpline
         string precision)
         where T : struct, IFloatingPointIeee754<T>
     {
-        SolverTrace.Event(
-            "spline_eval",
-            scope,
-            new
-            {
-                routine,
-                lowerIndex,
-                upperIndex,
-                parameter = double.CreateChecked(parameter),
-                ds = double.CreateChecked(ds),
-                t = double.CreateChecked(t),
-                valueLow = double.CreateChecked(valueLow),
-                valueHigh = double.CreateChecked(valueHigh),
-                derivativeLow = double.CreateChecked(derivativeLow),
-                derivativeHigh = double.CreateChecked(derivativeHigh),
-                cx1 = double.CreateChecked(cx1),
-                cx2 = double.CreateChecked(cx2),
-                delta = double.CreateChecked(delta),
-                factor1 = double.CreateChecked(factor1),
-                factor2 = double.CreateChecked(factor2),
-                product1 = double.CreateChecked(product1),
-                product2 = double.CreateChecked(product2),
-                operand1 = double.CreateChecked(operand1),
-                operand2 = double.CreateChecked(operand2),
-                operandCombined = double.CreateChecked(operandCombined),
-                accumulator = double.CreateChecked(accumulator),
-                value = double.CreateChecked(value),
-                precision
-            });
     }
 
     // Legacy mapping: none; structured segment tracing is managed-only diagnostics around SEGSPL.
@@ -741,18 +711,6 @@ public static class ParametricSpline
         string endBoundaryCondition,
         string precision)
     {
-        SolverTrace.Event(
-            "spline_segment",
-            scope,
-            new
-            {
-                routine,
-                segmentStart,
-                segmentCount,
-                startBoundaryCondition,
-                endBoundaryCondition,
-                precision
-            });
     }
 
     // Legacy mapping: none; structured row tracing is managed-only diagnostics around SPLIND.
@@ -773,23 +731,6 @@ public static class ParametricSpline
         string precision)
         where T : struct, IFloatingPointIeee754<T>
     {
-        SolverTrace.Event(
-            "spline_system_row",
-            scope,
-            new
-            {
-                routine,
-                index,
-                value = double.CreateChecked(value),
-                parameter = double.CreateChecked(parameter),
-                lower = double.CreateChecked(lower),
-                diagonal = double.CreateChecked(diagonal),
-                upper = double.CreateChecked(upper),
-                rhs = double.CreateChecked(rhs),
-                startBoundaryCondition,
-                endBoundaryCondition,
-                precision
-            });
     }
 
     // Legacy mapping: none; structured solution tracing is managed-only diagnostics around SPLIND/TRISOL.
@@ -807,20 +748,6 @@ public static class ParametricSpline
         string precision)
         where T : struct, IFloatingPointIeee754<T>
     {
-        SolverTrace.Event(
-            "spline_solution_node",
-            scope,
-            new
-            {
-                routine,
-                index,
-                value = double.CreateChecked(value),
-                parameter = double.CreateChecked(parameter),
-                derivative = double.CreateChecked(derivative),
-                startBoundaryCondition,
-                endBoundaryCondition,
-                precision
-            });
     }
 
     // Legacy mapping: none; structured arc-length tracing is managed-only diagnostics around SCALC.
@@ -837,19 +764,6 @@ public static class ParametricSpline
         string precision)
         where T : struct, IFloatingPointIeee754<T>
     {
-        SolverTrace.Event(
-            "arc_length_step",
-            scope,
-            new
-            {
-                routine,
-                index,
-                dx = double.CreateChecked(dx),
-                dy = double.CreateChecked(dy),
-                segmentLength = double.CreateChecked(segmentLength),
-                cumulative = double.CreateChecked(cumulative),
-                precision
-            });
     }
 
     // Legacy mapping: f_xfoil/src/spline.f :: SCALC point-to-point distance calculation.

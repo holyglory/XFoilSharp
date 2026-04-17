@@ -1,17 +1,13 @@
 using System;
-using System.Globalization;
-using System.IO;
-using System.Linq;
 using System.Numerics;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 
 // Legacy audit:
 // Primary legacy source: f_xfoil/src/xsolve.f :: BLSOLV
 // Secondary legacy source(s): none
 // Role in port: Coupled block-tridiagonal Newton solve for the viscous system.
-// Differences: The C# version splits the legacy monolith into a generic core, debug-trace hooks, and a parity-only float workspace; the Fortran routine is a single REAL kernel.
-// Decision: Keep the managed structure and diagnostics, but preserve the float workspace path when parity mode needs the legacy REAL solve.
+// Differences: The C# version splits the legacy monolith into a generic core and a parity-only float workspace; the Fortran routine is a single REAL kernel.
+// Decision: Keep the managed structure but preserve the float workspace path when parity mode needs the legacy REAL solve.
 
 namespace XFoil.Solver.Numerics;
 
@@ -21,10 +17,7 @@ namespace XFoil.Solver.Numerics;
 /// </summary>
 public static class BlockTridiagonalSolver
 {
-    private const string LegacyTraceScope = "BLSOLV";
     private const double PivotFloor = 1e-30;
-    [ThreadStatic]
-    private static int s_solveCallCount;
 
     /// <summary>
     /// Solves the coupled Newton system in place. The factored solution overwrites
@@ -36,21 +29,9 @@ public static class BlockTridiagonalSolver
     public static void Solve(
         ViscousNewtonSystem system,
         double vaccel = 0.01,
-        TextWriter? debugWriter = null,
         bool useLegacyPrecision = false)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(BlockTridiagonalSolver)),
-            new
-            {
-                nsys = system.NSYS,
-                vaccel,
-                upperTe = system.UpperTeLine + 1,
-                firstWake = system.FirstWakeLine + 1,
-                useLegacyPrecision
-            });
         int nsys = system.NSYS;
-        s_solveCallCount++;
         if (nsys <= 0)
         {
             return;
@@ -92,8 +73,7 @@ public static class BlockTridiagonalSolver
                 system.UpperTeLine,
                 system.FirstWakeLine,
                 system.ArcLengthSpan,
-                (float)vaccel,
-                debugWriter);
+                (float)vaccel);
 
             CopySolutionToDouble(vdel, system.VDEL, nsys);
         }
@@ -109,15 +89,8 @@ public static class BlockTridiagonalSolver
                 system.UpperTeLine,
                 system.FirstWakeLine,
                 system.ArcLengthSpan,
-                vaccel,
-                debugWriter);
+                vaccel);
         }
-
-        SolverTrace.Array(
-            SolverTrace.ScopeName(typeof(BlockTridiagonalSolver)),
-            "vdel_solution_row1",
-            Enumerable.Range(0, nsys).Select(iv => system.VDEL[0, 0, iv]).ToArray(),
-            new { nsys, precision = useLegacyPrecision ? "Single" : "Double" });
     }
 
     // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV
@@ -133,8 +106,7 @@ public static class BlockTridiagonalSolver
         int ivte1,
         int ivz,
         double arcLengthSpan,
-        T vaccel,
-        TextWriter? debugWriter)
+        T vaccel)
         where T : struct, IFloatingPointIeee754<T>
     {
         T span = T.Max(T.CreateChecked(arcLengthSpan), T.CreateChecked(1e-12));
@@ -142,18 +114,12 @@ public static class BlockTridiagonalSolver
         T vacc2 = (vaccel * T.CreateChecked(2.0)) / span;
         T vacc3 = (vaccel * T.CreateChecked(2.0)) / span;
 
-        // Dump pre-solve VDEL at call 14 to verify input matches
-        
         // Legacy block: xsolve.f BLSOLV forward elimination sweep.
         for (int iv = 0; iv < nsys; iv++)
         {
             int ivp = iv + 1;
-            SolverTrace.Event(
-                "forward_elimination",
-                SolverTrace.ScopeName(typeof(BlockTridiagonalSolver)),
-                new { iv = iv + 1, ivp = ivp + 1, precision = GetPrecisionLabel<T>() });
 
-            T pivot = SafeReciprocal(va[0, 0, iv], "VA11", iv, debugWriter);
+            T pivot = SafeReciprocal(va[0, 0, iv]);
             va[0, 1, iv] *= pivot;
             for (int l = iv; l < nsys; l++)
             {
@@ -176,7 +142,7 @@ public static class BlockTridiagonalSolver
                 vdel[k, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vdel[0, 1, iv], vdel[k, 1, iv]);
             }
 
-            pivot = SafeReciprocal(va[1, 1, iv], "VA22", iv, debugWriter);
+            pivot = SafeReciprocal(va[1, 1, iv]);
             for (int l = iv; l < nsys; l++)
             {
                 vm[1, l, iv] *= pivot;
@@ -196,7 +162,7 @@ public static class BlockTridiagonalSolver
                 vdel[2, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vdel[1, 1, iv], vdel[2, 1, iv]);
             }
 
-            pivot = SafeReciprocal(vm[2, iv, iv], "VM33", iv, debugWriter);
+            pivot = SafeReciprocal(vm[2, iv, iv]);
             for (int l = ivp; l < nsys; l++)
             {
                 vm[2, l, iv] *= pivot;
@@ -258,15 +224,11 @@ public static class BlockTridiagonalSolver
                     vtmp1, vdel[0, 1, iv],
                     vtmp2, vdel[1, 1, iv],
                     vtmp3, vdel[2, 1, iv]);
-                // GDB: dump VB elimination inputs at IV=0, K=0
-                
+
                 vdel[k, 0, ivp] -= delta0;
                 vdel[k, 1, ivp] -= delta1;
-                // no trace
             }
 
-            // GDB: dump V3nxt BEFORE VZ elimination at TE
-            
             if (iv == ivte1 && ivz >= 0 && ivz < nsys)
             {
                 for (int k = 0; k < 3; k++)
@@ -286,8 +248,6 @@ public static class BlockTridiagonalSolver
                 }
             }
 
-            // (dump moved to end of main loop)
-
             if (ivp >= nsys - 1)
             {
                 continue;
@@ -298,9 +258,6 @@ public static class BlockTridiagonalSolver
                 T vtmp1 = vm[0, iv, kv];
                 T vtmp2 = vm[1, iv, kv];
                 T vtmp3 = vm[2, iv, kv];
-
-                // GDB: dump vtmp at last system line for first step
-                
 
                 if (T.Abs(vtmp1) > vacc1)
                 {
@@ -335,25 +292,13 @@ public static class BlockTridiagonalSolver
                     vdel[2, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp3, vdel[2, 1, iv], vdel[2, 1, kv]);
                 }
             }
-
-            // GDB: dump at end of each forward elimination step
-            
         }
 
-        WriteDebugRows(debugWriter, "BLSOLV_POST_FORWARD", "VDEL_FWD", "vdel_fwd", vdel, nsys);
-
-        // Dump per-station VDEL[2,0] after forward elimination at call 14
-        
-
         // Legacy block: xsolve.f BLSOLV back substitution.
-        // Difference from legacy: Same reverse sweep, with explicit trace events and helper-based multiply-subtract updates instead of inlined REAL statements.
+        // Difference from legacy: Same reverse sweep using helper-based multiply-subtract updates instead of inlined REAL statements.
         // Decision: Keep the reverse sweep structure and helper calls because they make parity mismatches auditable without changing the algorithm.
         for (int iv = nsys - 1; iv >= 1; iv--)
         {
-            SolverTrace.Event(
-                "back_substitution",
-                SolverTrace.ScopeName(typeof(BlockTridiagonalSolver)),
-                new { iv = iv + 1, precision = GetPrecisionLabel<T>() });
             T vtmp = vdel[2, 0, iv];
             for (int kv = iv - 1; kv >= 0; kv--)
             {
@@ -370,75 +315,12 @@ public static class BlockTridiagonalSolver
                 vdel[2, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vm[2, iv, kv], vtmp, vdel[2, 1, kv]);
             }
         }
-
-        WriteDebugRows(debugWriter, null, "VDEL_SOL", "vdel_sol", vdel, nsys);
     }
-
-    // Legacy mapping: none
-    // Difference from legacy: Managed-only debug formatting helper used to inspect intermediate solver rows; the legacy routine does not have a separate reusable writer like this.
-    // Decision: Keep the helper because it supports parity debugging without changing the solver math.
-    private static void WriteDebugRows<T>(
-        TextWriter? debugWriter,
-        string? header,
-        string label,
-        string traceName,
-        T[,,] vdel,
-        int nsys)
-        where T : struct, IFloatingPointIeee754<T>
-    {
-        for (int iv = 0; iv < nsys; iv++)
-        {
-            SolverTrace.Array(
-                LegacyTraceScope,
-                traceName,
-                new[]
-                {
-                    double.CreateChecked(vdel[0, 0, iv]),
-                    double.CreateChecked(vdel[1, 0, iv]),
-                    double.CreateChecked(vdel[2, 0, iv])
-                },
-                new { iv = iv + 1 });
-        }
-
-        if (debugWriter is null)
-        {
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(header))
-        {
-            debugWriter.WriteLine(header);
-        }
-
-        int logCount = Math.Min(5, nsys);
-        for (int iv = 0; iv < logCount; iv++)
-        {
-            debugWriter.WriteLine(string.Format(
-                CultureInfo.InvariantCulture,
-                "{0} IV={1,4}{2,15:E8} {3,15:E8} {4,15:E8}",
-                label,
-                iv + 1,
-                double.CreateChecked(vdel[0, 0, iv]),
-                double.CreateChecked(vdel[1, 0, iv]),
-                double.CreateChecked(vdel[2, 0, iv])));
-        }
-    }
-
-    // Legacy mapping: none
-    // Difference from legacy: Managed-only trace helper that labels whether the generic solver is running in the default double path or the parity float path.
-    // Decision: Keep the helper because it is diagnostic-only.
-    private static string GetPrecisionLabel<T>()
-        where T : struct, IFloatingPointIeee754<T>
-        => typeof(T) == typeof(float) ? "Single" : "Double";
 
     // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV pivot handling
-    // Difference from legacy: The managed solver makes the pivot clamp explicit and traceable instead of relying on raw reciprocal behavior when a pivot approaches zero.
-    // Decision: Keep the explicit guard because it improves diagnosability without changing valid-pivot behavior.
-    private static T SafeReciprocal<T>(
-        T value,
-        string label,
-        int iv,
-        TextWriter? debugWriter)
+    // Difference from legacy: The managed solver makes the pivot clamp explicit instead of relying on raw reciprocal behavior when a pivot approaches zero.
+    // Decision: Keep the explicit guard because it improves robustness without changing valid-pivot behavior.
+    private static T SafeReciprocal<T>(T value)
         where T : struct, IFloatingPointIeee754<T>
     {
         T pivotFloor = T.CreateChecked(PivotFloor);
@@ -449,13 +331,6 @@ public static class BlockTridiagonalSolver
 
         T signValue = value == T.Zero || T.IsNaN(value) ? T.One : value;
         T safeValue = T.CopySign(pivotFloor, signValue);
-        debugWriter?.WriteLine(string.Format(
-            CultureInfo.InvariantCulture,
-            "BLSOLV_PIVOT_CLAMP IV={0,4} LABEL={1} RAW={2,15:E8} SAFE={3,15:E8}",
-            iv + 1,
-            label,
-            double.CreateChecked(value),
-            double.CreateChecked(safeValue)));
         return T.One / safeValue;
     }
 

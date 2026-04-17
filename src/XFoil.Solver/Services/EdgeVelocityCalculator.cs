@@ -1,5 +1,4 @@
 using System;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
@@ -103,9 +102,6 @@ public static class EdgeVelocityCalculator
     // Decision: Keep the explicit map and preserve the original station ordering into the Newton system.
     public static (int[,] isys, int nsys) MapStationsToSystemLines(int[] iblte, int[] nbl)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(EdgeVelocityCalculator)),
-            new { upperTe = iblte[0], lowerTe = iblte[1], upperCount = nbl[0], lowerCount = nbl[1] });
         // Port of IBLSYS from xbl.f:507-527.
         // Fortran: DO IBL=2,NBL(IS) maps station IBL=2 (similarity) as first system line.
         // C# 0-based: station 1 = Fortran IBL=2 (similarity), so start from station 1.
@@ -141,10 +137,6 @@ public static class EdgeVelocityCalculator
             lineNum++;
         }
 
-        SolverTrace.Event(
-            "system_line_mapping",
-            SolverTrace.ScopeName(typeof(EdgeVelocityCalculator)),
-            new { nsys, upperCount = nbl[0], lowerCount = nbl[1] });
         return (isys, nsys);
     }
 
@@ -226,9 +218,6 @@ public static class EdgeVelocityCalculator
     // Decision: Keep the helper and preserve the original basis-speed synthesis.
     public static double[] SetInviscidSpeeds(double[,] basisSpeed, int n, double alpha, bool useLegacyPrecision = false)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(EdgeVelocityCalculator)),
-            new { n, alpha, useLegacyPrecision });
         // QISET is a short linear combination of the 0 deg and 90 deg basis
         // states. The parity branch keeps that blend on the shared float/FMA
         // helpers so the alpha synthesis follows the classic REAL path too.
@@ -246,11 +235,6 @@ public static class EdgeVelocityCalculator
                 useLegacyPrecision);
         }
 
-        SolverTrace.Array(
-            SolverTrace.ScopeName(typeof(EdgeVelocityCalculator)),
-            "qinv",
-            q,
-            new { n, alpha });
         return q;
     }
 

@@ -21,11 +21,6 @@ namespace XFoil.Solver.Services;
 /// </summary>
 public static class ViscousNewtonAssembler
 {
-    [ThreadStatic]
-    private static int s_buildCallCount;
-
-    internal static int BuildCallCount => s_buildCallCount;
-
     private const double Gamma = 1.4;
     private const double Gm1 = Gamma - 1.0;
 
@@ -84,7 +79,6 @@ public static class ViscousNewtonAssembler
         double[,] ueInv,
         int isp = -1,
         int nPanel = -1,
-        TextWriter? debugWriter = null,
         double[,]? cachedUsav = null,
         double? cachedSstGo = null,
         double? cachedSstGp = null,
@@ -93,7 +87,6 @@ public static class ViscousNewtonAssembler
         // wakeGap[0] = WGAP(1) by ~2 ULP due to cubic (AA+BB) rounding.
         double anteRaw = 0.0)
     {
-        s_buildCallCount++;
         int nsys = newtonSystem.NSYS;
         var va = newtonSystem.VA;
         var vb = newtonSystem.VB;
@@ -117,7 +110,7 @@ public static class ViscousNewtonAssembler
         // Parity mode needs the REAL-staged GAMM1 value that classic XFoil feeds
         // into COMSET/BLKIN, not the double literal 0.4.
         double gm1bl = LegacyPrecisionMath.GammaMinusOne(useLegacyPrecision);
-        double[,] usav = cachedUsav ?? ComputePredictedEdgeVelocities(blState, dij, ueInv, isp, nPanel, debugWriter, useLegacyPrecision);
+        double[,] usav = cachedUsav ?? ComputePredictedEdgeVelocities(blState, dij, ueInv, isp, nPanel, null, useLegacyPrecision);
         ComputeLeadingEdgeSensitivities(
             blState,
             out double sstGoComputed,
@@ -343,11 +336,6 @@ public static class ViscousNewtonAssembler
                     // Store transition arc-length position (Fortran: XSSITR(IS) = XT)
                     if (blState.TINDEX != null)
                         blState.TINDEX[side] = trResult.TransitionXi;
-                    if (debugWriter != null)
-                    {
-                        debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                            "TRANSITION IS={0} IBL={1} XT={2,15:E8}", side + 1, ibl, trResult.TransitionXi));
-                    }
                 }
 
                 // Assemble local BL system
@@ -463,7 +451,7 @@ public static class ViscousNewtonAssembler
                         station1SecondaryOverride: null,
                         traceSide: side + 1,
                         traceStation: ibl + 1,
-                        traceIteration: s_buildCallCount,
+                        traceIteration: 0,
                         staleVs121: 0.0,
                         // Fortran SETBL: TRCHEK computes XT once, then BLSYS/TRDIF
                         // reads XT from COMMON. Passing the SETBL TRCHEK result as
@@ -642,42 +630,6 @@ public static class ViscousNewtonAssembler
                 // Diagnostic dump: station BL state, VA/VB blocks, VDEL residuals
                 // GDB parity hex dump of raw VSREZ and VDEL
                 
-                if (debugWriter != null)
-                {
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "DUE2={0,15:E8} DDS2={1,15:E8} XIF={2,15:E8}",
-                        due2, dds2, xiForcing));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "STATION IS={0,2} IBL={1,4} IV={2,4}", side + 1, ibl + 1, iv + 1));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "BL_STATE x={0} Ue={1} th={2} ds={3} m={4}",
-                        FormatDebugSingle(xsi),
-                        FormatDebugSingle(uei),
-                        FormatDebugSingle(thi),
-                        FormatDebugSingle(dsi),
-                        FormatDebugSingle(mdi)));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VA_ROW1 {0,15:E8} {1,15:E8}", va[0, 0, iv], va[0, 1, iv]));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VA_ROW2 {0,15:E8} {1,15:E8}", va[1, 0, iv], va[1, 1, iv]));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VA_ROW3 {0,15:E8} {1,15:E8}", va[2, 0, iv], va[2, 1, iv]));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VB_ROW1 {0,15:E8} {1,15:E8}", vb[0, 0, iv], vb[0, 1, iv]));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VB_ROW2 {0,15:E8} {1,15:E8}", vb[1, 0, iv], vb[1, 1, iv]));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VB_ROW3 {0,15:E8} {1,15:E8}", vb[2, 0, iv], vb[2, 1, iv]));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VDEL_R {0,15:E8} {1,15:E8} {2,15:E8}",
-                        vdel[0, 0, iv], vdel[1, 0, iv], vdel[2, 0, iv]));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VDEL_S {0,15:E8} {1,15:E8} {2,15:E8}",
-                        vdel[0, 1, iv], vdel[1, 1, iv], vdel[2, 1, iv]));
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "VSREZ {0,15:E8} {1,15:E8} {2,15:E8}",
-                        localResult.Residual[0], localResult.Residual[1], localResult.Residual[2]));
-                }
 
                 // Legacy block: xbl.f SETBL mass-coupling fill for VM.
                 // VM(k,JV,IV) = VS1(k,3)*D1_M(JV) + VS1(k,4)*U1_M(JV)
@@ -1063,80 +1015,6 @@ public static class ViscousNewtonAssembler
                 // GDB parity: dump UESET accumulators
                 
 
-                if (debugWriter != null)
-                {
-                    if (side == 0 && ibl == 1)
-                    {
-                        double vtiI = GetVTI(ibl, side, blState);
-                        for (int sourceSide = 0; sourceSide < 2; sourceSide++)
-                        {
-                            int maxAirfoilStation = Math.Min(blState.NBL[sourceSide], blState.IBLTE[sourceSide] + 1);
-                            for (int jbl = 1; jbl < maxAirfoilStation; jbl++)
-                            {
-                                int jPan = GetPanelIndex(jbl, sourceSide, isp, nPanel, blState);
-                                if (jPan < 0 || jPan >= dij.GetLength(1))
-                                {
-                                    continue;
-                                }
-
-                                double vtiJ = GetVTI(jbl, sourceSide, blState);
-                                double ueM = -LegacyPrecisionMath.Multiply(vtiI, vtiJ, dij[iPan, jPan], useLegacyPrecision);
-                                double mass = blState.MASS[jbl, sourceSide];
-                                double contribution = LegacyPrecisionMath.Multiply(ueM, mass, useLegacyPrecision);
-
-                                debugWriter.WriteLine(string.Format(
-                                    CultureInfo.InvariantCulture,
-                                    "USAV_AIR_TERM IS={0,2} IBL={1,4} JS={2,2} JBL={3,4} JPAN={4,4} UE_M={5,15:E8} MASS={6,15:E8} CONTR={7,15:E8}",
-                                    side + 1,
-                                    ibl + 1,
-                                    sourceSide + 1,
-                                    jbl + 1,
-                                    jPan + 1,
-                                    ueM,
-                                    mass,
-                                    contribution));
-                            }
-                        }
-
-                        for (int jbl = blState.IBLTE[1] + 1;
-                             jbl < Math.Min(blState.NBL[1], blState.IBLTE[1] + 6);
-                             jbl++)
-                        {
-                            int jPan = GetPanelIndex(jbl, 1, isp, nPanel, blState);
-                            if (jPan < 0 || jPan >= dij.GetLength(1))
-                            {
-                                continue;
-                            }
-
-                            double vtiJ = GetVTI(jbl, 1, blState);
-                            double ueM = -LegacyPrecisionMath.Multiply(vtiI, vtiJ, dij[iPan, jPan], useLegacyPrecision);
-                            double mass = blState.MASS[jbl, 1];
-                            double contribution = LegacyPrecisionMath.Multiply(ueM, mass, useLegacyPrecision);
-
-                            debugWriter.WriteLine(string.Format(
-                                CultureInfo.InvariantCulture,
-                                "USAV_WAKE_TERM IS={0,2} IBL={1,4} JS={2,2} JBL={3,4} JPAN={4,4} UE_M={5} MASS={6} CONTR={7}",
-                                side + 1,
-                                ibl + 1,
-                                2,
-                                jbl + 1,
-                                jPan + 1,
-                                FormatDebugSingle(ueM),
-                                FormatDebugSingle(mass),
-                                FormatDebugSingle(contribution)));
-                        }
-                    }
-
-                    debugWriter.WriteLine(string.Format(
-                        CultureInfo.InvariantCulture,
-                        "USAV_SPLIT IS={0,2} IBL={1,4} UINV={2} AIR={3} WAKE={4} USAV={5}",
-                        side + 1,
-                        ibl + 1,
-                        FormatDebugSingle(ueInvLocal),
-                        FormatDebugSingle(airfoilContribution),
-                        FormatDebugSingle(wakeContribution),
-                        FormatDebugSingle(predicted)));
-                }
             }
         }
 

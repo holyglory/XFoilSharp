@@ -2,8 +2,6 @@ using System.Globalization;
 using System.Numerics;
 using XFoil.Core.Numerics;
 using XFoil.Core.Models;
-using XFoil.Core.Diagnostics;
-
 // Legacy audit:
 // Primary legacy source: f_xfoil/src/naca.f :: NACA4
 // Secondary legacy source: f_xfoil/src/xfoil.f :: NACA command wrapper
@@ -40,17 +38,7 @@ public sealed class NacaAirfoilGenerator
         bool useClassicXFoilGeometry)
         where T : struct, IFloatingPointIeee754<T>
     {
-        string traceScope = CoreTrace.ScopeName(typeof(NacaAirfoilGenerator));
         string precision = typeof(T) == typeof(float) ? "Single" : "Double";
-        using var trace = CoreTrace.Scope(
-            traceScope,
-            new
-            {
-                designation,
-                pointCount,
-                useClassicXFoilGeometry = useClassicXFoilGeometry ? 1 : 0,
-                precision
-            });
 
         if (string.IsNullOrWhiteSpace(designation))
         {
@@ -82,22 +70,6 @@ public sealed class NacaAirfoilGenerator
         T oneMinusP = T.One - maxCamberPosition;
         T oneMinusPSquared = oneMinusP * oneMinusP;
 
-        CoreTrace.Event(
-            "naca4_config",
-            traceScope,
-            new
-            {
-                designation,
-                pointCount,
-                surfacePointCount,
-                maxCamber = double.CreateChecked(maxCamber),
-                maxCamberPosition = double.CreateChecked(maxCamberPosition),
-                thickness = double.CreateChecked(thickness),
-                exponent = double.CreateChecked(exponent),
-                exponentPlusOne = double.CreateChecked(exponentPlusOne),
-                useClassicXFoilGeometry = useClassicXFoilGeometry ? 1 : 0,
-                precision
-            });
 
         // Legacy block: NACA4 surface-node generation loop.
         // Difference: The classic branch preserves the legacy bunching, thickness, and camber formulas, while the default managed branch replaces the final ordinate construction with a normal-offset formulation and adds explicit trace state.
@@ -172,59 +144,6 @@ public sealed class NacaAirfoilGenerator
                     double.CreateChecked(yc - (yt * T.Cos(theta)))));
             }
 
-            if (CoreTrace.IsEnabled)
-            {
-                // Keep the trace values explicit so parity work can compare the
-                // actual raw generator inputs before paneling starts.
-                T sqrtX = T.Sqrt(x);
-                T ytScale = thickness / pointTwo;
-                T ytTermSqrt = T.CreateChecked(0.29690) * sqrtX;
-                T ytTermX = -(T.CreateChecked(0.12600) * x);
-                T ytTermX2 = -(T.CreateChecked(0.35160) * x2);
-                T ytTermX3 = T.CreateChecked(0.28430) * x3;
-                T ytTermX4 = T.CreateChecked(FiniteTrailingEdgeThicknessCoefficient) * x4;
-                T ytPartial1 = ytTermSqrt + ytTermX;
-                T ytPartial2 = ytPartial1 + ytTermX2;
-                T ytPartial3 = ytPartial2 + ytTermX3;
-                T ytPolynomial = ytPartial3 + ytTermX4;
-
-                CoreTrace.Event(
-                    "naca4_node",
-                    traceScope,
-                    new
-                    {
-                        index = index + 1,
-                        fraction = double.CreateChecked(fraction),
-                        oneMinusFraction = double.CreateChecked(oneMinusFraction),
-                        usedTrailingEdgeOverride = index == surfacePointCount - 1 ? 1 : 0,
-                        sqrtOneMinusFraction = double.CreateChecked(sqrtOneMinusFraction),
-                        xPowerAn = double.CreateChecked(oneMinusFractionPowAn),
-                        xPowerAnp = double.CreateChecked(oneMinusFractionPowAnp),
-                        xLeadingTerm = double.CreateChecked(xLeadingTerm),
-                        xTrailingTerm = double.CreateChecked(xTrailingTerm),
-                        x = double.CreateChecked(x),
-                        x2 = double.CreateChecked(x2),
-                        x3 = double.CreateChecked(x3),
-                        x4 = double.CreateChecked(x4),
-                        sqrtX = double.CreateChecked(sqrtX),
-                        ytScale = double.CreateChecked(ytScale),
-                        ytTermSqrt = double.CreateChecked(ytTermSqrt),
-                        ytTermX = double.CreateChecked(ytTermX),
-                        ytTermX2 = double.CreateChecked(ytTermX2),
-                        ytTermX3 = double.CreateChecked(ytTermX3),
-                        ytTermX4 = double.CreateChecked(ytTermX4),
-                        ytPartial1 = double.CreateChecked(ytPartial1),
-                        ytPartial2 = double.CreateChecked(ytPartial2),
-                        ytPartial3 = double.CreateChecked(ytPartial3),
-                        ytPolynomial = double.CreateChecked(ytPolynomial),
-                        yt = double.CreateChecked(yt),
-                        camberBranch = x < maxCamberPosition ? 1 : 2,
-                        yc = double.CreateChecked(yc),
-                        dycDx = double.CreateChecked(dycDx),
-                        useClassicXFoilGeometry = useClassicXFoilGeometry ? 1 : 0,
-                        precision
-                    });
-            }
         }
 
         // Legacy block: NACA4 upper/lower surface assembly into the final airfoil contour.
@@ -235,22 +154,6 @@ public sealed class NacaAirfoilGenerator
             .Reverse()
             .Concat(lower.Skip(1))
             .ToArray();
-
-        if (CoreTrace.IsEnabled)
-        {
-            for (int i = 0; i < points.Length; i++)
-            {
-                CoreTrace.Event(
-                    "naca_geometry_point",
-                    traceScope,
-                    new
-                    {
-                        index = i + 1,
-                        x = points[i].X,
-                        y = points[i].Y
-                    });
-            }
-        }
 
         return new AirfoilGeometry($"NACA {designation}", points, AirfoilFormat.PlainCoordinates);
     }

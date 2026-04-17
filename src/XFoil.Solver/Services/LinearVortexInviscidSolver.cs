@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using XFoil.Core.Numerics;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
@@ -42,9 +41,6 @@ public static class LinearVortexInviscidSolver
         double freestreamSpeed,
         double angleOfAttackRadians)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { panel.NodeCount, freestreamSpeed, angleOfAttackRadians });
         int n = panel.NodeCount;
         int systemSize = AssembleSystem(panel, state, freestreamSpeed, angleOfAttackRadians);
 
@@ -98,13 +94,6 @@ public static class LinearVortexInviscidSolver
 
         // GDB parity trace: dump GAMU and AIJ at stagnation area
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "basis_ready",
-                SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-                new { systemSize, nodeCount = n });
-        }
     }
 
     // Legacy mapping: f_xfoil/src/xpanel.f :: GGCALC system-assembly block.
@@ -116,9 +105,6 @@ public static class LinearVortexInviscidSolver
         double freestreamSpeed,
         double angleOfAttackRadians)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { panel.NodeCount, freestreamSpeed, angleOfAttackRadians });
         int n = panel.NodeCount;
         int systemSize = n + 1;
 
@@ -197,13 +183,6 @@ public static class LinearVortexInviscidSolver
 
         state.IsInfluenceMatrixFactored = false;
         state.AreBasisSolutionsComputed = false;
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "system_assembled",
-                SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-                new { systemSize, sharpTrailingEdge = state.IsSharpTrailingEdge });
-        }
         return systemSize;
     }
 
@@ -212,91 +191,10 @@ public static class LinearVortexInviscidSolver
     // Decision: Keep the trace-helper block because parity debugging depends on it and it does not alter solver behavior.
     private static void TracePanelNodes(LinearVortexPanelState panel)
     {
-        string scope = SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver), nameof(AssembleAndFactorSystem));
-        for (int i = 0; i < panel.NodeCount; i++)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "panel_node",
-                    scope,
-                    new
-                    {
-                        index = i + 1,
-                        x = panel.X[i],
-                        y = panel.Y[i],
-                        xp = panel.XDerivative[i],
-                        yp = panel.YDerivative[i],
-                        nx = panel.NormalX[i],
-                        ny = panel.NormalY[i],
-                        panelAngle = panel.PanelAngle[Math.Min(i, panel.NodeCount - 1)]
-                    });
-            }
-        }
     }
 
     private static void TraceInfluenceSystem(InviscidSolverState state, int nodeCount, int systemSize)
     {
-        if (SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        string scope = SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver), nameof(AssembleAndFactorSystem));
-        string precision = state.UseLegacyKernelPrecision ? "SingleKernel" : "Double";
-
-        for (int row = 0; row < systemSize; row++)
-        {
-            for (int col = 0; col < systemSize; col++)
-            {
-                // The legacy parity path solves a float-cast copy of the influence system.
-                // Trace that exact input so bitwise comparisons are made against the real kernel input.
-                double value = state.UseLegacyKernelPrecision
-                    ? (float)state.StreamfunctionInfluence[row, col]
-                    : state.StreamfunctionInfluence[row, col];
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "matrix_entry",
-                        scope,
-                        new
-                        {
-                            matrix = "aij",
-                            row = row + 1,
-                            col = col + 1,
-                            value,
-                            precision
-                        });
-                }
-            }
-        }
-
-        for (int row = 0; row < systemSize; row++)
-        {
-            for (int col = 0; col < nodeCount; col++)
-            {
-                double value = state.UseLegacyKernelPrecision
-                    ? (float)state.SourceInfluence[row, col]
-                    : state.SourceInfluence[row, col];
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "matrix_entry",
-                        scope,
-                        new
-                        {
-                            matrix = "bij",
-                            row = row + 1,
-                            col = col + 1,
-                            value,
-                            precision
-                        });
-                }
-            }
-        }
-
-        TraceBasisEntries(scope, "basis_rhs_alpha0", state.BasisVortexStrength, 0, systemSize, precision);
-        TraceBasisEntries(scope, "basis_rhs_alpha90", state.BasisVortexStrength, 1, systemSize, precision);
     }
 
     private static void TraceBasisEntries(
@@ -307,27 +205,6 @@ public static class LinearVortexInviscidSolver
         int count,
         string precision)
     {
-        if (SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        for (int index = 0; index < count; index++)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "basis_entry",
-                    scope,
-                    new
-                    {
-                        index = index + 1,
-                        value = values[index, column],
-                        precision
-                    },
-                    name);
-            }
-        }
     }
 
     private static void TraceBasisEntries(
@@ -336,34 +213,6 @@ public static class LinearVortexInviscidSolver
         IReadOnlyList<double> values,
         string precision)
     {
-        if (SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        for (int index = 0; index < values.Count; index++)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "basis_entry",
-                    scope,
-                    new
-                    {
-                        index = index + 1,
-                        value = values[index],
-                        precision
-                    },
-                    name);
-            }
-        }
-    }
-
-    private static string FormatSingleHex(float[] values, int index)
-    {
-        return (uint)index < (uint)values.Length
-            ? BitConverter.SingleToInt32Bits(values[index]).ToString("X8")
-            : "NA";
     }
 
     // Legacy mapping: f_xfoil/src/xpanel.f :: GGCALC basis back-substitution.
@@ -371,9 +220,6 @@ public static class LinearVortexInviscidSolver
     // Decision: Keep the helper because it isolates the basis solve stage cleanly.
     private static void SolveBasisRightHandSides(InviscidSolverState state, int systemSize)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { systemSize });
         var rhs0 = new double[systemSize];
         var rhs1 = new double[systemSize];
         if (state.UseLegacyKernelPrecision)
@@ -440,31 +286,6 @@ public static class LinearVortexInviscidSolver
             }
         }
 
-        string traceScope = SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver));
-        string precision = state.UseLegacyKernelPrecision ? "SingleKernel" : "Double";
-        TraceBasisEntries(traceScope, "basis_gamma_alpha0", rhs0, precision);
-        TraceBasisEntries(traceScope, "basis_gamma_alpha90", rhs1, precision);
-
-
-
-        
-
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                traceScope,
-                "basis_gamma_alpha0",
-                rhs0,
-                new { systemSize });
-        }
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                traceScope,
-                "basis_gamma_alpha90",
-                rhs1,
-                new { systemSize });
-        }
     }
 
     // Legacy mapping: managed-only parity storage helper corresponding to legacy REAL matrix state.
@@ -487,32 +308,6 @@ public static class LinearVortexInviscidSolver
         int size,
         string precision)
     {
-        if (SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        string scope = SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver), nameof(AssembleAndFactorSystem));
-        for (int row = 0; row < size; row++)
-        {
-            for (int col = 0; col < size; col++)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "matrix_entry",
-                        scope,
-                        new
-                        {
-                            matrix = name,
-                            row = row + 1,
-                            col = col + 1,
-                            value = values[row, col],
-                            precision
-                        });
-                }
-            }
-        }
     }
 
     private static void TraceFactoredMatrix(
@@ -521,32 +316,6 @@ public static class LinearVortexInviscidSolver
         int size,
         string precision)
     {
-        if (SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        string scope = SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver));
-        for (int row = 0; row < size; row++)
-        {
-            for (int col = 0; col < size; col++)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "matrix_entry",
-                        scope,
-                        new
-                        {
-                            matrix = name,
-                            row = row + 1,
-                            col = col + 1,
-                            value = values[row, col],
-                            precision
-                        });
-                }
-            }
-        }
     }
 
     private static void TracePivotEntries(
@@ -555,28 +324,6 @@ public static class LinearVortexInviscidSolver
         int size,
         string precision)
     {
-        if (SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        string scope = SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver));
-        for (int index = 0; index < size; index++)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "pivot_entry",
-                    scope,
-                    new
-                    {
-                        vector = name,
-                        index = index + 1,
-                        value = pivotIndices[index] + 1,
-                        precision
-                    });
-            }
-        }
     }
 
     /// <summary>
@@ -599,9 +346,6 @@ public static class LinearVortexInviscidSolver
         double freestreamSpeed,
         double machNumber)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { alphaRadians, panel.NodeCount, freestreamSpeed, machNumber });
         int n = panel.NodeCount;
 
         // Step 1: Ensure basis solutions exist
@@ -668,19 +412,6 @@ public static class LinearVortexInviscidSolver
             0.25 * panel.Chord + panel.LeadingEdgeX,
             panel.LeadingEdgeY);
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "inviscid_solution",
-                SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-                new
-                {
-                    result.LiftCoefficient,
-                    result.MomentCoefficient,
-                    result.AngleOfAttackRadians,
-                    result.LiftCoefficientAlphaDerivative
-                });
-        }
 
         return result;
     }
@@ -748,9 +479,6 @@ public static class LinearVortexInviscidSolver
     // Decision: Keep the helper because it clarifies the basis-to-surface-speed step.
     public static void ComputeInviscidSpeed(double alphaRadians, InviscidSolverState state, int nodeCount)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { alphaRadians, nodeCount });
         bool useLegacyPrecision = state.UseLegacyKernelPrecision || state.UseLegacyPanelingPrecision;
         double cosa = LegacyPrecisionMath.Cos(alphaRadians, useLegacyPrecision);
         double sina = LegacyPrecisionMath.Sin(alphaRadians, useLegacyPrecision);
@@ -767,14 +495,6 @@ public static class LinearVortexInviscidSolver
             
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-                "inviscid_speed",
-                state.InviscidSpeed.Take(nodeCount).ToArray(),
-                new { nodeCount });
-        }
     }
 
     // Legacy mapping: f_xfoil/src/xoper.f :: SPECAL/SPECCL and f_xfoil/src/xpanel.f :: QISET basis superposition.
@@ -853,9 +573,6 @@ public static class LinearVortexInviscidSolver
         double momentRefX,
         double momentRefY)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { panel.NodeCount, alphaRadians, machNumber, freestreamSpeed, momentRefX, momentRefY });
         int n = panel.NodeCount;
         bool useLegacyPrecision = state.UseLegacyKernelPrecision || state.UseLegacyPanelingPrecision;
         double cosa = LegacyPrecisionMath.Cos(alphaRadians, useLegacyPrecision);
@@ -982,14 +699,6 @@ public static class LinearVortexInviscidSolver
             cp,
             alphaRadians);
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "pressure_forces",
-                SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-                new { cl, cdp, cm, clAlpha, clMach2 });
-        }
-
         return result;
     }
 
@@ -1013,9 +722,6 @@ public static class LinearVortexInviscidSolver
         int count,
         bool useLegacyPrecision = false)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { freestreamSpeed, machNumber, count });
         var comp = PanelGeometryBuilder.ComputeCompressibilityParameters(machNumber);
         double beta = comp.Beta;
         double bFac = comp.KarmanTsienFactor;
@@ -1036,14 +742,6 @@ public static class LinearVortexInviscidSolver
             }
         }
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Array(
-                SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-                "pressure_coefficients",
-                pressureCoefficients.Take(count).ToArray(),
-                new { count });
-        }
     }
 
     /// <summary>
@@ -1109,9 +807,6 @@ public static class LinearVortexInviscidSolver
         double angleOfAttackRadians,
         int n)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { n, freestreamSpeed, angleOfAttackRadians });
         int last = n - 1;
         const double bisectorWeight = 0.1;
         bool useLegacyPrecision = state.UseLegacyKernelPrecision || state.UseLegacyPanelingPrecision;
@@ -1185,13 +880,6 @@ public static class LinearVortexInviscidSolver
         state.BasisVortexStrength[last, 0] = -freestreamSpeed * cbis;
         state.BasisVortexStrength[last, 1] = -freestreamSpeed * sbis;
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "sharp_te_condition",
-                SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-                new { row = last + 1, cbis, sbis });
-        }
     }
 
     /// <summary>
@@ -1204,9 +892,6 @@ public static class LinearVortexInviscidSolver
         LinearVortexPanelState panel,
         InviscidSolverState state)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-            new { panel.NodeCount });
         int n = panel.NodeCount;
         bool useLegacyPrecision = state.UseLegacyKernelPrecision || state.UseLegacyPanelingPrecision;
 
@@ -1228,17 +913,5 @@ public static class LinearVortexInviscidSolver
         state.TrailingEdgeSourceStrength = LegacyPrecisionMath.Multiply(0.5, scs, gamDiff, useLegacyPrecision);
         state.TrailingEdgeVortexStrength = -LegacyPrecisionMath.Multiply(0.5, sds, gamDiff, useLegacyPrecision);
 
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "trailing_edge_strengths",
-                SolverTrace.ScopeName(typeof(LinearVortexInviscidSolver)),
-                new
-                {
-                    gamDiff,
-                    state.TrailingEdgeSourceStrength,
-                    state.TrailingEdgeVortexStrength
-                });
-        }
     }
 }

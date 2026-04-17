@@ -6,7 +6,6 @@
 // Decision: Keep the managed shared solver because it preserves the LUDCMP/BAKSUB algorithm while making precision and tracing explicit.
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using XFoil.Solver.Diagnostics;
 
 namespace XFoil.Solver.Numerics;
 
@@ -310,23 +309,6 @@ public static class ScaledPivotLuSolver
         T diagonal,
         T maxScaled)
     {
-        if (traceContext is null || SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        SolverTrace.Event(
-            "lu_pivot",
-            SolverTrace.ScopeName(typeof(ScaledPivotLuSolver), nameof(Decompose)),
-            new
-            {
-                context = traceContext,
-                column = column + 1,
-                pivotRow = pivotRow + 1,
-                diagonal,
-                maxScaled,
-                precision
-            });
     }
 
     private static void TraceDecomposeTerm<T>(
@@ -342,28 +324,6 @@ public static class ScaledPivotLuSolver
         T sumBefore,
         T sumAfter)
     {
-        if (traceContext is null || SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        SolverTrace.Event(
-            "lu_decompose_term",
-            SolverTrace.ScopeName(typeof(ScaledPivotLuSolver), nameof(Decompose)),
-            new
-            {
-                context = traceContext,
-                phase,
-                row = row + 1,
-                column = column + 1,
-                innerColumn = innerColumn + 1,
-                leftValue,
-                rightValue,
-                product,
-                sumBefore,
-                sumAfter,
-                precision
-            });
     }
 
     // Legacy mapping: none; row-state tracing is managed-only diagnostics around BAKSUB.
@@ -382,29 +342,6 @@ public static class ScaledPivotLuSolver
         T divisor,
         bool hasDivisor)
     {
-        if (traceContext is null || SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        // Parity work needs the exact row state after swaps and elimination so the
-        // first differing solved gamma entry can be traced back to one row.
-        SolverTrace.Event(
-            "lu_back_substitute_row",
-            SolverTrace.ScopeName(typeof(ScaledPivotLuSolver), nameof(BackSubstitute)),
-            new
-            {
-                context = traceContext,
-                phase,
-                row = row + 1,
-                pivotRow = pivotRow + 1,
-                ii = ii >= 0 ? ii + 1 : 0,
-                sumBeforeElimination,
-                sumAfterElimination,
-                divisor = hasDivisor ? divisor : default(T),
-                solutionValue,
-                precision
-            });
     }
 
     // Legacy mapping: none; term-by-term tracing is managed-only diagnostics around BAKSUB.
@@ -424,28 +361,5 @@ public static class ScaledPivotLuSolver
         T sumBefore,
         T sumAfter)
     {
-        if (traceContext is null || SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        SolverTrace.Event(
-            "lu_back_substitute_term",
-            SolverTrace.ScopeName(typeof(ScaledPivotLuSolver), nameof(BackSubstitute)),
-            new
-            {
-                context = traceContext,
-                phase,
-                row = row + 1,
-                column = column + 1,
-                pivotRow = pivotRow + 1,
-                ii = ii >= 0 ? ii + 1 : 0,
-                matrixValue,
-                rhsValue,
-                product,
-                sumBefore,
-                sumAfter,
-                precision
-            });
     }
 }

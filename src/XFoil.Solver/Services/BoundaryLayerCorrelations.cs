@@ -1,6 +1,5 @@
 using System;
 using XFoil.Core.Numerics;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Numerics;
 
 // Legacy audit:
@@ -212,30 +211,6 @@ public static class BoundaryLayerCorrelations
             hsHkf = hsHkTerm1 - hsHkTerm2;
         }
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "hsl_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-                    new
-                    {
-                        hk = hkf,
-                        hs = hsf,
-                        hsHk = hsHkf,
-                        tmp = tmpTrace,
-                        hkPlusOne = hkPlusOneTrace,
-                        hsHkTerm1 = hsHkTerm1Trace,
-                        hsHkTerm2 = hsHkTerm2Trace,
-                        hsHkTerm3 = hsHkTerm3Trace,
-                        hsHkDirect = hsHkDirectTrace,
-                        hsHkDirectPlainTerm2 = hsHkDirectPlainTerm2Trace,
-                        hsHkDirectLeftTerm3 = hsHkDirectLeftTerm3Trace,
-                        hsHkDirectTmpHkTerm3 = hsHkDirectTmpHkTerm3Trace
-                    });
-            }
-        }
 
         return (hsf, hsHkf, 0.0, 0.0);
     }
@@ -377,7 +352,6 @@ public static class BoundaryLayerCorrelations
         float hsf;
         float hsHkf;
         float hsRtf;
-        float branchf = 0.0f;
         float grtf = 0.0f;
         float hdiff = 0.0f;
         float rtmpf = 0.0f;
@@ -392,7 +366,6 @@ public static class BoundaryLayerCorrelations
         float hsRtTerm3f = 0.0f;
         if (hkf < hof)
         {
-            branchf = 1.0f;
             float hr = (hof - hkf) / (hof - 1.0f);
             float hrHkf = -1.0f / (hof - 1.0f);
             float hrRtf = ((1.0f - hr) / (hof - 1.0f)) * hoRtf;
@@ -415,7 +388,6 @@ public static class BoundaryLayerCorrelations
         }
         else
         {
-            branchf = 2.0f;
             grtf = LegacyLibm.Log(rtzf);
             hdiff = hkf - hof;
             rtmpf = hkf - hof + (4.0f / grtf);
@@ -449,47 +421,6 @@ public static class BoundaryLayerCorrelations
         hsRtf /= fmf;
         float hsMsqf = (0.028f / fmf) - ((0.014f * hsf) / fmf);
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "hst_terms",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-                    new
-                    {
-                        hk = hkf,
-                        rt = rtf,
-                        msq = msqf,
-                        branch = branchf,
-                        ho = hof,
-                        hoRt = hoRtf,
-                        rtz = rtzf,
-                        rtzRt = rtzRtf,
-                        grt = grtf,
-                        hdif = hdiff,
-                        rtmp = rtmpf,
-                        htmp = htmpf,
-                        htmpHk = htmpHkf,
-                        htmpHkBits = unchecked((int)BitConverter.SingleToUInt32Bits(htmpHkf)),
-                        htmpRt = htmpRtf,
-                        hsHkTerm1 = hsHkTerm1f,
-                        hsHkTerm1Bits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkTerm1f)),
-                        hsHkTerm2 = hsHkTerm2f,
-                        hsHkTerm2Bits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkTerm2f)),
-                        hsRtRaw = hsRtRawf,
-                        hsRtTerm1 = hsRtTerm1f,
-                        hsRtTerm2 = hsRtTerm2f,
-                        hsRtTerm3 = hsRtTerm3f,
-                        hs = hsf,
-                        hsHk = hsHkf,
-                        hsHkBits = unchecked((int)BitConverter.SingleToUInt32Bits(hsHkf)),
-                        hsRt = hsRtf,
-                        hsMsq = hsMsqf,
-                        fm = fmf
-                    });
-            }
-        }
 
         return (hsf, hsHkf, hsRtf, hsMsqf);
     }
@@ -676,44 +607,6 @@ public static class BoundaryLayerCorrelations
             float cfMsqLeadTerm32 = cfMsqLeadCore32 * (-cfMsqScale32);
             float cfMsq32 = cfMsqLeadTerm32 - cfMsqTail32;
 
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "cft_terms",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-                        new
-                        {
-                            hk = hkf,
-                            rt = rtf,
-                            msq = msqf,
-                            fcArg,
-                            fc = fc32,
-                            grt = grt32,
-                            gex = gex32,
-                            arg = arg32,
-                            thkArg = thkArg32,
-                            thk = thk32,
-                            grtRatio = grtRatio32,
-                            thkSq = thkSq32,
-                            oneMinusThkSq = oneMinusThkSq32,
-                            scaledThkDiff = scaledThkDiff32,
-                            cfo = cfo32,
-                            cfHkTerm1,
-                            cfHkTerm2,
-                            cfHkTerm3,
-                            cfNumerator = cfNumerator32,
-                            cf = cf32,
-                            cfHk = cfHk32,
-                            cfRt = cfRt32,
-                            cfMsqScale = cfMsqScale32,
-                            cfMsqLeadCore = cfMsqLeadCore32,
-                            cfMsqTail = cfMsqTail32,
-                            cfMsq = cfMsq32
-                        });
-                }
-            }
 
             return (cf32, cfHk32, cfRt32, cfMsq32);
         }
@@ -829,28 +722,6 @@ public static class BoundaryLayerCorrelations
             }
 
             float diRt32 = -di32 / rtf;
-            if (SolverTrace.IsActive)
-            {
-                if (SolverTrace.IsActive)
-                {
-                    SolverTrace.Event(
-                        "laminar_dissipation",
-                        SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-                        new
-                        {
-                            hk = hkf,
-                            rt = rtf,
-                            hkb = hkbTrace,
-                            hkbSq = hkbSqTrace,
-                            den = denTrace,
-                            ratio = ratioTrace,
-                            numerator = numeratorTrace,
-                            di = di32,
-                            diHk = diHk32,
-                            diRt = diRt32
-                        });
-                }
-            }
             
             return (di32, diHk32, diRt32);
         }
@@ -886,28 +757,6 @@ public static class BoundaryLayerCorrelations
 
         double di_rt = -di / rt;
 
-        if (SolverTrace.IsActive)
-        {
-            if (SolverTrace.IsActive)
-            {
-                SolverTrace.Event(
-                    "laminar_dissipation",
-                    SolverTrace.ScopeName(typeof(BoundaryLayerCorrelations)),
-                    new
-                    {
-                        hk,
-                        rt,
-                        hkb = hkbTrace64,
-                        hkbSq = hkbSqTrace64,
-                        den = denTrace64,
-                        ratio = ratioTrace64,
-                        numerator = numeratorTrace64,
-                        di,
-                        diHk = di_hk,
-                        diRt = di_rt
-                    });
-            }
-        }
 
         return (di, di_hk, di_rt);
     }

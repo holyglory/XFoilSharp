@@ -1,5 +1,4 @@
 using System;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
@@ -58,9 +57,6 @@ public static class DragCalculator
         bool useLockWaveDrag,
         bool useLegacyPrecision = false)
     {
-        using var scope = SolverTrace.Scope(
-            SolverTrace.ScopeName(typeof(DragCalculator)),
-            new { qinf, alfa, machNumber, teGap, useExtendedWake, useLockWaveDrag, panel.Chord, useLegacyPrecision });
         if (qinf < 1e-12) qinf = 1.0;
         double chord = LegacyPrecisionMath.Max(panel.Chord, 1e-6, useLegacyPrecision);
 
@@ -124,11 +120,6 @@ public static class DragCalculator
             TEBaseDrag = cdBase,
             WaveDrag = waveDrag
         };
-
-        SolverTrace.Event(
-            "drag_decomposition",
-            SolverTrace.ScopeName(typeof(DragCalculator)),
-            new { result.CD, result.CDF, result.CDP, result.CDSurfaceCrossCheck, result.DiscrepancyMetric, result.TEBaseDrag, result.WaveDrag });
 
         return result;
     }
@@ -225,11 +216,6 @@ public static class DragCalculator
         }
 
         
-
-        SolverTrace.Event(
-            "squire_young_wake",
-            SolverTrace.ScopeName(typeof(DragCalculator)),
-            new { wakeEnd, nbl1 = blState.NBL[1], iblte1 = blState.IBLTE[1], thwake, ueWake, dsWake, shwake, urat, ueWakeAdjusted = uewake, qinf, cd });
 
         return cd;
     }

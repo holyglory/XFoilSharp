@@ -1,5 +1,4 @@
 using XFoil.Core.Numerics;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
@@ -21,6 +20,8 @@ namespace XFoil.Solver.Services;
 /// </summary>
 public static class StreamfunctionInfluenceCalculator
 {
+    private const string traceScope = nameof(StreamfunctionInfluenceCalculator);
+
     /// <summary>
     /// Computes the streamfunction PSI and all sensitivity arrays at a single field point
     /// due to all panels, the TE panel, and the freestream.
@@ -74,22 +75,6 @@ public static class StreamfunctionInfluenceCalculator
                 angleOfAttackRadians);
         }
 
-        string traceScope = SolverTrace.ScopeName(typeof(StreamfunctionInfluenceCalculator));
-        using var scope = SolverTrace.Scope(
-            traceScope,
-            new
-            {
-                fieldIndex = fieldNodeIndex + 1,
-                fieldX,
-                fieldY,
-                fieldNormalX,
-                fieldNormalY,
-                computeGeometricSensitivities = computeGeometricSensitivities ? 1 : 0,
-                includeSourceTerms = includeSourceTerms ? 1 : 0,
-                freestreamSpeed,
-                angleOfAttackRadians,
-                precision = "Double"
-            });
         TracePsilinField(
             traceScope,
             fieldNodeIndex + 1,
@@ -381,22 +366,6 @@ public static class StreamfunctionInfluenceCalculator
         const float qopi = 1f / (4f * MathF.PI);
         const float hopi = 1f / (2f * MathF.PI);
 
-        string traceScope = SolverTrace.ScopeName(typeof(StreamfunctionInfluenceCalculator));
-        using var scope = SolverTrace.Scope(
-            traceScope,
-            new
-            {
-                fieldIndex = fieldNodeIndex + 1,
-                fieldX,
-                fieldY,
-                fieldNormalX,
-                fieldNormalY,
-                computeGeometricSensitivities = 0,
-                includeSourceTerms = includeSourceTerms ? 1 : 0,
-                freestreamSpeed,
-                angleOfAttackRadians,
-                precision = "Single"
-            });
         TracePsilinField(
             traceScope,
             fieldNodeIndex + 1,
@@ -1598,21 +1567,6 @@ public static class StreamfunctionInfluenceCalculator
         bool includeSourceTerms,
         string precision)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_field",
-            scope,
-            new
-            {
-                fieldIndex,
-                fieldX,
-                fieldY,
-                fieldNormalX,
-                fieldNormalY,
-                computeGeometricSensitivities = computeGeometricSensitivities ? 1 : 0,
-                includeSourceTerms = includeSourceTerms ? 1 : 0,
-                precision
-            });
     }
 
     private static void TracePsilinPanel(
@@ -1655,50 +1609,6 @@ public static class StreamfunctionInfluenceCalculator
         double x2i,
         double yyi)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_panel",
-            scope,
-            new
-            {
-                fieldIndex,
-                panelIndex,
-                jm,
-                jo,
-                jp,
-                jq,
-                computeGeometricSensitivities = computeGeometricSensitivities ? 1 : 0,
-                includeSourceTerms = includeSourceTerms ? 1 : 0,
-                precision,
-                panelXJo,
-                panelYJo,
-                panelXJp,
-                panelYJp,
-                panelDx,
-                panelDy,
-                dso,
-                dsio,
-                panelAngle,
-                rx1,
-                ry1,
-                rx2,
-                ry2,
-                sx,
-                sy,
-                x1,
-                x2,
-                yy,
-                rs1,
-                rs2,
-                sgn,
-                g1,
-                g2,
-                t1,
-                t2,
-                x1i,
-                x2i,
-                yyi
-            });
     }
 
     private static void TracePsilinResult(
@@ -1708,17 +1618,6 @@ public static class StreamfunctionInfluenceCalculator
         double psiNormalDerivative,
         string precision)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_result",
-            scope,
-            new
-            {
-                fieldIndex,
-                psi,
-                psiNormalDerivative,
-                precision
-            });
     }
 
     private static void TracePsilinAccumState(
@@ -1733,22 +1632,6 @@ public static class StreamfunctionInfluenceCalculator
         double psiNormalDerivative,
         string precision)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_accum_state",
-            scope,
-            new
-            {
-                fieldIndex,
-                stage,
-                jo,
-                jp,
-                psiBefore,
-                psiNormalBefore,
-                psi,
-                psiNormalDerivative,
-                precision
-            });
     }
 
     private static void TracePsilinResultTerms(
@@ -1760,19 +1643,6 @@ public static class StreamfunctionInfluenceCalculator
         double psiNormalFreestreamDelta,
         string precision)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_result_terms",
-            scope,
-            new
-            {
-                fieldIndex,
-                psiBeforeFreestream,
-                psiNormalBeforeFreestream,
-                psiFreestreamDelta,
-                psiNormalFreestreamDelta,
-                precision
-            });
     }
 
     private static void TracePsilinSourceSegment(
@@ -1854,89 +1724,6 @@ public static class StreamfunctionInfluenceCalculator
         double dqJp,
         double dqJq)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_source_segment",
-            scope,
-            new
-            {
-                fieldIndex,
-                panelIndex,
-                half,
-                jm,
-                jo,
-                jp,
-                jq,
-                precision,
-                x0,
-                x1,
-                x2,
-                yy,
-                panelAngle,
-                x1i,
-                x2i,
-                yyi,
-                rs0,
-                rs1,
-                rs2,
-                g0,
-                g1,
-                g2,
-                t0,
-                t1,
-                t2,
-                dso,
-                dsio,
-                dsm,
-                dsim,
-                dsp,
-                dsip,
-                dxInv,
-                sourceTermLeft,
-                sourceTermRight,
-                ssum,
-                sdif,
-                psum,
-                pdif,
-                psx0,
-                psx1,
-                psx2,
-                psyy,
-                pdx0Term1,
-                pdx0Term2,
-                pdx0Numerator,
-                pdx0,
-                pdx1Term1,
-                pdx1Term2,
-                pdx1Numerator,
-                pdx1,
-                pdx2Term1,
-                pdx2Term2,
-                pdx2Numerator,
-                pdx2,
-                pdyyTerm1,
-                pdyyTailLinear,
-                pdyyTailAngular,
-                pdyyTerm2,
-                pdyyNumerator,
-                pdyy,
-                psniTerm1,
-                psniTerm2,
-                psniTerm3,
-                psni,
-                pdniTerm1,
-                pdniTerm2,
-                pdniTerm3,
-                pdni,
-                dzJm,
-                dzJo,
-                dzJp,
-                dzJq,
-                dqJm,
-                dqJo,
-                dqJp,
-                dqJq
-            });
     }
 
     private static void TracePsilinSourcePdyyWrite(
@@ -1963,34 +1750,6 @@ public static class StreamfunctionInfluenceCalculator
         double pdyyNumerator,
         double pdyy)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_source_pdyy_write",
-            scope,
-            new
-            {
-                fieldIndex,
-                panelIndex,
-                half,
-                precision,
-                x0,
-                xEdge,
-                yy,
-                t0,
-                tEdge,
-                psyy,
-                dxInv,
-                pdyyWriteDt,
-                pdyyWriteInner,
-                pdyyWriteHead,
-                pdyyWriteTail,
-                pdyyWriteSum,
-                pdyyWriteValue,
-                pdyyTerm1,
-                pdyyTerm2,
-                pdyyNumerator,
-                pdyy
-            });
     }
 
     private static void TracePsilinSourceDqTerms(
@@ -2012,29 +1771,6 @@ public static class StreamfunctionInfluenceCalculator
         double dqJqTerm2,
         double dqJqInner)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_source_dq_terms",
-            scope,
-            new
-            {
-                fieldIndex,
-                panelIndex,
-                half,
-                precision,
-                dqJmTerm1,
-                dqJmTerm2,
-                dqJmInner,
-                dqJoTerm1,
-                dqJoTerm2,
-                dqJoInner,
-                dqJpTerm1,
-                dqJpTerm2,
-                dqJpInner,
-                dqJqTerm1,
-                dqJqTerm2,
-                dqJqInner
-            });
     }
 
     private static void TracePsilinSourceDzTerms(
@@ -2056,29 +1792,6 @@ public static class StreamfunctionInfluenceCalculator
         double dzJqTerm2,
         double dzJqInner)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_source_dz_terms",
-            scope,
-            new
-            {
-                fieldIndex,
-                panelIndex,
-                half,
-                precision,
-                dzJmTerm1,
-                dzJmTerm2,
-                dzJmInner,
-                dzJoTerm1,
-                dzJoTerm2,
-                dzJoInner,
-                dzJpTerm1,
-                dzJpTerm2,
-                dzJpInner,
-                dzJqTerm1,
-                dzJqTerm2,
-                dzJqInner
-            });
     }
 
     private static void TracePsilinTeCorrection(
@@ -2107,36 +1820,6 @@ public static class StreamfunctionInfluenceCalculator
         double dqJoTe,
         double dqJpTe)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_te_correction",
-            scope,
-            new
-            {
-                fieldIndex,
-                jo,
-                jp,
-                precision,
-                psig,
-                pgam,
-                psigni,
-                pgamni,
-                sigte,
-                gamte,
-                scs,
-                sds,
-                dzJoTeSig,
-                dzJpTeSig,
-                dzJoTeGam,
-                dzJpTeGam,
-                dqJoTeSigHalf,
-                dqJoTeSigTerm,
-                dqJoTeGamHalf,
-                dqJoTeGamTerm,
-                dqTeInner,
-                dqJoTe,
-                dqJpTe
-            });
     }
 
     private static void TracePsilinTePgamTerms(
@@ -2152,23 +1835,6 @@ public static class StreamfunctionInfluenceCalculator
         double pgamDt,
         double pgamTail)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_te_pgam_terms",
-            scope,
-            new
-            {
-                fieldIndex,
-                jo,
-                jp,
-                precision,
-                pgamLeadProduct1,
-                pgamLeadProduct2,
-                pgamLeadPair,
-                pgamBase,
-                pgamDt,
-                pgamTail
-            });
     }
 
     private static void TracePsilinSourceHalfTerms(
@@ -2192,40 +1858,7 @@ public static class StreamfunctionInfluenceCalculator
         double pdifNumerator,
         double pdif)
     {
-        if (!SolverTrace.IsActive) return;
-        if (SolverTrace.Current is null)
-        {
-            return;
-        }
-
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "psilin_source_half_terms",
-                scope,
-                new
-                {
-                    fieldIndex,
-                    panelIndex,
-                    half,
-                    precision,
-                    x0,
-                    psumTerm1,
-                    psumTerm2,
-                    psumTerm3,
-                    psumAccum,
-                    psum,
-                    pdifTerm1,
-                    pdifTerm2,
-                    pdifTerm3,
-                    pdifTerm4,
-                    pdifAccum1,
-                    pdifAccum2,
-                    pdifNumerator,
-                    pdif
-                });
-        }
-    }
+}
 
     private static void TracePsilinVortexSegment(
         string scope,
@@ -2285,68 +1918,6 @@ public static class StreamfunctionInfluenceCalculator
         double dqJo,
         double dqJp)
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "psilin_vortex_segment",
-            scope,
-            new
-            {
-                fieldIndex,
-                jo,
-                jp,
-                precision,
-                x1,
-                x2,
-                yy,
-                rs1,
-                rs2,
-                g1,
-                g2,
-                t1,
-                t2,
-                dxInv,
-                psisTerm1,
-                psisTerm2,
-                psisTerm3,
-                psisTerm4,
-                psis,
-                psidTerm1,
-                psidTerm2,
-                psidTerm3,
-                psidTerm4,
-                psidTerm5,
-                psidHalfTerm,
-                psid,
-                psx1,
-                psx2,
-                psyy,
-                pdxSum,
-                pdx1Mul,
-                pdx1PanelTerm,
-                pdx1Accum1,
-                pdx1Accum2,
-                pdx1Numerator,
-                pdx1,
-                pdx2Mul,
-                pdx2PanelTerm,
-                pdx2Accum1,
-                pdx2Accum2,
-                pdx2Numerator,
-                pdx2,
-                pdyy,
-                gammaJo,
-                gammaJp,
-                gsum,
-                gdif,
-                psni,
-                pdni,
-                psiDelta,
-                psiNiDelta,
-                dzJo,
-                dzJp,
-                dqJo,
-                dqJp
-            });
     }
 
     /// <summary>

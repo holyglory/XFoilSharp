@@ -392,9 +392,6 @@ public static class ViscousSolverEngine
         {
             
             
-            debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                "=== ITER {0} ===", iter + 1));
-
             // The legacy initialization already performed the first remarch.
             // Skip the Newton-loop remarch on iter 0 because the init MRCHDU
             // at line 1808 is equivalent to the first SETBL's MRCHDU.
@@ -448,7 +445,7 @@ public static class ViscousSolverEngine
                 rstbl, rstbl_ms,
                 reybl, reybl_re, reybl_ms, hvrat,
                 ueInv,
-                isp, n, debugWriter,
+                isp, n,
                 cachedUsav: fixedUsav,
                 cachedSstGo: settings.UseLegacyBoundaryLayerInitialization
                     ? preNewton.InviscidSstGo : null,
@@ -485,7 +482,6 @@ public static class ViscousSolverEngine
             BlockTridiagonalSolver.Solve(
                 newtonSystem,
                 vaccel: 0.01,
-                debugWriter: debugWriter,
                 useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
 
             // Post-BLSOLV additive checksum
@@ -519,7 +515,6 @@ public static class ViscousSolverEngine
                             currentCl,
                             ueInv,
                             IsAlphaPrescribed: true),
-                        debugWriter,
                         settings.UseLegacyBoundaryLayerInitialization);
                 // Fortran UPDATE: CL = CL + RLX*DAC (for LALFA=true)
                 if (settings.UseLegacyBoundaryLayerInitialization)
@@ -555,12 +550,6 @@ public static class ViscousSolverEngine
                     useLegacyPrecision: true);
             }
 
-            if (debugWriter != null)
-            {
-                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                    "POST_UPDATE RMSBL={0,15:E8} RMXBL={1,15:E8} RLX={2,15:E8}",
-                    rmsbl, rmsbl * 2.0, rlx));
-            }
 
             // f. STMOVE: Relocate stagnation point if it has moved
             // Convert UEDG back to panel speeds, then find stagnation by sign change
@@ -693,11 +682,6 @@ public static class ViscousSolverEngine
             
             double cm = ComputeViscousCM(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
 
-            if (debugWriter != null)
-            {
-                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                    "POST_CALC CL={0,15:E8} CD={1,15:E8} CM={2,15:E8}", cl, cd, cm));
-            }
 
             // Guard against NaN from transient numerical issues
             if (double.IsNaN(rmsbl) || double.IsInfinity(rmsbl))
@@ -720,8 +704,6 @@ public static class ViscousSolverEngine
             // Convergence check uses rmsbl (Newton RMS from BuildNewtonSystem)
             if (rmsbl < tolerance)
             {
-                debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                    "CONVERGED iter={0}", iter + 1));
                 converged = true;
                 break;
             }
@@ -1691,21 +1673,6 @@ public static class ViscousSolverEngine
             settings.UseLegacyWakeSourceKernelPrecision);
         
 
-        if (debugWriter != null)
-        {
-            int ile1 = blState.IPAN[1, 0];
-            int iw1 = blState.IPAN[blState.IBLTE[1] + 1, 1];
-            if (ile1 >= 0 && iw1 >= 0 && ile1 < dij.GetLength(0) && iw1 < dij.GetLength(1))
-            {
-                debugWriter.WriteLine(string.Format(
-                    CultureInfo.InvariantCulture,
-                    "DIJ_SAMPLE ILE1={0} IW1={1} AIR={2,15:E8} WAKE={3,15:E8}",
-                    ile1 + 1,
-                    iw1 + 1,
-                    dij[ile1, ile1],
-                    dij[ile1, iw1]));
-            }
-        }
         // Compute SST_GO/SST_GP once from the initial BL state (matching
         // Fortran XICALC which computes from the inviscid stagnation geometry).
         // At this point UEDG has the initial inviscid values, so the formula
@@ -3700,8 +3667,7 @@ public static class ViscousSolverEngine
                     finalKin, finalSecSnapshot,
                     traceLabel: "march_legacy_label109");
                 
-                } catch (Exception ex) {
-                    Console.Error.WriteLine($"C_STFLO_109_EXCEPTION ibl={ibl+1}: {ex.GetType().Name}: {ex.Message}");
+                } catch (Exception) {
                 }
             }
 

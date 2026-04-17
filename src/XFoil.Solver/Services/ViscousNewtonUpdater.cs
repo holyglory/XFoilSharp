@@ -69,19 +69,18 @@ public static class ViscousNewtonUpdater
         int isp = -1,
         int nPanel = -1,
         NewtonUpdateContext? updateContext = null,
-        TextWriter? debugWriter = null,
         bool useLegacyPrecision = false)
     {
         s_updateCallCount++;
         if (mode == ViscousSolverMode.XFoilRelaxation)
         {
-            var (rlx, normalizedRms, dac) = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, dij, isp, nPanel, updateContext, debugWriter, useLegacyPrecision);
+            var (rlx, normalizedRms, dac) = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, dij, isp, nPanel, updateContext, useLegacyPrecision);
             double rmsbl = useLegacyPrecision ? normalizedRms : ComputeUpdateRms(blState, newtonSystem, useLegacyPrecision);
             return (rlx, rmsbl, trustRadius, true, dac);
         }
 
         var trResult = ApplyTrustRegionUpdate(blState, newtonSystem, hstinv, wakeGap,
-            trustRadius, previousRmsbl, currentRmsbl, dij, isp, nPanel, updateContext, debugWriter, useLegacyPrecision);
+            trustRadius, previousRmsbl, currentRmsbl, dij, isp, nPanel, updateContext, useLegacyPrecision);
         return (trResult.Rlx, trResult.Rmsbl, trResult.TrustRadius, trResult.Accepted, 0.0);
     }
 
@@ -102,7 +101,6 @@ public static class ViscousNewtonUpdater
         int isp,
         int nPanel,
         NewtonUpdateContext? updateContext,
-        TextWriter? debugWriter,
         bool useLegacyPrecision)
     {
         var vdel = newtonSystem.VDEL;
@@ -224,29 +222,6 @@ public static class ViscousNewtonUpdater
                 rmsAccum += dn1 * dn1 + dn2 * dn2 + dn3 * dn3 + dn4 * dn4;
             }
 
-            if (debugWriter != null)
-            {
-                double maxNorm = LegacyPrecisionMath.Max(
-                    LegacyPrecisionMath.Max(LegacyPrecisionMath.Abs(dn1, useLegacyPrecision), LegacyPrecisionMath.Abs(dn2, useLegacyPrecision), useLegacyPrecision),
-                    LegacyPrecisionMath.Max(LegacyPrecisionMath.Abs(dn3, useLegacyPrecision), LegacyPrecisionMath.Abs(dn4, useLegacyPrecision), useLegacyPrecision),
-                    useLegacyPrecision);
-                if (!double.IsFinite(maxNorm) || maxNorm > 5.0)
-                {
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "UPDATE_ALERT IS={0} IBL={1} IV={2} dC={3,15:E8} dT={4,15:E8} dM={5,15:E8} dU={6,15:E8} n1={7,15:E8} n2={8,15:E8} n3={9,15:E8} n4={10,15:E8}",
-                        side + 1,
-                        ibl + 1,
-                        jv + 1,
-                        dctau,
-                        dthet,
-                        dmass,
-                        duedg,
-                        dn1,
-                        dn2,
-                        dn3,
-                        dn4));
-                }
-            }
 
             // Check each variable against DHI/DLO limits
             double rdn1 = LegacyPrecisionMath.Multiply(rlx, dn1, useLegacyPrecision);
@@ -274,32 +249,8 @@ public static class ViscousNewtonUpdater
         // Match XFoil UPDATE: no artificial lower bound, only cap at 1.0.
         rlx = LegacyPrecisionMath.Max(0.0, LegacyPrecisionMath.Min(1.0, rlx, useLegacyPrecision), useLegacyPrecision);
 
-        // Diagnostic: log first 5 stations' Newton deltas and the relaxation factor
-        if (debugWriter != null)
-        {
-            int logCount = Math.Min(5, nsys);
-            for (int jv = 0; jv < logCount; jv++)
-            {
-                int iblDbg = isys[jv, 0];
-                int sideDbg = isys[jv, 1];
-                double dctauDbg = vdel[0, 0, jv] - coupling.Dac * vdel[0, 1, jv];
-                double dthetDbg = vdel[1, 0, jv] - coupling.Dac * vdel[1, 1, jv];
-                double dmassDbg = vdel[2, 0, jv] - coupling.Dac * vdel[2, 1, jv];
-                double duedgDbg = coupling.Duedg[jv];
-                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                    "UPDATE IS={0} IBL={1} IV={2} dC={3,15:E8} dT={4,15:E8} dM={5,15:E8} dU={6,15:E8}",
-                    sideDbg + 1, iblDbg + 1, jv + 1, dctauDbg, dthetDbg, dmassDbg, duedgDbg));
-            }
-            debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                "UPDATE_RLX RLX={0,15:E8}", rlx));
-        }
-
-
-        // GDB: dump RLX, DAC, RMSBL and max-delta station
-        
-
         // Second pass: apply the relaxed update
-        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, coupling, debugWriter, useLegacyPrecision);
+        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, coupling, useLegacyPrecision);
 
         int totalStations = blState.NBL[0] + blState.NBL[1];
         double normalizedRmsbl;
@@ -335,7 +286,6 @@ public static class ViscousNewtonUpdater
         int isp,
         int nPanel,
         NewtonUpdateContext? updateContext,
-        TextWriter? debugWriter,
         bool useLegacyPrecision)
     {
         // Compute step norm
@@ -347,24 +297,6 @@ public static class ViscousNewtonUpdater
             : 1.0;
         rlx = LegacyPrecisionMath.Max(0.01, LegacyPrecisionMath.Min(1.0, rlx, useLegacyPrecision), useLegacyPrecision);
 
-        // Diagnostic: log first 5 stations' Newton deltas and relaxation factor
-        if (debugWriter != null)
-        {
-            var vdelTr = newtonSystem.VDEL;
-            var isysTr = newtonSystem.ISYS;
-            int nsysTr = newtonSystem.NSYS;
-            int logCount = Math.Min(5, nsysTr);
-            for (int jv = 0; jv < logCount; jv++)
-            {
-                int iblDbg = isysTr[jv, 0];
-                int sideDbg = isysTr[jv, 1];
-                debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                    "UPDATE IS={0} IBL={1} IV={2} dC={3,15:E8} dT={4,15:E8} dM={5,15:E8} dU={6,15:E8}",
-                    sideDbg + 1, iblDbg, jv + 1, vdelTr[0, 0, jv], vdelTr[1, 0, jv], vdelTr[2, 0, jv], 0.0));
-            }
-            debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                "UPDATE_RLX RLX={0,15:E8}", rlx));
-        }
 
         // Save current state for potential rollback (ThreadStatic snapshot buffers
         // avoid per-iter heap allocation; exact-size match + Array.Copy preserves semantics).
@@ -384,7 +316,7 @@ public static class ViscousNewtonUpdater
             useLegacyPrecision);
 
         // Apply step
-        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, coupling, debugWriter, useLegacyPrecision);
+        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, coupling, useLegacyPrecision);
 
         // Compute new residual
         double newRmsbl = ComputeUpdateRms(blState, newtonSystem, useLegacyPrecision);
@@ -707,7 +639,6 @@ public static class ViscousNewtonUpdater
         double hstinv,
         double[] wakeGap,
         UpdateStepCoupling coupling,
-        TextWriter? debugWriter,
         bool useLegacyPrecision)
     {
         var vdel = newtonSystem.VDEL;
@@ -818,29 +749,6 @@ public static class ViscousNewtonUpdater
             
 
 
-            if (debugWriter != null)
-            {
-                bool thetaClamped = blState.THET[ibl, side] == 1e-10
-                    && LegacyPrecisionMath.AddScaled(oldTheta, rlx, dthet, useLegacyPrecision) < 1e-10;
-                bool dstrCollapsed = blState.DSTR[ibl, side] <= 1.1e-10 && oldDstr > 1e-8;
-                bool ueLarge = LegacyPrecisionMath.Abs(LegacyPrecisionMath.Subtract(blState.UEDG[ibl, side], oldUedg, useLegacyPrecision), useLegacyPrecision) > 0.25;
-                if (thetaClamped || dstrCollapsed || ueLarge)
-                {
-                    debugWriter.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                        "UPDATE_CLAMP IS={0} IBL={1} IV={2} oldC={3,15:E8} oldT={4,15:E8} oldD={5,15:E8} oldU={6,15:E8} newC={7,15:E8} newT={8,15:E8} newD={9,15:E8} newU={10,15:E8}",
-                        side + 1,
-                        ibl + 1,
-                        jv + 1,
-                        oldCtau,
-                        oldTheta,
-                        oldDstr,
-                        oldUedg,
-                        blState.CTAU[ibl, side],
-                        blState.THET[ibl, side],
-                        blState.DSTR[ibl, side],
-                        blState.UEDG[ibl, side]));
-                }
-            }
         }
 
         // Legacy block: xbl.f UPDATE negative-Ue cleanup.

@@ -942,27 +942,6 @@ public static class TransitionModel
                 useLegacyPrecision);
         point.DownstreamKinematic = kinematic2.Clone();
 
-        // Gate on outer Newton iteration via static build count
-        // MRCHDU runs before BuildNewtonSystem, so the count is 1 less than Fortran's TRACE_OUTER
-        int outerIter = ViscousNewtonAssembler.BuildCallCount + 1;
-        bool outerGate = false; // Disabled — enable for targeted debugging
-        if (outerGate)
-        {
-            Console.Error.WriteLine(
-                $"C_TRC_IN it={outerIter} s={traceSide} i={traceStation} ph={tracePhase}" +
-                $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
-                $" A2={BitConverter.SingleToInt32Bits((float)ampl2):X8}" +
-                $" X1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
-                $" X2={BitConverter.SingleToInt32Bits((float)x2):X8}");
-            Console.Error.WriteLine(
-                $"C_TRC_IN2 HK1={BitConverter.SingleToInt32Bits((float)kinematic1.HK2):X8}" +
-                $" T1={BitConverter.SingleToInt32Bits((float)t1):X8}" +
-                $" RT1={BitConverter.SingleToInt32Bits((float)kinematic1.RT2):X8}" +
-                $" HK2={BitConverter.SingleToInt32Bits((float)kinematic2.HK2):X8}" +
-                $" T2={BitConverter.SingleToInt32Bits((float)t2):X8}" +
-                $" RT2={BitConverter.SingleToInt32Bits((float)kinematic2.RT2):X8}");
-        }
-
         var ax0 = ComputeTransitionSensitivities(
             kinematic1.HK2,
             t1,
@@ -975,13 +954,6 @@ public static class TransitionModel
             amcrit,
             useHighHkModel,
             useLegacyPrecision);
-
-        if (outerGate)
-        {
-            Console.Error.WriteLine(
-                $"C_TRC_AX it={outerIter} s={traceSide} i={traceStation}" +
-                $" AX={BitConverter.SingleToInt32Bits((float)ax0.Ax):X8}");
-        }
 
         double dx = LegacyPrecisionMath.Subtract(x2, x1, useLegacyPrecision);
         // Fortran TRCHEK receives AMPL2 via COMMON, set by caller:
@@ -1616,21 +1588,6 @@ public static class TransitionModel
             point.Xt2[4] = point.Xt2[4] - (xt2OverZa2 * zX2);
         }
 
-        if (outerGate && (freeTransition || forcedTransition))
-        {
-            Console.Error.WriteLine(
-                $"C_TRC_OUT it={outerIter} s={traceSide} i={traceStation}");
-            Console.Error.WriteLine(
-                $"C_TRC_SEN XT_X2={BitConverter.SingleToInt32Bits((float)point.Xt2[4]):X8}" +
-                $" XT_A1={BitConverter.SingleToInt32Bits((float)point.Xt1[0]):X8}" +
-                $" XT_T1={BitConverter.SingleToInt32Bits((float)point.Xt1[1]):X8}" +
-                $" XT_D1={BitConverter.SingleToInt32Bits((float)point.Xt1[2]):X8}");
-            Console.Error.WriteLine(
-                $"C_TRC_SEN2 WF2={BitConverter.SingleToInt32Bits((float)(useLegacyPrecision ? carriedWf2 : finalWf2)):X8}" +
-                $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
-                $" XT={BitConverter.SingleToInt32Bits((float)point.Xt):X8}" +
-                $" zA2={BitConverter.SingleToInt32Bits((float)zA2):X8}");
-        }
 
 
         point.TransitionOccurred = true;

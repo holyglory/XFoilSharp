@@ -1,5 +1,4 @@
 using System.Numerics;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
@@ -72,7 +71,7 @@ public static class CosineClusteringPanelDistributor
         double curvatureDensityRatio)
         where T : struct, IFloatingPointIeee754<T>
     {
-        string traceScope = SolverTrace.ScopeName(typeof(CosineClusteringPanelDistributor));
+        string traceScope = nameof(CosineClusteringPanelDistributor);
         if (inputCount < 2)
         {
             return;
@@ -937,17 +936,6 @@ public static class CosineClusteringPanelDistributor
     private static void TracePangenCurvatureNode<T>(string scope, string stage, int index, T arcLength, T value)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_curvature_node",
-            scope,
-            new
-            {
-                stage,
-                index,
-                arcLength = double.CreateChecked(arcLength),
-                value = double.CreateChecked(value)
-            });
     }
 
     private static void TraceBufferSplineNode<T>(
@@ -960,19 +948,6 @@ public static class CosineClusteringPanelDistributor
         T yp)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "buffer_spline_node",
-            scope,
-            new
-            {
-                index,
-                x = double.CreateChecked(x),
-                y = double.CreateChecked(y),
-                arcLength = double.CreateChecked(arcLength),
-                xp = double.CreateChecked(xp),
-                yp = double.CreateChecked(yp)
-            });
     }
 
     private static void TracePangenPanelNode<T>(
@@ -985,19 +960,6 @@ public static class CosineClusteringPanelDistributor
         T yp)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_panel_node",
-            scope,
-            new
-            {
-                index,
-                x = double.CreateChecked(x),
-                y = double.CreateChecked(y),
-                arcLength = double.CreateChecked(arcLength),
-                xp = double.CreateChecked(xp),
-                yp = double.CreateChecked(yp)
-            });
     }
 
     private static void TracePangenLeadingEdge<T>(
@@ -1013,22 +975,6 @@ public static class CosineClusteringPanelDistributor
         int ible)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_lefind",
-            scope,
-            new
-            {
-                stage,
-                sle = double.CreateChecked(sle),
-                xle = double.CreateChecked(xle),
-                yle = double.CreateChecked(yle),
-                xte = double.CreateChecked(xte),
-                yte = double.CreateChecked(yte),
-                cvle = double.CreateChecked(cvle),
-                cvavg = double.CreateChecked(cvavg),
-                ible
-            });
     }
 
     private static void TracePangenLeadingEdgeSample<T>(
@@ -1041,34 +987,11 @@ public static class CosineClusteringPanelDistributor
         T curvatureSum)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_le_sample",
-            scope,
-            new
-            {
-                stage,
-                sample,
-                frac = double.CreateChecked(frac),
-                parameter = double.CreateChecked(parameter),
-                curvatureValue = double.CreateChecked(curvatureValue),
-                curvatureSum = double.CreateChecked(curvatureSum)
-            });
     }
 
     private static void TracePangenIteration<T>(string scope, int iteration, T dmax, T rlx)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_iteration",
-            scope,
-            new
-            {
-                iteration,
-                dmax = double.CreateChecked(dmax),
-                rlx = double.CreateChecked(rlx)
-            });
     }
 
     private static void TracePangenNewtonRow<T>(
@@ -1082,20 +1005,6 @@ public static class CosineClusteringPanelDistributor
         T residual)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_newton_row",
-            scope,
-            new
-            {
-                iteration,
-                index,
-                arcLength = double.CreateChecked(arcLength),
-                lower = double.CreateChecked(lower),
-                diagonal = double.CreateChecked(diagonal),
-                upper = double.CreateChecked(upper),
-                residual = double.CreateChecked(residual)
-            });
     }
 
     private static void TracePangenNewtonState<T>(
@@ -1126,52 +1035,11 @@ public static class CosineClusteringPanelDistributor
         T residual)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_newton_state",
-            scope,
-            new
-            {
-                iteration,
-                index,
-                arcLength = double.CreateChecked(arcLength),
-                dsm = double.CreateChecked(dsm),
-                dsp = double.CreateChecked(dsp),
-                cv1 = double.CreateChecked(cv1),
-                cv2 = double.CreateChecked(cv2),
-                cv3 = double.CreateChecked(cv3),
-                cvs1 = double.CreateChecked(cvs1),
-                cvs2 = double.CreateChecked(cvs2),
-                cvs3 = double.CreateChecked(cvs3),
-                cavm = double.CreateChecked(cavm),
-                cavmS1 = double.CreateChecked(cavmS1),
-                cavmS2 = double.CreateChecked(cavmS2),
-                cavp = double.CreateChecked(cavp),
-                cavpS2 = double.CreateChecked(cavpS2),
-                cavpS3 = double.CreateChecked(cavpS3),
-                fm = double.CreateChecked(fm),
-                fp = double.CreateChecked(fp),
-                rez = double.CreateChecked(rez),
-                lower = double.CreateChecked(lower),
-                diagonal = double.CreateChecked(diagonal),
-                upper = double.CreateChecked(upper),
-                residual = double.CreateChecked(residual)
-            });
     }
 
     private static void TracePangenNewtonDelta<T>(string scope, int iteration, int index, T delta)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_newton_delta",
-            scope,
-            new
-            {
-                iteration,
-                index,
-                delta = double.CreateChecked(delta)
-            });
     }
 
     private static void TracePangenRelaxationStep<T>(
@@ -1187,38 +1055,11 @@ public static class CosineClusteringPanelDistributor
         T dmaxAfter)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_relaxation_step",
-            scope,
-            new
-            {
-                iteration,
-                index,
-                ds = double.CreateChecked(ds),
-                dds = double.CreateChecked(dds),
-                dsrat = double.CreateChecked(dsrat),
-                rlxBefore = double.CreateChecked(rlxBefore),
-                rlxAfter = double.CreateChecked(rlxAfter),
-                dmaxBefore = double.CreateChecked(dmaxBefore),
-                dmaxAfter = double.CreateChecked(dmaxAfter)
-            });
     }
 
     private static void TracePangenSnewNode<T>(string scope, string stage, int iteration, int index, T value)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        SolverTrace.Event(
-            "pangen_snew_node",
-            scope,
-            new
-            {
-                stage,
-                iteration,
-                index,
-                value = double.CreateChecked(value)
-            });
     }
 
     private static void TraceCurvatureEvaluation<T>(
@@ -1251,44 +1092,6 @@ public static class CosineClusteringPanelDistributor
         T curvature)
         where T : struct, IFloatingPointIeee754<T>
     {
-        if (!SolverTrace.IsActive) return;
-        string precision = typeof(T) == typeof(float) ? "Single" : "Double";
-        if (SolverTrace.IsActive)
-        {
-            SolverTrace.Event(
-                "curvature_eval",
-                scope,
-                new
-                {
-                    routine,
-                    lowerIndex,
-                    upperIndex,
-                    parameter = double.CreateChecked(parameter),
-                    ds = double.CreateChecked(ds),
-                    t = double.CreateChecked(t),
-                    xDelta = double.CreateChecked(xDelta),
-                    yDelta = double.CreateChecked(yDelta),
-                    cx1 = double.CreateChecked(cx1),
-                    cx2 = double.CreateChecked(cx2),
-                    cy1 = double.CreateChecked(cy1),
-                    cy2 = double.CreateChecked(cy2),
-                    xFactor1 = double.CreateChecked(xFactor1),
-                    xFactor2 = double.CreateChecked(xFactor2),
-                    yFactor1 = double.CreateChecked(yFactor1),
-                    yFactor2 = double.CreateChecked(yFactor2),
-                    xTerm1 = double.CreateChecked(xTerm1),
-                    xTerm2 = double.CreateChecked(xTerm2),
-                    yTerm1 = double.CreateChecked(yTerm1),
-                    yTerm2 = double.CreateChecked(yTerm2),
-                    xd = double.CreateChecked(xd),
-                    xdd = double.CreateChecked(xdd),
-                    yd = double.CreateChecked(yd),
-                    ydd = double.CreateChecked(ydd),
-                    sd = double.CreateChecked(sd),
-                    curvature = double.CreateChecked(curvature),
-                    precision
-                });
-        }
     }
 
     // Legacy mapping: managed-only scalar helper corresponding to Fortran intrinsic MAX/AMAX1 usage.
