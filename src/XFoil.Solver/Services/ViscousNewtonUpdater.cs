@@ -62,6 +62,7 @@ public static class ViscousNewtonUpdater
         ViscousSolverMode mode,
         double hstinv,
         double[] wakeGap,
+        int wakeGapCount,
         double trustRadius,
         double previousRmsbl,
         double currentRmsbl,
@@ -74,12 +75,12 @@ public static class ViscousNewtonUpdater
         s_updateCallCount++;
         if (mode == ViscousSolverMode.XFoilRelaxation)
         {
-            var (rlx, normalizedRms, dac) = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, dij, isp, nPanel, updateContext, useLegacyPrecision);
+            var (rlx, normalizedRms, dac) = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, wakeGapCount, dij, isp, nPanel, updateContext, useLegacyPrecision);
             double rmsbl = useLegacyPrecision ? normalizedRms : ComputeUpdateRms(blState, newtonSystem, useLegacyPrecision);
             return (rlx, rmsbl, trustRadius, true, dac);
         }
 
-        var trResult = ApplyTrustRegionUpdate(blState, newtonSystem, hstinv, wakeGap,
+        var trResult = ApplyTrustRegionUpdate(blState, newtonSystem, hstinv, wakeGap, wakeGapCount,
             trustRadius, previousRmsbl, currentRmsbl, dij, isp, nPanel, updateContext, useLegacyPrecision);
         return (trResult.Rlx, trResult.Rmsbl, trResult.TrustRadius, trResult.Accepted, 0.0);
     }
@@ -97,6 +98,7 @@ public static class ViscousNewtonUpdater
         ViscousNewtonSystem newtonSystem,
         double hstinv,
         double[] wakeGap,
+        int wakeGapCount,
         double[,]? dij,
         int isp,
         int nPanel,
@@ -250,7 +252,7 @@ public static class ViscousNewtonUpdater
         rlx = LegacyPrecisionMath.Max(0.0, LegacyPrecisionMath.Min(1.0, rlx, useLegacyPrecision), useLegacyPrecision);
 
         // Second pass: apply the relaxed update
-        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, coupling, useLegacyPrecision);
+        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, wakeGapCount, coupling, useLegacyPrecision);
 
         int totalStations = blState.NBL[0] + blState.NBL[1];
         double normalizedRmsbl;
@@ -279,6 +281,7 @@ public static class ViscousNewtonUpdater
         ViscousNewtonSystem newtonSystem,
         double hstinv,
         double[] wakeGap,
+        int wakeGapCount,
         double trustRadius,
         double previousRmsbl,
         double currentRmsbl,
@@ -316,7 +319,7 @@ public static class ViscousNewtonUpdater
             useLegacyPrecision);
 
         // Apply step
-        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, coupling, useLegacyPrecision);
+        ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, wakeGapCount, coupling, useLegacyPrecision);
 
         // Compute new residual
         double newRmsbl = ComputeUpdateRms(blState, newtonSystem, useLegacyPrecision);
@@ -638,6 +641,7 @@ public static class ViscousNewtonUpdater
         double rlx,
         double hstinv,
         double[] wakeGap,
+        int wakeGapCount,
         UpdateStepCoupling coupling,
         bool useLegacyPrecision)
     {
@@ -715,7 +719,7 @@ public static class ViscousNewtonUpdater
             if (ibl > blState.IBLTE[side] && wakeGap != null)
             {
                 int iw = ibl - blState.IBLTE[side];
-                if (iw >= 0 && iw < wakeGap.Length)
+                if (iw >= 0 && iw < wakeGapCount)
                     dswaki = wakeGap[iw];
             }
 

@@ -42,19 +42,36 @@ public static class ViscousSolverEngine
         // Legacy mapping: none
         // Difference from legacy: This is a managed-only container for wake geometry and seed data that the Fortran code kept in distributed arrays.
         // Decision: Keep the container because it makes the wake-seed plumbing explicit without changing solver math.
-        public WakeSeedData(InfluenceMatrixBuilder.WakeGeometryData geometry, double[] rawSpeeds, double[] gapProfile, double normalGap)
+        public WakeSeedData(InfluenceMatrixBuilder.WakeGeometryData geometry, double[] rawSpeeds, int rawSpeedsCount, double[] gapProfile, int gapProfileCount, double normalGap)
         {
             Geometry = geometry;
             RawSpeeds = rawSpeeds;
+            RawSpeedsCount = rawSpeedsCount;
             GapProfile = gapProfile;
+            GapProfileCount = gapProfileCount;
             NormalGap = normalGap;
         }
 
         public InfluenceMatrixBuilder.WakeGeometryData Geometry { get; }
 
+        /// <summary>
+        /// Wake edge speeds. Backed by a pooled ThreadStatic buffer whose
+        /// <c>Length</c> may exceed the active wake count; consumers must use
+        /// <see cref="RawSpeedsCount"/> for bounds, not <c>RawSpeeds.Length</c>.
+        /// </summary>
         public double[] RawSpeeds { get; }
 
+        /// <summary>Active wake station count for <see cref="RawSpeeds"/>.</summary>
+        public int RawSpeedsCount { get; }
+
+        /// <summary>
+        /// Wake gap profile. Pooled like <see cref="RawSpeeds"/> — consumers
+        /// must use <see cref="GapProfileCount"/> as the authoritative bound.
+        /// </summary>
         public double[] GapProfile { get; }
+
+        /// <summary>Active element count for <see cref="GapProfile"/>.</summary>
+        public int GapProfileCount { get; }
 
         // Raw trailing edge normal gap (Fortran ANTE). This is used for the
         // initial DSTR seed at the first wake station where Fortran's
@@ -77,7 +94,20 @@ public static class ViscousSolverEngine
 
         public required double[,] UeInv { get; init; }
 
+        /// <summary>
+        /// Active row count for <see cref="UeInv"/>. The backing buffer is
+        /// pooled and its `GetLength(0)` may exceed this value; consumers
+        /// must treat <see cref="MaxStations"/> as the authoritative bound.
+        /// </summary>
+        public required int MaxStations { get; init; }
+
         public required double[] QInv { get; init; }
+
+        /// <summary>
+        /// Active length for <see cref="QInv"/>. The backing buffer is pooled
+        /// and <c>QInv.Length</c> may exceed this value.
+        /// </summary>
+        public required int QInvCount { get; init; }
 
         public required int Isp { get; init; }
 
@@ -275,10 +305,6 @@ public static class ViscousSolverEngine
         double alphaRadians,
         TextWriter? debugWriter = null)
     {
-
-        TraceBufferGeometry(geometry.x, geometry.y);
-        
-
         // Step 1: Run inviscid analysis to get baseline.
         // ThreadStatic pool eliminates per-case 500KB+ LOH churn (3 influence
         // matrices inside InviscidSolverState, plus the panel-state arrays).
@@ -380,32 +406,6 @@ public static class ViscousSolverEngine
         return context;
     }
 
-    // Legacy mapping: none
-    // Difference from legacy: This tracing helper has no direct Fortran analogue; it exists only to expose the buffered geometry to the managed diagnostics stream.
-    // Decision: Keep it as managed-only instrumentation.
-    private static void TraceBufferGeometry(double[] x, double[] y)
-    {
-        int count = Math.Min(x.Length, y.Length);
-        if (count == 0)
-        {
-            return;
-        }
-
-        var arc = new double[count];
-        arc[0] = 0.0;
-        for (int i = 1; i < count; i++)
-        {
-            double dx = x[i] - x[i - 1];
-            double dy = y[i] - y[i - 1];
-            arc[i] = arc[i - 1] + Math.Sqrt((dx * dx) + (dy * dy));
-        }
-
-
-        for (int i = 0; i < count; i++)
-        {
-        }
-    }
-
     /// <summary>
     /// Runs the viscous/inviscid Newton coupling iteration starting from a converged inviscid solution.
     /// Port of VISCAL from xoper.f.
@@ -435,6 +435,8 @@ public static class ViscousSolverEngine
         int n = preNewton.NodeCount;
         int nWake = preNewton.WakeCount;
         double[] qinv = preNewton.QInv;
+        int qinvCount = preNewton.QInvCount;
+        int maxStations = preNewton.MaxStations;
         int isp = preNewton.Isp;
         double sst = preNewton.Sst;
         BoundaryLayerSystemState blState = preNewton.BoundaryLayerState;
@@ -549,7 +551,7 @@ public static class ViscousSolverEngine
             // b. SETBL global assembly: build the Newton system from the current state.
             double rmsbl = ViscousNewtonAssembler.BuildNewtonSystem(
                 blState, newtonSystem, dij, settings,
-                isAlphaPrescribed: true, wakeGap,
+                isAlphaPrescribed: true, wakeGap, nWake + 1,
                 tkbl, qinfbl, tkbl_ms,
                 hstinv, hstinv_ms,
                 rstbl, rstbl_ms,
@@ -616,7 +618,7 @@ public static class ViscousSolverEngine
                 var (newtonRlx, updatedRms, newTrustRadius, accepted, dac) =
                     ViscousNewtonUpdater.ApplyNewtonUpdate(
                         blState, newtonSystem, settings.ViscousSolverMode,
-                        hstinv, wakeGap, trustRadius, rmsbl, rmsbl,
+                        hstinv, wakeGap, nWake + 1, trustRadius, rmsbl, rmsbl,
                         dij, isp, n,
                         new ViscousNewtonUpdater.NewtonUpdateContext(
                             panel,
@@ -718,7 +720,7 @@ public static class ViscousSolverEngine
 
                 isp = newIsp;
                 sst = newSst;
-                UpdateInviscidEdgeBaseline(ueInv, blState, qinv, nWake, wakeSeed);
+                UpdateInviscidEdgeBaseline(ueInv, maxStations, blState, qinv, qinvCount, nWake, wakeSeed);
                 var (isysNew, nsysNew) = EdgeVelocityCalculator.MapStationsToSystemLines(iblteNew, nblNew);
                 newtonSystem.SetupISYS(isysNew, nsysNew);
                 ConfigureNewtonSystemTopology(newtonSystem, blState, panel);
@@ -1406,12 +1408,20 @@ public static class ViscousSolverEngine
 
     private static void UpdateInviscidEdgeBaseline(
         double[,] ueInv,
+        int ueInvRowCount,
         BoundaryLayerSystemState blState,
         double[] qinv,
+        int qinvCount,
         int nWake,
         WakeSeedData? wakeSeed = null)
     {
-        Array.Clear(ueInv);
+        // Zero only the active region; the pooled buffer may be larger but
+        // rows beyond ueInvRowCount belong to another case's worst-case sizing.
+        for (int row = 0; row < ueInvRowCount; row++)
+        {
+            ueInv[row, 0] = 0.0;
+            ueInv[row, 1] = 0.0;
+        }
 
         for (int side = 0; side < 2; side++)
         {
@@ -1419,7 +1429,7 @@ public static class ViscousSolverEngine
             for (int ibl = 1; ibl <= blState.IBLTE[side] && ibl < blState.MaxStations; ibl++)
             {
                 int iPan = blState.IPAN[ibl, side];
-                if (iPan >= 0 && iPan < qinv.Length)
+                if (iPan >= 0 && iPan < qinvCount)
                 {
                     ueInv[ibl, side] = blState.VTI[ibl, side] * qinv[iPan];
                 }
@@ -1433,13 +1443,13 @@ public static class ViscousSolverEngine
                 blState,
                 wakeSeed,
                 iw);
-            if (ibl1 < ueInv.GetLength(0))
+            if (ibl1 < ueInvRowCount)
             {
                 ueInv[ibl1, 1] = wakeUe;
             }
 
             int ibl0 = blState.IBLTE[0] + iw;
-            if (ibl0 < ueInv.GetLength(0))
+            if (ibl0 < ueInvRowCount)
             {
                 ueInv[ibl0, 0] = wakeUe;
             }
@@ -1642,7 +1652,7 @@ public static class ViscousSolverEngine
         // parity path should allow a 3-station wake seed instead of forcing 4.
         int nWake = Math.Max((n / 8) + 2, 3);
 
-        double[] qinv = new double[n];
+        double[] qinv = XFoil.Solver.Numerics.SolverBuffers.QinvScratch(n);
         Array.Copy(inviscidState.InviscidSpeed, qinv, n);
 
         var (isp, sst, initSstGo, initSstGp) = FindStagnationPointXFoil(
@@ -1667,6 +1677,7 @@ public static class ViscousSolverEngine
             panel,
             inviscidState,
             qinv,
+            n,
             isp,
             nWake,
             settings.FreestreamVelocity,
@@ -1698,7 +1709,7 @@ public static class ViscousSolverEngine
         // The C# laminar seed (RefineLaminarSeedStation) writes UEDG, so
         // ueInv must be captured NOW — before InitializeBLThwaitesXFoil
         // overwrites the inviscid UEDG at laminar stations.
-        double[,] ueInv = new double[maxStations, 2];
+        double[,] ueInv = XFoil.Solver.Numerics.SolverBuffers.UeInvScratch(maxStations, 2);
         for (int side = 0; side < 2; side++)
         {
             for (int ibl = 0; ibl < blState.NBL[side]; ibl++)
@@ -1800,7 +1811,9 @@ public static class ViscousSolverEngine
             NewtonSystem = newtonSystem,
             Dij = dij,
             UeInv = ueInv,
+            MaxStations = maxStations,
             QInv = qinv,
+            QInvCount = n,
             Isp = isp,
             Sst = sst,
             InviscidSstGo = invSstGo,
@@ -2236,6 +2249,7 @@ public static class ViscousSolverEngine
         LinearVortexPanelState panel,
         InviscidSolverState inviscidState,
         double[] qinv,
+        int qinvCount,
         int isp,
         int nWake,
         double freestreamSpeed,
@@ -2249,12 +2263,13 @@ public static class ViscousSolverEngine
         (int[] overlayIndices, double[] currentGamma) = GetLegacyWakeSeedGammaOverlay(
             inviscidState,
             qinv,
+            qinvCount,
             isp,
             freestreamSpeed);
         double[]? restoredGamma = null;
         if (overlayIndices.Length > 0)
         {
-            restoredGamma = new double[overlayIndices.Length];
+            restoredGamma = XFoil.Solver.Numerics.SolverBuffers.WakeSeedRestoredGamma(overlayIndices.Length);
             for (int overlay = 0; overlay < overlayIndices.Length; overlay++)
             {
                 int index = overlayIndices[overlay];
@@ -2273,8 +2288,8 @@ public static class ViscousSolverEngine
                 freestreamSpeed,
                 angleOfAttackRadians);
 
-            var rawSpeeds = new double[nWake];
-            rawSpeeds[0] = (qinv.Length > 0) ? qinv[^1] : 0.0;
+            var rawSpeeds = XFoil.Solver.Numerics.SolverBuffers.WakeSeedRawSpeeds(nWake);
+            rawSpeeds[0] = (qinvCount > 0) ? qinv[qinvCount - 1] : 0.0;
             // Try the fix: also compute rawSpeeds[0] via ComputeInfluenceAt at FIRST wake position
 
             // Fortran QWCALC: PSILIN at each wake panel computes QTAN1/QTAN2
@@ -2285,7 +2300,7 @@ public static class ViscousSolverEngine
             bool useBasisDecomposition = inviscidState.UseLegacyKernelPrecision;
             if (useBasisDecomposition)
             {
-                var savedGamma = new double[n + 1];
+                var savedGamma = XFoil.Solver.Numerics.SolverBuffers.WakeSeedSavedGamma(n + 1);
                 for (int i = 0; i <= n; i++)
                     savedGamma[i] = inviscidState.VortexStrength[i];
 
@@ -2338,7 +2353,7 @@ public static class ViscousSolverEngine
             double anteRaw = inviscidState.TrailingEdgeAngleNormal;
 
 
-            return new WakeSeedData(wakeGeometry, rawSpeeds, gapProfile, anteRaw);
+            return new WakeSeedData(wakeGeometry, rawSpeeds, nWake, gapProfile, wakeGeometry.Count, anteRaw);
         }
         finally
         {
@@ -2355,11 +2370,12 @@ public static class ViscousSolverEngine
     private static (int[] overlayIndices, double[] currentGamma) GetLegacyWakeSeedGammaOverlay(
         InviscidSolverState inviscidState,
         double[] qinv,
+        int qinvCount,
         int isp,
         double freestreamSpeed)
     {
         bool useLegacyPrecision = inviscidState.UseLegacyKernelPrecision || inviscidState.UseLegacyPanelingPrecision;
-        int n = Math.Min(inviscidState.NodeCount, qinv.Length);
+        int n = Math.Min(inviscidState.NodeCount, qinvCount);
         if (!useLegacyPrecision || n <= 0)
         {
             return (Array.Empty<int>(), Array.Empty<double>());
@@ -2430,12 +2446,12 @@ public static class ViscousSolverEngine
         InviscidSolverState inviscidState,
         LinearVortexPanelState panel)
     {
-        double[] gapProfile = new double[wakeGeometry.Count];
+        double[] gapProfile = XFoil.Solver.Numerics.SolverBuffers.WakeGapProfileScratch(wakeGeometry.Count);
         // Fortran xpanel.f line 2518: WGAP(IW) = ANTE * (AA + BB*ZN)*ZN**2 — uses
         // signed ANTE (cross product). Using Math.Abs here was a parity bug.
         double normalGap = inviscidState.TrailingEdgeAngleNormal;
         bool sharpTrailingEdge = inviscidState.IsSharpTrailingEdge || Math.Abs(normalGap) <= 1e-9;
-        if (gapProfile.Length == 0)
+        if (wakeGeometry.Count == 0)
         {
             return gapProfile;
         }
@@ -2582,7 +2598,7 @@ public static class ViscousSolverEngine
         WakeSeedData? wakeSeed,
         int wakeStation)
     {
-        if (wakeSeed?.RawSpeeds.Length >= wakeStation)
+        if (wakeSeed is not null && wakeSeed.RawSpeedsCount >= wakeStation)
         {
             return blState.VTI[blState.IBLTE[1] + wakeStation, 1] * wakeSeed.RawSpeeds[wakeStation - 1];
         }
@@ -8383,7 +8399,7 @@ public static class ViscousSolverEngine
         int iblte = blState.IBLTE[side];
         int nbl = blState.NBL[side];
         int nw = nbl - iblte - 1;
-        if (nw <= 0 || wakeSeed.GapProfile.Length == 0)
+        if (nw <= 0 || wakeSeed.GapProfileCount == 0)
             return;
 
         // Fortran ANTE = DXS*DYTE - DYS*DXTE (cross-product projected TE gap)
@@ -8393,7 +8409,9 @@ public static class ViscousSolverEngine
         double ante = inviscidState.TrailingEdgeAngleNormal;
         if (Math.Abs(ante) <= 1e-9 || inviscidState.IsSharpTrailingEdge)
         {
-            Array.Clear(wakeSeed.GapProfile);
+            // Zero only the active region; extra slots in the pooled buffer
+            // belong to worst-case sizing and are irrelevant.
+            Array.Clear(wakeSeed.GapProfile, 0, wakeSeed.GapProfileCount);
             return;
         }
 
@@ -8435,7 +8453,7 @@ public static class ViscousSolverEngine
 
         // Compute WGAP from XSSI using Fortran cubic (xpanel.f line 2321-2323)
         double xssiTe = blState.XSSI[iblte, side];
-        int count = Math.Min(nw, wakeSeed.GapProfile.Length);
+        int count = Math.Min(nw, wakeSeed.GapProfileCount);
         for (int iw = 0; iw < count; iw++)
         {
             int ibl = iblte + 1 + iw;
@@ -8480,7 +8498,7 @@ public static class ViscousSolverEngine
             return 0.0;
         }
 
-        if (wakeSeed is not null && wakeSeed.GapProfile.Length >= wakeIndex)
+        if (wakeSeed is not null && wakeSeed.GapProfileCount >= wakeIndex)
         {
             return wakeSeed.GapProfile[wakeIndex - 1];
         }
@@ -8496,26 +8514,27 @@ public static class ViscousSolverEngine
     // Decision: Keep the helper because it makes the Newton-system wake input deterministic and explicit.
     private static double[] BuildWakeGapArray(WakeSeedData? wakeSeed, double teGap, int nWake)
     {
-        double[] wakeGap = new double[nWake + 1];
+        int count = nWake + 1;
+        double[] wakeGap = XFoil.Solver.Numerics.SolverBuffers.WakeGapScratch(count);
         if (nWake <= 0)
         {
             return wakeGap;
         }
 
-        if (wakeSeed is not null && wakeSeed.GapProfile.Length > 0)
+        if (wakeSeed is not null && wakeSeed.GapProfileCount > 0)
         {
             wakeGap[0] = wakeSeed.GapProfile[0];
             for (int iw = 1; iw <= nWake; iw++)
             {
-                int source = Math.Min(iw - 1, wakeSeed.GapProfile.Length - 1);
+                int source = Math.Min(iw - 1, wakeSeed.GapProfileCount - 1);
                 wakeGap[iw] = wakeSeed.GapProfile[source];
             }
-            
+
 
             return wakeGap;
         }
 
-        for (int iw = 0; iw < wakeGap.Length; iw++)
+        for (int iw = 0; iw < count; iw++)
         {
             wakeGap[iw] = teGap * Math.Exp(-0.5 * iw);
         }

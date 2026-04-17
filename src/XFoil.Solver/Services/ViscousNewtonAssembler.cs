@@ -71,6 +71,7 @@ public static class ViscousNewtonAssembler
         AnalysisSettings settings,
         bool isAlphaPrescribed,
         double[] wakeGap,
+        int wakeGapCount,
         double tkbl, double qinfbl, double tkbl_ms,
         double hstinv, double hstinv_ms,
         double rstbl, double rstbl_ms,
@@ -250,7 +251,7 @@ public static class ViscousNewtonAssembler
                 if (wake)
                 {
                     int iw = ibl - blState.IBLTE[side];
-                    if (wakeGap != null && iw >= 0 && iw < wakeGap.Length)
+                    if (wakeGap != null && iw >= 0 && iw < wakeGapCount)
                         dswaki = wakeGap[iw];
                     
                 }

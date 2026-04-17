@@ -80,6 +80,19 @@ internal static class SolverBuffers
     [ThreadStatic] private static double[]? _wakeDijRhs;
     [ThreadStatic] private static float[]? _wakeDijRhsSingle;
 
+    // ViscousSolverEngine per-case working arrays. Pooling is safe here
+    // because every consumer iterates with an explicit count (never
+    // `.Length`). WakeSeedData carries its own `RawSpeedsCount` so the
+    // pooled RawSpeeds buffer stays correct even when it's larger than
+    // the active wake station count.
+    [ThreadStatic] private static double[]? _wakeSeedSavedGamma;
+    [ThreadStatic] private static double[]? _wakeSeedRestoredGamma;
+    [ThreadStatic] private static double[]? _wakeSeedRawSpeeds;
+    [ThreadStatic] private static double[]? _qinvScratch;
+    [ThreadStatic] private static double[,]? _ueInvScratch;
+    [ThreadStatic] private static double[]? _wakeGapScratch;
+    [ThreadStatic] private static double[]? _wakeGapProfileScratch;
+
     // InfluenceMatrixBuilder.ComputeWakeSourceSensitivitiesAt* output buffers.
     // These are the `out double[] dzdm, out double[] dqdm` arrays the wake
     // kernel returns to the caller. Each call currently allocates two fresh
@@ -170,6 +183,14 @@ internal static class SolverBuffers
     internal static double[] PanelScratch4(int n) => EnsureVector(ref _panelScratch4, n);
     internal static double[] PanelScratch5(int n) => EnsureVector(ref _panelScratch5, n);
     internal static double[] PanelScratch6(int n) => EnsureVector(ref _panelScratch6, n);
+
+    internal static double[] WakeSeedSavedGamma(int n) => EnsureVector(ref _wakeSeedSavedGamma, n);
+    internal static double[] WakeSeedRestoredGamma(int n) => EnsureVector(ref _wakeSeedRestoredGamma, n);
+    internal static double[] WakeSeedRawSpeeds(int n) => EnsureVector(ref _wakeSeedRawSpeeds, n);
+    internal static double[] QinvScratch(int n) => EnsureVector(ref _qinvScratch, n);
+    internal static double[,] UeInvScratch(int rows, int cols) => EnsureMatrix(ref _ueInvScratch, rows, cols);
+    internal static double[] WakeGapScratch(int n) => EnsureVector(ref _wakeGapScratch, n);
+    internal static double[] WakeGapProfileScratch(int n) => EnsureVector(ref _wakeGapProfileScratch, n);
 
     internal static double[] WakeDijRhs(int n) => EnsureVector(ref _wakeDijRhs, n);
     internal static float[] WakeDijRhsSingle(int n) => EnsureFloatVector(ref _wakeDijRhsSingle, n);
