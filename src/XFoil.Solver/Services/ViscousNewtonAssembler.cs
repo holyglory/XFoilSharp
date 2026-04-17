@@ -447,6 +447,10 @@ public static class ViscousNewtonAssembler
                         hstinv, hstinv_ms,
                         gm1bl, rstbl, rstbl_ms,
                         hvrat, reybl, reybl_re, reybl_ms,
+                        // Route through ThreadStatic pooled buffers so the
+                        // per-station × per-iter call never hits the GC.
+                        destinationResult: BoundaryLayerSystemAssembler.GetPooledBlsysResult(),
+                        bldifBuffer: BoundaryLayerSystemAssembler.GetPooledBldifPrimary(),
                         useLegacyPrecision: useLegacyPrecision,
                         // Parity mode must reuse the previous station's pre-accept
                         // BLKIN snapshot instead of recomputing it from the later

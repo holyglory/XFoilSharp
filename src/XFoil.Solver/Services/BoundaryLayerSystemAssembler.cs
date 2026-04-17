@@ -579,12 +579,13 @@ public static class BoundaryLayerSystemAssembler
         int? traceIteration = null,
         string? tracePhase = null,
         bool extraTurbHkClamp = false,
-        bool station1IsLaminar = false)
+        bool station1IsLaminar = false,
+        BldifResult? destinationResult = null)
     {
-        var result = new BldifResult();
-        result.Residual = new double[3];
-        result.VS1 = new double[3, 5];
-        result.VS2 = new double[3, 5];
+        // Fixed-size arrays are preallocated in BldifResult's default
+        // initializer; the pooled path reuses a ThreadStatic instance so
+        // the per-station-per-iter call pattern never hits the GC.
+        var result = destinationResult ?? new BldifResult();
         string canonicalTracePhase = CanonicalizeTracePhase(tracePhase);
         kinematic1 ??= CreateStandaloneKinematicFallback(u1, t1, d1, dw1, reybl, useLegacyPrecision);
         kinematic2 ??= CreateStandaloneKinematicFallback(u2, t2, d2, dw2, reybl, useLegacyPrecision);
@@ -2451,7 +2452,8 @@ public static class BoundaryLayerSystemAssembler
         PrimaryStationState? station2PrimaryOverride = null,
         SecondaryStationResult? station2SecondaryOverride = null,
         TransitionModel.TransitionPointResult? transitionPointOverride = null,
-        double? forcedXtr = null)
+        double? forcedXtr = null,
+        BldifResult? destinationResult = null)
     {
         string canonicalTracePhase = CanonicalizeTracePhase(tracePhase);
         
@@ -3701,9 +3703,11 @@ public static class BoundaryLayerSystemAssembler
             traceSide: traceSide,
             traceStation: traceStation,
             traceIteration: traceIteration,
-            tracePhase: tracePhase);
-
-        
+            tracePhase: tracePhase,
+            // Route this laminar call through the Secondary slot so the
+            // caller's primary buffer (destinationResult) stays free for
+            // the final combined BldifResult below.
+            destinationResult: GetPooledBldifSecondary());
 
         double hT = DivP(dt, tt);
         var (hsT, hsT_Hk, hsT_Rt, hsT_Msq) = BoundaryLayerCorrelations.TurbulentShapeParameter(
@@ -3869,22 +3873,17 @@ public static class BoundaryLayerSystemAssembler
             traceSide: traceSide,
             traceStation: traceStation,
             traceIteration: traceIteration,
-            tracePhase: tracePhase);
+            tracePhase: tracePhase,
+            // Turbulent call uses the Tertiary slot (distinct from Secondary
+            // used by the laminar call above; both must remain live until the
+            // combine step below).
+            destinationResult: GetPooledBldifTertiary());
 
-        // Trace transition sensitivities and DT_A1 at station 5
-        
-        // Trace laminar BLDIF VS2[1,2] at station 5
-        
-        
-        
-        var result = new BldifResult
-        {
-            Residual = new double[3],
-            VS1 = new double[3, 5],
-            VS2 = new double[3, 5],
-            CarryKinematicSnapshot = transitionKinematic.Clone(),
-            Secondary2Snapshot = turbulentPart.Secondary2Snapshot?.Clone()
-        };
+        // Reuse caller's destination buffer (or allocate fresh fallback);
+        // arrays are preallocated and zero-cleared by ResetForReuse.
+        var result = destinationResult ?? new BldifResult();
+        result.CarryKinematicSnapshot = transitionKinematic.Clone();
+        result.Secondary2Snapshot = turbulentPart.Secondary2Snapshot?.Clone();
 
         double bl31 = 0.0, bl32 = 0.0, bl33 = 0.0, bl34 = 0.0, bl35 = 0.0;
         double bl41 = 0.0, bl42 = 0.0, bl43 = 0.0, bl44 = 0.0, bl45 = 0.0;
@@ -5795,7 +5794,8 @@ public static class BoundaryLayerSystemAssembler
         double cte, double tte, double dte,
         double hk2, double rt2, double msq2, double h2,
         double s2, double t2, double d2, double dw2,
-        bool useLegacyPrecision = false)
+        bool useLegacyPrecision = false,
+        BldifResult? destinationResult = null)
     {
         if (useLegacyPrecision)
         {
@@ -5812,12 +5812,11 @@ public static class BoundaryLayerSystemAssembler
             dw2 = LegacyPrecisionMath.RoundToSingle(dw2);
         }
 
-        var result = new BldifResult();
-        result.Residual = new double[3];
-        result.VS1 = new double[3, 5];
-        result.VS2 = new double[3, 5];
+        var result = destinationResult ?? new BldifResult();
 
-        // Initialize to zero (matching Fortran DO 55 loop)
+        // Initialize to zero (matching Fortran DO 55 loop) — ResetForReuse
+        // on the pooled instance already zeros arrays; fresh instances start
+        // at zero too. No explicit init needed.
 
         // Equation 1: Ctau continuity
         result.VS1[0, 0] = LegacyPrecisionMath.Negate(1.0, useLegacyPrecision);
@@ -5901,9 +5900,11 @@ public static class BoundaryLayerSystemAssembler
         TransitionModel.TransitionPointResult? transitionPointOverride = null,
         double? forcedXtr = null,
         bool extraTurbHkClamp = false,
-        bool station1IsLaminar = false)
+        bool station1IsLaminar = false,
+        BlsysResult? destinationResult = null,
+        BldifResult? bldifBuffer = null)
     {
-        
+
         string canonicalTracePhase = CanonicalizeTracePhase(tracePhase);
 
         if (useLegacyPrecision)
@@ -5940,10 +5941,9 @@ public static class BoundaryLayerSystemAssembler
             reybl_ms = LegacyPrecisionMath.RoundToSingle(reybl_ms);
         }
 
-        var result = new BlsysResult();
-        result.Residual = new double[3];
-        result.VS1 = new double[3, 5];
-        result.VS2 = new double[3, 5];
+        // Fixed-size arrays are preallocated in BlsysResult's default
+        // initializer; the pooled path reuses a ThreadStatic instance.
+        var result = destinationResult ?? new BlsysResult();
 
 
         // Determine ITYP (Fortran BLSYS lines 604-614)
@@ -6116,6 +6116,9 @@ public static class BoundaryLayerSystemAssembler
         // Difference from legacy: The managed code dispatches to shared helpers rather than branching into separate monolithic routines inline.
         // Decision: Keep the helper-based dispatch and preserve the original interval-type selection.
         
+        // Route BLDIF through the caller's pooled buffer (or a fresh
+        // BldifResult if none provided). ComputeTransitionIntervalSystem
+        // manages its own secondary/tertiary pools internally.
         var bldif = isTran
             ? ComputeTransitionIntervalSystem(
                 x1,
@@ -6153,7 +6156,8 @@ public static class BoundaryLayerSystemAssembler
                 station2PrimaryOverride,
                 station2SecondaryOverride,
                 transitionPointOverride,
-                forcedXtr)
+                forcedXtr,
+                destinationResult: bldifBuffer)
             : ComputeFiniteDifferences(
                 ityp, x1, x2, u1, u2, t1, t2, d1ForSystem, d2ForSystem, s1, s2,
                 dw1, dw2, msq1, msq2, ampl1, ampl2, amcrit, reybl,
@@ -6168,7 +6172,8 @@ public static class BoundaryLayerSystemAssembler
                 traceIteration: traceIteration,
                 tracePhase: tracePhase,
                 extraTurbHkClamp: extraTurbHkClamp,
-                station1IsLaminar: station1IsLaminar);
+                station1IsLaminar: station1IsLaminar,
+                destinationResult: bldifBuffer);
 
         result.U2 = u2;
         result.U2_UEI = u2_uei;
@@ -6889,9 +6894,12 @@ public static class BoundaryLayerSystemAssembler
 
     public class BldifResult
     {
-        public double[] Residual = Array.Empty<double>();
-        public double[,] VS1 = new double[0, 0]; // 3x5 Jacobian block for station 1
-        public double[,] VS2 = new double[0, 0]; // 3x5 Jacobian block for station 2
+        // Fixed-size Jacobian/residual blocks; allocated once per instance.
+        // When an instance is reused via SolverBuffers pooling, the arrays
+        // are zeroed in ResetForReuse() rather than reallocated.
+        public double[] Residual = new double[3];
+        public double[,] VS1 = new double[3, 5]; // 3x5 Jacobian block for station 1
+        public double[,] VS2 = new double[3, 5]; // 3x5 Jacobian block for station 2
         /// <summary>
         /// Arc-length sensitivity VSX(3) from TRDIF transition interval.
         /// Non-zero only at the transition station. Set by BTX computation.
@@ -6899,13 +6907,23 @@ public static class BoundaryLayerSystemAssembler
         public double[] VSX = new double[3];
         public KinematicResult? CarryKinematicSnapshot;
         public SecondaryStationResult? Secondary2Snapshot;
+
+        internal void ResetForReuse()
+        {
+            Array.Clear(Residual, 0, Residual.Length);
+            Array.Clear(VS1, 0, VS1.Length);
+            Array.Clear(VS2, 0, VS2.Length);
+            Array.Clear(VSX, 0, VSX.Length);
+            CarryKinematicSnapshot = null;
+            Secondary2Snapshot = null;
+        }
     }
 
     public class BlsysResult
     {
-        public double[] Residual = Array.Empty<double>();
-        public double[,] VS1 = new double[0, 0];
-        public double[,] VS2 = new double[0, 0];
+        public double[] Residual = new double[3];
+        public double[,] VS1 = new double[3, 5];
+        public double[,] VS2 = new double[3, 5];
         /// <summary>
         /// Arc-length sensitivity vector VSX(3). Fortran BLSYS: VSX = BLX + BTX.
         /// Used in SETBL for the XI_ULE coupling in both VM matrix and VDEL RHS.
@@ -6921,6 +6939,55 @@ public static class BoundaryLayerSystemAssembler
         public KinematicResult? Kinematic2Snapshot;
         public SecondaryStationResult? Secondary2Snapshot;
         public double StaleVs121;
+
+        internal void ResetForReuse()
+        {
+            Array.Clear(Residual, 0, Residual.Length);
+            Array.Clear(VS1, 0, VS1.Length);
+            Array.Clear(VS2, 0, VS2.Length);
+            Array.Clear(VSX, 0, VSX.Length);
+            U2 = U2_UEI = HK2 = HK2_U2 = HK2_T2 = HK2_D2 = StaleVs121 = 0.0;
+            Primary2Snapshot = null;
+            Kinematic2Snapshot = null;
+            Secondary2Snapshot = null;
+        }
+    }
+
+    // ThreadStatic pooled result buffers — per-station-per-Newton-iter
+    // allocations were the #1 parity-branch GC pressure site (~70k
+    // allocations per polar case). Callers use the destinationResult
+    // parameters on the assembly methods to route through these slots.
+    [ThreadStatic] private static BlsysResult? _pooledBlsys;
+    [ThreadStatic] private static BldifResult? _pooledBldifPrimary;
+    [ThreadStatic] private static BldifResult? _pooledBldifSecondary;
+    [ThreadStatic] private static BldifResult? _pooledBldifTertiary;
+
+    internal static BlsysResult GetPooledBlsysResult()
+    {
+        var b = _pooledBlsys ??= new BlsysResult();
+        b.ResetForReuse();
+        return b;
+    }
+
+    internal static BldifResult GetPooledBldifPrimary()
+    {
+        var b = _pooledBldifPrimary ??= new BldifResult();
+        b.ResetForReuse();
+        return b;
+    }
+
+    internal static BldifResult GetPooledBldifSecondary()
+    {
+        var b = _pooledBldifSecondary ??= new BldifResult();
+        b.ResetForReuse();
+        return b;
+    }
+
+    internal static BldifResult GetPooledBldifTertiary()
+    {
+        var b = _pooledBldifTertiary ??= new BldifResult();
+        b.ResetForReuse();
+        return b;
     }
 
     public class SecondaryStationResult
