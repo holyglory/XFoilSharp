@@ -93,6 +93,39 @@ public static class TransitionModel
         public BoundaryLayerSystemAssembler.KinematicResult? DownstreamKinematic;
         public BoundaryLayerSystemAssembler.KinematicResult? FinalTransitionKinematic;
         public AxsetResult? FinalAx;
+
+        /// <summary>
+        /// Reset all scalar fields and inner sensitivity arrays to defaults so the
+        /// pooled instance can be reused by another ComputeTransitionPoint call
+        /// without leaking stale data. Inner arrays are zeroed in place (the
+        /// references themselves are never reassigned).
+        /// </summary>
+        internal void Reset()
+        {
+            TransitionOccurred = false;
+            TransitionXi = 0.0;
+            AmplAtTransition = 0.0;
+            DownstreamAmplification = 0.0;
+            Type = TransitionResultType.None;
+            Converged = false;
+            Iterations = 0;
+            Xt = 0.0;
+            Tt = 0.0;
+            Dt = 0.0;
+            Ut = 0.0;
+            Wf2XF = 0.0;
+            DownstreamKinematic = null;
+            FinalTransitionKinematic = null;
+            FinalAx = null;
+            System.Array.Clear(Xt1, 0, Xt1.Length);
+            System.Array.Clear(Xt2, 0, Xt2.Length);
+            System.Array.Clear(Tt1, 0, Tt1.Length);
+            System.Array.Clear(Tt2, 0, Tt2.Length);
+            System.Array.Clear(Dt1, 0, Dt1.Length);
+            System.Array.Clear(Dt2, 0, Dt2.Length);
+            System.Array.Clear(Ut1, 0, Ut1.Length);
+            System.Array.Clear(Ut2, 0, Ut2.Length);
+        }
     }
 
     /// <summary>
@@ -865,10 +898,11 @@ public static class TransitionModel
         BoundaryLayerSystemAssembler.KinematicResult? station1KinematicOverride = null,
         BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride = null,
         BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride = null,
-        bool useInternalAmpl2Seed = true)
+        bool useInternalAmpl2Seed = true,
+        TransitionPointResult? destinationResult = null)
     {
         const double transitionTolerance = 5.0e-5;
-        
+
         if (useLegacyPrecision && station2PrimaryOverride is not null)
         {
             // Legacy MRCHUE/TRDIF feeds TRCHEK2 from the live COM2 primary
@@ -880,20 +914,30 @@ public static class TransitionModel
             d2 = station2PrimaryOverride.D;
         }
 
-        var point = new TransitionPointResult
+        TransitionPointResult point;
+        if (destinationResult is not null)
         {
-            TransitionOccurred = false,
-            TransitionXi = x2,
-            AmplAtTransition = ampl2,
-            DownstreamAmplification = ampl2,
-            Type = TransitionResultType.None,
-            Converged = true,
-            Iterations = 0,
-            Xt = x2,
-            Tt = t2,
-            Dt = d2,
-            Ut = u2
-        };
+            // Reuse caller-provided pooled instance. Reset clears all scalar
+            // fields and zeros the inner sensitivity arrays in place.
+            destinationResult.Reset();
+            point = destinationResult;
+        }
+        else
+        {
+            point = new TransitionPointResult();
+        }
+
+        point.TransitionOccurred = false;
+        point.TransitionXi = x2;
+        point.AmplAtTransition = ampl2;
+        point.DownstreamAmplification = ampl2;
+        point.Type = TransitionResultType.None;
+        point.Converged = true;
+        point.Iterations = 0;
+        point.Xt = x2;
+        point.Tt = t2;
+        point.Dt = d2;
+        point.Ut = u2;
 
         bool forcedInInterval = forcedXtr.HasValue && forcedXtr.Value > x1 && forcedXtr.Value <= x2;
         // TRCHEK2 does not short-circuit when N2 is still below Ncrit. The

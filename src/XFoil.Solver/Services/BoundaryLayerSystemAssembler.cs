@@ -2482,7 +2482,8 @@ public static class BoundaryLayerSystemAssembler
             tracePhase: tracePhase,
             station1KinematicOverride: station1KinematicOverride,
             station2KinematicOverride: station2KinematicOverride,
-            station2PrimaryOverride: station2PrimaryOverride);
+            station2PrimaryOverride: station2PrimaryOverride,
+            destinationResult: GetPooledTransitionPointInterval());
 
         // Transition point trace for parity debugging
         
@@ -6953,6 +6954,14 @@ public static class BoundaryLayerSystemAssembler
     [ThreadStatic] private static BldifResult? _pooledBldifPrimary;
     [ThreadStatic] private static BldifResult? _pooledBldifSecondary;
     [ThreadStatic] private static BldifResult? _pooledBldifTertiary;
+    // Pool for ComputeTransitionPoint calls made inside AssembleTESystem's
+    // transition interval path. Separate from the ViscousSolverEngine seed
+    // pools so an outer seed probe and an inner interval assembly can coexist
+    // on the same thread without corrupting each other's sensitivity arrays.
+    [ThreadStatic] private static TransitionModel.TransitionPointResult? _pooledTransitionPointInterval;
+
+    internal static TransitionModel.TransitionPointResult GetPooledTransitionPointInterval()
+        => _pooledTransitionPointInterval ??= new TransitionModel.TransitionPointResult();
 
     internal static BlsysResult GetPooledBlsysResult()
     {

@@ -206,6 +206,25 @@ public static class ViscousSolverEngine
         return grown;
     }
 
+    // ThreadStatic TransitionPointResult pool slots. Each slot belongs to a
+    // distinct ComputeTransitionPoint call site so their results do not
+    // trample each other when multiple call sites are live on the same thread
+    // (e.g., outer seed probe + inner interval assembly). Each pooled instance
+    // reuses its 8 internal double[5] sensitivity arrays across Newton iters,
+    // eliminating 9 heap allocations per TRCHEK2 solve.
+    [ThreadStatic] private static TransitionModel.TransitionPointResult? s_pooledTransitionPointSeed;
+    [ThreadStatic] private static TransitionModel.TransitionPointResult? s_pooledTransitionPointPostLoop;
+    [ThreadStatic] private static TransitionModel.TransitionPointResult? s_pooledTransitionPointLaminarSeed;
+
+    private static TransitionModel.TransitionPointResult GetPooledTransitionPointSeed()
+        => s_pooledTransitionPointSeed ??= new TransitionModel.TransitionPointResult();
+
+    private static TransitionModel.TransitionPointResult GetPooledTransitionPointPostLoop()
+        => s_pooledTransitionPointPostLoop ??= new TransitionModel.TransitionPointResult();
+
+    private static TransitionModel.TransitionPointResult GetPooledTransitionPointLaminarSeed()
+        => s_pooledTransitionPointLaminarSeed ??= new TransitionModel.TransitionPointResult();
+
     private static double GetHvRat(bool useLegacyPrecision)
     {
         // Classic XFoil's main viscous solve effectively runs with HVRAT=0 in the
@@ -4026,7 +4045,8 @@ public static class ViscousSolverEngine
                         ? blState.LegacyKinematic[ibl - 1, side]
                         : null,
                     station2KinematicOverride: station2KinematicOverride,
-                    station2PrimaryOverride: station2PrimaryOverride);
+                    station2PrimaryOverride: station2PrimaryOverride,
+                    destinationResult: GetPooledTransitionPointSeed());
                 seedTransitionPoint = transitionPoint;
                 transitionInterval = transitionPoint.TransitionOccurred;
                 transitionXi = transitionPoint.TransitionXi;
@@ -4608,7 +4628,8 @@ public static class ViscousSolverEngine
                 traceIteration: 26, tracePhase: "post_loop_109",
                 station1KinematicOverride: blState.LegacyKinematic[ibl - 1, side],
                 station2KinematicOverride: postKin2,
-                station2PrimaryOverride: null);
+                station2PrimaryOverride: null,
+                destinationResult: GetPooledTransitionPointPostLoop());
             ampl2 = Math.Max(postTransition.DownstreamAmplification, 0.0);
             transitionInterval = postTransition.TransitionOccurred;
             if (transitionInterval)
@@ -5466,7 +5487,8 @@ public static class ViscousSolverEngine
                     uei2,
                     theta2,
                     dstar2,
-                    settings.UseLegacyBoundaryLayerInitialization));
+                    settings.UseLegacyBoundaryLayerInitialization),
+                destinationResult: GetPooledTransitionPointLaminarSeed());
             // TRCHEK2 updates the downstream N2 implicitly even when the interval
             // stays laminar. Using only the explicit AX*DX predictor here leaves
             // the station input behind the classic march before the Newton solve.
