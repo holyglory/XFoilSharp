@@ -351,7 +351,7 @@ public static class InfluenceMatrixBuilder
             nWake,
             freestreamSpeed,
             angleOfAttackRadians);
-        var rhs = new double[n + 1];
+        var rhs = XFoil.Solver.Numerics.SolverBuffers.WakeDijRhs(n + 1);
         var wakeSurfaceInfluence = XFoil.Solver.Numerics.SolverBuffers.WakeSurfaceInfluenceScratch(n, nWake);
         ComputeWakeSensitivitiesDelegate computeWakeSensitivities = useLegacyWakeSourceKernelPrecision
             ? ComputeWakeSourceSensitivitiesAtLegacyPrecision
@@ -612,7 +612,7 @@ public static class InfluenceMatrixBuilder
 
         string? traceContext = sourceIndex == 1 ? "qdcalc_wake_column_1_single" : null;
 
-        var rhsSingle = new float[size];
+        var rhsSingle = XFoil.Solver.Numerics.SolverBuffers.WakeDijRhsSingle(size);
         for (int i = 0; i < size; i++)
         {
             rhsSingle[i] = (float)rhs[i];
@@ -699,8 +699,8 @@ public static class InfluenceMatrixBuilder
         const float tiny = 1e-30f;
 
         int nWake = wake.Count;
-        var dzdmSingle = new float[nWake];
-        var dqdmSingle = new float[nWake];
+        var dzdmSingle = XFoil.Solver.Numerics.SolverBuffers.WakeSrcDzdmSingle(nWake);
+        var dqdmSingle = XFoil.Solver.Numerics.SolverBuffers.WakeSrcDqdmSingle(nWake);
 
         float fieldXF = (float)fieldX;
         float fieldYF = (float)fieldY;
@@ -1243,8 +1243,8 @@ public static class InfluenceMatrixBuilder
         // Parity trace: final DZDM at LE
         
 
-        dzdm = new double[nWake];
-        dqdm = new double[nWake];
+        dzdm = XFoil.Solver.Numerics.SolverBuffers.WakeSrcDzdmDouble(nWake);
+        dqdm = XFoil.Solver.Numerics.SolverBuffers.WakeSrcDqdmDouble(nWake);
         for (int i = 0; i < nWake; i++)
         {
             dzdm[i] = dzdmSingle[i];
@@ -1650,8 +1650,8 @@ public static class InfluenceMatrixBuilder
             }
         }
 
-        dzdm = new double[nWake];
-        dqdm = new double[nWake];
+        dzdm = XFoil.Solver.Numerics.SolverBuffers.WakeSrcDzdmDouble(nWake);
+        dqdm = XFoil.Solver.Numerics.SolverBuffers.WakeSrcDqdmDouble(nWake);
         for (int i = 0; i < nWake; i++)
         {
             dzdm[i] = double.CreateChecked(dzdmTyped[i]);

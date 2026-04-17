@@ -74,6 +74,23 @@ internal static class SolverBuffers
     // wakeSurfaceInfluence = new double[n, nWake] — smaller but also per case.
     [ThreadStatic] private static double[,]? _wakeSurfaceInfluenceScratch;
 
+    // InfluenceMatrixBuilder.BuildInfluenceMatrix wake-column RHS + single-prec
+    // variant. One allocation each per case for rhs; rhsSingle is per wake
+    // column (×~150) so the single-prec slot sees heavy reuse per case.
+    [ThreadStatic] private static double[]? _wakeDijRhs;
+    [ThreadStatic] private static float[]? _wakeDijRhsSingle;
+
+    // InfluenceMatrixBuilder.ComputeWakeSourceSensitivitiesAt* output buffers.
+    // These are the `out double[] dzdm, out double[] dqdm` arrays the wake
+    // kernel returns to the caller. Each call currently allocates two fresh
+    // double[nWake] arrays; called ~n times per case = ~240 × 5000 cases in
+    // a sweep. The internal float[] scratch arrays used by the single-prec
+    // variant are pooled alongside.
+    [ThreadStatic] private static double[]? _wakeSrcDzdmDouble;
+    [ThreadStatic] private static double[]? _wakeSrcDqdmDouble;
+    [ThreadStatic] private static float[]? _wakeSrcDzdmSingle;
+    [ThreadStatic] private static float[]? _wakeSrcDqdmSingle;
+
     // TRDIF (transition interval) per-call scratch arrays. 8× double[5] per
     // transition station per Newton iter; pooled as ThreadStatic to avoid GC.
     [ThreadStatic] private static double[]? _trdifTt1;
@@ -153,6 +170,13 @@ internal static class SolverBuffers
     internal static double[] PanelScratch4(int n) => EnsureVector(ref _panelScratch4, n);
     internal static double[] PanelScratch5(int n) => EnsureVector(ref _panelScratch5, n);
     internal static double[] PanelScratch6(int n) => EnsureVector(ref _panelScratch6, n);
+
+    internal static double[] WakeDijRhs(int n) => EnsureVector(ref _wakeDijRhs, n);
+    internal static float[] WakeDijRhsSingle(int n) => EnsureFloatVector(ref _wakeDijRhsSingle, n);
+    internal static double[] WakeSrcDzdmDouble(int n) => EnsureVector(ref _wakeSrcDzdmDouble, n);
+    internal static double[] WakeSrcDqdmDouble(int n) => EnsureVector(ref _wakeSrcDqdmDouble, n);
+    internal static float[] WakeSrcDzdmSingle(int n) => EnsureFloatVector(ref _wakeSrcDzdmSingle, n);
+    internal static float[] WakeSrcDqdmSingle(int n) => EnsureFloatVector(ref _wakeSrcDqdmSingle, n);
 
     internal static double[,] DijScratch(int rows, int cols)
     {
