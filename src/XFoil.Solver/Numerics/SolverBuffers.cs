@@ -30,6 +30,25 @@ internal static class SolverBuffers
     [ThreadStatic] private static double[,]? _couplingMatrix2D;
     [ThreadStatic] private static double[,]? _couplingMatrix2DSecondary;
 
+    // Panel-sized double[] scratch slots for per-Newton-iter reuse inside
+    // BuildViscousPanelSpeeds / ConvertUedgToSpeeds / Compute*CL/CM. A Newton
+    // iteration may have up to ~5 of these alive concurrently (preStmoveQvis,
+    // currentSpeeds, qvis, cp_CL, cp_CM, gamma), so we give each callsite its
+    // own dedicated slot.
+    [ThreadStatic] private static double[]? _panelScratch1;
+    [ThreadStatic] private static double[]? _panelScratch2;
+    [ThreadStatic] private static double[]? _panelScratch3;
+    [ThreadStatic] private static double[]? _panelScratch4;
+    [ThreadStatic] private static double[]? _panelScratch5;
+    [ThreadStatic] private static double[]? _panelScratch6;
+
+    // InfluenceMatrixBuilder.BuildAnalyticalDIJ main dij array. Per-case LOH
+    // allocation (~460KB for typical 240-panel systems); pooling eliminates
+    // the dominant remaining LOH contribution.
+    [ThreadStatic] private static double[,]? _dijScratch;
+    // wakeSurfaceInfluence = new double[n, nWake] — smaller but also per case.
+    [ThreadStatic] private static double[,]? _wakeSurfaceInfluenceScratch;
+
     // TRDIF (transition interval) per-call scratch arrays. 8× double[5] per
     // transition station per Newton iter; pooled as ThreadStatic to avoid GC.
     [ThreadStatic] private static double[]? _trdifTt1;
@@ -61,6 +80,55 @@ internal static class SolverBuffers
     internal static double[] Vector4DoubleSecondary => _vector4DoubleSecondary ??= new double[4];
     internal static float[,] Matrix4x4Float => _matrix4x4Float ??= new float[4, 4];
     internal static float[] Vector4Float => _vector4Float ??= new float[4];
+
+    internal static double[] PanelScratch1(int n) => EnsureVector(ref _panelScratch1, n);
+    internal static double[] PanelScratch2(int n) => EnsureVector(ref _panelScratch2, n);
+    internal static double[] PanelScratch3(int n) => EnsureVector(ref _panelScratch3, n);
+    internal static double[] PanelScratch4(int n) => EnsureVector(ref _panelScratch4, n);
+    internal static double[] PanelScratch5(int n) => EnsureVector(ref _panelScratch5, n);
+    internal static double[] PanelScratch6(int n) => EnsureVector(ref _panelScratch6, n);
+
+    internal static double[,] DijScratch(int rows, int cols)
+    {
+        var buffer = _dijScratch;
+        if (buffer is null
+            || buffer.GetLength(0) < rows
+            || buffer.GetLength(1) < cols)
+        {
+            int nr = buffer is null ? rows : Math.Max(buffer.GetLength(0), rows);
+            int nc = buffer is null ? cols : Math.Max(buffer.GetLength(1), cols);
+            buffer = new double[nr, nc];
+            _dijScratch = buffer;
+        }
+        else
+        {
+            // The caller writes every cell it cares about, but the array may
+            // have stale rows/cols beyond the current (n, totalSize). Zero
+            // those to be safe — clearing the full buffer is cheap relative
+            // to the N^2 work that follows.
+            Array.Clear(buffer, 0, buffer.Length);
+        }
+        return buffer;
+    }
+
+    internal static double[,] WakeSurfaceInfluenceScratch(int rows, int cols)
+    {
+        var buffer = _wakeSurfaceInfluenceScratch;
+        if (buffer is null
+            || buffer.GetLength(0) < rows
+            || buffer.GetLength(1) < cols)
+        {
+            int nr = buffer is null ? rows : Math.Max(buffer.GetLength(0), rows);
+            int nc = buffer is null ? cols : Math.Max(buffer.GetLength(1), cols);
+            buffer = new double[nr, nc];
+            _wakeSurfaceInfluenceScratch = buffer;
+        }
+        else
+        {
+            Array.Clear(buffer, 0, buffer.Length);
+        }
+        return buffer;
+    }
 
     // TRDIF per-call scratch accessors (all are size 5, zero-cleared on reuse).
     internal static double[] TrdifTt1 => _trdifTt1 ??= new double[5];

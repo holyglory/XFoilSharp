@@ -83,7 +83,9 @@ public static class InfluenceMatrixBuilder
     {
         int n = inviscidState.NodeCount;
         int totalSize = n + nWake;
-        var dij = new double[totalSize, totalSize];
+        // ThreadStatic pool for dij — was per-case LOH allocation (~460 KB at
+        // 240-panel cases). The sweep's dominant remaining LOH source.
+        var dij = XFoil.Solver.Numerics.SolverBuffers.DijScratch(totalSize, totalSize);
 
         // Port of QDCALC from xpanel.f:
         // For each source panel j, perturb sigma_j by 1 and solve for resulting
@@ -350,7 +352,7 @@ public static class InfluenceMatrixBuilder
             freestreamSpeed,
             angleOfAttackRadians);
         var rhs = new double[n + 1];
-        var wakeSurfaceInfluence = new double[n, nWake];
+        var wakeSurfaceInfluence = XFoil.Solver.Numerics.SolverBuffers.WakeSurfaceInfluenceScratch(n, nWake);
         ComputeWakeSensitivitiesDelegate computeWakeSensitivities = useLegacyWakeSourceKernelPrecision
             ? ComputeWakeSourceSensitivitiesAtLegacyPrecision
             : ComputeWakeSourceSensitivitiesAt;

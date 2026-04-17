@@ -633,15 +633,21 @@ public static class ViscousSolverEngine
             double[]? preStmoveQvis = null;
             if (settings.UseLegacyBoundaryLayerInitialization)
             {
+                // Pooled slot 1 persists across Newton iters within the same
+                // case; ComputeViscousCL reads it via overrideQvis so the
+                // write here and the downstream read share the same buffer.
                 preStmoveQvis = BuildViscousPanelSpeeds(
                     blState, inviscidState, panel, isp, n, qinf,
-                    useLegacyPrecision: true);
+                    useLegacyPrecision: true,
+                    destination: SolverBuffers.PanelScratch1(n));
             }
 
 
             // f. STMOVE: Relocate stagnation point if it has moved
             // Convert UEDG back to panel speeds, then find stagnation by sign change
-            double[] currentSpeeds = ConvertUedgToSpeeds(blState, n, settings.UseLegacyBoundaryLayerInitialization);
+            double[] currentSpeeds = ConvertUedgToSpeeds(blState, n,
+                settings.UseLegacyBoundaryLayerInitialization,
+                destination: SolverBuffers.PanelScratch2(n));
             var (newIsp, newSst, newSstGo, newSstGp) = FindStagnationPointXFoil(
                 currentSpeeds,
                 panel,
@@ -1447,7 +1453,8 @@ public static class ViscousSolverEngine
             isp,
             n,
             qinf,
-            useLegacyPrecision);
+            useLegacyPrecision,
+            destination: SolverBuffers.PanelScratch3(n));
 
         if (useLegacyPrecision)
         {
@@ -1495,7 +1502,7 @@ public static class ViscousSolverEngine
             return fCl;
         }
 
-        double[] cp = new double[n];
+        double[] cp = SolverBuffers.PanelScratch4(n);
         for (int i = 0; i < n; i++)
         {
             double qByQinf = qvis[i] / Math.Max(qinf, 1e-10);
@@ -1547,9 +1554,10 @@ public static class ViscousSolverEngine
             panel,
             isp,
             n,
-            qinf);
+            qinf,
+            destination: SolverBuffers.PanelScratch5(n));
 
-        double[] cp = new double[n];
+        double[] cp = SolverBuffers.PanelScratch6(n);
         for (int i = 0; i < n; i++)
         {
             double qByQinf = qvis[i] / Math.Max(qinf, 1e-10);
@@ -1804,9 +1812,10 @@ public static class ViscousSolverEngine
         LinearVortexPanelState panel,
         int isp, int n,
         double qinf,
-        bool useLegacyPrecision = false)
+        bool useLegacyPrecision = false,
+        double[]? destination = null)
     {
-        double[] qvis = new double[n];
+        double[] qvis = destination ?? new double[n];
         Array.Copy(inviscidState.InviscidSpeed, qvis, n);
 
         // Overwrite airfoil panels with viscous speeds using IPAN/VTI
@@ -1845,7 +1854,8 @@ public static class ViscousSolverEngine
             isp,
             n,
             qinf,
-            useLegacyPrecision);
+            useLegacyPrecision,
+            destination: SolverBuffers.PanelScratch4(n));
         double[] gamma = EdgeVelocityCalculator.SetVortexFromViscousSpeed(qvis, n, qinf, useLegacyPrecision);
 
         for (int i = 0; i < n; i++)
@@ -1864,9 +1874,11 @@ public static class ViscousSolverEngine
     // Decision: Keep the helper and preserve the original panel-speed mapping.
     private static double[] ConvertUedgToSpeeds(
         BoundaryLayerSystemState blState, int n,
-        bool useLegacyPrecision = false)
+        bool useLegacyPrecision = false,
+        double[]? destination = null)
     {
-        double[] speeds = new double[n];
+        double[] speeds = destination ?? new double[n];
+        Array.Clear(speeds, 0, n);
 
         for (int side = 0; side < 2; side++)
         {
