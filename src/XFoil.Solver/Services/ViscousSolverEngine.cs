@@ -554,18 +554,6 @@ public static class ViscousSolverEngine
             // f. STMOVE: Relocate stagnation point if it has moved
             // Convert UEDG back to panel speeds, then find stagnation by sign change
             double[] currentSpeeds = ConvertUedgToSpeeds(blState, n, settings.UseLegacyBoundaryLayerInitialization);
-            if (settings.UseLegacyBoundaryLayerInitialization)
-            {
-                int windowStart = Math.Max(0, isp - 2);
-                int windowEnd = Math.Min(n - 1, isp + 3);
-                int windowLength = windowEnd - windowStart + 1;
-                double[] speedWindow = new double[windowLength];
-                for (int i = 0; i < windowLength; i++)
-                {
-                    speedWindow[i] = currentSpeeds[windowStart + i];
-                }
-
-            }
             var (newIsp, newSst, newSstGo, newSstGp) = FindStagnationPointXFoil(
                 currentSpeeds,
                 panel,
@@ -1862,17 +1850,6 @@ public static class ViscousSolverEngine
             }
         }
         if (ist < 0) ist = n / 2;
-
-        int windowStart = Math.Max(0, ist - 2);
-        if (windowStart + 5 < n)
-        {
-            double[] speedWindow = new double[6];
-            for (int offset = 0; offset < speedWindow.Length; offset++)
-            {
-                speedWindow[offset] = qinv[windowStart + offset];
-            }
-
-        }
 
         double sst;
         if (useLegacyPrecision)

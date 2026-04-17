@@ -30,6 +30,17 @@ internal static class SolverBuffers
     [ThreadStatic] private static double[,]? _couplingMatrix2D;
     [ThreadStatic] private static double[,]? _couplingMatrix2DSecondary;
 
+    // TRDIF (transition interval) per-call scratch arrays. 8× double[5] per
+    // transition station per Newton iter; pooled as ThreadStatic to avoid GC.
+    [ThreadStatic] private static double[]? _trdifTt1;
+    [ThreadStatic] private static double[]? _trdifTt2;
+    [ThreadStatic] private static double[]? _trdifDt1;
+    [ThreadStatic] private static double[]? _trdifDt2;
+    [ThreadStatic] private static double[]? _trdifUt1;
+    [ThreadStatic] private static double[]? _trdifUt2;
+    [ThreadStatic] private static double[]? _trdifSt1;
+    [ThreadStatic] private static double[]? _trdifSt2;
+
     // BlockTridiagonalSolver parity float scratch (VA, VB, VM, VDEL, VZ).
     [ThreadStatic] private static float[,,]? _btVaFloat;
     [ThreadStatic] private static float[,,]? _btVbFloat;
@@ -50,6 +61,16 @@ internal static class SolverBuffers
     internal static double[] Vector4DoubleSecondary => _vector4DoubleSecondary ??= new double[4];
     internal static float[,] Matrix4x4Float => _matrix4x4Float ??= new float[4, 4];
     internal static float[] Vector4Float => _vector4Float ??= new float[4];
+
+    // TRDIF per-call scratch accessors (all are size 5, zero-cleared on reuse).
+    internal static double[] TrdifTt1 => _trdifTt1 ??= new double[5];
+    internal static double[] TrdifTt2 => _trdifTt2 ??= new double[5];
+    internal static double[] TrdifDt1 => _trdifDt1 ??= new double[5];
+    internal static double[] TrdifDt2 => _trdifDt2 ??= new double[5];
+    internal static double[] TrdifUt1 => _trdifUt1 ??= new double[5];
+    internal static double[] TrdifUt2 => _trdifUt2 ??= new double[5];
+    internal static double[] TrdifSt1 => _trdifSt1 ??= new double[5];
+    internal static double[] TrdifSt2 => _trdifSt2 ??= new double[5];
 
     internal static double[,] DenseScratchMatrixDouble(int rowCount, int columnCount)
     {

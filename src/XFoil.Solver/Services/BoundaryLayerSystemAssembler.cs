@@ -3543,12 +3543,16 @@ public static class BoundaryLayerSystemAssembler
                 : x1 * wf1_XF + x2 * wf2_XF;
         }
 
-        double[] tt1 = new double[5];
-        double[] tt2 = new double[5];
-        double[] dt1 = new double[5];
-        double[] dt2 = new double[5];
-        double[] ut1 = new double[5];
-        double[] ut2 = new double[5];
+        // ThreadStatic scratch; TRDIF runs once per transition station per
+        // Newton iter, and these 6 arrays are fully rewritten each call.
+        double[] tt1 = XFoil.Solver.Numerics.SolverBuffers.TrdifTt1;
+        double[] tt2 = XFoil.Solver.Numerics.SolverBuffers.TrdifTt2;
+        double[] dt1 = XFoil.Solver.Numerics.SolverBuffers.TrdifDt1;
+        double[] dt2 = XFoil.Solver.Numerics.SolverBuffers.TrdifDt2;
+        double[] ut1 = XFoil.Solver.Numerics.SolverBuffers.TrdifUt1;
+        double[] ut2 = XFoil.Solver.Numerics.SolverBuffers.TrdifUt2;
+        Array.Clear(tt1); Array.Clear(tt2); Array.Clear(dt1); Array.Clear(dt2);
+        Array.Clear(ut1); Array.Clear(ut2);
 
         double ttA1Term1 = MulP(t1, wf1_A1);
         double ttA1Term2 = MulP(t2, wf2_A1);
@@ -3791,8 +3795,9 @@ public static class BoundaryLayerSystemAssembler
         double st_Dt = AddP(MulP(ctr, cqT_Dt), MulP(MulP(cqT, ctr_Hk), transitionKinematic.HK2_D2));
         double st_Ut = AddP(MulP(ctr, cqT_Ut), MulP(MulP(cqT, ctr_Hk), transitionKinematic.HK2_U2));
 
-        double[] st1 = new double[5];
-        double[] st2 = new double[5];
+        double[] st1 = XFoil.Solver.Numerics.SolverBuffers.TrdifSt1;
+        double[] st2 = XFoil.Solver.Numerics.SolverBuffers.TrdifSt2;
+        Array.Clear(st1); Array.Clear(st2);
         for (int i = 0; i < 5; i++)
         {
             st1[i] = useLegacyPrecision
