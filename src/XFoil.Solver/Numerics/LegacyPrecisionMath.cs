@@ -66,6 +66,96 @@ internal static class LegacyPrecisionMath
     internal static double Multiply(double left, double right, bool useLegacyPrecision)
         => useLegacyPrecision ? (float)((float)left * (float)right) : left * right;
 
+    // -----------------------------------------------------------------
+    // Float-native overloads for the legacy-precision branch. These do
+    // not take a useLegacyPrecision flag; they are pure float arithmetic
+    // matching what the `(float)((float)left * (float)right)` pattern
+    // produces above but without the double↔float roundtrip noise.
+    // Callers that can hold float locals throughout a parity block should
+    // prefer these to avoid repeatedly converting back to double between
+    // operations.
+    // -----------------------------------------------------------------
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float MultiplyF(float left, float right) => left * right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float MultiplyF(float left, float middle, float right) => left * middle * right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float AddF(float left, float right) => left + right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SubtractF(float left, float right) => left - right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float NegateF(float value) => -value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float DivideF(float numerator, float denominator) => numerator / denominator;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float AverageF(float left, float right) => 0.5f * (left + right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SquareF(float value) => value * value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SqrtF(float value) => MathF.Sqrt(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float PowF(float value, float exponent) => LegacyLibm.Pow(value, exponent);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float ExpF(float value) => LegacyLibm.Exp(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float LogF(float value) => LegacyLibm.Log(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float Log10F(float value) => LegacyLibm.Log10(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float TanhF(float value) => LegacyLibm.Tanh(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SinF(float value) => MathF.Sin(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float CosF(float value) => MathF.Cos(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float Atan2F(float y, float x) => LegacyLibm.Atan2(y, x);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float AbsF(float value) => MathF.Abs(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float MaxF(float left, float right) => MathF.Max(left, right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float MinF(float left, float right) => MathF.Min(left, right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float MultiplyAddF(float left, float right, float addend) => Fma(left, right, addend);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float MultiplySubtractF(float left, float right, float minuend) => Fma(-left, right, minuend);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float ProductThenAddF(float left, float right, float addend) => (left * right) + addend;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float ProductThenSubtractF(float left, float right, float subtrahend) => (left * right) - subtrahend;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SumOfProductsF(float left1, float right1, float left2, float right2)
+        => Fma(left1, right1, left2 * right2);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SumOfProductsF(float left1, float right1, float left2, float right2, float left3, float right3)
+        => Fma(left1, right1, Fma(left2, right2, left3 * right3));
+
     internal static double Multiply(double left, double middle, double right, bool useLegacyPrecision)
         => useLegacyPrecision ? (float)(((float)left * (float)middle) * (float)right) : left * middle * right;
 

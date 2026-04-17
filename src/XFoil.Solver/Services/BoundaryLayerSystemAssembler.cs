@@ -172,12 +172,12 @@ public static class BoundaryLayerSystemAssembler
 
             float legacyV2 = MathF.Sqrt(legacyHerat * legacyHerat * legacyHerat) * (1.0f + hvratf) / (legacyHerat + hvratf) / reyblf;
             float legacyV2He = legacyV2 * ((1.5f / legacyHerat) - (1.0f / (legacyHerat + hvratf)));
-            float legacyV2U2 = (float)LegacyPrecisionMath.Multiply(legacyV2He, legacyHeU2, true);
-            float legacyV2OverRe = (float)LegacyPrecisionMath.Divide(legacyV2, reyblf, true);
-            float legacyV2MsReyblTerm = (float)LegacyPrecisionMath.Multiply(-legacyV2OverRe, reyblMsf, true);
-            float legacyV2MsHeTerm = (float)LegacyPrecisionMath.Multiply(legacyV2He, legacyHeMs, true);
-            float legacyV2Ms = (float)LegacyPrecisionMath.Add(legacyV2MsReyblTerm, legacyV2MsHeTerm, true);
-            float legacyV2Re = (float)LegacyPrecisionMath.Multiply(-legacyV2OverRe, reyblRef, true);
+            float legacyV2U2 = LegacyPrecisionMath.MultiplyF(legacyV2He, legacyHeU2);
+            float legacyV2OverRe = LegacyPrecisionMath.DivideF(legacyV2, reyblf);
+            float legacyV2MsReyblTerm = LegacyPrecisionMath.MultiplyF(-legacyV2OverRe, reyblMsf);
+            float legacyV2MsHeTerm = LegacyPrecisionMath.MultiplyF(legacyV2He, legacyHeMs);
+            float legacyV2Ms = LegacyPrecisionMath.AddF(legacyV2MsReyblTerm, legacyV2MsHeTerm);
+            float legacyV2Re = LegacyPrecisionMath.MultiplyF(-legacyV2OverRe, reyblRef);
 
             var (hk2Raw, hk2H2Raw, hk2M2Raw) =
                 BoundaryLayerCorrelations.KinematicShapeParameter((float)legacy.H2, (float)legacy.M2, useLegacyPrecision: true);
@@ -4712,22 +4712,25 @@ public static class BoundaryLayerSystemAssembler
             // BLVAR's CF_T replay matches a contracted leading `CF_HK*HK_T`
             // update with the RT product rounded first. Both the standalone CF
             // driver and the station-5 seed trace converge on this exact shape.
-            cf_t = (float)LegacyPrecisionMath.Fma(
-                (float)cf_hk,
+            float cfHkF = (float)cf_hk;
+            float cfRtF = (float)cf_rt;
+            float cfMF = (float)cf_m;
+            cf_t = LegacyPrecisionMath.Fma(
+                cfHkF,
                 (float)hk_t,
-                (float)LegacyPrecisionMath.Multiply(cf_rt, rt_t, true));
-            cf_d = LegacyPrecisionMath.Multiply(cf_hk, hk_d, true);
-            float cfUBase = (float)LegacyPrecisionMath.Fma(
+                LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_t));
+            cf_d = LegacyPrecisionMath.MultiplyF(cfHkF, (float)hk_d);
+            float cfUBase = LegacyPrecisionMath.Fma(
                 (float)hk_u,
-                (float)cf_hk,
-                (float)LegacyPrecisionMath.Multiply(cf_rt, rt_u, true));
-            cf_u = (float)LegacyPrecisionMath.Fma((float)m_u, (float)cf_m, cfUBase);
-            float cfMsBase = (float)LegacyPrecisionMath.Fma(
+                cfHkF,
+                LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_u));
+            cf_u = LegacyPrecisionMath.Fma((float)m_u, cfMF, cfUBase);
+            float cfMsBase = LegacyPrecisionMath.Fma(
                 (float)hk_ms,
-                (float)cf_hk,
-                (float)LegacyPrecisionMath.Multiply(cf_rt, rt_ms, true));
-            cf_ms = (float)LegacyPrecisionMath.Fma((float)m_ms, (float)cf_m, cfMsBase);
-            cf_re = LegacyPrecisionMath.Multiply(cf_rt, rt_re, true);
+                cfHkF,
+                LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_ms));
+            cf_ms = LegacyPrecisionMath.Fma((float)m_ms, cfMF, cfMsBase);
+            cf_re = LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_re);
             return;
         }
 
@@ -4954,22 +4957,21 @@ public static class BoundaryLayerSystemAssembler
         cf2tRt = (float)cf2tRtRaw;
         cf2tM = (float)cf2tMRaw;
 
-        float cf2tUBase = (float)LegacyPrecisionMath.Fma(
+        float cf2tUBase = LegacyPrecisionMath.Fma(
             hkUf,
             cf2tHk,
-            (float)LegacyPrecisionMath.Multiply(cf2tRt, rtUf, true));
-        cf2tUf = (float)LegacyPrecisionMath.Fma(mUf, cf2tM, cf2tUBase);
-        cf2tTf = (float)LegacyPrecisionMath.MultiplyAdd(
+            LegacyPrecisionMath.MultiplyF(cf2tRt, rtUf));
+        cf2tUf = LegacyPrecisionMath.Fma(mUf, cf2tM, cf2tUBase);
+        cf2tTf = LegacyPrecisionMath.MultiplyAddF(
             cf2tHk,
             hkTf,
-            LegacyPrecisionMath.Multiply(cf2tRt, rtTf, true),
-            true);
+            LegacyPrecisionMath.MultiplyF(cf2tRt, rtTf));
         cf2tDf = cf2tHk * hkDf;
-        float cf2tMsBase = (float)LegacyPrecisionMath.Fma(
+        float cf2tMsBase = LegacyPrecisionMath.Fma(
             hkMsf,
             cf2tHk,
-            (float)LegacyPrecisionMath.Multiply(cf2tRt, rtMsf, true));
-        cf2tMsf = (float)LegacyPrecisionMath.Fma(mMsf, cf2tM, cf2tMsBase);
+            LegacyPrecisionMath.MultiplyF(cf2tRt, rtMsf));
+        cf2tMsf = LegacyPrecisionMath.Fma(mMsf, cf2tM, cf2tMsBase);
 
         di = (0.5f * cf2t * usf) * 2.0f / hsf;
         diHs = -(0.5f * cf2t * usf) * 2.0f / (hsf * hsf);
@@ -5233,22 +5235,19 @@ public static class BoundaryLayerSystemAssembler
 
                 dif = dil;
                 diSf = 0.0f;
-                diTf = (float)LegacyPrecisionMath.MultiplyAdd(
+                diTf = LegacyPrecisionMath.MultiplyAddF(
                     dilHk,
                     hkTf,
-                    LegacyPrecisionMath.Multiply(dilRt, rtTf, true),
-                    true);
+                    LegacyPrecisionMath.MultiplyF(dilRt, rtTf));
                 diDf = dilHk * hkDf;
-                diUf = (float)LegacyPrecisionMath.MultiplyAdd(
+                diUf = LegacyPrecisionMath.MultiplyAddF(
                     dilHk,
                     hkUf,
-                    LegacyPrecisionMath.Multiply(dilRt, rtUf, true),
-                    true);
-                diMsf = (float)LegacyPrecisionMath.MultiplyAdd(
+                    LegacyPrecisionMath.MultiplyF(dilRt, rtUf));
+                diMsf = LegacyPrecisionMath.MultiplyAddF(
                     dilHk,
                     hkMsf,
-                    LegacyPrecisionMath.Multiply(dilRt, rtMsf, true),
-                    true);
+                    LegacyPrecisionMath.MultiplyF(dilRt, rtMsf));
 
                 di = dif;
                 di_s = diSf;
@@ -5511,22 +5510,18 @@ public static class BoundaryLayerSystemAssembler
                 // grouped DD/DDL D scratch totals. The grouped totals remain
                 // useful trace outputs, but the parity path must mirror the
                 // sequential REAL updates to recover the recorded word.
-                diDf = (float)LegacyPrecisionMath.Add(
+                diDf = LegacyPrecisionMath.AddF(
                     diDf,
-                    LegacyPrecisionMath.Multiply(ddHs, hsDf, true),
-                    true);
-                diDf = (float)LegacyPrecisionMath.Add(
+                    LegacyPrecisionMath.MultiplyF(ddHs, hsDf));
+                diDf = LegacyPrecisionMath.AddF(
                     diDf,
-                    LegacyPrecisionMath.Multiply(ddUs, usDf, true),
-                    true);
-                diDf = (float)LegacyPrecisionMath.Add(
+                    LegacyPrecisionMath.MultiplyF(ddUs, usDf));
+                diDf = LegacyPrecisionMath.AddF(
                     diDf,
-                    LegacyPrecisionMath.Multiply(ddlHs, hsDf, true),
-                    true);
-                diDf = (float)LegacyPrecisionMath.Add(
+                    LegacyPrecisionMath.MultiplyF(ddlHs, hsDf));
+                diDf = LegacyPrecisionMath.AddF(
                     diDf,
-                    LegacyPrecisionMath.Multiply(ddlUs, usDf, true),
-                    true);
+                    LegacyPrecisionMath.MultiplyF(ddlUs, usDf));
 
                 if (stationTraceIndex != 0)
                 {
@@ -5547,22 +5542,19 @@ public static class BoundaryLayerSystemAssembler
                 {
                     dif = dil;
                     diSf = 0.0f;
-                    diUf = (float)LegacyPrecisionMath.MultiplyAdd(
+                    diUf = LegacyPrecisionMath.MultiplyAddF(
                         dilHk,
                         hkUf,
-                        LegacyPrecisionMath.Multiply(dilRt, rtUf, true),
-                        true);
-                    diTf = (float)LegacyPrecisionMath.MultiplyAdd(
+                        LegacyPrecisionMath.MultiplyF(dilRt, rtUf));
+                    diTf = LegacyPrecisionMath.MultiplyAddF(
                         dilHk,
                         hkTf,
-                        LegacyPrecisionMath.Multiply(dilRt, rtTf, true),
-                        true);
+                        LegacyPrecisionMath.MultiplyF(dilRt, rtTf));
                     diDf = dilHk * hkDf;
-                    diMsf = (float)LegacyPrecisionMath.MultiplyAdd(
+                    diMsf = LegacyPrecisionMath.MultiplyAddF(
                         dilHk,
                         hkMsf,
-                        LegacyPrecisionMath.Multiply(dilRt, rtMsf, true),
-                        true);
+                        LegacyPrecisionMath.MultiplyF(dilRt, rtMsf));
                 }
             }
 

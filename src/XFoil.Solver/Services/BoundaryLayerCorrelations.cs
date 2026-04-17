@@ -587,10 +587,10 @@ public static class BoundaryLayerCorrelations
             float cfHkTerm1 = -1.33f * cfo32;
             float logGrtRatio32 = LegacyLibm.Log(grtRatio32);
             float cfHkTerm2 = (-0.31f * logGrtRatio32) * cfo32;
-            float thkSq32 = (float)LegacyPrecisionMath.Multiply(thk32, thk32, true);
-            float oneMinusThkSq32 = (float)LegacyPrecisionMath.Subtract(1.0f, thkSq32, true);
-            float scaledThkDiff32 = (float)LegacyPrecisionMath.Multiply(-1.1e-4f, oneMinusThkSq32, true);
-            float cfHkTerm3 = (float)LegacyPrecisionMath.Divide(scaledThkDiff32, 0.875f, true);
+            float thkSq32 = LegacyPrecisionMath.MultiplyF(thk32, thk32);
+            float oneMinusThkSq32 = LegacyPrecisionMath.SubtractF(1.0f, thkSq32);
+            float scaledThkDiff32 = LegacyPrecisionMath.MultiplyF(-1.1e-4f, oneMinusThkSq32);
+            float cfHkTerm3 = LegacyPrecisionMath.DivideF(scaledThkDiff32, 0.875f);
             // CFT stores CFHKTERM1/2/3 to REAL before assembling CF_HK, so the
             // parity path must sum the staged terms rather than recomputing a
             // wider inline numerator.
