@@ -1056,7 +1056,7 @@ public static class ViscousNewtonAssembler
         TextWriter? debugWriter,
         bool useLegacyPrecision)
     {
-        double[,] usav = new double[blState.MaxStations, 2];
+        double[,] usav = SolverBuffers.UsavScratch(blState.MaxStations);
 
         // Legacy block: xbl.f UESET side/station reconstruction loops.
         // Difference from legacy: The nested loops are explicit about airfoil versus wake contributions, but they still preserve the original DUI accumulator shape and march order.

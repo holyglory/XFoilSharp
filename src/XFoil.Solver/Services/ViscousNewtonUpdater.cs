@@ -366,12 +366,13 @@ public static class ViscousNewtonUpdater
                 "UPDATE_RLX RLX={0,15:E8}", rlx));
         }
 
-        // Save current state for potential rollback
-        var savedThet = (double[,])blState.THET.Clone();
-        var savedDstr = (double[,])blState.DSTR.Clone();
-        var savedCtau = (double[,])blState.CTAU.Clone();
-        var savedUedg = (double[,])blState.UEDG.Clone();
-        var savedMass = (double[,])blState.MASS.Clone();
+        // Save current state for potential rollback (ThreadStatic snapshot buffers
+        // avoid per-iter heap allocation; exact-size match + Array.Copy preserves semantics).
+        var savedThet = SolverBuffers.SnapshotThet(blState.THET);
+        var savedDstr = SolverBuffers.SnapshotDstr(blState.DSTR);
+        var savedCtau = SolverBuffers.SnapshotCtau(blState.CTAU);
+        var savedUedg = SolverBuffers.SnapshotUedg(blState.UEDG);
+        var savedMass = SolverBuffers.SnapshotMass(blState.MASS);
 
         UpdateStepCoupling coupling = ComputeUpdateStepCoupling(
             newtonSystem,
@@ -447,9 +448,9 @@ public static class ViscousNewtonUpdater
         var isys = newtonSystem.ISYS;
 
         if (dij == null || nsys <= 0)
-            return new double[Math.Max(nsys, 0)];
+            return SolverBuffers.CouplingVector4(Math.Max(nsys, 0));
 
-        double[] duedg = new double[nsys];
+        double[] duedg = SolverBuffers.CouplingVector4(nsys);
 
         // Legacy block: UPDATE mass-to-Ue coupling accumulation.
         // Difference from legacy: The loop is spelled out with explicit panel and sign lookups rather than implicit COMMON-array indexing.
@@ -507,10 +508,10 @@ public static class ViscousNewtonUpdater
         var isys = newtonSystem.ISYS;
         int n = context.Panel.NodeCount;
 
-        double[,] uNew = new double[blState.MaxStations, 2];
-        double[,] uAc = new double[blState.MaxStations, 2];
-        double[] qNew = new double[n];
-        double[] qAc = new double[n];
+        double[,] uNew = SolverBuffers.CouplingMatrix2D(blState.MaxStations, 2);
+        double[,] uAc = SolverBuffers.CouplingMatrix2DSecondary(blState.MaxStations, 2);
+        double[] qNew = SolverBuffers.CouplingVector1(n);
+        double[] qAc = SolverBuffers.CouplingVector2(n);
 
         for (int iv = 0; iv < nsys; iv++)
         {
@@ -672,7 +673,7 @@ public static class ViscousNewtonUpdater
             double denom = 1.0 - clAc;
             dac = Math.Abs(denom) > 1e-30 ? (clNew - context.CurrentCl) / denom : 0.0;
         }
-        double[] duedg = new double[nsys];
+        double[] duedg = SolverBuffers.CouplingVector3(nsys);
         for (int jv = 0; jv < nsys; jv++)
         {
             int ibl = isys[jv, 0];

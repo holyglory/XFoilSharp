@@ -28,6 +28,8 @@ debug_*.txt
 debug_*.jsonl
 debug_dump.txt
 debug_trace.jsonl
+tools/fortran-debug/polar_alpha10_debug.*.txt
+tools/fortran-debug/trace_counter.txt
 
 # GDB command scripts
 gdb_*.cmd
