@@ -92,9 +92,8 @@ public static class InfluenceMatrixBuilder
         // delta-gamma via back-substitution through the already-factored AIJ.
         // The resulting delta-gamma gives delta-Ue at each node i.
 
-        double[] rhs = new double[n + 1];
+        double[] rhs = XFoil.Solver.Numerics.SolverBuffers.AirfoilDijRhs(n + 1);
 
-        
         for (int j = 0; j < n; j++)
         {
             // SourceInfluence already stores the Fortran BIJ sign convention.
@@ -152,7 +151,7 @@ public static class InfluenceMatrixBuilder
     {
         if (inviscidState.UseLegacyKernelPrecision)
         {
-            var rhsSingle = new float[size];
+            var rhsSingle = XFoil.Solver.Numerics.SolverBuffers.AirfoilDijRhsSingle(size);
             for (int i = 0; i < size; i++)
             {
                 rhsSingle[i] = (float)rhs[i];
@@ -448,8 +447,8 @@ public static class InfluenceMatrixBuilder
                 freestreamSpeed: 1.0,
                 angleOfAttackRadians: 0.0);
 
-            var cijRow = new double[n];
-            var airfoilSourceRow = new double[n];
+            var cijRow = XFoil.Solver.Numerics.SolverBuffers.CijRow(n);
+            var airfoilSourceRow = XFoil.Solver.Numerics.SolverBuffers.AirfoilSourceRow(n);
             for (int j = 0; j < n; j++)
             {
                 cijRow[j] = couplingState.VelocityVortexSensitivity[j];

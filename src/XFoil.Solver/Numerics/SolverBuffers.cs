@@ -79,6 +79,15 @@ internal static class SolverBuffers
     // column (×~150) so the single-prec slot sees heavy reuse per case.
     [ThreadStatic] private static double[]? _wakeDijRhs;
     [ThreadStatic] private static float[]? _wakeDijRhsSingle;
+    // InfluenceMatrixBuilder.BuildAnalyticalDIJ airfoil-column RHS + single-
+    // prec variant. rhs reused n times per case; rhsSingle fires every
+    // airfoil-column back-solve in the legacy-precision path (~n calls/case).
+    [ThreadStatic] private static double[]? _airfoilDijRhs;
+    [ThreadStatic] private static float[]? _airfoilDijRhsSingle;
+    // CijRow / airfoilSourceRow in BuildInfluenceMatrix wake loop — per wake
+    // station, each allocates double[n]. nWake × n doubles per case.
+    [ThreadStatic] private static double[]? _cijRow;
+    [ThreadStatic] private static double[]? _airfoilSourceRow;
 
     // ViscousSolverEngine per-case working arrays. Pooling is safe here
     // because every consumer iterates with an explicit count (never
@@ -222,6 +231,10 @@ internal static class SolverBuffers
 
     internal static double[] WakeDijRhs(int n) => EnsureVector(ref _wakeDijRhs, n);
     internal static float[] WakeDijRhsSingle(int n) => EnsureFloatVector(ref _wakeDijRhsSingle, n);
+    internal static double[] AirfoilDijRhs(int n) => EnsureVector(ref _airfoilDijRhs, n);
+    internal static float[] AirfoilDijRhsSingle(int n) => EnsureFloatVector(ref _airfoilDijRhsSingle, n);
+    internal static double[] CijRow(int n) => EnsureVector(ref _cijRow, n);
+    internal static double[] AirfoilSourceRow(int n) => EnsureVector(ref _airfoilSourceRow, n);
     internal static double[] WakeSrcDzdmDouble(int n) => EnsureVector(ref _wakeSrcDzdmDouble, n);
     internal static double[] WakeSrcDqdmDouble(int n) => EnsureVector(ref _wakeSrcDqdmDouble, n);
     internal static float[] WakeSrcDzdmSingle(int n) => EnsureFloatVector(ref _wakeSrcDzdmSingle, n);
