@@ -1,6 +1,4 @@
-using System;
 using XFoil.Core.Numerics;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 

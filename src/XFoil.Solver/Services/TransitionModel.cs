@@ -1,5 +1,4 @@
 using System;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Numerics;
 
 // Legacy audit:

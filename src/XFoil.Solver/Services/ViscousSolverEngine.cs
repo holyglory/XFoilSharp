@@ -1,10 +1,8 @@
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using XFoil.Core.Numerics;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 

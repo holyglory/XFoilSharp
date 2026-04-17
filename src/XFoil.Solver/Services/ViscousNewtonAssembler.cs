@@ -1,8 +1,6 @@
 #pragma warning disable CS8602 // Dereference of a possibly null reference - trace code
-using System;
 using System.Globalization;
 using System.IO;
-using XFoil.Solver.Diagnostics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
 
