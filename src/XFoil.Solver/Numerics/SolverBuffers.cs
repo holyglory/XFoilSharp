@@ -267,6 +267,32 @@ internal static class SolverBuffers
     internal static float[] PspSegDerivativesFloat(int n) => EnsureFloatVector(ref _pspSegDerivativesFloat, n);
     internal static float[] PspSegParametersFloat(int n) => EnsureFloatVector(ref _pspSegParametersFloat, n);
 
+    // PanelGeometryBuilder.ComputeNormalsCore typed scratch. 5 arrays × 2
+    // precisions; the X/Y/S arrays and the spline-derivative outputs must
+    // all stay live across ParametricSpline.FitSegmented, which uses its own
+    // ThreadStatic Psp* slots — no collision with those helpers.
+    [ThreadStatic] private static double[]? _pgbXDouble;
+    [ThreadStatic] private static double[]? _pgbYDouble;
+    [ThreadStatic] private static double[]? _pgbSDouble;
+    [ThreadStatic] private static double[]? _pgbXDerivDouble;
+    [ThreadStatic] private static double[]? _pgbYDerivDouble;
+    [ThreadStatic] private static float[]? _pgbXFloat;
+    [ThreadStatic] private static float[]? _pgbYFloat;
+    [ThreadStatic] private static float[]? _pgbSFloat;
+    [ThreadStatic] private static float[]? _pgbXDerivFloat;
+    [ThreadStatic] private static float[]? _pgbYDerivFloat;
+
+    internal static double[] PgbXDouble(int n) => EnsureVector(ref _pgbXDouble, n);
+    internal static double[] PgbYDouble(int n) => EnsureVector(ref _pgbYDouble, n);
+    internal static double[] PgbSDouble(int n) => EnsureVector(ref _pgbSDouble, n);
+    internal static double[] PgbXDerivDouble(int n) => EnsureVector(ref _pgbXDerivDouble, n);
+    internal static double[] PgbYDerivDouble(int n) => EnsureVector(ref _pgbYDerivDouble, n);
+    internal static float[] PgbXFloat(int n) => EnsureFloatVector(ref _pgbXFloat, n);
+    internal static float[] PgbYFloat(int n) => EnsureFloatVector(ref _pgbYFloat, n);
+    internal static float[] PgbSFloat(int n) => EnsureFloatVector(ref _pgbSFloat, n);
+    internal static float[] PgbXDerivFloat(int n) => EnsureFloatVector(ref _pgbXDerivFloat, n);
+    internal static float[] PgbYDerivFloat(int n) => EnsureFloatVector(ref _pgbYDerivFloat, n);
+
     internal static double[] WakeDijRhs(int n) => EnsureVector(ref _wakeDijRhs, n);
     internal static float[] WakeDijRhsSingle(int n) => EnsureFloatVector(ref _wakeDijRhsSingle, n);
     internal static double[] AirfoilDijRhs(int n) => EnsureVector(ref _airfoilDijRhs, n);

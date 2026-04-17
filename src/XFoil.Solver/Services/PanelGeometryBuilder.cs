@@ -69,18 +69,33 @@ public static class PanelGeometryBuilder
             return;
         }
 
-        var x = new T[n];
-        var y = new T[n];
-        var s = new T[n];
+        T[] x;
+        T[] y;
+        T[] s;
+        T[] xDerivative;
+        T[] yDerivative;
+        if (typeof(T) == typeof(double))
+        {
+            x = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbXDouble(n);
+            y = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbYDouble(n);
+            s = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbSDouble(n);
+            xDerivative = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbXDerivDouble(n);
+            yDerivative = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbYDerivDouble(n);
+        }
+        else
+        {
+            x = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbXFloat(n);
+            y = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbYFloat(n);
+            s = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbSFloat(n);
+            xDerivative = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbXDerivFloat(n);
+            yDerivative = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.PgbYDerivFloat(n);
+        }
         for (int i = 0; i < n; i++)
         {
             x[i] = T.CreateChecked(panel.X[i]);
             y[i] = T.CreateChecked(panel.Y[i]);
             s[i] = T.CreateChecked(panel.ArcLength[i]);
         }
-
-        var xDerivative = new T[n];
-        var yDerivative = new T[n];
 
         ParametricSpline.FitSegmented(x, xDerivative, s, n);
         ParametricSpline.FitSegmented(y, yDerivative, s, n);

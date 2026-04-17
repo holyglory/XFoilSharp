@@ -6051,31 +6051,35 @@ public static class BoundaryLayerSystemAssembler
             // built the similarity-station state. Recomputing a separate station-1
             // BLKIN snapshot up front invents an extra legacy event and breaks the
             // seed-path ordering before the first laminar station is marched.
-            kinematic1 = currentKinematic.Clone();
+            kinematic1 = GetPooledKinematic1();
+            kinematic1.CopyFrom(currentKinematic);
+        }
+        else if (useLegacyPrecision && station1KinematicOverride != null)
+        {
+            // Parity mode must consume the carried station-1 BLKIN snapshot, not a
+            // freshly rebuilt one. Classic XFoil stores only the primary update and
+            // leaves the station-1 BLVAR/BLMID chains tied to the last pre-accept
+            // BLKIN state, so recomputing here breaks binary input parity.
+            kinematic1 = GetPooledKinematic1();
+            kinematic1.CopyFrom(station1KinematicOverride);
         }
         else
         {
-            kinematic1 = (useLegacyPrecision && station1KinematicOverride != null)
-                // Parity mode must consume the carried station-1 BLKIN snapshot, not a
-                // freshly rebuilt one. Classic XFoil stores only the primary update and
-                // leaves the station-1 BLVAR/BLMID chains tied to the last pre-accept
-                // BLKIN state, so recomputing here breaks binary input parity.
-                ? station1KinematicOverride.Clone()
-                : ComputeKinematicParameters(
-                    u1,
-                    t1,
-                    d1ForSystem,
-                    dw1,
-                    hstinv,
-                    hstinv_ms,
-                    gm1bl,
-                    rstbl,
-                    rstbl_ms,
-                    hvrat,
-                    reybl,
-                    reybl_re,
-                    reybl_ms,
-                    useLegacyPrecision);
+            kinematic1 = ComputeKinematicParameters(
+                u1,
+                t1,
+                d1ForSystem,
+                dw1,
+                hstinv,
+                hstinv_ms,
+                gm1bl,
+                rstbl,
+                rstbl_ms,
+                hvrat,
+                reybl,
+                reybl_re,
+                reybl_ms,
+                useLegacyPrecision);
         }
 
         // Fortran SETBL: BLVAR clamps HK2 at each station, and COM1=COM2
@@ -6805,30 +6809,39 @@ public static class BoundaryLayerSystemAssembler
         // Decision: Keep the clone helper because parity debugging needs stable copies of pre-update state.
         public KinematicResult Clone()
         {
-            return new KinematicResult
-            {
-                M2 = M2,
-                M2_U2 = M2_U2,
-                M2_MS = M2_MS,
-                R2 = R2,
-                R2_U2 = R2_U2,
-                R2_MS = R2_MS,
-                H2 = H2,
-                H2_D2 = H2_D2,
-                H2_T2 = H2_T2,
-                HK2 = HK2,
-                HK2_U2 = HK2_U2,
-                HK2_T2 = HK2_T2,
-                HK2_D2 = HK2_D2,
-                HK2_MS = HK2_MS,
-                RT2 = RT2,
-                RT2_U2 = RT2_U2,
-                RT2_T2 = RT2_T2,
-                RT2_MS = RT2_MS,
-                RT2_RE = RT2_RE,
-                InputD2 = InputD2,
-                InputT2 = InputT2
-            };
+            var clone = new KinematicResult();
+            clone.CopyFrom(this);
+            return clone;
+        }
+
+        /// <summary>
+        /// Copy all fields from <paramref name="source"/> into this instance,
+        /// used by ThreadStatic-pooled callers that want Clone's snapshot
+        /// semantics without the per-call heap allocation.
+        /// </summary>
+        public void CopyFrom(KinematicResult source)
+        {
+            M2 = source.M2;
+            M2_U2 = source.M2_U2;
+            M2_MS = source.M2_MS;
+            R2 = source.R2;
+            R2_U2 = source.R2_U2;
+            R2_MS = source.R2_MS;
+            H2 = source.H2;
+            H2_D2 = source.H2_D2;
+            H2_T2 = source.H2_T2;
+            HK2 = source.HK2;
+            HK2_U2 = source.HK2_U2;
+            HK2_T2 = source.HK2_T2;
+            HK2_D2 = source.HK2_D2;
+            HK2_MS = source.HK2_MS;
+            RT2 = source.RT2;
+            RT2_U2 = source.RT2_U2;
+            RT2_T2 = source.RT2_T2;
+            RT2_MS = source.RT2_MS;
+            RT2_RE = source.RT2_RE;
+            InputD2 = source.InputD2;
+            InputT2 = source.InputT2;
         }
     }
 
@@ -6962,6 +6975,15 @@ public static class BoundaryLayerSystemAssembler
 
     internal static TransitionModel.TransitionPointResult GetPooledTransitionPointInterval()
         => _pooledTransitionPointInterval ??= new TransitionModel.TransitionPointResult();
+
+    // Per-station-per-Newton-iter KinematicResult snapshots that used to call
+    // `.Clone()` inside AssembleStationSystem. kinematic1 is local to one
+    // station assembly and gets mutated (HK2 clamp) so it must be a distinct
+    // instance from the source — pooling replaces Clone with CopyFrom.
+    [ThreadStatic] private static KinematicResult? _pooledKinematic1;
+
+    internal static KinematicResult GetPooledKinematic1()
+        => _pooledKinematic1 ??= new KinematicResult();
 
     internal static BlsysResult GetPooledBlsysResult()
     {
