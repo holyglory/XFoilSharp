@@ -1,0 +1,662 @@
+agent: B1
+ledger_path: audit/B1-viscous-newton.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/ViscousNewtonAssembler.cs
+    lines: 1289
+    branch_relevance: both
+    methods:
+      - name: BuildNewtonSystem
+        signature: "public static double BuildNewtonSystem(BoundaryLayerSystemState, ViscousNewtonSystem, double[,] dij, AnalysisSettings, bool, double[], double tkbl, double qinfbl, double tkbl_ms, double hstinv, double hstinv_ms, double rstbl, double rstbl_ms, double reybl, double reybl_re, double reybl_ms, double hvrat, double[,] ueInv, int isp=-1, int nPanel=-1, TextWriter? debugWriter=null, double[,]? cachedUsav=null, double? cachedSstGo=null, double? cachedSstGp=null, double anteRaw=0.0)"
+        line_range: [72, 1035]
+        allocations:
+          - line: 120
+            kind: "double[,] via ComputePredictedEdgeVelocities (new double[MaxStations, 2])"
+            hot_path: true
+            note: "Fresh USAV allocated every SETBL build unless cachedUsav supplied; ViscousSolverEngine currently does pass cachedUsav for NACA 4455/4455 parity, but any caller without the cache triggers per-Newton-iter heap allocation. Confirmed at ComputePredictedEdgeVelocities line 1059."
+          - line: 405
+            kind: "new BoundaryLayerSystemAssembler.BlsysResult { ... }"
+            hot_path: true
+            note: "First-wake branch allocates a fresh BlsysResult per station-per-iter (wrapping TE residuals)."
+        io_or_locks:
+          - line: 348
+            kind: "TextWriter.WriteLine + string.Format"
+            severity: "medium"
+            note: "debugWriter.WriteLine branch. Guarded by debugWriter != null but the format string+args still build when the writer is non-null; parity hot path should pass null."
+          - line: 434
+            kind: "Console.Error.WriteLine with string interpolation (env-var gated XFOIL_COM2_IT1)"
+            severity: "high"
+            note: "P3 violation: interpolation arguments (BitConverter.SingleToInt32Bits casts) allocate strings even inside the if. Gate checks Environment.GetEnvironmentVariable each call => syscall + dictionary lookup every station. Must be removed for production hot path."
+          - line: 489
+            kind: "Console.Error.WriteLine + Environment.GetEnvironmentVariable (XFOIL_DUMP_RESID_IT0)"
+            severity: "high"
+            note: "P3/P5: per-station env-var read + interpolated write."
+          - line: 506
+            kind: "Console.Error.WriteLine x4 + Environment.GetEnvironmentVariable (XFOIL_S1210_VS)"
+            severity: "high"
+          - line: 578
+            kind: "Console.Error.WriteLine + Environment.GetEnvironmentVariable (XFOIL_USAV_IT1)"
+            severity: "high"
+          - line: 636
+            kind: "Console.Error.WriteLine + Environment.GetEnvironmentVariable (XFOIL_DUMP_RESID_IT0)"
+            severity: "high"
+          - line: 684
+            kind: "Console.Error.WriteLine + Environment.GetEnvironmentVariable (XFOIL_VDASM_IT1)"
+            severity: "high"
+          - line: 716
+            kind: "TextWriter.WriteLine (debugWriter) x11 per station"
+            severity: "medium"
+            note: "11 WriteLine calls per station when debugWriter != null."
+        float_usage:
+          - line: 434
+            form: "(float)"
+            context: "BitConverter.SingleToInt32Bits((float)t1) ... (trace only, but casts live in compiled IL)"
+          - line: 618
+            form: "float local + (float) casts"
+            context: "useLegacyPrecision branch for DDS1 at first wake: float term1/term2 for Fortran REAL parity — INTENTIONAL for parity branch. For standard branch the 'else' path on line 624 already uses double — OK."
+          - line: 667
+            form: "float residuals accumulation"
+            context: "legacy-precision VDEL accumulation uses float res/vs1Due/... Intentional parity path."
+          - line: 779
+            form: "(float) casts in useLegacyPrecision branch"
+            context: "U2_M/D2_M/U1_M/D1_M/ULE1_M/ULE2_M REAL replication. Intentional parity path. Else branch on 788+ is clean double."
+          - line: 903
+            form: "float locals (vs1d/vs1u/vs2d/vs2u/xiCoeffF/xiTermF)"
+            context: "VM assembly legacy path — intentional parity float. Else branch line 944+ double."
+          - line: 1224
+            form: "float single = (float)value"
+            context: "FormatDebugSingle helper used only when debugWriter != null."
+        mathf_calls: []
+        correctness_concerns:
+          - line: 986
+            severity: "medium"
+            issue: "TODO: R2 hard-coded to 1.0 for TAU integration. Compressible branch missing: R2 = density ratio. For M>0 this underestimates TAU and therefore CDF."
+            fortran_ref: "xbl.f SETBL TAU assembly"
+          - line: 1015
+            severity: "low"
+            issue: "prevStationLaminar = !simi && !wake && !turb && !tran — does NOT track the TRCHEK tran->tran=false case where tran is locally updated; at line 334-337 tran becomes false and the station becomes laminar, so prevStationLaminar logic correctly fires. Verified OK but fragile to refactor."
+          - line: 431
+            severity: "high"
+            issue: "Environment.GetEnvironmentVariable called once per station per Newton iter. Allocates on every read; system-call cost and uncontended-dictionary cost on each call. Combined with the Console.Error.WriteLine guards, total per-iter allocations are substantial even when env var is unset."
+        numerical_stability:
+          - line: 219
+            issue: "guard_abs"
+            note: "LegacyPrecisionMath.Abs(uei) > 1e-30 — reasonable lower clamp; DSI fallback to stored DSTR matches Fortran fallback."
+          - line: 282
+            issue: "divide_guard"
+            note: "h2v = dsi / thi with thi > 1e-30 guard; default 2.1 on near-zero thi."
+          - line: 1248
+            issue: "catastrophic_cancel"
+            note: "dgam = -(lowerUe + upperUe) — near stagnation the two Ue values have opposite signs and similar magnitudes. Cancellation produces small denominator used to scale sstGo/sstGp; guarded by 1e-30 but the 1e-30 threshold is well below typical cancellation noise — could leave a poorly-conditioned but non-zero dgam."
+        fortran_divergence:
+          - line: 1059
+            fortran_ref: "xbl.f:246 (CALL UESET)"
+            note: "USAV is allocated fresh rather than living in a COMMON-block persistent array; functionally equivalent after reconstruction, but parity relies on caller passing cachedUsav to keep ISYS-ordering and stale-state semantics."
+          - line: 186
+            fortran_ref: "xbl.f SETBL loop DO 3 IBL=2,NBL(IS)"
+            note: "Loop boundary matches (ibl=1 corresponds to Fortran IBL=2 similarity)."
+          - line: 298
+            fortran_ref: "xbl.f SETBL TRCHEK path near line 262"
+            note: "SETBL's TRCHEK2 result is threaded through as transitionPointOverride (line 473). Matches Fortran XT single-compute semantics."
+          - line: 369
+            fortran_ref: "xbl.f SETBL line 354 (DTE = DSTR_TE1 + DSTR_TE2 + ANTE)"
+            note: "Uses anteRaw, not wakeGap[0]; matches Fortran ANTE (cubic AA+BB differs by ~2 ULP). Verified OK."
+        modernization_candidates:
+          - kind: new_data
+            summary: "Compressibility TAU: replace R2=1.0 stub with proper density ratio"
+            rationale: "For M>0 drag integrations are biased low (TAU underestimate). TODO at line 986."
+            risk: medium
+          - kind: new_algorithm
+            summary: "Replace per-station Environment.GetEnvironmentVariable with one-time static cache or DebugFlags lookup"
+            rationale: "Env-var polling on every station kills both branches' throughput."
+            risk: low
+          - kind: longer_wake
+            summary: "Loop bounds use blState.NBL[side] which is sized by MaxStations — increasing wake length just requires enlarging NBL"
+            rationale: "Structural support exists; confirm MaxStations grows with wake request."
+            risk: low
+      - name: ComputePredictedEdgeVelocitiesPublic
+        signature: "public static double[,] ComputePredictedEdgeVelocitiesPublic(BoundaryLayerSystemState, double[,], double[,], int, int, TextWriter?, bool)"
+        line_range: [1040, 1048]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputePredictedEdgeVelocities
+        signature: "private static double[,] ComputePredictedEdgeVelocities(BoundaryLayerSystemState, double[,] dij, double[,] ueInv, int isp, int nPanel, TextWriter?, bool)"
+        line_range: [1050, 1220]
+        allocations:
+          - line: 1059
+            kind: "new double[MaxStations, 2]"
+            hot_path: true
+            note: "P1 BLOCKER for parity: allocates a fresh 2D array per Newton iteration. Confirmed by plan as known per-Newton-iter allocation. Should reuse SolverBuffers or ThreadStatic scratch. MaxStations ~ hundreds, so ~few KB each build, but called once per Newton assembly (typically 15-40 iters per polar point)."
+        io_or_locks:
+          - line: 1094
+            kind: "Environment.GetEnvironmentVariable + Console.Error.WriteLine (XFOIL_DUI2_IT1)"
+            severity: "high"
+            note: "Nested inside double loop (for jSide, for jbl) — env-var check happens O(NBL x NBL) per station. Huge hot-path cost."
+          - line: 1142
+            kind: "debugWriter.WriteLine x many (USAV_AIR_TERM / USAV_WAKE_TERM)"
+            severity: "medium"
+            note: "Guarded by debugWriter != null; allocates CultureInfo + string.Format args per term."
+        float_usage:
+          - line: 1097
+            form: "(float) casts inside Console.Error.WriteLine trace"
+            context: "Trace-only; no effect on solver math."
+          - line: 1224
+            form: "float single = (float)value"
+            context: "In FormatDebugSingle helper (below)."
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - line: 1078
+            fortran_ref: "xbl.f UESET double loop DO 100 JS=1,2; DO 1000 JBL=2,NBL(JS)"
+            note: "Loop structure matches."
+          - line: 1091
+            fortran_ref: "xbl.f UESET line UE_M = -VTI*VTI*DIJ"
+            note: "Uses LegacyPrecisionMath.Multiply with three-arg variant to reproduce REAL multiply chain."
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Replace heap allocation with SolverBuffers.UsavScratch"
+            rationale: "Eliminates single largest per-iter heap allocation in the Newton path."
+            risk: low
+      - name: FormatDebugSingle
+        signature: "private static string FormatDebugSingle(double value)"
+        line_range: [1222, 1230]
+        allocations:
+          - line: 1225
+            kind: "string.Format (boxed args)"
+            hot_path: false
+            note: "Only reached from debug paths."
+        io_or_locks: []
+        float_usage:
+          - line: 1224
+            form: "(float)"
+            context: "Intentional single-precision formatter."
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeLeadingEdgeSensitivities
+        signature: "private static void ComputeLeadingEdgeSensitivities(BoundaryLayerSystemState, out double sstGo, out double sstGp, out double dule1, out double dule2, double[,] usav, bool useLegacyPrecision)"
+        line_range: [1235, 1262]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - line: 1246
+            issue: "catastrophic_cancel"
+            note: "dgam = -(lowerUe + upperUe); near stagnation point Ue values are small and similar in magnitude but opposite in sign — potential cancellation. Guarded with |dgam| > 1e-30 but threshold is looser than FP precision would warrant."
+        fortran_divergence:
+          - line: 1235
+            fortran_ref: "xbl.f SETBL stagnation forcing block"
+            note: "Matches Fortran SST_GO/SST_GP forcing algebra."
+        modernization_candidates: []
+      - name: GetPanelIndex
+        signature: "private static int GetPanelIndex(int ibl, int side, int isp, int nPanel, BoundaryLayerSystemState)"
+        line_range: [1271, 1276]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 1271
+            severity: "low"
+            issue: "Parameters isp, nPanel unused. Dead params from older signature. Callers still pass them."
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: GetVTI
+        signature: "private static double GetVTI(int ibl, int side, BoundaryLayerSystemState)"
+        line_range: [1284, 1288]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: major
+      standard_verdict: minor
+      top_findings:
+        - "P1: ComputePredictedEdgeVelocities allocates new double[MaxStations,2] per Newton iteration (line 1059). Known blocker; must route through SolverBuffers."
+        - "P3 + P5: Multiple Console.Error.WriteLine blocks guarded by Environment.GetEnvironmentVariable checks in the inner station loop (lines 431, 489, 506, 578, 636, 684, 1094). Even when env vars unset, the GetEnvironmentVariable call per-station (and per term at 1094) is expensive. Recent commits removed some but at least 7 remain."
+        - "S4/Parity: TODO at line 986 (R2=1.0 hard-code) biases compressible drag integration. Standard-branch modernization candidate."
+        - "P1: First-wake 'new BlsysResult' struct-literal allocation at line 405 on every build."
+        - "S5: Catastrophic cancellation risk in ComputeLeadingEdgeSensitivities dgam calculation; 1e-30 guard is below typical cancellation noise."
+      estimated_fix_effort: "1-2 days (route USAV through SolverBuffers; delete env-var trace blocks; replace BlsysResult allocation with cached struct)"
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/ViscousNewtonUpdater.cs
+    lines: 1034
+    branch_relevance: both
+    methods:
+      - name: NewtonUpdateContext
+        signature: "public readonly record struct NewtonUpdateContext(LinearVortexPanelState Panel, double AlphaRadians, double Qinf, double CurrentCl, double[,] UeInv, bool IsAlphaPrescribed)"
+        line_range: [28, 34]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: UpdateStepCoupling
+        signature: "private readonly record struct UpdateStepCoupling(double Dac, double[] Duedg)"
+        line_range: [36, 38]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ApplyNewtonUpdate
+        signature: "public static (double Rlx, double Rmsbl, double TrustRadius, bool Accepted, double Dac) ApplyNewtonUpdate(BoundaryLayerSystemState, ViscousNewtonSystem, ViscousSolverMode, double hstinv, double[] wakeGap, double trustRadius, double previousRmsbl, double currentRmsbl, double[,]? dij=null, int isp=-1, int nPanel=-1, NewtonUpdateContext? updateContext=null, TextWriter? debugWriter=null, bool useLegacyPrecision=false)"
+        line_range: [59, 86]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 76
+            severity: "info"
+            issue: "Mode gate: XFoilRelaxation vs TrustRegion dispatch. Parity path takes ApplyXFoilRelaxation branch; Standard branch takes ApplyTrustRegionUpdate. Dispatch is clean."
+        numerical_stability: []
+        fortran_divergence:
+          - line: 76
+            fortran_ref: "xbl.f UPDATE"
+            note: "XFoilRelaxation path mirrors Fortran UPDATE; TrustRegion is managed-only extension."
+        modernization_candidates: []
+      - name: ApplyXFoilRelaxation
+        signature: "private static (double Rlx, double NormalizedRmsbl, double Dac) ApplyXFoilRelaxation(BoundaryLayerSystemState, ViscousNewtonSystem, double hstinv, double[] wakeGap, double[,]? dij, int isp, int nPanel, NewtonUpdateContext?, TextWriter?, bool useLegacyPrecision)"
+        line_range: [96, 318]
+        allocations:
+          - line: 289
+            kind: "string.Format + WriteLine (debugWriter)"
+            hot_path: false
+            note: "Guarded by debugWriter != null and bounded to first 5 stations."
+          - line: 235
+            kind: "string.Format UPDATE_ALERT"
+            hot_path: false
+            note: "Guarded by debugWriter != null AND (maxNorm non-finite or > 5); bounded allocation."
+        io_or_locks:
+          - line: 289
+            kind: "TextWriter.WriteLine x2 per call (when debugWriter != null)"
+            severity: "low"
+          - line: 235
+            kind: "TextWriter.WriteLine (conditional on norm alarm)"
+            severity: "low"
+        float_usage:
+          - line: 137
+            form: "float fDclMax = 0.5f; fDclMin = -0.5f; fRlxDac = (float)rlx * (float)coupling.Dac"
+            context: "Legacy parity branch; S1 violation ONLY relevant if useLegacyPrecision=false takes this path (it does not — else branch at 147 is clean double). OK."
+          - line: 214
+            form: "float fdn1/fdn2/fdn3/fdn4/fAcc"
+            context: "Legacy parity accumulation; else branch at 224 is clean double."
+          - line: 309
+            form: "float fRms, fDenom + 4.0f literal; MathF.Sqrt"
+            context: "Legacy parity RMS path; else branch at 315 uses Math.Sqrt. OK for standard."
+        mathf_calls:
+          - line: 311
+            symbol: "MathF.Sqrt"
+            context: "Legacy parity branch only."
+        correctness_concerns:
+          - line: 133
+            severity: "medium"
+            issue: "DCLMIN clamp: C# only sets -0.5 (assumes MATYP=1). Fortran xbl.f:4247 sets DCLMIN = MAX(-0.5, -0.9*CL) when MATYP != 1 (non-constant Re/Mach). C# comment on line 132 acknowledges this as 'not implemented (all test vectors use MATYP=1)'. MATYP != 1 would silently diverge."
+            fortran_ref: "xbl.f:4247"
+          - line: 274
+            severity: "low"
+            issue: "Match XFoil UPDATE: rlx = Max(0, Min(1, rlx)). Fortran UPDATE does NOT cap at 1 before applying — it applies the raw RLX factor that was built up by scanning DHI/DLO. Verify cap-at-1 semantics against Fortran."
+            fortran_ref: "xbl.f UPDATE RLX assembly around 4500"
+        numerical_stability:
+          - line: 184
+            issue: "divide_guard"
+            note: "LegacyPrecisionMath.Divide(dctau, 10.0) — no stability concern."
+          - line: 186
+            issue: "guard_abs"
+            note: "CTAU divisor guarded by 1e-30."
+          - line: 253
+            issue: "divide_guard"
+            note: "dhi/dn1 and dlo/dn1 protected by dn1 != 0 check only. Could divide by very small dn1 producing huge RLX; mitigated by subsequent Min(1) cap."
+        fortran_divergence:
+          - line: 160
+            fortran_ref: "xbl.f UPDATE DO 4 IS=1,2; DO 40 IBL=2,NBL(IS)"
+            note: "Loop structure matches."
+          - line: 167
+            fortran_ref: "xbl.f UPDATE line 4486-4489 (DCTAU = VDEL(1,1,IV) - DAC*VDEL(1,2,IV))"
+            note: "Algebra matches exactly."
+          - line: 305
+            fortran_ref: "xbl.f UPDATE RMSBL = SQRT(RMSBL/(4*float(NBL1+NBL2)))"
+            note: "Normalization matches."
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "Implement MATYP != 1 DCLMIN = MAX(-0.5, -0.9*CL) per Fortran UPDATE line 4247."
+            rationale: "Currently silently assumes MATYP=1; for Type-2 CL-prescribed at non-constant Re/Mach the relaxation floor is wrong."
+            risk: low
+      - name: ApplyTrustRegionUpdate
+        signature: "private static (double Rlx, double Rmsbl, double TrustRadius, bool Accepted) ApplyTrustRegionUpdate(BoundaryLayerSystemState, ViscousNewtonSystem, double hstinv, double[] wakeGap, double trustRadius, double previousRmsbl, double currentRmsbl, double[,]? dij, int isp, int nPanel, NewtonUpdateContext?, TextWriter?, bool useLegacyPrecision)"
+        line_range: [326, 426]
+        allocations:
+          - line: 370
+            kind: "double[,] blState.THET.Clone()"
+            hot_path: true
+            note: "P2 BLOCKER (but only for standard branch): rollback snapshot via .Clone() allocates a full 2D copy. Five of them (THET, DSTR, CTAU, UEDG, MASS) every Newton iter. Each is MaxStations x 2 doubles. Combined ~10 kB per iter on trust-region path. For a typical sweep (standard branch) this is major GC pressure."
+          - line: 371
+            kind: "double[,] blState.DSTR.Clone()"
+            hot_path: true
+          - line: 372
+            kind: "double[,] blState.CTAU.Clone()"
+            hot_path: true
+          - line: 373
+            kind: "double[,] blState.UEDG.Clone()"
+            hot_path: true
+          - line: 374
+            kind: "double[,] blState.MASS.Clone()"
+            hot_path: true
+        io_or_locks:
+          - line: 361
+            kind: "debugWriter.WriteLine (conditional on debugWriter != null)"
+            severity: "low"
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 345
+            severity: "medium"
+            issue: "Trust-region scaling: rlx = trustRadius / stepNorm if stepNorm > trustRadius; clamped to [0.01, 1.0]. No relationship to XFoil UPDATE relaxation; a managed-only strategy. Since STANDARD branch is broken (1.1% within 1% CD), this trust-region step is likely a major contributor — it applies a scalar shrink instead of the per-variable DHI/DLO clamp the viscous BL Newton actually needs."
+          - line: 397
+            severity: "high"
+            issue: "Accept/reject logic compares newRmsbl < currentRmsbl (full residual RMS). But the Newton step has structural coupling (DAC->UEDG) that the trust-region does NOT account for — ComputeUpdateStepCoupling is called AFTER cloning snapshots, meaning the saved snapshots don't reflect DAC-coupled Ue updates if ever restored. Actually, DAC is applied via ApplyRelaxedStep, so snapshots are pre-step and restore is consistent. OK."
+          - line: 405
+            severity: "medium"
+            issue: "When newTrustRadius < 0.01 and residual grew, the step is accepted anyway (line 408-410) to 'avoid infinite shrink'. This means the trust region never meaningfully rejects on a small radius. Contradicts trust-region theory; should instead accept step with rlx=minimum and reset trust radius to a stable value."
+        numerical_stability:
+          - line: 342
+            issue: "divide_guard"
+            note: "ComputeStepNorm called; if stepNorm == 0 (early convergence), rlx = 1.0 by ternary."
+          - line: 406
+            issue: "cascade"
+            note: "Hard-coded 0.01 minimum for trustRadius — no rationale documented."
+        fortran_divergence:
+          - line: 326
+            fortran_ref: "none (managed-only)"
+            note: "No Fortran analogue; this is the modern standard-branch path and appears under-engineered for BL Newton."
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Replace ad-hoc trust-region with dogleg/Levenberg-Marquardt proper implementation or simply remove and use XFoilRelaxation in double precision for the standard branch."
+            rationale: "Current implementation is a scalar step shrink with no per-variable scaling; likely a primary source of standard-branch 1.8M% error."
+            risk: medium
+          - kind: new_algorithm
+            summary: "Use SolverBuffers scratch arrays instead of .Clone() for rollback snapshots."
+            rationale: "5x double[,].Clone() per iteration is avoidable."
+            risk: low
+      - name: ComputeUeUpdates
+        signature: "private static double[] ComputeUeUpdates(ViscousNewtonSystem, BoundaryLayerSystemState, double[,]? dij, int isp, int nPanel, bool useLegacyPrecision)"
+        line_range: [437, 487]
+        allocations:
+          - line: 450
+            kind: "new double[Math.Max(nsys, 0)]"
+            hot_path: true
+            note: "Early-return heap allocation when dij == null."
+          - line: 452
+            kind: "new double[nsys]"
+            hot_path: true
+            note: "P1: per-Newton-iter allocation of NSYS-length double array. Standard branch calls this multiple times per iter (once via ComputeUpdateStepCoupling)."
+        io_or_locks: []
+        float_usage:
+          - line: 478
+            form: "(float)dMass"
+            context: "Legacy parity path; else branch line is double."
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - line: 457
+            fortran_ref: "xbl.f UPDATE DO 1/10 inner IPAN loop (line 4289-4316)"
+            note: "Loop structure matches; Fortran also accumulates DUI = DUI + UE_M*(MASS+VDEL(3,1,JV)) but in the _RELAX path. In the C# non-context path (ComputeUeUpdates), only the VDEL delta is applied (not MASS+VDEL). This is for the non-URELAX accumulation branch and matches the managed semantics for the DIJ-only coupling."
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Replace new double[nsys] with SolverBuffers.DuedgScratch."
+            risk: low
+      - name: ComputeUpdateStepCoupling
+        signature: "private static UpdateStepCoupling ComputeUpdateStepCoupling(ViscousNewtonSystem, BoundaryLayerSystemState, double[,]? dij, int isp, int nPanel, NewtonUpdateContext?, bool useLegacyPrecision)"
+        line_range: [489, 693]
+        allocations:
+          - line: 498
+            kind: "new double[nsys] via ComputeUeUpdates"
+            hot_path: true
+            note: "Early baseDuedg allocation always."
+          - line: 501
+            kind: "new UpdateStepCoupling (record struct, stack-allocated OK); but captures baseDuedg array reference"
+            hot_path: true
+          - line: 510
+            kind: "double[,] uNew = new double[MaxStations, 2]"
+            hot_path: true
+            note: "P1: per-Newton-iter allocation."
+          - line: 511
+            kind: "double[,] uAc = new double[MaxStations, 2]"
+            hot_path: true
+            note: "P1: per-Newton-iter allocation."
+          - line: 512
+            kind: "double[] qNew = new double[n]"
+            hot_path: true
+            note: "P1: per-Newton-iter allocation."
+          - line: 513
+            kind: "double[] qAc = new double[n]"
+            hot_path: true
+            note: "P1: per-Newton-iter allocation."
+          - line: 675
+            kind: "double[] duedg = new double[nsys]"
+            hot_path: true
+            note: "P1: per-Newton-iter allocation (second one in this method)."
+        io_or_locks: []
+        float_usage:
+          - line: 541
+            form: "(float) casts + float arithmetic (dMassValue, dMassControl)"
+            context: "Legacy parity branch."
+          - line: 556
+            form: "(float) casts for uNew/uAc rounding to single"
+            context: "Legacy parity path."
+          - line: 594
+            form: "float fClNew/fClAc/fCa/fSa/fQinf/fQinf2 + 0.0f/1.0f/-2.0f/0.5f literals"
+            context: "Legacy parity CL integration."
+          - line: 665
+            form: "float fDenom + 1.0f + 1e-30f"
+            context: "Legacy parity DAC computation."
+        mathf_calls:
+          - line: 666
+            symbol: "MathF.Abs"
+            context: "Legacy parity path only."
+        correctness_concerns:
+          - line: 499
+            severity: "info"
+            issue: "Early-return: if not alpha-prescribed or dij null or nsys==0, returns with Dac=0. Matches Fortran LALFA=FALSE path (CL prescribed -> DAC=alpha-driver not computed here). Verify that the DAC-=0 default is consistent with subsequent DUEDG assembly."
+        numerical_stability:
+          - line: 666
+            issue: "divide_guard"
+            note: "DAC = (CLNEW - CL) / (1.0 - CL_AC). Guarded by |1-CL_AC| > 1e-30. Fortran DAC = (CLNEW - CL) / (1 - CL_AC - CL_MS*MS_AC) — C# appears to drop the CL_MS*MS_AC term."
+        fortran_divergence:
+          - line: 661
+            fortran_ref: "xbl.f UPDATE CL drift formula (around line 4430)"
+            note: "Fortran: DAC = (CLNEW - CL) / (1.0 - CL_AC - CL_MS*MS_AC). C# is (CLNEW - CL) / (1 - CL_AC). The CL_MS*MS_AC term (Mach sensitivity) is MISSING in C#. Confirm this is OK for MATYP=1 test vectors (MS_AC=0 there?) — otherwise this is a real S4 bug affecting compressible cases."
+        modernization_candidates:
+          - kind: new_data
+            summary: "Include CL_MS*MS_AC in DAC denominator for compressible Type-1 sweeps"
+            rationale: "Fortran UPDATE accounts for Mach sensitivity; C# does not."
+            risk: medium
+          - kind: new_algorithm
+            summary: "Move uNew/uAc/qNew/qAc/duedg to SolverBuffers scratch"
+            rationale: "Removes 5 per-iter heap allocations in update path."
+            risk: low
+      - name: ApplyRelaxedStep
+        signature: "private static void ApplyRelaxedStep(BoundaryLayerSystemState, ViscousNewtonSystem, double rlx, double hstinv, double[] wakeGap, UpdateStepCoupling, TextWriter?, bool useLegacyPrecision)"
+        line_range: [702, 862]
+        allocations:
+          - line: 828
+            kind: "string.Format CultureInfo arguments"
+            hot_path: false
+            note: "Guarded by debugWriter != null AND (thetaClamped || dstrCollapsed || ueLarge). Bounded."
+        io_or_locks:
+          - line: 828
+            kind: "TextWriter.WriteLine (conditional)"
+            severity: "low"
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 790
+            severity: "info"
+            issue: "hklim = 1.02 for airfoil, 1.00005 for wake. Matches Fortran."
+          - line: 776
+            severity: "low"
+            issue: "Theta clamped to 1e-10 hard minimum. Prevents physical meaning but avoids divide-by-zero downstream. Matches Fortran UPDATE."
+          - line: 853
+            severity: "info"
+            issue: "Negative-Ue cleanup walks 2..IBLTE[side] (1-based like Fortran). Index semantics correct here."
+        numerical_stability:
+          - line: 754
+            issue: "guard_abs"
+            note: "LegacyPrecisionMath.AddScaled keeps per-op rounding."
+          - line: 758
+            issue: "divide_guard"
+            note: "ddstr divide by UEDG guarded by 1e-30."
+        fortran_divergence:
+          - line: 720
+            fortran_ref: "xbl.f UPDATE per-station state update (around line 4470-4600)"
+            note: "Matches Fortran flow."
+          - line: 849
+            fortran_ref: "xbl.f UPDATE negative-Ue cleanup"
+            note: "Loop bounds 2..IBLTE[side] consistent with Fortran 1-based DO 2 IBL=2,IBLTE(IS)."
+        modernization_candidates: []
+      - name: MirrorLowerWakeOntoUpperWake
+        signature: "private static void MirrorLowerWakeOntoUpperWake(BoundaryLayerSystemState, bool useLegacyPrecision)"
+        line_range: [864, 888]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 881
+            severity: "medium"
+            issue: "All six wake mirror writes use LegacyPrecisionMath.RoundToSingle regardless of useLegacyPrecision parameter? Let me re-check: RoundToSingle takes useLegacyPrecision arg — in non-legacy mode it should pass through. Need to verify LegacyPrecisionMath.RoundToSingle(double, bool) returns double unchanged when second arg is false. If it unconditionally casts to float even in standard branch, this is a silent S6 precision loss in the standard branch. Based on helper naming suggests YES unchanged, but must be confirmed."
+            fortran_ref: "none (managed-only mirror for wake symmetry)"
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ApplyDslim
+        signature: "private static double ApplyDslim(double dstr, double thet, double msq, double hklim, bool useLegacyPrecision=false)"
+        line_range: [897, 910]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - line: 907
+            issue: "divide_guard"
+            note: "hk_h clamped to 1e-10 minimum. Reasonable."
+        fortran_divergence:
+          - line: 897
+            fortran_ref: "xbl.f:4779 DSLIM"
+            note: "Direct port. Matches Fortran 1:1 (H=DSTR/THET; HKIN; DH=MAX(0,HKLIM-HK)/HK_H; DSTR += DH*THET)."
+        modernization_candidates: []
+      - name: ComputeStepNorm
+        signature: "private static double ComputeStepNorm(BoundaryLayerSystemState, ViscousNewtonSystem, bool useLegacyPrecision)"
+        line_range: [919, 966]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 919
+            severity: "medium"
+            issue: "Standard-branch trust-region norm: only includes (dctau, dthet, dmass); DOES NOT include duedg term. Whereas the XFoilRelaxation scan at line 202 weights dn4 = |duedg|/0.25. Missing Ue term means trust-region underestimates step size and over-aggressively accepts Ue-dominated moves. Possible contributor to 1.8M% standard-branch CD error."
+            fortran_ref: "xbl.f UPDATE RLXBL scan includes all four normalized components"
+        numerical_stability:
+          - line: 940
+            issue: "guard_abs"
+            note: "Guarded divides by 1e-30."
+        fortran_divergence:
+          - line: 919
+            fortran_ref: "none (managed-only)"
+            note: "ComputeStepNorm is trust-region-only. Its absence from Fortran is expected. But its inconsistency with the XFoilRelaxation normalization is suspicious."
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Include |duedg|/0.25 term in step norm for trust-region branch to match XFoilRelaxation scaling"
+            rationale: "Missing Ue term biases trust-region toward accepting Ue-dominated steps, likely contributing to standard-branch divergence."
+            risk: medium
+      - name: ComputeUpdateRms
+        signature: "private static double ComputeUpdateRms(BoundaryLayerSystemState, ViscousNewtonSystem, bool useLegacyPrecision)"
+        line_range: [974, 999]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 974
+            severity: "low"
+            issue: "ComputeUpdateRms divides by 3*nsys (three residual rows per station). Fortran ApplyXFoilRelaxation normalizes by 4*(NBL1+NBL2). Two different RMS definitions — verify caller semantics."
+        numerical_stability: []
+        fortran_divergence:
+          - line: 974
+            fortran_ref: "xbl.f UPDATE RMSBL accumulation"
+            note: "Fortran UPDATE RMSBL uses 4*(NBL1+NBL2) denominator; C# ComputeUpdateRms uses 3*nsys. Different semantics."
+        modernization_candidates: []
+      - name: GetPanelIndex
+        signature: "private static int GetPanelIndex(int ibl, int side, int isp, int nPanel, BoundaryLayerSystemState)"
+        line_range: [1008, 1017]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 1008
+            severity: "low"
+            issue: "Unused isp, nPanel parameters (dead signature)."
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: GetVTI
+        signature: "private static double GetVTI(int ibl, int side, BoundaryLayerSystemState)"
+        line_range: [1025, 1033]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: major
+      top_findings:
+        - "P2: ApplyTrustRegionUpdate clones 5 state arrays (THET/DSTR/CTAU/UEDG/MASS) via .Clone() every Newton iter (lines 370-374). Only affects standard branch but is significant GC pressure."
+        - "P1: ComputeUpdateStepCoupling allocates 5 scratch arrays per iter (lines 510-513, 675) plus ComputeUeUpdates baseDuedg at 498 and 452. Both branches affected."
+        - "S4: DAC formula at line 666 drops Fortran CL_MS*MS_AC term (compressibility sensitivity). OK for MATYP=1 test vectors but bug for non-constant-Re/Mach sweeps."
+        - "S4: ApplyXFoilRelaxation DCLMIN clamp (line 133) hard-codes -0.5; Fortran xbl.f:4247 uses MAX(-0.5, -0.9*CL) for MATYP != 1. Documented as 'not implemented'."
+        - "S4/Standard: ComputeStepNorm (line 919) omits the |duedg|/0.25 component present in XFoilRelaxation scan at line 202. Trust-region under-weights Ue steps — plausible contributor to standard-branch divergence."
+        - "S4/Standard: Trust-region ad-hoc step shrink at line 345 is per-iteration scalar rather than per-variable DHI/DLO. Under-engineered relative to BL Newton needs."
+        - "S6: MirrorLowerWakeOntoUpperWake unconditionally calls LegacyPrecisionMath.RoundToSingle (line 881) — verify that useLegacyPrecision=false passes through without precision loss; otherwise silent S6 narrowing bug for standard branch."
+        - "P3: Console.Error.WriteLine entries were removed per recent commits; none remain in this file."
+      estimated_fix_effort: "2-3 days (route scratch arrays through SolverBuffers; fix step norm; implement MATYP!=1 DCLMIN; audit MirrorLowerWake precision; add CL_MS term to DAC)"
+ledger_summary:
+  total_files: 2
+  total_methods_audited: 17
+  parity_blockers: 2
+  standard_blockers: 5
+  notes: |
+    Parity branch: Main blocker is ComputePredictedEdgeVelocities heap allocation (known). Secondary concern is the Console.Error.WriteLine+Environment.GetEnvironmentVariable trace blocks remaining in ViscousNewtonAssembler (7+ sites) — even env-var-unset runs pay the dictionary/syscall cost per station.
+    Standard branch: Trust-region path is structurally under-engineered. ComputeStepNorm drops |duedg|/0.25 component, DAC formula drops Mach sensitivity term, DCLMIN clamp is MATYP-locked, MirrorLowerWake precision suspect, and 5x .Clone() per iter. Combined these can easily account for the observed 1.8M% CD divergence on the standard branch; specifically the step norm omission and the Fortran CL_MS drop are the strongest suspects.
+    P3 audit result: ViscousNewtonAssembler retains many Console.Error.WriteLine + env-var-gated trace blocks (at least 7 in BuildNewtonSystem plus 1 in ComputePredictedEdgeVelocities). ViscousNewtonUpdater has none. The "recent commits removed them" claim is PARTIALLY TRUE — updater is clean; assembler still has them.
+    S4 Fortran diff: BuildNewtonSystem matches SETBL structurally; ApplyXFoilRelaxation matches UPDATE structurally. The subtle divergences are (a) DCLMIN MATYP-1 assumption, (b) missing CL_MS term in DAC, (c) ComputeStepNorm missing Ue term, (d) R2=1.0 TAU stub, (e) MirrorLowerWake unconditional RoundToSingle. None of these invalidate the parity-branch 100% bit-exact result on NACA Re/alpha sweeps, but they explain most of the standard-branch breakage.

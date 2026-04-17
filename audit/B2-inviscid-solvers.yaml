@@ -1,0 +1,488 @@
+agent: B2
+ledger_path: audit/B2-inviscid-solvers.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/LinearVortexInviscidSolver.cs
+    lines: 1244
+    branch_relevance: both
+    methods:
+      - name: AssembleAndFactorSystem
+        signature: "public static void AssembleAndFactorSystem(LinearVortexPanelState, InviscidSolverState, double, double)"
+        line_range: [39, 108]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 55, form: "float[,] copy", context: "CopyMatrixToSingle — parity-gated by state.UseLegacyKernelPrecision (Fortran REAL workspace). Confirmed gated, standard branch skips."}
+          - {line: 59, form: "float factors", context: "state.LegacyStreamfunctionInfluenceFactors — gated behind UseLegacyKernelPrecision."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: AssembleSystem
+        signature: "private static int AssembleSystem(LinearVortexPanelState, InviscidSolverState, double, double)"
+        line_range: [113, 208]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 126, fortran_ref: "f_xfoil/src/xpanel.f:GGCALC", note: "C# path always calls ComputeTrailingEdgeGeometry/ComputeNormals/ComputePanelAngles every assembly; Fortran maintains LQAIJ flag to skip rebuilds. Managed rebuild every call is correct but wasteful outside parity (P-class concern but not per-station)."}
+        modernization_candidates: []
+      - name: TracePanelNodes
+        signature: "private static void TracePanelNodes(LinearVortexPanelState)"
+        line_range: [213, 236]
+        allocations: []
+        io_or_locks:
+          - {line: 220, kind: "trace_event_anonymous_object", severity: "low", note: "Allocates an anonymous object per panel node inside SolverTrace.Event when SolverTrace.IsActive. Gated by IsActive — benign when tracing off. P6 risk if tracing left on in benchmarks."}
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TraceInfluenceSystem
+        signature: "private static void TraceInfluenceSystem(InviscidSolverState, int, int)"
+        line_range: [238, 300]
+        allocations: []
+        io_or_locks:
+          - {line: 259, kind: "trace_event_anonymous_object", severity: "low", note: "Per-entry anonymous object allocations. O(systemSize^2) — off by IsActive gate."}
+        float_usage:
+          - {line: 255, form: "float_cast", context: "(float)state.StreamfunctionInfluence[row, col] — parity trace only, gated by UseLegacyKernelPrecision."}
+          - {line: 279, form: "float_cast", context: "(float)state.SourceInfluence[row, col] — same, parity trace."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TraceBasisEntries
+        signature: "private static void TraceBasisEntries(string, string, double[,], int, int, string) / (string, string, IReadOnlyList<double>, string)"
+        line_range: [302, 360]
+        allocations: []
+        io_or_locks:
+          - {line: 319, kind: "trace_event_anonymous_object", severity: "low", note: "Anonymous object per index; gated by IsActive."}
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: FormatSingleHex
+        signature: "private static string FormatSingleHex(float[], int)"
+        line_range: [362, 367]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 362, form: "float[] param", context: "Debug hex helper; unreferenced in live code paths — candidate for removal."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SolveBasisRightHandSides
+        signature: "private static void SolveBasisRightHandSides(InviscidSolverState, int)"
+        line_range: [372, 468]
+        allocations:
+          - {line: 377, kind: "new double[systemSize]", hot_path: false, note: "rhs0 allocated per AssembleAndFactorSystem call — once per panel build, not per Newton iteration. Acceptable."}
+          - {line: 378, kind: "new double[systemSize]", hot_path: false, note: "rhs1 — same."}
+          - {line: 381, kind: "new float[systemSize]", hot_path: false, note: "rhs0Single — parity-gated."}
+          - {line: 382, kind: "new float[systemSize]", hot_path: false, note: "rhs1Single — parity-gated."}
+        io_or_locks: []
+        float_usage:
+          - {line: 381, form: "float[]", context: "rhs0Single — PARITY-ONLY, gated by state.UseLegacyKernelPrecision. Confirmed gate."}
+          - {line: 382, form: "float[]", context: "rhs1Single — PARITY-ONLY, gated."}
+          - {line: 385, form: "(float) cast", context: "Down-cast RHS to single precision — parity-gated."}
+          - {line: 386, form: "(float) cast", context: "Same."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: CopyMatrixToSingle
+        signature: "private static void CopyMatrixToSingle(double[,], float[,], int)"
+        line_range: [473, 482]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 473, form: "float[,] destination", context: "Parity-only helper; callers all gated by UseLegacyKernelPrecision. Standard branch never reaches it."}
+          - {line: 479, form: "(float) cast", context: "Narrowing — parity-only."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TraceFactoredMatrix (float overload)
+        signature: "private static void TraceFactoredMatrix(string, float[,], int, string)"
+        line_range: [484, 516]
+        allocations: []
+        io_or_locks:
+          - {line: 502, kind: "trace_event_anonymous_object", severity: "low", note: "Per-entry; gated by IsActive."}
+        float_usage:
+          - {line: 486, form: "float[,] param", context: "Parity trace — invoked only from parity path."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TraceFactoredMatrix (double overload)
+        signature: "private static void TraceFactoredMatrix(string, double[,], int, string)"
+        line_range: [518, 550]
+        allocations: []
+        io_or_locks:
+          - {line: 536, kind: "trace_event_anonymous_object", severity: "low"}
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePivotEntries
+        signature: "private static void TracePivotEntries(string, IReadOnlyList<int>, int, string)"
+        line_range: [552, 580]
+        allocations: []
+        io_or_locks:
+          - {line: 568, kind: "trace_event_anonymous_object", severity: "low"}
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SolveAtAngleOfAttack
+        signature: "public static LinearVortexInviscidResult SolveAtAngleOfAttack(double, LinearVortexPanelState, InviscidSolverState, double, double)"
+        line_range: [595, 686]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 613, severity: "major", issue: "Standard branch routes cos/sin through LegacyPrecisionMath.Cos/Sin with useLegacyPrecision=false — that is fine, but the method maps to Fortran SPECAL (xoper.f:2435) which ALSO runs an inner CLM/Mach Newton loop with MRCL+COMSET for compressible cases. C# SolveAtAngleOfAttack skips that loop entirely — Mach convergence is absent. Only an issue when machNumber>0 (MATYP != 1). For M=0 cases it is correct."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 595, fortran_ref: "xoper.f:2435 SPECAL", note: "Missing MINF/CLM iteration block (lines 2458–2502 Fortran). Not invoked for M=0 but means standard compressible path diverges from SPECAL. Parity verification has been done at M=0 only."}
+          - {line: 665, fortran_ref: "xoper.f:2504-2520", note: "Fortran post-loop recomputes MRCL(CL, MINF_CL, REINF_CL) + COMSET + CPCALC for viscous CPV/CPI. C# returns result without the second compressible resync."}
+        modernization_candidates: []
+      - name: SolveAtLiftCoefficient
+        signature: "public static LinearVortexInviscidResult SolveAtLiftCoefficient(double, LinearVortexPanelState, InviscidSolverState, double, double)"
+        line_range: [701, 738]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 711, severity: "minor", issue: "Initial alpha guess is targetCl / (2*pi); Fortran SPECCL uses CURRENT ALFA (last solved) as guess (xoper.f:2540). For independent calls the managed behavior restarts from a fresh guess — fine for convergence but differs from legacy trajectory."}
+          - {line: 715, severity: "minor", issue: "No undamped-step limiter. Fortran SPECCL uses RLX=1 unconditionally at xoper.f:2562 but in highly-nonlinear stalled cases Newton can overshoot; managed code matches that so OK."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 701, fortran_ref: "xoper.f:2527 SPECCL", note: "Mach is held fixed in Fortran via MRCL+COMSET at line 2537. Managed SolveAtLiftCoefficient passes machNumber through but never calls an equivalent Mach/Re resync. Not a bug at M=0."}
+        modernization_candidates: []
+      - name: ComputeInviscidSpeed
+        signature: "public static void ComputeInviscidSpeed(double, InviscidSolverState, int)"
+        line_range: [749, 778]
+        allocations:
+          - {line: 775, kind: ".Take(nodeCount).ToArray()", hot_path: false, note: "LINQ allocation in SolverTrace.Array path — gated by IsActive. Trace-only but violates P2 when tracing enabled in hot loops."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SuperimposeBasisPair
+        signature: "private static double SuperimposeBasisPair(double, double, double, double, bool)"
+        line_range: [783, 808]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 795, form: "float local + cast", context: "cosaSingle/basisAlpha0Single — PARITY-ONLY, gated by useLegacyPrecision branch at line 790."}
+          - {line: 805, form: "RoundBarrier(float)", context: "Parity-only single-precision rounding; Fortran REAL arithmetic mirror."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SuperimposeBasisPairAlphaDerivative
+        signature: "private static double SuperimposeBasisPairAlphaDerivative(double, double, double, double, bool)"
+        line_range: [810, 830]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 822, form: "float local + cast", context: "Parity-only, gated by useLegacyPrecision branch at 817."}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 819, severity: "critical", issue: "STANDARD-BRANCH SIGN/ORDER: Managed returns (cosa * basisAlpha90) - (sina * basisAlpha0). Fortran SPECAL/SPECCL at xoper.f:2451,2545 computes GAM_A(I) = -SINA*GAMU(I,1) + COSA*GAMU(I,2). Mathematically equivalent (same result), but verify summation order for bit-identity expectations on standard branch."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: IntegratePressureForces
+        signature: "public static LinearVortexInviscidResult IntegratePressureForces(LinearVortexPanelState, InviscidSolverState, double, double, double, double, double)"
+        line_range: [847, 994]
+        allocations:
+          - {line: 870, kind: "new double[n]", hot_path: false, note: "cp array; called per alpha solve, not per Newton inner iteration in viscous loop."}
+          - {line: 874, kind: "new double[n]", hot_path: false, note: "cpAlpha array."}
+          - {line: 875, kind: "new double[n]", hot_path: false, note: "cpM2 array — allocated but NEVER WRITTEN (see X2 dead-code below)."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 902, severity: "critical", issue: "clMach2 is initialized to 0.0 and never accumulated. Fortran CLCALC (xfoil.f:1168) accumulates CL_MSQ += DX*AG_MSQ every panel, where AG_MSQ uses CPG*_MSQ terms. C# drops the compressibility sensitivity entirely, returning clMach2=0. For standard-branch compressible sweeps this is a hard-coded drop that breaks CL_MSQ-dependent callers (Mach iteration in SPECAL)."}
+          - {line: 875, severity: "minor", issue: "cpM2 array allocated but never populated — dead workspace. Either delete or populate with CPG*_MSQ values paralleling Fortran."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 902, fortran_ref: "xfoil.f:1168 CLCALC", note: "Missing CL_MSQ accumulation and CPG*_MSQ computations (xfoil.f:1105-1109 beta/bfac sensitivities, 1122/1134/1150 MSQ derivatives)."}
+          - {line: 941, fortran_ref: "xfoil.f:1164 CLCALC", note: "Managed moment term 'mx' implements DG*DX/12 + AG*AX; Fortran line 1164: CM = CM - DX*(AG*AX + DG*DX/12) - DY*(AG*AY + DG*DY/12). Expressions equivalent but parity path relies on LegacyPrecisionMath rounding order; verify ordering matches Fortran operator associativity."}
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "Restore CL_MSQ accumulation for compressible sweeps"
+            rationale: "Standard branch cannot converge SPECAL's CLM Newton loop without CL_MSQ. Required for M>0 support."
+            risk: medium
+      - name: ComputePressureCoefficients
+        signature: "public static void ComputePressureCoefficients(double[], double, double, double[], int, bool)"
+        line_range: [1008, 1047]
+        allocations:
+          - {line: 1044, kind: ".Take(count).ToArray()", hot_path: false, note: "LINQ allocation in SolverTrace.Array — IsActive-gated."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 1031, severity: "minor", issue: "Managed guards with 'denom > 1e-12 ? cp : cpInc'. Fortran CPCALC (xfoil.f:1072) computes CP = CPINC/DEN unguarded and only sets DENNEG warning. Managed fallback silently swaps to incompressible Cp — diverges from Fortran which returns NaN/Inf and warns. Behavioural difference; may hide compressibility blow-ups from users."}
+        numerical_stability:
+          - {line: 1030, issue: "denominator_near_zero", note: "Karman-Tsien denom can approach zero at supersonic-pocket speeds; current clamp suppresses divergence (silent)."}
+        fortran_divergence:
+          - {line: 1031, fortran_ref: "xfoil.f:1072 CPCALC", note: "Silent denom-guard swap vs Fortran unguarded division + warning."}
+        modernization_candidates: []
+      - name: AnalyzeInviscid
+        signature: "public static LinearVortexInviscidResult AnalyzeInviscid(double[], double[], int, double, int, double, bool)"
+        line_range: [1064, 1096]
+        allocations:
+          - {line: 1075, kind: "new LinearVortexPanelState(maxNodes)", hot_path: false, note: "Test/convenience entry; called per invocation, not per-Newton. OK."}
+          - {line: 1076, kind: "new InviscidSolverState(maxNodes)", hot_path: false, note: "Same as above."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ApplySharpTrailingEdgeCondition
+        signature: "private static void ApplySharpTrailingEdgeCondition(LinearVortexPanelState, InviscidSolverState, double, double, int)"
+        line_range: [1105, 1195]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 1122, form: "(float) cast", context: "LegacyLibm.Atan2((float)..., (float)...) — parity-gated via useLegacyPrecision."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 1146, issue: "dsMin clamp", note: "Early-returns on dsMin <= 1e-12 — silent skip of sharp-TE row. Fortran xpanel.f:GGCALC also skips via panel geometry but logs nothing; acceptable."}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: UpdateTrailingEdgeStrengths
+        signature: "private static void UpdateTrailingEdgeStrengths(LinearVortexPanelState, InviscidSolverState)"
+        line_range: [1203, 1243]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: major
+      top_findings:
+        - "STANDARD-BRANCH CRITICAL: IntegratePressureForces line 902 hard-codes clMach2=0.0, never accumulates CL_MSQ — compressible Mach Newton loop in SPECAL cannot converge (xfoil.f:1168 drop)."
+        - "STANDARD-BRANCH MAJOR: SolveAtAngleOfAttack skips Fortran SPECAL's inner CLM/Mach iteration (xoper.f:2458-2502) and post-loop CPV resync — no M>0 parity."
+        - "STANDARD-BRANCH MINOR: ComputePressureCoefficients silently falls back to incompressible Cp when Karman-Tsien denom<1e-12 (xfoil.f:1072 Fortran divides unguarded + warns) — masks compressibility blow-up."
+        - "DEAD CODE: cpM2 array allocated at line 875 but never written; FormatSingleHex helper unreferenced in non-debug paths."
+        - "PARITY branch: all float/MathF narrowings verified gated by UseLegacyKernelPrecision or useLegacyPrecision flag; standard branch is pure double."
+      estimated_fix_effort: "2-3 days (restore CL_MSQ accumulation + CPG*_MSQ sensitivities + Mach Newton loop; delete dead cpM2/FormatSingleHex)"
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/HessSmithInviscidSolver.cs
+    lines: 362
+    branch_relevance: standard
+    methods:
+      - name: Prepare
+        signature: "public PreparedInviscidSystem Prepare(PanelMesh)"
+        line_range: [21, 74]
+        allocations:
+          - {line: 29, kind: "new double[panelCount+1, panelCount+1]", hot_path: false, note: "Per Prepare() call — not per solve. Prepare is intended once per mesh."}
+          - {line: 30, kind: "new double[panelCount, panelCount]", hot_path: false, note: "sourceTangentialInfluence — same as above."}
+          - {line: 31, kind: "new double[panelCount, panelCount]", hot_path: false, note: "vortexTangentialInfluence — same."}
+          - {line: 63, kind: "(double[,])systemMatrix.Clone()", hot_path: false, note: "P2 clone — done twice (lines 63, 64) to keep LU factorization out of systemMatrix. Two full N+1 x N+1 clones per Prepare(). Not hot path (Prepare once per mesh) but avoidable by refactoring DenseLinearSystemSolver to accept in-place semantics or to save LU once."}
+          - {line: 70, kind: ".Take(panelCount).ToArray()", hot_path: false, note: "LINQ slicing — Prepare-time only."}
+          - {line: 72, kind: ".Take(panelCount).ToArray()", hot_path: false}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Analyze (mesh overload)
+        signature: "public InviscidAnalysisResult Analyze(PanelMesh, double, double, double)"
+        line_range: [79, 86]
+        allocations:
+          - {line: 85, kind: "new PreparedInviscidSystem via Prepare", hot_path: false, note: "Convenience path — each call re-Prepares. If callers hit this per-alpha sweep they pay O(N^3) LU per call. Recommend using Prepare+Analyze(prepared,...) pattern in sweeps."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Analyze (prepared overload)
+        signature: "public InviscidAnalysisResult Analyze(PreparedInviscidSystem, double, double, double)"
+        line_range: [91, 204]
+        allocations:
+          - {line: 127, kind: "new List<PressureCoefficientSample>(panelCount)", hot_path: false, note: "Per-Analyze allocation; one sample per panel. Acceptable for post-solve result packaging."}
+          - {line: 129, kind: "new double[panelCount]", hot_path: false, note: "panelPressureCoefficients — per Analyze."}
+          - {line: 130, kind: "new double[panelCount]", hot_path: false, note: "correctedPanelPressureCoefficients — per Analyze."}
+          - {line: 149, kind: "pressureSamples.Add(new PressureCoefficientSample(...))", hot_path: false, note: "Per-panel record-struct construction inside outer loop — cheap but accumulates N allocations per Analyze."}
+          - {line: 166, kind: ".Take(...).Average(...)", hot_path: false, note: "LINQ + lambda closure over Y coordinates. Allocates enumerator + delegate. Single invocation per Analyze — low impact, but P2/P6 violation if Analyze enters hot path."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 168, severity: "major", issue: "Heuristic lift-sign selection: liftSign = Sign(effectiveIncidence) where effectiveIncidence = alpha + 8*camberIndicator. This has no Fortran analogue — Fortran derives CL from pressure integration only. Custom heuristic for choosing between 'pressure lift' vs 'circulation lift' (lines 175-180) is a managed invention; produces non-Fortran results. Standard branch DIVERGES FROM PHYSICS in ambiguous cases."}
+          - {line: 178, severity: "major", issue: "Agreement threshold max(0.05, 0.2*|circulationLiftCoefficient|) is arbitrary. When disagreement triggers, code discards pressure drag (line 180: dragCoefficient = 0d). No Fortran parallel."}
+          - {line: 181, severity: "minor", issue: "Moment uses corrected only when machNumber>0; otherwise uses uncorrected momentQuarterChord. Fortran CLCALC always applies Karman-Tsien correction uniformly."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 168, fortran_ref: "xfoil.f:CLCALC", note: "No Fortran equivalent of 'liftSign from camber' heuristic; Fortran integrates panel pressures directly."}
+          - {line: 174, fortran_ref: "xfoil.f:CLCALC", note: "circulationLiftCoefficient = 2*|circulation|/Vinf with sign heuristic — Kutta-Joukowski estimate. Fortran doesn't compute a 'backup' CL this way."}
+        modernization_candidates: []
+      - name: BuildUnitFreestreamRightHandSide
+        signature: "private static double[] BuildUnitFreestreamRightHandSide(PanelMesh, Panel, Panel, double, double)"
+        line_range: [209, 231]
+        allocations:
+          - {line: 217, kind: "new double[panelCount+1]", hot_path: false, note: "Called twice inside Prepare — OK at prepare time."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: CombineBasisVectors
+        signature: "private static double[] CombineBasisVectors(IReadOnlyList<double>, IReadOnlyList<double>, double, double)"
+        line_range: [236, 249]
+        allocations:
+          - {line: 242, kind: "new double[xBasis.Count]", hot_path: false, note: "Per Analyze call."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeInfluence
+        signature: "private static PanelInfluence ComputeInfluence(Panel, Panel, bool)"
+        line_range: [254, 286]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 258, severity: "major", issue: "Self-influence returns (0.5, 0, 0, -0.5) — classical Hess-Smith self term. Fortran XFoil uses linear-vortex PSILIN which gives different self-contribution (panel-slope-dependent). This is documented as managed-derived rather than a port, but standard-branch parity claims should note the self-term is NOT PSILIN-equivalent."}
+          - {line: 265, severity: "minor", issue: "r1Squared clamped to 1e-16 — avoids log(0). Acceptable protection, not in Fortran."}
+          - {line: 267, severity: "minor", issue: "r2Squared clamped similarly."}
+        numerical_stability:
+          - {line: 271, issue: "log_of_ratio", note: "Math.Log(r1Squared / r2Squared): cancellation possible for near-identical r1,r2 far from panel. Fortran PSILIN uses explicit log ratio too — acceptable."}
+        fortran_divergence:
+          - {line: 254, fortran_ref: "xpanel.f:PSILIN", note: "Not a port of PSILIN. Uses classical constant-strength Hess-Smith kernel vs XFoil's linear-vortex kernel. Documented at the class-level comment; noted here for standard-branch reckoning — standard branch is NOT a Fortran-equivalent path."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Replace Hess-Smith kernel with linear-vortex PSILIN for standard-branch parity"
+            rationale: "Class comment explicitly states this is not a direct port. 1.8M% CD error on standard branch is consistent with wrong kernel + wrong force-integration heuristic."
+            risk: high
+      - name: IntegratePressureForces
+        signature: "private static (double, double, double) IntegratePressureForces(PanelMesh, IReadOnlyList<double>, double)"
+        line_range: [291, 321]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 308, severity: "major", issue: "Pressure force = -Cp * Normal * Length (constant Cp per panel). Fortran CLCALC uses trapezoidal Cp average between node endpoints + second-order DG*DX/12 correction (xfoil.f:1152-1165). Managed version DROPS the trapezoidal average and the DG/12 correction — materially less accurate integration, particularly for CM."}
+          - {line: 313, severity: "minor", issue: "Moment reference hard-coded to (0.25, 0) instead of user-provided XCMREF/YCMREF. Fortran CLCALC takes XCMREF,YCMREF as args (xfoil.f:1086)."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 291, fortran_ref: "xfoil.f:CLCALC", note: "Uses per-panel constant Cp vs Fortran's linear-Cp trapezoidal integration with DG/12 correction. Large error contribution."}
+          - {line: 313, fortran_ref: "xfoil.f:1086 CLCALC", note: "Hard-coded (0.25, 0) moment reference vs Fortran's XREF/YREF args."}
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "Use trapezoidal Cp integration with DG*DX/12 correction, matching CLCALC"
+            rationale: "Direct cause of standard-branch CM inaccuracy; trivial to implement from the existing LinearVortexInviscidSolver.IntegratePressureForces template."
+            risk: low
+      - name: ComputeIncompressiblePressureCoefficient
+        signature: "private static double ComputeIncompressiblePressureCoefficient(double, double)"
+        line_range: [326, 329]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 328, severity: "minor", issue: "Math.Pow(ratio, 2d) instead of ratio*ratio — small JIT inefficiency. Correctness OK."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ApplyCompressibilityCorrection
+        signature: "private static double ApplyCompressibilityCorrection(double, double)"
+        line_range: [334, 350]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 344, severity: "minor", issue: "denom<=1e-12 fallback to incompressible. Same behavioral divergence from Fortran noted in LinearVortexInviscidSolver.ComputePressureCoefficients."}
+        numerical_stability:
+          - {line: 344, issue: "denom_guard", note: "Silent fallback on near-zero denom — hides supersonic-pocket blow-up."}
+        fortran_divergence:
+          - {line: 334, fortran_ref: "xfoil.f:1055 CPCALC / COMSET", note: "Karman-Tsien matches; silent-fallback differs."}
+        modernization_candidates: []
+      - name: DegreesToRadians
+        signature: "private static double DegreesToRadians(double)"
+        line_range: [355, 355]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: neither
+      standard_verdict: major
+      top_findings:
+        - "Class is explicitly documented as NOT a port of XFoil's PSILIN kernel — uses classical Hess-Smith constant-strength panels. Standard-branch 1.8M% CD error is consistent with this architectural mismatch."
+        - "STANDARD MAJOR: IntegratePressureForces uses per-panel constant Cp (line 308) instead of Fortran's trapezoidal Cp average + DG*DX/12 moment correction (xfoil.f:1152-1165). Materially worse CM/CDp integration."
+        - "STANDARD MAJOR: Analyze line 168-180 uses a 'lift-sign from camber' heuristic and 'pressure vs circulation' agreement check with no Fortran analogue. Discards pressure drag on disagreement (line 180: dragCoefficient=0d)."
+        - "STANDARD MINOR: Moment reference hard-coded (0.25, 0) in IntegratePressureForces; Fortran CLCALC takes XREF,YREF args."
+        - "P1 benign: DenseLinearSystemSolver field is single per-instance; Prepare() allocates O(N^2) matrices but only per-mesh, not per-solve. Two matrix Clone() calls at lines 63-64 are redundant if solver supports reusable LU."
+      estimated_fix_effort: "1 week to fully replace with linear-vortex kernel + CLCALC-style integration; 1 day to fix CM/CDp integration alone"
+ledger_summary:
+  total_files: 2
+  total_methods_audited: 28
+  parity_blockers: 0
+  standard_blockers: 3
+  notes: |
+    LinearVortexInviscidSolver parity branch is clean — all float narrowings verified gated by
+    UseLegacyKernelPrecision or UseLegacyPanelingPrecision. Single-precision LU copies at lines
+    53, 379 are parity-only. Standard branch has a hard-coded clMach2=0 (dead CL_MSQ) and lacks
+    SPECAL's inner CLM/Mach Newton loop, so compressible sweeps cannot converge on the standard
+    path.
+
+    HessSmithInviscidSolver is NOT a port (documented at class level) — standard branch uses a
+    classical Hess-Smith kernel with per-panel constant Cp integration and a camber-based lift-
+    sign heuristic. Likely dominant contributor to the 1.8M% CD error on standard branch.
+
+    Parity allocations: no hot-path allocations. Prepare() allocates once per mesh; Analyze
+    allocates per-alpha but outside the Newton inner loop. SolverTrace anonymous objects are
+    IsActive-gated (P6 concern only when tracing enabled during benchmarks).
+
+    Dead code: cpM2 array (LinearVortex:875), FormatSingleHex helper (LinearVortex:362).

@@ -1,0 +1,584 @@
+agent: C2
+ledger_path: audit/C2-numerics-remainder.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+scope_note: >
+  Tier C cluster agent auditing the 6 remaining Solver/Numerics files
+  (DenseLinearSystemSolver, BlockTridiagonalSolver, TridiagonalSolver,
+  BandMatrixSolver, ScaledPivotLuSolver, SolverBuffers).
+  READ-ONLY audit; no source edits. Four-pass discipline applied to each file.
+
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/DenseLinearSystemSolver.cs
+    lines: 188
+    branch_relevance: both
+    notes: >
+      Zero-alloc hot path is SolveInPlace(double) called via
+      DenseLinearSystemSolver.Shared from ViscousSolverEngine seed solves.
+      SolveInPlace(float) is the parity-only counterpart, invoked only from
+      ViscousSolverEngine.SolveSeedLinearSystem when useLegacyPrecision is
+      true, fed by SolverBuffers.DenseScratchMatrixFloat/Float thread-statics
+      (no per-call allocation on that path either).
+    methods:
+      - name: Solve
+        signature: "double[] Solve(double[,] matrix, double[] rightHandSide)"
+        line_range: [9, 12]
+        allocations:
+          - {line: 41, kind: "new T[,]", hot_path: false, note: "allocating Solve overload; not used on per-station hot path (ViscousSolverEngine uses SolveInPlace). Still reachable from HessSmithInviscidSolver but only at assembly time."}
+          - {line: 42, kind: "new T[]",  hot_path: false, note: "same as above"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 65, issue: "fixed_singular_threshold", note: "1e-12 absolute pivot threshold is fine for double, but for the float overload it is tighter than float eps*scale; a near-zero float pivot that rounds below 1e-12 will throw. Low risk because callers pre-check."}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Solve (float)
+        signature: "float[] Solve(float[,] matrix, float[] rightHandSide)"
+        line_range: [14, 17]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 14, form: "public_overload", context: "float[,] matrix, float[] rhs - parity-only surface"}
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+      - name: SolveInPlace (double)
+        signature: "void SolveInPlace(double[,] matrix, double[] rightHandSide)"
+        line_range: [19, 20]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        notes: "Canonical zero-alloc Newton seed solve entry. Confirmed."
+      - name: SolveInPlace (float)
+        signature: "void SolveInPlace(float[,] matrix, float[] rightHandSide)"
+        line_range: [22, 23]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 22, form: "public_overload", context: "float[,] matrix, float[] rhs - parity-only surface"}
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        notes: "Used only via SolverBuffers.DenseScratchMatrixFloat/Float; no standard-branch caller."
+      - name: SolveCore<T>
+        signature: "private static T[] SolveCore<T>(T[,] matrix, T[] rhs) where T : IFloatingPointIeee754<T>"
+        line_range: [25, 110]
+        allocations:
+          - {line: 41, kind: "new T[rowCount, columnCount]", hot_path: false, note: "allocating branch"}
+          - {line: 42, kind: "new T[rowCount]",              hot_path: false, note: "allocating branch"}
+          - {line: 53, kind: "Array.Empty<T>()",              hot_path: false, note: "zero-size shortcut"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 60, issue: "partial_pivot_scaled_absent", note: "Uses plain partial pivoting (max |a[i,p]|) rather than scaled partial pivoting. For the classic Hess-Smith / AIJ system this is historically sufficient but diverges slightly from XFoil LUDCMP (scaled). Safe because this path is for managed seed solves, not the legacy AIJ solve."}
+          - {line: 89, issue: "legacy_precision_helper", note: "SeparateMultiplySubtract used for both double and float path - intentional to match Fortran split mul/sub rounding."}
+        fortran_divergence:
+          - {line: 25, fortran_ref: "xsolve.f:LUDCMP (scaled pivot) and GAUSS (simple pivot)", note: "f_xfoil's LUDCMP is scaled; this core is Gauss-with-partial-pivot. Not a bug - it is a separate managed algorithm. Standard branch relies on it for Newton seed solves."}
+        modernization_candidates: []
+      - name: SolveCoreInPlace<T>
+        signature: "private static void SolveCoreInPlace<T>(T[,] matrix, T[] rhs)"
+        line_range: [112, 187]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 139, issue: "partial_pivot_scaled_absent", note: "same as SolveCore: plain partial pivoting"}
+          - {line: 144, issue: "pivot_threshold_float_gap", note: "1e-12 abs threshold tighter than reasonable float eps*rowMax; may false-positive-throw for float matrices on the parity path."}
+        fortran_divergence: []
+        modernization_candidates: []
+        notes: "Caller-owned arrays mutated in place. Correctly zero-alloc. [NoOptimization] prevents JIT FMA contraction to match Fortran -ffp-contract=off."
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: minor
+      top_findings:
+        - "SolveInPlace is confirmed zero-alloc on both double and float paths; DenseScratchMatrixFloat/Float thread-statics feed the float overload from ViscousSolverEngine.SolveSeedLinearSystem."
+        - "Allocating Solve(double[,]) overload still reachable (e.g. HessSmithInviscidSolver). Not on the Newton-iteration hot path; consider deprecating in favor of SolveInPlace."
+        - "1e-12 absolute pivot floor is double-calibrated; on the float overload it can misreport singular for barely-scaled matrices. Parity-only so low impact."
+        - "Uses plain partial pivot rather than XFoil LUDCMP scaled pivot; documented managed alternative."
+      estimated_fix_effort: "4h (deprecate allocating overloads, rescale pivot floor by precision)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/BlockTridiagonalSolver.cs
+    lines: 503
+    branch_relevance: both
+    notes: >
+      Primary viscous Newton-coupled solver (BLSOLV). Parity branch is gated by
+      useLegacyPrecision flag: takes a COPY of VA/VB/VM/VDEL/VZ into float[,,]
+      workspaces, solves, copies back. This is per-Newton-iteration heavy
+      allocation on the parity path; acceptable for correctness but expensive
+      in memory.
+    methods:
+      - name: Solve
+        signature: "void Solve(ViscousNewtonSystem system, double vaccel=0.01, TextWriter? debugWriter=null, bool useLegacyPrecision=false)"
+        line_range: [36, 109]
+        allocations:
+          - {line: 42, kind: "SolverTrace.Scope + anonymous object", hot_path: true, note: "per-Newton-iteration. Anonymous record + scope disposable. Violates P6 when scope is actually entered; trace is usually disabled so object is allocated but not used."}
+          - {line: 67, kind: "new float[,,]  (VA copy)", hot_path: true, note: "parity branch only. nsys*3*3 floats per iteration. Copy-to-single helper."}
+          - {line: 68, kind: "new float[,,]  (VB copy)", hot_path: true, note: "parity branch only"}
+          - {line: 69, kind: "new float[,,]  (VM copy)", hot_path: true, note: "parity branch only - scales as nsys*nsys*3"}
+          - {line: 70, kind: "new float[,,]  (VDEL copy)", hot_path: true, note: "parity branch only"}
+          - {line: 71, kind: "new float[,]   (VZ copy)", hot_path: true, note: "parity branch only"}
+          - {line: 104, kind: "Enumerable.Range(...).Select(...).ToArray()", hot_path: true, note: "always runs; LINQ + array alloc for trace payload. P2 violation."}
+        io_or_locks:
+          - {line: 39, kind: "TextWriter parameter",  severity: "low", note: "writer is nullable and only invoked on pivot clamp / debug header. Not used on hot path at steady state."}
+        float_usage:
+          - {line: 62, form: "parity_branch_gate", context: "if (useLegacyPrecision) -> float workspace; properly gated"}
+          - {line: 67, form: "float[,,]", context: "parity-only workspace allocations"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 432, issue: "pivot_clamp", note: "PivotFloor 1e-30 safe for double; for the float parity workspace values below float denormal flush; behavior verified bit-exact for NACA 4455/4455."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Replace float copy-then-solve parity path with extended-precision double solve once the standard branch is hardened"
+            rationale: "Every Newton iteration on parity path allocates 4 float[,,] (up to ~nsys=360 stations ~= 3MB). Parity goal eventually becomes legacy-visible only for reference, not the default."
+            risk: high
+      - name: SolveCore<T>
+        signature: "private static void SolveCore<T>(T[,,] va, T[,,] vb, T[,,] vm, T[,,] vdel, T[,] vz, int nsys, int ivte1, int ivz, double arcLengthSpan, T vaccel, TextWriter? debugWriter)"
+        line_range: [114, 363]
+        allocations:
+          - {line: 139, kind: "SolverTrace.Event + anon obj",  hot_path: true, note: "per forward-elimination step per iteration; hot. P6."}
+          - {line: 342, kind: "SolverTrace.Event + anon obj",  hot_path: true, note: "per back-substitution step"}
+        io_or_locks:
+          - {line: 331, kind: "debugWriter.WriteLine (indirect)", severity: "low", note: "guarded by WriteDebugRows; null by default"}
+          - {line: 362, kind: "debugWriter.WriteLine (indirect)", severity: "low", note: "null by default"}
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 128, issue: "span_floor", note: "T.Max(arcLengthSpan, 1e-12) -- denominator guard for VACC scaling; matches BLSOLV."}
+          - {line: 293, issue: "vacc_gate", note: "VACC1/VACC2/VACC3 skip-small-eliminations match BLSOLV's IF(ABS(...)>VACCn) gates."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Consider sparse block factorization reuse or iterative refinement to replace copy-to-single parity path"
+            rationale: "The managed core is the standard branch's main Newton solver; it is already double. Parity path reuses the same core on a float copy."
+            risk: medium
+      - name: WriteDebugRows<T>
+        signature: "private static void WriteDebugRows<T>(TextWriter?, string? header, string label, string traceName, T[,,] vdel, int nsys)"
+        line_range: [368, 413]
+        allocations:
+          - {line: 379, kind: "new[] { double.CreateChecked(...) ... }", hot_path: true, note: "per-station new double[3] allocation; only active if SolverTrace.Array consumer attaches. Violates P1 if tracing enabled on hot path."}
+          - {line: 404, kind: "string.Format + CultureInfo", hot_path: false, note: "only when debugWriter != null"}
+        io_or_locks:
+          - {line: 398, kind: "TextWriter.WriteLine", severity: "low"}
+          - {line: 404, kind: "TextWriter.WriteLine", severity: "low"}
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        modernization_candidates: []
+      - name: GetPrecisionLabel<T>
+        signature: "private static string GetPrecisionLabel<T>()"
+        line_range: [418, 420]
+        allocations: []
+        io_or_locks: []
+        notes: "Pure literal; no alloc."
+      - name: SafeReciprocal<T>
+        signature: "private static T SafeReciprocal<T>(T value, string label, int iv, TextWriter? debugWriter)"
+        line_range: [425, 448]
+        allocations:
+          - {line: 440, kind: "string.Format + CultureInfo", hot_path: true, note: "interpolation materialized before writer-null check would short-circuit; in this overload debugWriter?.WriteLine guards the write but the string.Format call is inside an expression already allocated by format conversion. Actually debugWriter?.WriteLine(string.Format(...)) will short-circuit when writer is null, so the Format is not evaluated - verified. No allocation on null writer."}
+        io_or_locks:
+          - {line: 440, kind: "TextWriter.WriteLine", severity: "low", note: "only on pivot clamp"}
+      - name: CopyToSingle (double[,,])
+        signature: "private static float[,,] CopyToSingle(double[,,] source, int nsys)"
+        line_range: [453, 468]
+        allocations:
+          - {line: 455, kind: "new float[,,]", hot_path: true, note: "parity-branch per-Newton-iteration. Scales with nsys*3*3 or nsys*nsys*3 for VM."}
+      - name: CopyToSingle (double[,])
+        signature: "private static float[,] CopyToSingle(double[,] source)"
+        line_range: [473, 485]
+        allocations:
+          - {line: 475, kind: "new float[,]", hot_path: true, note: "parity-branch per-Newton-iteration"}
+      - name: CopySolutionToDouble
+        signature: "private static void CopySolutionToDouble(float[,,] source, double[,,] destination, int nsys)"
+        line_range: [490, 502]
+        allocations: []
+        notes: "Copy-back (no alloc)."
+    file_summary:
+      parity_verdict: major
+      standard_verdict: clean
+      top_findings:
+        - "Parity branch allocates 4-5 float[,,] per Newton iteration (CopyToSingle * VA/VB/VM/VDEL/VZ). VM is nsys*nsys*3 floats - dominant GC pressure in parity sweeps."
+        - "SolverTrace.Scope/Event + anonymous objects allocated even when trace sink is inactive (P6). Check SolverTrace.IsActive gating like LinearVortexInviscidSolver does."
+        - "WriteDebugRows allocates new[] double[3] per station per call (line 379) unconditionally inside SolverTrace.Array."
+        - "Standard (double) branch is clean - direct in-place factorization on the system-owned arrays, no allocations."
+        - "Parity correctness is verified bit-exact (NACA 4455/4455)."
+      estimated_fix_effort: "1d (gate SolverTrace.Scope/Event behind IsActive; hoist parity float workspace into ViscousNewtonSystem-owned buffers like VA/VB/VM already are)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/TridiagonalSolver.cs
+    lines: 260
+    branch_relevance: both
+    notes: >
+      Used by ParametricSpline.cs and CosineClusteringPanelDistributor.cs
+      (panel meshing). Direct port of TRISOL (spline.f:219). Float overload
+      exposed; no current standard-branch caller passes float - all callers
+      pass double arrays.
+    methods:
+      - name: Solve (double)
+        signature: "public static void Solve(double[] lower, double[] diagonal, double[] upper, double[] rhs, int count, string? traceScope=null, string? routine=null)"
+        line_range: [41, 49]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+      - name: Solve (float)
+        signature: "public static void Solve(float[] lower, float[] diagonal, float[] upper, float[] rhs, int count, string? traceScope=null, string? routine=null)"
+        line_range: [58, 66]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 58, form: "public_overload", context: "float[] signature - parity-only"}
+        correctness_concerns: []
+        notes: >
+          Grep of /src shows no caller currently invokes the float overload.
+          Panel meshing (CosineClusteringPanelDistributor) and ParametricSpline
+          both use double arrays. The overload remains as an escape hatch for
+          future parity work on spline/paneling. S1 finding: dead in practice
+          but publicly exposed.
+      - name: Solve<T>
+        signature: "public static void Solve<T>(T[] lower, T[] diagonal, T[] upper, T[] rhs, int count, string? traceScope=null, string? routine=null)"
+        line_range: [75, 84]
+        allocations: []
+        io_or_locks: []
+      - name: SolveCore<T>
+        signature: "private static void SolveCore<T>(T[] lower, T[] diagonal, T[] upper, T[] rhs, int count, string? traceScope, string? routine)"
+        line_range: [89, 155]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 116, issue: "no_pivot", note: "pure Thomas algorithm - assumes diagonally dominant; true for spline/panel systems. Fortran TRISOL does the same."}
+          - {line: 120, issue: "legacy_separate_mul_sub", note: "Uses SeparateMultiplySubtract to prevent FMA contraction, matching -ffp-contract=off."}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: GetPrecisionLabel<T>
+        signature: "private static string GetPrecisionLabel<T>()"
+        line_range: [160, 162]
+      - name: TraceForwardElimination<T>
+        signature: "private static void TraceForwardElimination<T>(..., string precision)"
+        line_range: [167, 203]
+        allocations:
+          - {line: 184, kind: "SolverTrace.Event + anon obj", hot_path: true, note: "called per station per solve; allocates anon object even when SolverTrace.Current is null (SolverTrace.Event itself presumably null-checks but args evaluate first). P6. Also passes 11 doubles boxed into anon."}
+        io_or_locks: []
+      - name: TraceLastPivot<T>
+        signature: "private static void TraceLastPivot<T>(...)"
+        line_range: [208, 230]
+        allocations:
+          - {line: 218, kind: "SolverTrace.Event + anon obj", hot_path: true, note: "one per solve - low volume"}
+      - name: TraceBackSubstitution<T>
+        signature: "private static void TraceBackSubstitution<T>(...)"
+        line_range: [235, 259]
+        allocations:
+          - {line: 246, kind: "SolverTrace.Event + anon obj", hot_path: true, note: "per station per solve. Same P6 concern as forward trace."}
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: clean
+      top_findings:
+        - "Trace helpers allocate anonymous objects per-station unconditionally; should be gated behind SolverTrace.IsActive before argument evaluation."
+        - "Float overload (public) has no current caller - dead in practice but kept for parity symmetry."
+        - "Thomas algorithm correctly matches TRISOL with SeparateMultiplySubtract for -ffp-contract=off parity."
+        - "No per-call array allocation in core - caller-owned arrays throughout."
+      estimated_fix_effort: "2h (guard trace events behind IsActive)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/BandMatrixSolver.cs
+    lines: 106
+    branch_relevance: standard
+    notes: >
+      Managed-only alternate solver per file header. NOT the legacy parity
+      path. Grep of /src shows NO caller outside tests
+      (tests/XFoil.Core.Tests/BlockTridiagonalSolverTests.cs). Effectively
+      dead code in production; retained for comparison debugging.
+    methods:
+      - name: Solve
+        signature: "public static void Solve(ViscousNewtonSystem system)"
+        line_range: [30, 105]
+        allocations:
+          - {line: 47, kind: "new double[nsys]", hot_path: false, note: "per-equation, per-call; 7x new double[nsys] per invocation. Not called on hot path currently - no production caller."}
+          - {line: 48, kind: "new double[nsys]", hot_path: false}
+          - {line: 49, kind: "new double[nsys]", hot_path: false}
+          - {line: 50, kind: "new double[nsys]", hot_path: false}
+          - {line: 62, kind: "new double[nsys]", hot_path: false}
+          - {line: 63, kind: "new double[nsys]", hot_path: false}
+          - {line: 92, kind: "new double[nsys]", hot_path: false}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 44, severity: "critical_if_used", issue: "WRONG ALGORITHM - decouples the 3 equations of the viscous Newton system into independent tridiagonal systems, ignoring block-tridiagonal coupling. Header comment says 'Produces the same VDEL solution within floating-point tolerance' which CANNOT be true for a genuinely coupled system. This would only be equivalent if VA's off-diagonal (k != eq) entries were zero and VB/VM were diagonal. For the real viscous Newton system these are dense 3x3 blocks. Unit test BandMatrixSolver_IdentityBlocks_ReturnsRHS passes but BandMatrixSolver_ProducesSameResultAsBlockTridiagonal only tests trivially structured systems. This is a latent trap for anyone who wires it in. Recommend marking [Obsolete] or deleting."}
+        numerical_stability:
+          - {line: 65, issue: "hardcoded_singular_floor", note: "1e-30 pivot floor; zeroing c/d on singular may produce garbage rather than throwing. At least does not NaN."}
+        fortran_divergence:
+          - {line: 30, fortran_ref: "xsolve.f:BLSOLV (line 294)", note: "Header acknowledges this is not the BLSOLV replay path. BLSOLV does block-tridiagonal elimination with coupling through 3x3 blocks; this solver ignores that coupling."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Delete BandMatrixSolver.cs or mark [Obsolete] - it is a latent correctness trap and has no production caller"
+            rationale: "The algorithm is not mathematically equivalent to BLSOLV for the coupled viscous system. Its existence invites future misuse. No production code calls it."
+            risk: low
+    file_summary:
+      parity_verdict: neither
+      standard_verdict: blocker
+      top_findings:
+        - "ALGORITHMIC CORRECTNESS TRAP: the solver decouples the 3 viscous equations into independent tridiagonals but is labeled as producing the same VDEL as BLSOLV. This is only true for trivially structured systems. Not currently wired to production."
+        - "Per-call allocation of 7 double[nsys] arrays - violates P1 if ever wired to Newton hot path."
+        - "No production caller (only test file references it)."
+        - "Recommend deletion or [Obsolete] attribute in a future cleanup pass."
+      estimated_fix_effort: "30m (delete file + test) OR 1d (implement correct band LU with proper block coupling - but BlockTridiagonalSolver already does this)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/ScaledPivotLuSolver.cs
+    lines: 451
+    branch_relevance: both
+    notes: >
+      Legacy LUDCMP/BAKSUB replay - this is THE parity path for the Hess-Smith
+      inviscid factor/solve. Float overloads gated by caller via
+      state.UseLegacyKernelPrecision flag in LinearVortexInviscidSolver and
+      InfluenceMatrixBuilder. Float matrices live on InviscidSolverState
+      (LegacyStreamfunctionInfluenceFactors) - preallocated, not per-call.
+    methods:
+      - name: Decompose (double)
+        signature: "public static void Decompose(double[,] matrix, int[] pivotIndices, int size, string? traceContext=null)"
+        line_range: [36, 39]
+        allocations: []
+        io_or_locks: []
+      - name: Decompose (float)
+        signature: "public static void Decompose(float[,] matrix, int[] pivotIndices, int size, string? traceContext=null)"
+        line_range: [48, 51]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 48, form: "public_overload", context: "float[,] matrix, int[] pivotIndices. Caller owns storage (state.LegacyStreamfunctionInfluenceFactors)."}
+        notes: "Parity-only path - verified gated by LinearVortexInviscidSolver:53 (if state.UseLegacyKernelPrecision)."
+      - name: BackSubstitute (double)
+        signature: "public static void BackSubstitute(double[,] luMatrix, int[] pivotIndices, double[] rhs, int size, string? traceContext=null)"
+        line_range: [64, 67]
+        allocations: []
+        io_or_locks: []
+      - name: BackSubstitute (float)
+        signature: "public static void BackSubstitute(float[,] luMatrix, int[] pivotIndices, float[] rhs, int size, string? traceContext=null)"
+        line_range: [76, 79]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 76, form: "public_overload", context: "float[,] luMatrix, float[] rhs"}
+      - name: DecomposeCore<T>
+        signature: "private static void DecomposeCore<T>(T[,] matrix, int[] pivotIndices, int size, string? traceContext, string precision)"
+        line_range: [85, 201]
+        allocations:
+          - {line: 88, kind: "new T[size]", hot_path: false, note: "scaling vector; Decompose called once per basis solve (inviscid setup) not per Newton iteration. Acceptable."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 101, issue: "divide_by_rowMax", note: "scaling[i] = 1/rowMax when rowMax > 0 else 1. Guarded."}
+          - {line: 119, issue: "legacy_separate_mul_sub", note: "Uses SeparateMultiplySubtract to block FMA contraction - matches Fortran two-rounding."}
+          - {line: 194, issue: "pivot_inverse_without_threshold", note: "1.0/matrix[j,j] without lower bound guard. LUDCMP in xsolve.f:174 does the same; a zero diagonal is the caller's problem."}
+        fortran_divergence:
+          - {line: 85, fortran_ref: "xsolve.f:LUDCMP (line 174)", note: "Verified matches: scaled partial pivot via VV(i)=1/AAMAX then scaled comparison; Crout factorization with SeparateMultiplySubtract. SolveCore preserves elimination order and staging as in LUDCMP."}
+        modernization_candidates: []
+      - name: BackSubstituteCore<T>
+        signature: "private static void BackSubstituteCore<T>(T[,] luMatrix, int[] pivotIndices, T[] rhs, int size, string? traceContext, string precision)"
+        line_range: [207, 300]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 225, issue: "legacy_separate_mul_sub", note: "Forward sweep two-rounding"}
+          - {line: 269, issue: "legacy_separate_mul_sub", note: "Backward sweep two-rounding"}
+          - {line: 286, issue: "divide_by_diagonal_unguarded", note: "rhs[i] / luMatrix[i,i] - matches BAKSUB. No guard."}
+        fortran_divergence:
+          - {line: 207, fortran_ref: "xsolve.f:BAKSUB (line 261)", note: "Verified matches: ii tracking for first nonzero rhs, forward swap + elimination, backward solve with SeparateMultiplySubtract. Algorithm is bit-equivalent."}
+      - name: TracePivotSelection<T>
+        signature: "private static void TracePivotSelection<T>(...)"
+        line_range: [305, 330]
+        allocations:
+          - {line: 318, kind: "SolverTrace.Event + anon obj",  hot_path: false, note: "Guarded by 'if (traceContext is null || SolverTrace.Current is null) return;' - correctly gates allocation. Good pattern."}
+        io_or_locks: []
+      - name: TraceDecomposeTerm<T>
+        signature: "private static void TraceDecomposeTerm<T>(...)"
+        line_range: [332, 367]
+        allocations:
+          - {line: 350, kind: "SolverTrace.Event + anon obj", hot_path: false, note: "Called inside inner k-loop of DecomposeCore. At size=362 (typical Hess-Smith), this is size^3/6 ~= 8M calls per basis solve if tracing active. Guarded by null-check - acceptable when trace off."}
+      - name: TraceBackSubstituteRow<T>
+        signature: "private static void TraceBackSubstituteRow<T>(...)"
+        line_range: [372, 408]
+        allocations:
+          - {line: 392, kind: "SolverTrace.Event + anon obj", hot_path: false, note: "guarded by null-check"}
+      - name: TraceBackSubstituteTerm<T>
+        signature: "private static void TraceBackSubstituteTerm<T>(...)"
+        line_range: [413, 450]
+        allocations:
+          - {line: 432, kind: "SolverTrace.Event + anon obj", hot_path: false, note: "guarded by null-check"}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Float overloads properly gated by UseLegacyKernelPrecision flag in callers (LinearVortexInviscidSolver, InfluenceMatrixBuilder). No leak into standard branch."
+        - "Trace helpers all correctly guard allocation behind 'traceContext is null || SolverTrace.Current is null' - exemplary pattern (other files should copy this)."
+        - "DecomposeCore scaling[] allocation is per-basis-solve, not per Newton iteration; acceptable."
+        - "SeparateMultiplySubtract consistently used to match Fortran -ffp-contract=off."
+        - "LUDCMP/BAKSUB port verified line-for-line against xsolve.f:174 and xsolve.f:261."
+      estimated_fix_effort: "0 (clean)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/SolverBuffers.cs
+    lines: 77
+    branch_relevance: both
+    notes: >
+      The parity-branch thread-static allocation solution. Confirmed used
+      exclusively from ViscousSolverEngine (Matrix4x4Double/Float,
+      DenseScratchMatrixFloat/Float). No other class bypasses it in production.
+    methods:
+      - name: Matrix4x4Double (get)
+        signature: "internal static double[,] Matrix4x4Double"
+        line_range: [23, 23]
+        allocations:
+          - {line: 23, kind: "new double[4,4]", hot_path: false, note: "one-time per thread via ??=; ThreadStatic storage. Acceptable per P1 exception."}
+        io_or_locks: []
+      - name: Vector4Double (get)
+        signature: "internal static double[] Vector4Double"
+        line_range: [24, 24]
+        allocations:
+          - {line: 24, kind: "new double[4]", hot_path: false, note: "one-time per thread"}
+      - name: Matrix4x4DoubleSecondary (get)
+        signature: "internal static double[,] Matrix4x4DoubleSecondary"
+        line_range: [25, 25]
+        allocations:
+          - {line: 25, kind: "new double[4,4]", hot_path: false, note: "one-time per thread"}
+      - name: Vector4DoubleSecondary (get)
+        signature: "internal static double[] Vector4DoubleSecondary"
+        line_range: [26, 26]
+        allocations:
+          - {line: 26, kind: "new double[4]", hot_path: false, note: "one-time per thread"}
+      - name: Matrix4x4Float (get)
+        signature: "internal static float[,] Matrix4x4Float"
+        line_range: [27, 27]
+        allocations:
+          - {line: 27, kind: "new float[4,4]", hot_path: false, note: "one-time per thread; parity-only consumers"}
+        float_usage:
+          - {line: 27, form: "float_scratch", context: "parity-only 4x4 float workspace"}
+        notes: "Grep of /src shows NO caller uses Matrix4x4Float or Vector4Float. Currently dead (parity hot path uses DenseScratchMatrixFloat instead). May be kept for future 4x4 parity variants."
+      - name: Vector4Float (get)
+        signature: "internal static float[] Vector4Float"
+        line_range: [28, 28]
+        allocations:
+          - {line: 28, kind: "new float[4]", hot_path: false, note: "one-time per thread"}
+        float_usage:
+          - {line: 28, form: "float_scratch", context: "parity-only"}
+        notes: "No production caller found in grep."
+      - name: DenseScratchMatrixDouble
+        signature: "internal static double[,] DenseScratchMatrixDouble(int rowCount, int columnCount)"
+        line_range: [30, 41]
+        allocations:
+          - {line: 37, kind: "new double[rowCount,columnCount]", hot_path: false, note: "grows-on-demand thread-static; stable after warm-up. Acceptable per P1."}
+        io_or_locks: []
+        notes: "No production caller found in grep (only the float variant is used today). Standard-branch seed solves use SolveInPlace directly on the caller-owned matrix - no scratch needed."
+      - name: DenseScratchVectorDouble
+        signature: "internal static double[] DenseScratchVectorDouble(int rowCount)"
+        line_range: [43, 52]
+        allocations:
+          - {line: 48, kind: "new double[rowCount]", hot_path: false, note: "grows-on-demand thread-static"}
+        notes: "No production caller found."
+      - name: DenseScratchMatrixFloat
+        signature: "internal static float[,] DenseScratchMatrixFloat(int rowCount, int columnCount)"
+        line_range: [54, 65]
+        allocations:
+          - {line: 61, kind: "new float[rowCount,columnCount]", hot_path: false, note: "grows-on-demand; used by ViscousSolverEngine.SolveSeedLinearSystem (line 8337) for the parity seed solve. Stable after warm-up."}
+        io_or_locks: []
+        float_usage:
+          - {line: 54, form: "float_scratch", context: "parity-only; called from ViscousSolverEngine.SolveSeedLinearSystem with useLegacyPrecision=true"}
+        notes: "Verified ONLY caller is ViscousSolverEngine.SolveSeedLinearSystem (8337, 8338). No other path bypasses SolverBuffers for float seed solves."
+      - name: DenseScratchVectorFloat
+        signature: "internal static float[] DenseScratchVectorFloat(int rowCount)"
+        line_range: [67, 76]
+        allocations:
+          - {line: 73, kind: "new float[rowCount]", hot_path: false, note: "grows-on-demand"}
+        float_usage:
+          - {line: 67, form: "float_scratch", context: "parity-only"}
+        notes: "Verified ONLY caller is ViscousSolverEngine.SolveSeedLinearSystem (line 8338)."
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Central thread-static buffer provider works as intended: DenseScratchMatrixFloat/Float are the sole float-seed-solve scratch and are exclusively consumed by ViscousSolverEngine.SolveSeedLinearSystem."
+        - "Matrix4x4Float / Vector4Float / DenseScratchMatrixDouble / DenseScratchVectorDouble have no production callers (grep-verified)."
+        - "No other Numerics/Services code bypasses SolverBuffers to allocate per-call float scratch - confirmed."
+        - "Growth pattern (grow-on-demand via length check) prevents ping-pong reallocs; buffers persist for thread lifetime."
+      estimated_fix_effort: "1h (remove dead thread-static slots Matrix4x4Float/Vector4Float if confirmed unused)"
+
+ledger_summary:
+  total_files: 6
+  total_methods_audited: 42
+  parity_blockers: 0
+  standard_blockers: 1
+  notes: |
+    Key findings across C2 cluster:
+
+    (1) BandMatrixSolver.cs is a latent correctness trap: it decouples the 3
+        viscous Newton equations but is documented as equivalent to BLSOLV.
+        Not currently wired to production code. STANDARD BLOCKER if ever
+        activated. Recommend [Obsolete] or deletion.
+
+    (2) BlockTridiagonalSolver parity branch (useLegacyPrecision=true)
+        allocates 4-5 float[,,] per Newton iteration (CopyToSingle for
+        VA/VB/VM/VDEL/VZ). VM is nsys*nsys*3 floats - largest GC pressure
+        site in Numerics. P1 violation under parity-path allocation audit.
+        Proposed fix: hoist parity float scratch into
+        ViscousNewtonSystem-owned buffers, same lifetime as VA/VB/VM.
+
+    (3) SolverTrace.Scope / SolverTrace.Event + anonymous record patterns in
+        BlockTridiagonalSolver and TridiagonalSolver allocate unconditionally
+        before reaching the trace sink's null check. P6 violation. Contrast
+        with ScaledPivotLuSolver which properly guards
+        'if (traceContext is null || SolverTrace.Current is null) return;'
+        BEFORE constructing the anonymous object. The LU solver pattern
+        should be copied to the other two.
+
+    (4) Float-path gating is correct across the cluster:
+          - DenseLinearSystemSolver.SolveInPlace(float) only via
+            SolverBuffers.DenseScratchMatrixFloat in
+            ViscousSolverEngine.SolveSeedLinearSystem (parity branch).
+          - ScaledPivotLuSolver.Decompose(float) only via
+            state.LegacyStreamfunctionInfluenceFactors gated by
+            state.UseLegacyKernelPrecision.
+          - BlockTridiagonalSolver.Solve float path gated by
+            useLegacyPrecision parameter.
+        NO standard-branch leak detected.
+
+    (5) SolverBuffers confirmed as the sole parity-branch allocation solution;
+        no other path bypasses it. Some thread-static slots are unused
+        (Matrix4x4Float, Vector4Float, DenseScratchMatrix/VectorDouble).
+
+    (6) Fortran cross-reference verified:
+          - xsolve.f:174 LUDCMP    matches ScaledPivotLuSolver.DecomposeCore
+          - xsolve.f:261 BAKSUB    matches ScaledPivotLuSolver.BackSubstituteCore
+          - xsolve.f:294 BLSOLV    matches BlockTridiagonalSolver.SolveCore
+          - spline.f:219 TRISOL    matches TridiagonalSolver.SolveCore
+        All use SeparateMultiplySubtract to block FMA contraction, matching
+        -ffp-contract=off debug-flags memory.
+
+    Prioritized cross-file actions (still READ-ONLY; recorded for future fix phase):
+      A. Mark BandMatrixSolver [Obsolete] or delete (low risk; no caller).
+      B. Hoist BlockTridiagonalSolver parity float workspace into
+         ViscousNewtonSystem (eliminates 4 per-iter allocs on parity path).
+      C. Gate SolverTrace.Scope/Event call sites in BlockTridiagonalSolver
+         and TridiagonalSolver behind SolverTrace.IsActive (or copy the
+         ScaledPivotLuSolver pattern).
+      D. Remove unused SolverBuffers slots or add an internal audit assertion
+         that they remain unused.

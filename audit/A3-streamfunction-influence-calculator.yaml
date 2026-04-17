@@ -1,0 +1,359 @@
+agent: A3
+ledger_path: audit/A3-streamfunction-influence-calculator.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:45:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/StreamfunctionInfluenceCalculator.cs
+    lines: 2916
+    branch_relevance: both
+    # -----------------------------------------------------------------
+    # Pass 1 - Method index (complete, 18 methods in a single static class)
+    # -----------------------------------------------------------------
+    methods:
+      - name: ComputeInfluenceAt
+        signature: "public static (double psi, double psiNormalDerivative) ComputeInfluenceAt(int fieldNodeIndex, double fieldX, double fieldY, double fieldNormalX, double fieldNormalY, bool computeGeometricSensitivities, bool includeSourceTerms, LinearVortexPanelState panel, InviscidSolverState state, double freestreamSpeed, double angleOfAttackRadians)"
+        line_range: [49, 363]
+        allocations:
+          - {line: 77, kind: "string via SolverTrace.ScopeName -> interpolated \"{owner.Name}.{memberName}\"", hot_path: true, note: "allocated per PSILIN call regardless of trace state (JsonlTraceWriter.ScopeName builds a fresh string via $\"{}\"); called n+wake-nodes times per inviscid field-point assembly and per DIJ wake sensitivity."}
+          - {line: 80, kind: "new {...} anonymous object (SolverTrace.Scope inputs)", hot_path: true, note: "anon object is always constructed before Scope's IsActive fast-path check; happens even when tracing is off."}
+          - {line: 93, kind: "boxing of bool args to TracePsilinField parameters - ok, primitives - but string 'Double' constant is not allocated per call (literal interned)", hot_path: false, note: "traces themselves are guarded by IsActive inside the Trace helpers; only the outer Scope anon at line 80 and ScopeName at 77 leak."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 124, severity: "medium", issue: "StreamfunctionNormalSensitivity is zeroed but never populated; DZDN (GEOLIN branch in xpanel.f:256-268, 658-663, 759-765, 881, 1100-1105, 1163-1169) is NOT implemented in either the double or legacy-precision managed paths. All callers currently pass computeGeometricSensitivities=false (InfluenceMatrixBuilder.cs:577, 2604, 2617), so this is dormant but the public API flag lies about capability. Blocks inverse design (MDES/QDES) re-port."}
+          - {line: 155, severity: "low", issue: "lastJo/lastJp initialized to n-1 / 0 before loop; if the first panel's dso == 0 (null panel), Fortran also keeps prior JO/JP, so parity holds, but in an airfoil with a sharp TE AND the final panel skipped via 'skipTEPanel = true' (line 184), the saved x1/x2/yy/g1/g2/t1/t2 locals used by ComputeTEPanelContribution (line 347) are the last NON-skipped panel's values. This matches Fortran GO TO 12, but any future refactor that reorders the break out of the loop MUST preserve this carry."}
+        numerical_stability:
+          - {line: 110, issue: "seps = (ArcLength[n-1] - ArcLength[0]) * 1e-5", note: "Assumes ArcLength is monotonic; a degenerate panel set with ArcLength[n-1] == ArcLength[0] yields seps == 0 and never triggers the coincident-TE skip."}
+          - {line: 194, issue: "if (dso == 0.0) continue", note: "Exact-zero test - fine for parity with Fortran IF(DSO.EQ.0.0), but any near-coincident duplicate node produces a near-singular 1/dso at line 199."}
+          - {line: 237, issue: "rs1 > 0.0 self-influence gate", note: "log(0) catastrophe is averted only by the combined io!=jo and rs1>0 check; same at line 249. Matches Fortran exactly."}
+        fortran_divergence:
+          - {line: 262, fortran_ref: "f_xfoil/src/xpanel.f:245-246", note: "C# x1i and x2i are computed identically (sx*NxI + sy*NyI). This mirrors the Fortran quirk; both X1I and X2I hold the same value because the projection uses a single NxI/NyI pair. Not a bug, but worth noting that the subsequent 0.5*(x1i+x2i) averaging in the source kernel is therefore a dead operation here (matches Fortran exactly)."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Implement GEOLIN/DZDN geometric-sensitivity path for inverse design"
+            rationale: "xpanel.f PSILIN has a full DZDN(JO)/DZDN(JP) accumulation chain that the managed port dropped. Required for MDES inverse-design solver modernization. Lives in XFoil.Design but the streamfunction kernel is the producer."
+            risk: medium
+      - name: ComputeInfluenceAtLegacyPrecision
+        signature: "private static (double psi, double psiNormalDerivative) ComputeInfluenceAtLegacyPrecision(int fieldNodeIndex, double fieldX, double fieldY, double fieldNormalX, double fieldNormalY, bool includeSourceTerms, LinearVortexPanelState panel, InviscidSolverState state, double freestreamSpeed, double angleOfAttackRadians)"
+        line_range: [368, 1585]
+        allocations:
+          - {line: 424, kind: "new float[n] (dzdg)", hot_path: true, note: "PARITY-BRANCH P1: allocated per PSILIN call. Called n+wake-count times per inviscid matrix build (O(n^2) allocations per Newton iteration). Not cleared via SolverBuffers. High GC pressure at 160-panel default. Legacy DZDG should reuse state.StreamfunctionVortexSensitivity directly (or a thread-static float scratch)."}
+          - {line: 425, kind: "new float[n] (dzdm)", hot_path: true, note: "See 424 - same pattern for source sensitivity."}
+          - {line: 426, kind: "new float[n] (dqdg)", hot_path: true, note: "See 424 - same pattern for dQtan/dGamma."}
+          - {line: 427, kind: "new float[n] (dqdm)", hot_path: true, note: "See 424 - same pattern for dQtan/dSigma. Four fresh float[] per call is the biggest GC hazard in the parity path of this file."}
+          - {line: 384, kind: "SolverTrace.ScopeName string build", hot_path: true, note: "Same $\"{}\" concatenation as line 77; repeated once per legacy-precision field-point call."}
+          - {line: 387, kind: "new {...} anonymous object for Scope inputs", hot_path: true, note: "Unconditionally constructed per call before IsActive check."}
+        io_or_locks: []
+        float_usage:
+          - {line: 381, form: "float const", context: "const float qopi = 1f / (4f * MathF.PI)"}
+          - {line: 382, form: "float const", context: "const float hopi = 1f / (2f * MathF.PI)"}
+          - {line: 411, form: "float cast", context: "(float)((panel.ArcLength[n-1] - panel.ArcLength[0]) * 1e-5) - legacy SEPS"}
+          - {line: 416, form: "float cast", context: "(float)fieldX, fieldY, fieldNormalX, fieldNormalY"}
+          - {line: 420, form: "float cast", context: "(float)Math.Cos(alpha), (float)Math.Sin(alpha)"}
+          - {line: 424, form: "float[]", context: "dzdg/dzdm/dqdg/dqdm scratch buffers"}
+          - {line: 432, form: "float locals", context: "scs, sds, x1, x2, yy, g1, g2, t1, t2, rs1, rs2, x1i, x2i, yyi, apan, psi, psiNi - intentional legacy REAL replay"}
+          - {line: 445, form: "float cast", context: "(float)state.TrailingEdgeAngleNormal/Streamwise/Gap"}
+          - {line: 487, form: "float cast block", context: "TE coincidence test in legacy precision"}
+          - {line: 502, form: "float cast block", context: "Per-panel coordinate rounding before delta"}
+          - {line: 520, form: "float cast", context: "(float)panel.PanelAngle[jo]"}
+          - {line: 739, form: "float cast", context: "(float)panel.X[jm] / Y[jm]"}
+          - {line: 752, form: "float cast", context: "(float)state.SourceStrength[jp]/jo"}
+          - {line: 1025, form: "float cast", context: "(float)panel.X[jq] / Y[jq]"}
+          - {line: 1038, form: "float cast", context: "(float)state.SourceStrength[jq]/jo"}
+          - {line: 1298, form: "float cast", context: "(float)state.VortexStrength[jp]/jo"}
+          - {line: 1467, form: "float cast", context: "(float)state.VortexStrength[lastJp]/lastJo at TE"}
+          - {line: 1560, form: "float cast", context: "(float)freestreamSpeed at freestream-contribution step"}
+        mathf_calls:
+          - {line: 381, symbol: "MathF.PI"}
+          - {line: 382, symbol: "MathF.PI"}
+          - {line: 513, symbol: "MathF.Sqrt"}
+          - {line: 554, symbol: "MathF.PI"}
+          - {line: 565, symbol: "MathF.PI"}
+          - {line: 640, symbol: "MathF.PI"}
+          - {line: 746, symbol: "MathF.Sqrt"}
+          - {line: 1032, symbol: "MathF.Sqrt"}
+        correctness_concerns:
+          - {line: 532, severity: "low", issue: "x1/x2/yy are computed via FusedMultiplyAdd/ContractedMultiplySubtract/SumOfProducts depending on airfoil-vs-wake branch. Documented as deliberate replay of gfortran FMA contraction for the optimized reference build. Relies on LegacyPrecisionMath shims to match -O2 gfortran rounding; the 25000-vector NACA sweep confirms bit-exactness. Fragile to compiler/JIT changes."}
+          - {line: 576, severity: "low", issue: "x2i = x1i - preserves the same Fortran quirk noted in the double path."}
+          - {line: 700, severity: "low", issue: "Identical pdyyTerm2 logic in BOTH branches of if (io >= 1 && io <= n) / else (lines 702-716). The two branches could be collapsed to a single block; keeping them separate reads like an unfinished parity experiment."}
+          - {line: 719, severity: "medium", issue: "pdyy is computed via 3 different formulas in sequence: (a) the pdyyTerm1+pdyyTerm2 path at line 725 (surface-source), (b) a different pdyyTerm1+pdyyTerm2 path at line 729 (wake), and (c) OVERWRITTEN at line 738 by pdyyWriteValue which uses LegacyPrecisionMath.FusedMultiplyAdd. The intermediate (a)/(b) assignments are therefore dead stores - only trace side-effects remain. This is confusing code smell (Pass-4 X2) but does not affect numerics because (c) always overwrites."}
+          - {line: 1014, severity: "low", issue: "pdyy half-2: unlike half-1, there is no surface-vs-wake split in the pre-write pdyyTerm2 construction; half-2 only uses LegacyPrecisionMath.AddRounded. Asymmetric with half-1 lines 700-716 even though both halves end with the same pdyyWriteValue overwrite (line 1024). Likely the same dead-store pattern - worth a cleanup after the parity freeze ends."}
+        numerical_stability:
+          - {line: 519, issue: "1f / dso without guard", note: "Upstream line 514 returns early when dso == 0f, but very small dso still produces huge dsio; matches Fortran."}
+          - {line: 747, issue: "1f / dsm", note: "No check that dsm > 0 before inverting; if jm==jo (loop start at jo==0 we set jm=jo), dsm degenerates. Guarded only by jo==0 ? jm=jo path which yields dsm = Sqrt((X[jp]-X[jo])^2 + ...) - same as dso - fine, but not obvious."}
+          - {line: 1033, issue: "1f / dsp", note: "Same pattern as line 747 for the half-2 path."}
+          - {line: 1071, issue: "float arithmetic near TE", note: "At sharp TE with scs=1, sds=0, gamte=0 and TE contribution reduces to psig*sigte. Cancellation not an issue here because scs/sds are exactly 0/1."}
+        fortran_divergence:
+          - {line: 554, fortran_ref: "xpanel.f:231", note: "C# uses LegacyLibm.Atan2 + (0.5f - 0.5f*sgn)*MathF.PI. Fortran uses ATAN2 + (0.5-0.5*SGN)*PI. Multiplication order (0.5f - 0.5f*sgn) vs ((0.5-0.5*SGN)) is identical after left-to-right associativity. Bit-exact per sweep."}
+          - {line: 700, fortran_ref: "xpanel.f:313-320", note: "The managed code has diverged structurally (io branch + RoundBarrier + double overwrite) from the Fortran single expression PDYY = ((X1+X0)*PSYY + 2.0*(X0-X1 + YY*(T1-T0))) * DXINV, but because the final pdyy value is overwritten at line 738 using LegacyPrecisionMath.FusedMultiplyAdd with the same algebraic identity, the result matches. Dead paths should be pruned."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Retire the legacy-precision replay once PSILIN-specific parity can be proven by full re-derivation in double"
+            rationale: "This 1200-line float replay exists only to replicate gfortran -O2 REAL rounding. A well-validated double-only path with a small ULP tolerance would eliminate four heap allocations per call, ~400 (float) casts, and all LegacyPrecisionMath.* indirection. Blocked on closing the last two Selig degenerate cases."
+            risk: high
+      - name: TracePsilinField
+        signature: "private static void TracePsilinField(string scope, int fieldIndex, double fieldX, double fieldY, double fieldNormalX, double fieldNormalY, bool computeGeometricSensitivities, bool includeSourceTerms, string precision)"
+        line_range: [1590, 1616]
+        allocations:
+          - {line: 1605, kind: "new {...} anonymous object", hot_path: false, note: "Guarded by if (!SolverTrace.IsActive) return at line 1601; no allocation in production."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinPanel
+        signature: "private static void TracePsilinPanel(string scope, int fieldIndex, int panelIndex, int jm, int jo, int jp, int jq, bool computeGeometricSensitivities, bool includeSourceTerms, string precision, double panelXJo, double panelYJo, double panelXJp, double panelYJp, double panelDx, double panelDy, double dso, double dsio, double panelAngle, double rx1, double ry1, double rx2, double ry2, double sx, double sy, double x1, double x2, double yy, double rs1, double rs2, double sgn, double g1, double g2, double t1, double t2, double x1i, double x2i, double yyi)"
+        line_range: [1618, 1702]
+        allocations:
+          - {line: 1662, kind: "new {...} anonymous object (40+ props)", hot_path: false, note: "Guarded by IsActive fast-path at 1658."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinResult
+        signature: "private static void TracePsilinResult(string scope, int fieldIndex, double psi, double psiNormalDerivative, string precision)"
+        line_range: [1704, 1722]
+        allocations:
+          - {line: 1715, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinAccumState
+        signature: "private static void TracePsilinAccumState(string scope, int fieldIndex, string stage, int jo, int jp, double psiBefore, double psiNiBefore, double psiAfter, double psiNiAfter, string precision)"
+        line_range: [1724, 1752]
+        allocations:
+          - {line: 1740, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinResultTerms
+        signature: "private static void TracePsilinResultTerms(string scope, int fieldIndex, double psi, double psiNi, double psiFreestreamDelta, double psiNiFreestreamDelta, string precision)"
+        line_range: [1754, 1776]
+        allocations:
+          - {line: 1767, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinSourceSegment
+        signature: "private static void TracePsilinSourceSegment(string scope, int fieldIndex, int panelIndex, int half, int jm, int jo, int jp, int jq, string precision, double x0, double x1, double x2, double yy, double panelAngle, double x1i, double x2i, double yyi, double rs0, double rs1, double rs2, double g0, double g1, double g2, double t0, double t1, double t2, double dso, double dsio, double dsm, double dsim, double dsp, double dsip, double dxInv, double sourceTermLeft, double sourceTermRight, double ssum, double sdif, double psum, double pdif, double psx0, double psx1, double psx2, double psyy, double pdx0Term1, double pdx0Term2, double pdx0Numerator, double pdx0, double pdx1Term1, double pdx1Term2, double pdx1Numerator, double pdx1, double pdx2Term1, double pdx2Term2, double pdx2Numerator, double pdx2, double pdyyTerm1, double pdyyTailLinear, double pdyyTailAngular, double pdyyTerm2, double pdyyNumerator, double pdyy, double psniTerm1, double psniTerm2, double psniTerm3, double psni, double pdniTerm1, double pdniTerm2, double pdniTerm3, double pdni, double dzJm, double dzJo, double dzJp, double dzJq, double dqJm, double dqJo, double dqJp, double dqJq)"
+        line_range: [1778, 1940]
+        allocations:
+          - {line: 1861, kind: "new {...} anonymous object (~70 props)", hot_path: false, note: "Guarded. Very wide - each trace event materializes 70 double boxings when active."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Collapse the 15 Trace* helpers into a structured record/ref-struct writer"
+            rationale: "Each helper rebuilds a giant anon object inline. A shared ref-struct trace payload would be alloc-free even when tracing is active, simpler to maintain, and easier to align with Fortran TRACE_PSILIN_* call sites."
+            risk: low
+      - name: TracePsilinSourcePdyyWrite
+        signature: "private static void TracePsilinSourcePdyyWrite(string scope, int fieldIndex, int panelIndex, int half, string precision, double x0, double xEdge, double yy, double t0, double tEdge, double psyy, double dxInv, double pdyyWriteDt, double pdyyWriteInner, double pdyyWriteHead, double pdyyWriteTail, double pdyyWriteSum, double pdyyWriteValue, double pdyyTerm1, double pdyyTerm2, double pdyyNumerator, double pdyy)"
+        line_range: [1942, 1994]
+        allocations:
+          - {line: 1970, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinSourceDqTerms
+        signature: "private static void TracePsilinSourceDqTerms(string scope, int fieldIndex, int panelIndex, int half, string precision, double dqJmTerm1, double dqJmTerm2, double dqJmInner, double dqJoTerm1, double dqJoTerm2, double dqJoInner, double dqJpTerm1, double dqJpTerm2, double dqJpInner, double dqJqTerm1, double dqJqTerm2, double dqJqInner)"
+        line_range: [1996, 2038]
+        allocations:
+          - {line: 2019, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinSourceDzTerms
+        signature: "private static void TracePsilinSourceDzTerms(string scope, int fieldIndex, int panelIndex, int half, string precision, double dzJmTerm1, double dzJmTerm2, double dzJmInner, double dzJoTerm1, double dzJoTerm2, double dzJoInner, double dzJpTerm1, double dzJpTerm2, double dzJpInner, double dzJqTerm1, double dzJqTerm2, double dzJqInner)"
+        line_range: [2040, 2082]
+        allocations:
+          - {line: 2063, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinTeCorrection
+        signature: "private static void TracePsilinTeCorrection(string scope, int fieldIndex, int lastJo, int lastJp, string precision, double psig, double pgam, double psigni, double pgamni, double sigte, double gamte, double scs, double sds, double dzJoTeSig, double dzJpTeSig, double dzJoTeGam, double dzJpTeGam, double dqJoTeSigHalf, double dqJoTeSigTerm, double dqJoTeGamHalf, double dqJoTeGamTerm, double dqTeInner, double dqJoTe, double dqJpTe)"
+        line_range: [2084, 2140]
+        allocations:
+          - {line: 2114, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinTePgamTerms
+        signature: "private static void TracePsilinTePgamTerms(string scope, int fieldIndex, int lastJo, int lastJp, string precision, double pgamTerm1, double pgamTerm2, double pgamDiff, double pgamBase, double pgamTDiff, double pgamTailMul)"
+        line_range: [2142, 2172]
+        allocations:
+          - {line: 2159, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinSourceHalfTerms
+        signature: "private static void TracePsilinSourceHalfTerms(string scope, int fieldIndex, int panelIndex, int half, string precision, double x0, double psumTerm1, double psumTerm2, double psumTerm3, double psumAccum, double psum, double pdifTerm1, double pdifTerm2, double pdifTerm3, double pdifTerm4, double pdifBase, double pdifAccum, double pdifNumerator, double pdif)"
+        line_range: [2174, 2228]
+        allocations:
+          - {line: 2206, kind: "new {...} anonymous object", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePsilinVortexSegment
+        signature: "private static void TracePsilinVortexSegment(string scope, int fieldIndex, int jo, int jp, string precision, double x1, double x2, double yy, double rs1, double rs2, double g1, double g2, double t1, double t2, double dxInv, double psisTerm1, double psisTerm2, double psisTerm3, double psisTerm4, double psis, double psidTerm1, double psidTerm2, double psidTerm3, double psidTerm4, double psidTerm5, double psidHalfTerm, double psid, double psx1, double psx2, double psyy, double pdxSum, double pdx1Mul, double pdx1PanelTerm, double pdx1Accum1, double pdx1Accum2, double pdx1Numerator, double pdx1, double pdx2Mul, double pdx2PanelTerm, double pdx2Accum1, double pdx2Accum2, double pdx2Numerator, double pdx2, double pdyy, double gammaJo, double gammaJp, double gsum, double gdif, double psni, double pdni, double psiDelta, double psiNiDelta, double dzJo, double dzJp, double dqJo, double dqJp)"
+        line_range: [2230, 2357]
+        allocations:
+          - {line: 2292, kind: "new {...} anonymous object (~50 props)", hot_path: false, note: "Guarded."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeSourceContribution
+        signature: "private static void ComputeSourceContribution(string traceScope, int fieldIndex, int jo, int jp, int jm, int jq, int n, double x1, double x2, double yy, double sgn, double g1, double g2, double t1, double t2, double rs1, double rs2, double x1i, double x2i, double yyi, double apan, double dsio, LinearVortexPanelState panel, InviscidSolverState state, double qopi, string precision, ref double psi, ref double psiNi)"
+        line_range: [2359, 2704]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls:
+          - {line: 2377, symbol: "Math.Log"}
+          - {line: 2378, symbol: "Math.Atan2, Math.PI"}
+          - {line: 2408, symbol: "Math.Sqrt"}
+          - {line: 2567, symbol: "Math.Sqrt"}
+        correctness_concerns:
+          - {line: 2395, severity: "low", issue: "pdx1 is recomputed from the decomposed (pdx1Term1, psum, pdx1Term2, pdif) pieces AND from the flattened expression '((x1+x0)*psx1 + psum + 2*x1*(t1-apan) - pdif) * dxInv' on the same line (different local vars built on 2391-2394 are dead)", note: "pdx1Numerator (line 2393-2394) is computed but never used; pdx1 uses the inline expression. Same pattern for pdx0 (line 2400) and pdx2 (line 2554, 2559). These are dead intermediates kept to match Fortran trace writer hooks, but the actual numeric pdx* value uses a single flattened expression that may compile differently under FMA-enabled code-gen."}
+          - {line: 2406, severity: "low", issue: "Similar dead-variable pattern for pdyyNumerator - the value is used via line 2406 (pdyyTerm1+pdyyTerm2 construction) but the final pdyy uses the same inline algebra as the Fortran reference. Not a bug per se, but makes diffing against xpanel.f harder."}
+        numerical_stability:
+          - {line: 2382, issue: "1.0 / (x1 - x0)", note: "If field point is exactly on the panel midpoint (yy==0 and x1==x0), division by zero. Fortran has the same risk (xpanel.f:281). Not typically encountered because field points sit on panel nodes."}
+          - {line: 2411, issue: "1.0 / dsm", note: "dsm could be 0 if node jp coincides with jm (degenerate 3-point neighborhood). Fortran does not guard this either."}
+          - {line: 2541, issue: "1.0 / (x0 - x2)", note: "Symmetric risk to 2382 for the half-2 path."}
+          - {line: 2570, issue: "1.0 / dsp", note: "dsp could be 0 if jq coincides with jo."}
+        fortran_divergence:
+          - {line: 2383, fortran_ref: "xpanel.f:282-286", note: "Managed code flattens PSUMTERM1/2/3 back into a single expression (double psum = x0*(t0-apan) - x1*(t1-apan) + 0.5*yy*(g1-g0)). Fortran stages them into named temporaries. Under pure double with no FMA contraction this is bit-equivalent; under FMA-enabled JIT the managed flat form may contract differently. Investigate if standard-branch parity sweep ever shows 1-ULP drift at source-term boundaries."}
+          - {line: 2384, fortran_ref: "xpanel.f:287-294", note: "Same flattening for pdif. Fortran PDIFACCUM1/2/PDIFNUM chain vs the managed flat expression - bit-equivalent in double, but if the caller enables FMA contraction (e.g. XFOIL_DISABLE_FMA=0), this expression is an FMA contraction hazard."}
+          - {line: 2395, fortran_ref: "xpanel.f:318", note: "pdx1 uses the flat Fortran expression PDX1 = ((X1+X0)*PSX1 + PSUM + 2.0*X1*(T1-APAN) - PDIF) * DXINV. Matches Fortran exactly."}
+          - {line: 2406, fortran_ref: "xpanel.f:320", note: "pdyy is computed with pdyyTerm1/pdyyTerm2/pdyyNumerator named temporaries here (matches Fortran PDYYTERM1/PDYYTERM2/PDYYNUMERATOR), unlike the other pdx* which are flattened. Inconsistent style but numerically equivalent."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Stage all pdx*/pdyy computations via named temporaries to mirror Fortran PDX0NUMERATOR/PDX1NUMERATOR chain exactly"
+            rationale: "Keeping the chain explicit makes FMA contraction under different JIT levels deterministic and makes side-by-side Fortran diffing trivial. Current flattened form (lines 2395, 2400, 2554, 2559) is an FMA contraction wildcard."
+            risk: low
+      - name: ComputeVortexContribution
+        signature: "private static void ComputeVortexContribution(string traceScope, int fieldIndex, int jo, int jp, int n, double x1, double x2, double yy, double g1, double g2, double t1, double t2, double rs1, double rs2, double x1i, double x2i, double yyi, LinearVortexPanelState panel, InviscidSolverState state, double qopi, string precision, ref double psi, ref double psiNi)"
+        line_range: [2713, 2851]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 2729, severity: "low", issue: "psis is computed flat: '0.5*x1*g1 - 0.5*x2*g2 + x2 - x1 + yy*(t1-t2)'. xpanel.f:336 expresses it as the same flat formula, so S4 matches. Note though that the staged psisTerm1..psisTerm4 on lines 2730-2733 are computed but never consumed - they exist only for the TracePsilinVortexSegment call."}
+          - {line: 2744, severity: "low", issue: "psid uses a staged psidBase/psidHalfTerm chain matching xpanel.f:350-358 exactly. Good."}
+          - {line: 2757, severity: "low", issue: "pdx1 is a single flattened expression rather than the staged pdx1Accum1/2/Numerator chain. Same FMA contraction risk noted in ComputeSourceContribution."}
+          - {line: 2763, severity: "low", issue: "Same pdx2 flattening."}
+          - {line: 2764, severity: "low", issue: "pdyy is a single flat expression. Matches xpanel.f:366 flat form."}
+        numerical_stability:
+          - {line: 2726, issue: "1.0 / (x1 - x2)", note: "Panel-local x1 and x2 are the field point's projections onto the panel tangent. If x1==x2, the field point lies exactly at the panel midpoint in tangential coordinates (yy arbitrary). Rare but possible for a point exactly on the panel. Fortran has the same risk (xpanel.f:347)."}
+          - {line: 2729, issue: "catastrophic cancellation 'x2 - x1' when the field point is near mid-panel", note: "Well-conditioned for normal use. Flagged as S5 observation."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "Replace linear-vorticity influence coefficients with higher-order quadrature for curved panels"
+            rationale: "XFoil-era linear vorticity is robust but limits mesh refinement return. TSFoil/MSES use quadratic vorticity. Would improve cusp/sharp-TE accuracy."
+            risk: high
+      - name: ComputeTEPanelContribution
+        signature: "private static void ComputeTEPanelContribution(int jo, int jp, int n, double x1, double x2, double yy, double g1, double g2, double t1, double t2, double x1i, double x2i, double yyi, double apan, double scs, double sds, LinearVortexPanelState panel, InviscidSolverState state, double hopi, ref double psi, ref double psiNi)"
+        line_range: [2862, 2915]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 2876, severity: "low", issue: "psig is a single flat expression matching xpanel.f:419 exactly. Good."}
+          - {line: 2877, severity: "low", issue: "pgam is a single flat expression matching xpanel.f:420."}
+          - {line: 2900, severity: "medium", issue: "Comment notes gamte already carries the negated sds factor, so the TE PGAM branch is added (not subtracted). Verify against xpanel.f:430-456 to be sure the sign convention is not flipped in a wake-panel regression scenario."}
+          - {line: 2913, severity: "low", issue: "'panel' parameter and 'n' parameter are received but never used. Dead parameters should be removed during cleanup."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 2894, fortran_ref: "xpanel.f:422-423", note: "C#: sigte = 0.5 * scs * (VortexStrength[jp] - VortexStrength[jo]); Fortran: SIGTE = 0.5*SCS*(GAM(JP)-GAM(JO)) - bit-exact."}
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: minor
+      top_findings:
+        - "PARITY P1: 4 fresh float[n] allocations per PSILIN call in ComputeInfluenceAtLegacyPrecision (lines 424-427). Called O(n) per field-point, O(n^2) per matrix build. Biggest GC hazard in the file."
+        - "PARITY P6/P3: every ComputeInfluenceAt* entry builds an anonymous object (lines 80, 387) for SolverTrace.Scope BEFORE the IsActive fast-path check. Plus a new interpolated string via SolverTrace.ScopeName (lines 77, 384) per call."
+        - "STANDARD S4 MISSING FEATURE: DZDN/GEOLIN geometric-sensitivity accumulation (xpanel.f:256-268, 658-663, 759-765, 881, 1100-1105, 1163-1169) is NOT implemented in either managed path. Blocks inverse-design MDES re-port. All current callers pass false, so no runtime bug."
+        - "X2 DEAD CODE: pdyy in legacy path is assigned three times (lines 725/729/738) with only the last write effective; pdx1/pdx0/pdx2 in double path (ComputeSourceContribution) compute staged *Numerator locals that are never consumed except by trace writers."
+        - "S6/S4: ComputeSourceContribution and ComputeVortexContribution mix flat single-expression forms (pdx1, pdx2, pdyy inline) with staged named-temporary forms in the same routine. Under FMA-enabled JIT these flat forms can contract differently from Fortran. For the standard double-only branch this is a precision-parity concern when Hk approx 1 or Uw approx 0 (close-to-panel field points)."
+      estimated_fix_effort: 1-2 days (parity P1 array pooling + anon-object elimination) + 3-5 days (GEOLIN DZDN port) + 2-3 days (cleanup dead intermediates and unify staged vs flat expressions in the double path)
+ledger_summary:
+  total_files: 1
+  total_methods_audited: 18
+  parity_blockers: 0
+  standard_blockers: 0
+  notes: |
+    File has two kernels:
+      (1) ComputeInfluenceAt - pure double, used as the standard branch.
+      (2) ComputeInfluenceAtLegacyPrecision - deliberate float REAL replay for bit-exact gfortran parity.
+    The double path is free of float/MathF/float-literal leaks (S1/S2/S3 clean).
+    The legacy-precision path is intentionally float-heavy and must remain that way
+    until parity can be proven without the replay.
+
+    Key parity concerns (P1/P3/P6): 4 float[] allocations per call in the legacy path,
+    plus unconditional anon-object + interpolated-string allocations per call in BOTH paths
+    via SolverTrace.Scope and ScopeName. On 160-panel/40-wake problems this is
+    tens of thousands of small allocations per Newton iteration. Would show as GC
+    pressure in sustained polar sweeps but not as a parity-breaking bug.
+
+    Standard-branch audit is clean on S1/S2/S3 - no float leaks in the double path.
+    The main S4 concern is missing GEOLIN (DZDN) and the cosmetic flat-vs-staged
+    expression inconsistency that becomes FMA-sensitive when -ffp-contract differs
+    between JIT and the Fortran reference.
+
+    The 25000-vector NACA sweep has validated the parity path to bit-exactness.
+    The file is production-ready for the parity branch and only minor for standard,
+    with the caveat that the 1.8M% CD error in the standard branch is NOT rooted
+    in this kernel (PSILIN outputs look correct; the bug is downstream).

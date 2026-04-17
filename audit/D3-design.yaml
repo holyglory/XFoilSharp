@@ -1,0 +1,652 @@
+agent: D3
+ledger_path: audit/D3-design.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+scope_notes: |
+  XFoil.Design is an offline, per-request design-tooling assembly (MAPGEN, flap deflection,
+  QSpec inverse design, contour edits, LE-radius edits, modal inverse design). None of these
+  services are invoked from the solver sweep hot path (ViscousSolverEngine / PolarSweepRunner /
+  BoundaryLayerSystemAssembler / TransitionModel). Grepped the entire XFoil.Design tree for
+  references to AirfoilAnalysisService, PolarSweepRunner, ViscousSolverEngine — zero matches.
+  Per assignment, ran only the reduced P1/P4/P5/X1 checks. S-family (float/MathF/correctness/
+  modernization) and X2/X3 are explicitly out of scope for this tier.
+
+  Audit signals (repo-wide greps confined to src/XFoil.Design/):
+    - X1 (TODO|FIXME|HACK|NotImplementedException|NotSupportedException): 0 matches.
+    - P4 (lock/Monitor/Mutex/SemaphoreSlim/Interlocked/volatile/RWLockSlim/Parallel./Task./async/await): 0 matches.
+    - P5 (File.*/Stream*/ReadAllText/WriteAllText/Directory.*/Path.*/Console.*): 0 matches.
+    - P1 allocations: present (expected for offline workflows). Flagged per file for completeness
+      but all are per-request, not per-station or per-Newton-iteration. None are hot-path.
+
+files:
+  # -------------------- Models (DTOs / enums) --------------------
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/ConformalMapgenResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO carrier for ConformalMapgenService results]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/ConformalMappingCoefficient.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/ContourEditResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/ContourModificationResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/CornerRefinementParameterMode.cs
+    classification: enum
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [enum with two values (Uniform, ArcLength)]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/FlapDeflectionResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/GeometryScaleOrigin.cs
+    classification: enum
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [enum (LeadingEdge, TrailingEdge, Point)]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/GeometryScalingResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/LeadingEdgeRadiusEditResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/ModalCoefficient.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO (raw + filtered coefficient)]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/ModalInverseExecutionResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/ModalSpectrum.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO carrying IReadOnlyList<ModalCoefficient>]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/QSpecEditResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/QSpecExecutionResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/QSpecPoint.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/QSpecProfile.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO; container for QSpecPoint list]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Models/TrailingEdgeGapEditResult.cs
+    classification: dto
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: [pure DTO]
+      estimated_fix_effort: 0h
+
+  # -------------------- Services --------------------
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/BasicGeometryTransformService.cs
+    lines: 170
+    classification: service
+    branch_relevance: neither
+    methods:
+      - name: RotateDegrees
+        signature: AirfoilGeometry RotateDegrees(AirfoilGeometry, double)
+        line_range: [19, 22]
+        allocations: []
+        io_or_locks: []
+      - name: RotateRadians
+        signature: AirfoilGeometry RotateRadians(AirfoilGeometry, double)
+        line_range: [27, 30]
+        allocations: []
+        io_or_locks: []
+      - name: Translate
+        signature: AirfoilGeometry Translate(AirfoilGeometry, double, double)
+        line_range: [35, 46]
+        allocations:
+          - {line: 38, kind: "LINQ Select + ToArray (new AirfoilPoint[])", hot_path: false, note: "per-request offline rigid translation"}
+          - {line: 41, kind: "new AirfoilGeometry + interpolated string name", hot_path: false}
+        io_or_locks: []
+      - name: ScaleAboutOrigin
+        signature: AirfoilGeometry ScaleAboutOrigin(AirfoilGeometry, double, double)
+        line_range: [51, 69]
+        allocations:
+          - {line: 55, kind: "LINQ Select + ToArray (new AirfoilPoint[])", hot_path: false}
+          - {line: 64, kind: "new AirfoilGeometry + interpolated name", hot_path: false}
+        io_or_locks: []
+      - name: ScaleYLinearly
+        signature: AirfoilGeometry ScaleYLinearly(AirfoilGeometry, double, double, double, double)
+        line_range: [74, 108]
+        allocations:
+          - {line: 92, kind: "LINQ Select + ToArray", hot_path: false}
+          - {line: 103, kind: "new AirfoilGeometry + interpolated name", hot_path: false}
+        io_or_locks: []
+      - name: Derotate
+        signature: AirfoilGeometry Derotate(AirfoilGeometry)
+        line_range: [113, 121]
+        allocations:
+          - {line: 120, kind: "delegates to RotateRadians (Select+ToArray)", hot_path: false}
+        io_or_locks: []
+      - name: NormalizeUnitChord
+        signature: AirfoilGeometry NormalizeUnitChord(AirfoilGeometry)
+        line_range: [126, 135]
+        allocations:
+          - {line: 130, kind: "new AirfoilGeometry + interpolated name", hot_path: false}
+        io_or_locks: []
+      - name: RotateRadians (private static)
+        signature: AirfoilGeometry RotateRadians(AirfoilGeometry, double, string)
+        line_range: [140, 157]
+        allocations:
+          - {line: 146, kind: "LINQ Select + ToArray (new AirfoilPoint[])", hot_path: false}
+          - {line: 152, kind: "new AirfoilGeometry", hot_path: false}
+        io_or_locks: []
+      - name: ValidateGeometry (private static)
+        signature: void ValidateGeometry(AirfoilGeometry)
+        line_range: [162, 168]
+        allocations: []
+        io_or_locks: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "no locks, no I/O, no TODO/stub"
+        - "LINQ Select+ToArray allocations are per-request offline transforms, not hot-path"
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/ConformalMapgenService.cs
+    lines: 1319
+    classification: service
+    branch_relevance: neither
+    methods:
+      - {name: Execute, line_range: [18, 41], allocations: [], io_or_locks: []}
+      - {name: Execute (overload), line_range: [43, 128], allocations: [], io_or_locks: []}
+      - {name: SolveForTrailingEdgeAngleTarget, line_range: [130, 272], allocations: [], io_or_locks: []}
+      - {name: SolveForProfileTarget, line_range: [274, 314], allocations: [], io_or_locks: []}
+      - {name: ExecuteWithContinuation, line_range: [316, 375], allocations: [], io_or_locks: []}
+      - {name: ExecuteCore, line_range: [377, 517], allocations: [], io_or_locks: []}
+      - {name: RebindReportedTargets, line_range: [519, 540], allocations: [], io_or_locks: []}
+      - {name: ShouldAcceptDirectResult, line_range: [542, 548], allocations: [], io_or_locks: []}
+      - {name: IsBetterResult, line_range: [550, 561], allocations: [], io_or_locks: []}
+      - {name: DetermineContinuationStageCount, line_range: [563, 582], allocations: [], io_or_locks: []}
+      - {name: DetermineInitialContinuationFilter, line_range: [584, 592], allocations: [], io_or_locks: []}
+      - name: BlendProfiles
+        line_range: [594, 623]
+        allocations:
+          - {line: 597, kind: "new QSpecPoint[baseline.Points.Count]", hot_path: false, note: "per MAPGEN-continuation stage"}
+        io_or_locks: []
+      - {name: NormalizeBracket, line_range: [625, 644], allocations: [], io_or_locks: []}
+      - {name: TryFalsePosition, line_range: [646, 663], allocations: [], io_or_locks: []}
+      - {name: TrySecant, line_range: [665, 677], allocations: [], io_or_locks: []}
+      - {name: BuildCnFromQSpec, line_range: [679, 746], allocations: [], io_or_locks: []}
+      - {name: FourierTransform, line_range: [748, 768], allocations: [], io_or_locks: []}
+      - {name: PiqSum, line_range: [770, 788], allocations: [], io_or_locks: []}
+      - {name: ZcCalc, line_range: [790, 829], allocations: [], io_or_locks: []}
+      - name: ZcNorm
+        line_range: [831, 881]
+        allocations:
+          - {line: 851, kind: "new Complex[state.Mct + 1]", hot_path: false, note: "per-call scratch, offline"}
+        io_or_locks: []
+      - name: FindLeadingEdge
+        line_range: [883, 955]
+        allocations:
+          - {line: 905, kind: "new double[count]", hot_path: false}
+          - {line: 906, kind: "new double[count]", hot_path: false}
+          - {line: 907, kind: "new double[count]", hot_path: false}
+        io_or_locks: []
+      - {name: EvaluateDzDw, line_range: [957, 966], allocations: [], io_or_locks: []}
+      - {name: SafeExp, line_range: [968, 976], allocations: [], io_or_locks: []}
+      - {name: IsFinite, line_range: [978, 984], allocations: [], io_or_locks: []}
+      - {name: AreFinite, line_range: [986, 1000], allocations: [], io_or_locks: []}
+      - {name: CaptureState, line_range: [1002, 1012], allocations: [], io_or_locks: []}
+      - {name: RestoreState, line_range: [1014, 1023], allocations: [], io_or_locks: []}
+      - {name: EstimateSplineDerivative, line_range: [1025, 1039], allocations: [], io_or_locks: []}
+      - {name: EstimateSplineSecondDerivative, line_range: [1041, 1059], allocations: [], io_or_locks: []}
+      - name: ResampleProfile
+        line_range: [1061, 1091]
+        allocations:
+          - {line: 1070, kind: "new QSpecPoint[pointCount]", hot_path: false}
+        io_or_locks: []
+      - {name: ComputeTrailingEdgeAngleDegrees, line_range: [1093, 1107], allocations: [], io_or_locks: []}
+      - {name: ApplyHanningFilter, line_range: [1109, 1134], allocations: [], io_or_locks: []}
+      - {name: ClampTrailingEdgeAngle, line_range: [1136, 1211], allocations: [], io_or_locks: []}
+      - name: CirclePlaneState.Create
+        line_range: [1213, 1300]
+        allocations:
+          - {line: 1245, kind: "new double[nc]", hot_path: false}
+          - {line: 1246, kind: "new Complex[nc, mc + 1]", hot_path: false, note: "2D scratch for Fourier eiw table"}
+          - {line: 1280, kind: "new Complex[nc]", hot_path: false}
+          - {line: 1281, kind: "new Complex[mc + 1]", hot_path: false}
+          - {line: 1282, kind: "new Complex[nc]", hot_path: false}
+          - {line: 1283, kind: "new Complex[nc, mct + 1]", hot_path: false}
+        io_or_locks: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: not_audited_reduced_scope
+      top_findings:
+        - "no locks, no file I/O, no TODO/stub (X1/P4/P5 all clean)"
+        - "heavy per-call Complex[,] scratch in CirclePlaneState.Create — acceptable for offline MAPGEN but if MAPGEN is ever called per-Newton this becomes P1-critical; confirm upstream"
+        - "BlendProfiles and ResampleProfile allocate QSpecPoint[] per continuation stage — acceptable offline"
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/ContourEditService.cs
+    lines: 356
+    classification: service
+    branch_relevance: neither
+    methods:
+      - {name: AddPoint, line_range: [20, 35], allocations: [], io_or_locks: []}
+      - {name: MovePoint, line_range: [37, 52], allocations: [], io_or_locks: []}
+      - {name: DeletePoint, line_range: [54, 73], allocations: [], io_or_locks: []}
+      - {name: DoublePoint, line_range: [75, 94], allocations: [], io_or_locks: []}
+      - {name: RefineCorners, line_range: [96, 164], allocations: [], io_or_locks: []}
+      - {name: BuildResult, line_range: [166, 195], allocations: [], io_or_locks: []}
+      - name: BuildSplineParameters
+        line_range: [197, 237]
+        allocations:
+          - {line: 201, kind: "new double[points.Count]", hot_path: false}
+        io_or_locks: []
+      - {name: ComputeCornerAngleDegrees, line_range: [239, 257], allocations: [], io_or_locks: []}
+      - {name: EvaluateSplinePoint, line_range: [259, 270], allocations: [], io_or_locks: []}
+      - {name: FindNonZeroVector, line_range: [272, 293], allocations: [], io_or_locks: []}
+      - {name: TryAppendDistinct, line_range: [295, 314], allocations: [], io_or_locks: []}
+      - {name: Distance, line_range: [316, 324], allocations: [], io_or_locks: []}
+      - {name: ValidateGeometry, line_range: [326, 335], allocations: [], io_or_locks: []}
+      - {name: ValidateInsertIndex, line_range: [337, 346], allocations: [], io_or_locks: []}
+      - {name: ValidatePointIndex, line_range: [348, 355], allocations: [], io_or_locks: []}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: not_audited_reduced_scope
+      top_findings:
+        - "no locks, no I/O, no stubs"
+        - "allocations per-request (offline contour edits)"
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/ContourModificationService.cs
+    lines: 188
+    classification: service
+    branch_relevance: neither
+    methods:
+      - {name: ModifyContour, line_range: [17, 127], allocations: [], io_or_locks: []}
+      - {name: FindClosestPointIndex, line_range: [128, 147], allocations: [], io_or_locks: []}
+      - name: BuildArcLengths
+        line_range: [148, 163]
+        allocations:
+          - {line: 150, kind: "new double[points.Count]", hot_path: false}
+        io_or_locks: []
+      - {name: RescaleParameters, line_range: [164, 180], allocations: [], io_or_locks: []}
+      - {name: DistanceSquared, line_range: [181, 187], allocations: [], io_or_locks: []}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: not_audited_reduced_scope
+      top_findings: ["no locks, no I/O, no stubs"]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/FlapDeflectionService.cs
+    lines: 853
+    classification: service
+    branch_relevance: neither
+    methods:
+      - {name: DeflectTrailingEdge, line_range: [20, 109], allocations: [], io_or_locks: []}
+      - {name: EditSurface, line_range: [110, 272], allocations: [], io_or_locks: []}
+      - {name: SolvePerpendicularBreak, line_range: [273, 322], allocations: [], io_or_locks: []}
+      - {name: ComputeClosingBreakResiduals, line_range: [323, 342], allocations: [], io_or_locks: []}
+      - {name: RotateAroundHinge, line_range: [343, 356], allocations: [], io_or_locks: []}
+      - {name: IsInside, line_range: [357, 384], allocations: [], io_or_locks: []}
+      - {name: RemoveMicroSegments, line_range: [385, 424], allocations: [], io_or_locks: []}
+      - {name: Distance, line_range: [425, 431], allocations: [], io_or_locks: []}
+      - name: SurfaceData.Create
+        line_range: [470, 494]
+        allocations:
+          - {line: 475, kind: "new double[points.Count]", hot_path: false, note: "arc-length array for spline"}
+        io_or_locks: []
+      - {name: SampleByX, line_range: [495, 554], allocations: [], io_or_locks: []}
+      - {name: SampleByArcLength, line_range: [555, 572], allocations: [], io_or_locks: []}
+      - {name: EstimateTangent, line_range: [573, 589], allocations: [], io_or_locks: []}
+      - {name: EstimateCurvatureDerivative, line_range: [590, 599], allocations: [], io_or_locks: []}
+      - {name: EvaluateWorldPoint, line_range: [600, 609], allocations: [], io_or_locks: []}
+      - {name: EvaluateWorldDerivative, line_range: [610, 619], allocations: [], io_or_locks: []}
+      - {name: EvaluateChordPoint, line_range: [620, 641], allocations: [], io_or_locks: []}
+      - {name: EvaluateChordDerivative, line_range: [642, 652], allocations: [], io_or_locks: []}
+      - {name: FindNearestIndex, line_range: [653, 668], allocations: [], io_or_locks: []}
+      - {name: EvaluateFirstDerivativeComponent, line_range: [669, 684], allocations: [], io_or_locks: []}
+      - {name: EvaluateWorldSecondDerivativeComponent, line_range: [685, 707], allocations: [], io_or_locks: []}
+      - {name: NaturalCubicSpline.Evaluate, line_range: [741, 767], allocations: [], io_or_locks: []}
+      - {name: FindUpperIndex, line_range: [768, 791], allocations: [], io_or_locks: []}
+      - name: ComputeNaturalSlopes
+        line_range: [792, 826]
+        allocations: []
+        io_or_locks: []
+      - name: SolveTriDiagonal
+        line_range: [827, 852]
+        allocations:
+          - {line: 795, kind: "new double[count] x4 (a,b,c,d work vectors)", hot_path: false, note: "embedded tri-diagonal solver; fine offline"}
+        io_or_locks: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: not_audited_reduced_scope
+      top_findings:
+        - "no locks, no I/O, no stubs"
+        - "private embedded NaturalCubicSpline + SolveTriDiagonal duplicates numerics elsewhere (see B5 spline audit); candidate for later consolidation, not a parity bug"
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/GeometryScalingService.cs
+    lines: 58
+    classification: service
+    branch_relevance: neither
+    methods:
+      - name: Scale
+        signature: GeometryScalingResult Scale(AirfoilGeometry, double, GeometryScaleOrigin, AirfoilPoint?)
+        line_range: [17, 56]
+        allocations:
+          - {line: 43, kind: "LINQ Select + ToArray (new AirfoilPoint[])", hot_path: false}
+          - {line: 49, kind: "new AirfoilGeometry + interpolated name", hot_path: false}
+        io_or_locks: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: ["tiny service, no issues"]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/GeometryTransformUtilities.cs
+    lines: 570
+    classification: service
+    branch_relevance: neither
+    methods:
+      - {name: FindLeadingEdgeIndex, line_range: [16, 38], allocations: [], io_or_locks: []}
+      - {name: BuildChordFrame, line_range: [39, 68], allocations: [], io_or_locks: []}
+      - {name: ToChordFrame, line_range: [69, 80], allocations: [], io_or_locks: []}
+      - {name: FromChordFrame, line_range: [81, 90], allocations: [], io_or_locks: []}
+      - {name: EstimateLeadingEdgePoint, line_range: [91, 98], allocations: [], io_or_locks: []}
+      - {name: EstimateLeadingEdgeRadius, line_range: [99, 117], allocations: [], io_or_locks: []}
+      - {name: FindOppositePointAtSameChordX, line_range: [118, 169], allocations: [], io_or_locks: []}
+      - {name: InterpolateY, line_range: [170, 206], allocations: [], io_or_locks: []}
+      - {name: CircumcircleRadius, line_range: [207, 227], allocations: [], io_or_locks: []}
+      - {name: Distance, line_range: [228, 237], allocations: [], io_or_locks: []}
+      - {name: FindLeadingEdgeArcLength, line_range: [238, 281], allocations: [], io_or_locks: []}
+      - name: SplineCurve2D.Create
+        line_range: [317, 333]
+        allocations:
+          - {line: 319, kind: "new double[points.Count]", hot_path: false}
+        io_or_locks: []
+      - {name: Evaluate, line_range: [334, 343], allocations: [], io_or_locks: []}
+      - {name: EvaluateDerivative, line_range: [344, 353], allocations: [], io_or_locks: []}
+      - {name: EvaluateSecondDerivative, line_range: [354, 363], allocations: [], io_or_locks: []}
+      - {name: EvaluateFirstDerivative, line_range: [364, 379], allocations: [], io_or_locks: []}
+      - {name: EvaluateSecondDerivative (spline), line_range: [380, 395], allocations: [], io_or_locks: []}
+      - {name: NaturalCubicSpline.Evaluate, line_range: [436, 462], allocations: [], io_or_locks: []}
+      - {name: FindUpperIndex, line_range: [463, 485], allocations: [], io_or_locks: []}
+      - name: ComputeNaturalSlopes
+        line_range: [486, 543]
+        allocations:
+          - {line: 493, kind: "new double[count] x4 (a,b,c,d tri-diagonal work)", hot_path: false}
+        io_or_locks: []
+      - name: SolveTriDiagonal
+        line_range: [544, 569]
+        allocations: []
+        io_or_locks: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: not_audited_reduced_scope
+      top_findings:
+        - "no locks, no I/O, no stubs"
+        - "duplicated tri-diag + natural cubic spline vs FlapDeflectionService + ParametricSpline (B5); consolidation candidate, not a parity bug"
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/LeadingEdgeRadiusService.cs
+    lines: 87
+    classification: service
+    branch_relevance: neither
+    methods:
+      - name: ScaleLeadingEdgeRadius
+        signature: LeadingEdgeRadiusEditResult ScaleLeadingEdgeRadius(AirfoilGeometry, double, double)
+        line_range: [17, 85]
+        allocations:
+          - {line: 37, kind: "points.ToArray()", hot_path: false}
+          - {line: 41, kind: "LINQ Select + ToArray (chord-frame copy)", hot_path: false}
+          - {line: 44, kind: "Reverse + ToArray (upper surface)", hot_path: false}
+          - {line: 47, kind: "ToArray (lower surface)", hot_path: false}
+          - {line: 50, kind: "new AirfoilPoint[points.Length]", hot_path: false}
+          - {line: 73, kind: "new AirfoilGeometry + interpolated name", hot_path: false}
+        io_or_locks: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "high local-allocation count per call (~5 array copies) but offline per-edit, fine"
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/ModalInverseDesignService.cs
+    lines: 326
+    classification: service
+    branch_relevance: neither
+    methods:
+      - {name: CreateSpectrum, line_range: [17, 34], allocations: [], io_or_locks: []}
+      - {name: Execute, line_range: [35, 69], allocations: [], io_or_locks: []}
+      - {name: PerturbMode, line_range: [70, 112], allocations: [], io_or_locks: []}
+      - name: ExecuteFromSpectrum
+        line_range: [113, 185]
+        allocations:
+          - {line: 147, kind: "new AirfoilPoint[points.Length]", hot_path: false}
+        io_or_locks: []
+      - name: BuildSpectrum
+        line_range: [186, 213]
+        allocations:
+          - {line: 198, kind: "new ModalCoefficient[modeCount]", hot_path: false}
+        io_or_locks: []
+      - {name: ComputeSineCoefficient, line_range: [214, 234], allocations: [], io_or_locks: []}
+      - {name: ApplyFilter, line_range: [235, 248], allocations: [], io_or_locks: []}
+      - name: ReconstructField
+        line_range: [249, 278]
+        allocations:
+          - {line: 251, kind: "new double[points.Count]", hot_path: false}
+        io_or_locks: []
+      - {name: EnsureCompatibleProfiles, line_range: [279, 289], allocations: [], io_or_locks: []}
+      - {name: ComputeCentroid, line_range: [290, 299], allocations: [], io_or_locks: []}
+      - {name: ComputeOutwardNormal, line_range: [300, 325], allocations: [], io_or_locks: []}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: not_audited_reduced_scope
+      top_findings: ["no locks, no I/O, no stubs"]
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/QSpecDesignService.cs
+    lines: 551
+    classification: service
+    branch_relevance: neither
+    methods:
+      - name: CreateFromInviscidAnalysis
+        line_range: [18, 52]
+        allocations:
+          - {line: 29, kind: "new QSpecPoint[analysis.PressureSamples.Count]", hot_path: false}
+        io_or_locks: []
+      - name: Modify
+        line_range: [53, 138]
+        allocations:
+          - {line: 175, kind: "new double[values.Length] x3 (tri-diag lower/diag/upper)", hot_path: false}
+        io_or_locks: []
+      - {name: Smooth, line_range: [139, 216], allocations: [], io_or_locks: []}
+      - {name: ForceSymmetry, line_range: [217, 247], allocations: [], io_or_locks: []}
+      - name: ExecuteInverse
+        line_range: [248, 350]
+        allocations:
+          - {line: 288, kind: "new double[pointCount]", hot_path: false}
+          - {line: 304, kind: "new double[pointCount]", hot_path: false}
+          - {line: 318, kind: "new AirfoilPoint[pointCount]", hot_path: false}
+        io_or_locks: []
+      - {name: ApplySlopeConstraint, line_range: [351, 386], allocations: [], io_or_locks: []}
+      - {name: SolveTriDiagonal, line_range: [387, 411], allocations: [], io_or_locks: []}
+      - {name: RebuildProfile, line_range: [412, 434], allocations: [], io_or_locks: []}
+      - {name: FindClosestIndex, line_range: [435, 454], allocations: [], io_or_locks: []}
+      - {name: EstimateDerivative, line_range: [455, 469], allocations: [], io_or_locks: []}
+      - name: BuildSampleDistances
+        line_range: [470, 485]
+        allocations:
+          - {line: 472, kind: "new double[samples.Count]", hot_path: false}
+        io_or_locks: []
+      - {name: SmoothDisplacements, line_range: [486, 514], allocations: [], io_or_locks: []}
+      - {name: ComputeCentroid, line_range: [515, 524], allocations: [], io_or_locks: []}
+      - {name: ComputeOutwardNormal, line_range: [525, 550], allocations: [], io_or_locks: []}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: not_audited_reduced_scope
+      top_findings:
+        - "no locks, no I/O, no stubs"
+        - "per-call tri-diagonal allocations (lower/diag/upper) are fine offline; would be P1 if called per-Newton, but QSpecDesignService is never called from solver hot path"
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Design/Services/TrailingEdgeGapService.cs
+    lines: 180
+    classification: service
+    branch_relevance: neither
+    methods:
+      - name: SetTrailingEdgeGap
+        line_range: [17, 111]
+        allocations:
+          - {line: 63, kind: "new AirfoilPoint[points.Count]", hot_path: false}
+        io_or_locks: []
+      - {name: FindLeadingEdgeIndex, line_range: [112, 172], allocations: [], io_or_locks: []}
+      - {name: ComputeEndpointGap, line_range: [173, 179], allocations: [], io_or_locks: []}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings: ["no locks, no I/O, no stubs"]
+      estimated_fix_effort: 0h
+
+ledger_summary:
+  total_files: 28
+  total_methods_audited_in_services: 104
+  models_dto_or_enum_count: 17
+  services_count: 11
+  parity_blockers: 0
+  standard_blockers: 0
+  x1_stub_count: 0
+  p4_lock_or_concurrency_count: 0
+  p5_file_io_count: 0
+  p1_allocations_in_services: many_but_all_offline
+  notes: |
+    XFoil.Design is clean on all four assigned checks (P1/P4/P5/X1):
+      - X1: zero TODO/FIXME/HACK/NotImplemented/NotSupported across the whole assembly.
+      - P4: zero lock/async/Task/Parallel/Interlocked/volatile usages.
+      - P5: zero File/Stream/Path/Directory/Console calls — design services are pure in-memory.
+      - P1: allocations exist in every service (LINQ Select+ToArray, new Array[], new AirfoilGeometry
+        with interpolated name strings) but all are per-request offline design operations. Confirmed
+        via grep that no solver hot-path component (ViscousSolverEngine, PolarSweepRunner,
+        AirfoilAnalysisService) references anything in XFoil.Design. Allocations are therefore
+        not hot-path P1 violations.
+
+    Secondary observations (out of reduced scope, recorded for later passes):
+      - Duplicated natural cubic spline + tri-diagonal solver code across FlapDeflectionService,
+        GeometryTransformUtilities, and QSpecDesignService. Consolidation candidate with B5
+        (ParametricSpline / CubicSpline) — not a parity bug.
+      - CirclePlaneState.Create (ConformalMapgenService:1213) allocates several Complex[,] tables
+        per MAPGEN run; fine offline.
+      - Every service consistently carries the "Legacy audit:" / "Legacy mapping:" comment blocks
+        documenting Fortran provenance (xgdes.f, xqdes.f, xgeom.f, modify.f, spline.f), which is
+        the project convention.
+
+    No findings require action under the D3 reduced-criteria audit.

@@ -1,0 +1,569 @@
+agent: A4
+ledger_path: audit/A4-influence-matrix-builder.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/InfluenceMatrixBuilder.cs
+    lines: 2891
+    branch_relevance: both
+    notes: >-
+      Static class exposing QDCALC (analytical DIJ), XYWAKE (wake geometry),
+      PSWLIN wake-source sensitivity kernels (double + legacy float), numerical
+      DIJ cross-check, and the wake-row CIJ*DIJ indirect coupling assembly.
+      The whole file is invoked once per viscous solve (called from
+      ViscousSolverEngine.cs:1847 only), not per Newton iteration, so
+      per-sweep allocations are acceptable; per-call scratch buffers still
+      matter since a polar sweep re-enters on every alpha/Re point.
+    methods:
+      - name: BuildAnalyticalDIJ (overload 1 - no OP)
+        signature: public static double[,] BuildAnalyticalDIJ(InviscidSolverState, LinearVortexPanelState, int nWake, bool useLegacyWakeSourceKernelPrecision=false)
+        line_range: [35, 48]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BuildAnalyticalDIJ (overload 2 - alpha/V)
+        signature: public static double[,] BuildAnalyticalDIJ(..., double freestreamSpeed, double angleOfAttackRadians, bool useLegacyWakeSourceKernelPrecision=false)
+        line_range: [53, 69]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BuildAnalyticalDIJ (internal, full wakeGeometry)
+        signature: internal static double[,] BuildAnalyticalDIJ(..., WakeGeometryData? wakeGeometry, bool useLegacyWakeSourceKernelPrecision=false)
+        line_range: [74, 211]
+        allocations:
+          - {line: 96, kind: "new double[totalSize,totalSize]", hot_path: false, note: "Per-sweep DIJ. Unavoidable result buffer; caller owns lifetime."}
+          - {line: 103, kind: "new double[n+1]", hot_path: false, note: "Per-sweep RHS scratch. Could be pooled via SolverBuffers."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BackSubstituteAirfoilColumn
+        signature: private static void BackSubstituteAirfoilColumn(InviscidSolverState, double[] rhs, int size)
+        line_range: [216, 245]
+        allocations:
+          - {line: 220, kind: "new float[size]", hot_path: true, note: "Per-airfoil-column (N times per sweep) only on legacy path. Parity-gated by inviscidState.UseLegacyKernelPrecision."}
+        io_or_locks: []
+        float_usage:
+          - {line: 220, form: "float[] scratch", context: "rhsSingle allocation for parity LU back-substitution"}
+          - {line: 223, form: "float_cast", context: "(float)rhs[i] narrowing cast"}
+          - {line: 234, form: "float_to_double", context: "rhs[i] = rhsSingle[i] widening"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BuildWakeGeometryData
+        signature: internal static WakeGeometryData BuildWakeGeometryData(LinearVortexPanelState, InviscidSolverState, int nWake, double freestreamSpeed, double angleOfAttackRadians)
+        line_range: [250, 263]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BuildNumericalDIJ
+        signature: public static double[,] BuildNumericalDIJ(InviscidSolverState, LinearVortexPanelState, int nWake, double epsilon=1e-6)
+        line_range: [278, 344]
+        allocations:
+          - {line: 286, kind: "new double[totalSize,totalSize]", hot_path: false, note: "DIJ result (validation path)."}
+          - {line: 289, kind: "new double[n]", hot_path: false, note: "originalUe scratch."}
+          - {line: 293, kind: "new double[n]", hot_path: false, note: "originalSigma scratch."}
+          - {line: 296, kind: "new double[n+1]", hot_path: false, note: "rhs scratch."}
+          - {line: 297, kind: "new double[n+1]", hot_path: false, note: "solution scratch."}
+          - {line: 321, kind: "new double[n+1]", hot_path: true, note: "Per-column rhsBase (N times)."}
+          - {line: 330, kind: "new double[n+1]", hot_path: true, note: "Per-column solutionBase (N times)."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 326, severity: "low", issue: "rhsBase rebuilt from scratch every j iteration; could be computed once outside loop. This is a validation-only path but still O(N^3) wasted work."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Numerical DIJ cross-check is validation-only; should be disabled or guarded in release builds."
+            rationale: "Not used by solver; any live solver reaching this path would take a severe perf hit."
+            risk: low
+      - name: FillWakeApproximation
+        signature: private static void FillWakeApproximation(double[,] dij, int n, int nWake)
+        line_range: [349, 387]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 368, severity: "medium", issue: "Heuristic exp(-0.5*k) decay is pure fiction — it has no Fortran analogue. Only reachable from BuildNumericalDIJ (validation), but if any caller routes to it, wake columns will be wildly wrong."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 349, fortran_ref: "xpanel.f:2073-2114 (QDCALC wake-row assembly)", note: "Managed fallback does not replicate the analytical wake-row CIJ*DIJ accumulation; the comment acknowledges this is a 'heuristic approximation.'"}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Delete FillWakeApproximation or make it explicit debug-only. Numerical DIJ should either share analytical wake-row code or be removed."
+            rationale: "Silent fallback to a heuristic during any unexpected test is a parity trap."
+            risk: low
+      - name: FillAnalyticalWakeCoupling
+        signature: private static void FillAnalyticalWakeCoupling(double[,] dij, InviscidSolverState, LinearVortexPanelState, int nWake, double freestreamSpeed, double angleOfAttackRadians, WakeGeometryData?, bool useLegacyWakeSourceKernelPrecision)
+        line_range: [392, 654]
+        allocations:
+          - {line: 430, kind: "new double[n+1]", hot_path: false, note: "wake RHS scratch per wake-column solve (NW times)."}
+          - {line: 431, kind: "new double[n,nWake]", hot_path: false, note: "wakeSurfaceInfluence matrix (N rows x NW cols) allocated per call."}
+          - {line: 450, kind: "new double[] (out dzdmWake)", hot_path: true, note: "N + NW times (per field point) via ComputeWakeSourceSensitivitiesAtCore allocating nWake-length dzdm + dqdm."}
+          - {line: 584, kind: "new double[n]", hot_path: true, note: "cijRow allocated per wake row (NW iterations). Could be pooled."}
+          - {line: 585, kind: "new double[n]", hot_path: true, note: "airfoilSourceRow allocated per wake row (NW iterations)."}
+          - {line: 601, kind: "new double[] (out wakeSourceRow)", hot_path: true, note: "NW allocations for wake source row."}
+        io_or_locks: []
+        float_usage:
+          - {line: 612, form: "float local", context: "fSum += (float)cijRow[k] * (float)dij[k, column] — legacyWakeRow path; gated by couplingState.UseLegacyKernelPrecision."}
+          - {line: 614, form: "float_cast", context: "(float)cijRow[k] * (float)dij[k, column] narrowing for REAL-parity sum accumulator."}
+          - {line: 615, form: "float_cast", context: "(float)airfoilSourceRow[column] downcast."}
+          - {line: 631, form: "float local", context: "wake-column fSum — same legacy accumulator."}
+          - {line: 633, form: "float_cast", context: "(float)cijRow[k] * (float)dij[k, column] narrowing."}
+          - {line: 634, form: "float_cast", context: "(float)wakeSourceRow[jw] downcast."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: longer_wake
+            summary: "wakeSurfaceInfluence[n,nWake] matrix and per-row cij/airfoil scratch are sized to current nWake — verify these still scale for 100+ station wakes without GC pressure."
+            rationale: "Longer wakes multiply matrix size quadratically and allocations linearly."
+            risk: medium
+      - name: ComputeWakeSensitivitiesDelegate (delegate type)
+        signature: private delegate void ComputeWakeSensitivitiesDelegate(...)
+        line_range: [659, 668]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: CreateLegacyWakeSolveContext (from state)
+        signature: private static LegacyWakeSolveContext CreateLegacyWakeSolveContext(InviscidSolverState)
+        line_range: [670, 684]
+        allocations:
+          - {line: 674, kind: "new float[size,size]", hot_path: false, note: "(N+1)^2 float LU snapshot per parity wake solve."}
+          - {line: 683, kind: "(int[]).Clone()", hot_path: false, note: "Pivot index clone."}
+        io_or_locks: []
+        float_usage:
+          - {line: 674, form: "float[,]", context: "LU factor snapshot in single precision."}
+          - {line: 679, form: "float_assign", context: "luFactors[row,col] = (float) from LegacyStreamfunctionInfluenceFactors (already float)."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: CreateLegacyWakeSolveContext (from panel/OP)
+        signature: private static LegacyWakeSolveContext CreateLegacyWakeSolveContext(LinearVortexPanelState, double, double, bool useLegacyPanelingPrecision)
+        line_range: [686, 726]
+        allocations:
+          - {line: 692, kind: "new InviscidSolverState", hot_path: false, note: "Full legacy inviscid state constructed + factored for parity wake snapshot."}
+          - {line: 709, kind: "new float[size,size]", hot_path: false, note: "LU snapshot."}
+          - {line: 725, kind: "(int[]).Clone()", hot_path: false, note: "Pivot clone."}
+        io_or_locks: []
+        float_usage:
+          - {line: 709, form: "float[,]", context: "LU factor snapshot."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BackSubstituteWakeColumn
+        signature: private static void BackSubstituteWakeColumn(InviscidSolverState, LegacyWakeSolveContext?, double[] rhs, int size, int sourceIndex)
+        line_range: [731, 767]
+        allocations:
+          - {line: 750, kind: "new float[size]", hot_path: true, note: "Per-wake-column (NW times per sweep) when legacy wake context present."}
+        io_or_locks: []
+        float_usage:
+          - {line: 750, form: "float[]", context: "rhsSingle scratch."}
+          - {line: 753, form: "float_cast", context: "(float)rhs[i] narrowing."}
+          - {line: 765, form: "float_to_double", context: "rhs[i] = rhsSingle[i] widening."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeWakeSourceSensitivitiesAt
+        signature: private static void ComputeWakeSourceSensitivitiesAt(WakeGeometryData, int fieldNodeIndex, double fieldX, double fieldY, double fieldNormalX, double fieldNormalY, int fieldWakeIndex, out double[] dzdm, out double[] dqdm)
+        line_range: [772, 793]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeWakeSourceSensitivitiesAtLegacyPrecision
+        signature: private static void ComputeWakeSourceSensitivitiesAtLegacyPrecision(...)
+        line_range: [795, 816]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeWakeSourceSensitivitiesAtCoreSingle
+        signature: private static void ComputeWakeSourceSensitivitiesAtCoreSingle(WakeGeometryData, int, double, double, double, double, int, out double[], out double[])
+        line_range: [821, 1613]
+        allocations:
+          - {line: 841, kind: "new float[nWake]", hot_path: true, note: "Per call (N + NW field points per sweep)."}
+          - {line: 842, kind: "new float[nWake]", hot_path: true, note: "Per call."}
+          - {line: 1563, kind: "new double[nWake]", hot_path: true, note: "Output dzdm per call."}
+          - {line: 1564, kind: "new double[nWake]", hot_path: true, note: "Output dqdm per call."}
+        io_or_locks: []
+        float_usage:
+          - {line: 837, form: "float const qopi", context: "const float qopi = 1f/(4f*MathF.PI)"}
+          - {line: 838, form: "float const tiny", context: "const float tiny = 1e-30f"}
+          - {line: 841, form: "float[] dzdmSingle", context: "parity float accumulator."}
+          - {line: 842, form: "float[] dqdmSingle", context: "parity float accumulator."}
+          - {line: 844, form: "float_cast", context: "(float)fieldX downcast."}
+          - {line: 845, form: "float_cast", context: "(float)fieldY downcast."}
+          - {line: 846, form: "float_cast", context: "(float)fieldNormalX downcast."}
+          - {line: 847, form: "float_cast", context: "(float)fieldNormalY downcast."}
+          - {line: 873, form: "float_cast", context: "(float)wake.X[jo] etc. (bulk narrowing)."}
+        mathf_calls:
+          - {line: 837, symbol: "MathF.PI"}
+          - {line: 906, symbol: "MathF.CopySign"}
+          - {line: 941, symbol: "MathF.PI"}
+          - {line: 955, symbol: "MathF.PI"}
+          - {line: 973, symbol: "MathF.Max"}
+          - {line: 975, symbol: "MathF.PI"}
+          - {line: 1042, symbol: "MathF.Max"}
+          - {line: 1331, symbol: "MathF.Max"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 980, issue: "division_by_small", note: "1/(x1-x0) can blow up near collinear panel midpoints; no guard. Mirrored in Fortran but remains a hazard for long/coarse wakes (S7 risk)."}
+          - {line: 1276, issue: "division_by_small", note: "1/(x0-x2) same hazard (half-2)."}
+          - {line: 1046, issue: "hard_coded_hex_patch", note: "Explicit bit-pattern match: if psum/pdif/dsim/dzJm match specific REAL hex values, force dzJm = 0xBD971D0F. This is a point-fix for alpha=-10 sourceIndex=8 wake owner parity; documents a real Fortran rounding lane that the managed recurrence does not reproduce generically."}
+        fortran_divergence:
+          - {line: 1046, fortran_ref: "xpanel.f:1193 PSWLIN (half-1 JM lane)", note: "Fragile hex patch, parity-gated, fine for parity branch. Must NOT leak into standard-branch computation."}
+        modernization_candidates: []
+      - name: ComputeWakeSourceSensitivitiesAtCore<T>
+        signature: private static void ComputeWakeSourceSensitivitiesAtCore<T>(WakeGeometryData, int, double, double, double, double, int, out double[], out double[]) where T : IFloatingPointIeee754<T>
+        line_range: [1618, 2082]
+        allocations:
+          - {line: 1641, kind: "new T[nWake]", hot_path: true, note: "Per call (N + NW field points per sweep)."}
+          - {line: 1642, kind: "new T[nWake]", hot_path: true, note: "Per call."}
+          - {line: 2032, kind: "new double[nWake]", hot_path: true, note: "Output dzdm per call."}
+          - {line: 2033, kind: "new double[nWake]", hot_path: true, note: "Output dqdm per call."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 1752, issue: "division_by_small", note: "1/(x1-x0); same hazard as single-precision kernel."}
+          - {line: 1893, issue: "division_by_small", note: "1/(x0-x2); same hazard."}
+        fortran_divergence:
+          - {line: 1934, fortran_ref: "xpanel.f:1193 PSWLIN half-2", note: "pdx2 expression managed writes (((x0+x2)*psx2)+psum - ((two*x2)*psx2) + pdif)*dxInv; Fortran writes ((X0+X2)*PSX2 + PSUM - 2.0*X2*(T2-APAN) + PDIF)/(X0-X2). (two*x2)*psx2 vs 2*x2*(t2-apan) algebraic equivalent but rounding order differs — verify in double the residue matches intended analytical result. Likely fine in double."}
+        modernization_candidates: []
+      - name: TracePswlinGeometry<T>
+        signature: private static void TracePswlinGeometry<T>(string scope, int fieldNodeIndex, int fieldWakeIndex, int wakeSegmentIndex, string precision, T xJo, T yJo, ...) where T : IFloatingPointIeee754<T>
+        line_range: [2087, 2135]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePswlinPdx0Terms<T>
+        signature: private static void TracePswlinPdx0Terms<T>(...)
+        line_range: [2136, 2171]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: LegacySingleLength
+        signature: private static float LegacySingleLength(float dx, float dy)
+        line_range: [2173, 2181]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2173, form: "float_parameter", context: "float dx, float dy parameters."}
+          - {line: 2173, form: "float_return", context: "float return type."}
+          - {line: 2177, form: "float local", context: "dxSq, dySq, squaredLength."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: LegacyWideProductSum
+        signature: private static float LegacyWideProductSum(float left1, float right1, float left2, float right2)
+        line_range: [2183, 2184]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2183, form: "float_parameter,float_return", context: "All params + return float; parity FMA helper."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: LegacyWideProductDifference
+        signature: private static float LegacyWideProductDifference(float left1, float right1, float left2, float right2)
+        line_range: [2186, 2188]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2186, form: "float_parameter,float_return", context: "parity helper."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: LegacyMixedProductDifference
+        signature: private static float LegacyMixedProductDifference(float left1, float right1, float left2, float right2)
+        line_range: [2190, 2194]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2190, form: "float_parameter,float_return", context: "parity helper."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePswlinSegment<T>
+        signature: private static void TracePswlinSegment<T>(... T?, ... trace helper)
+        line_range: [2196, 2324]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePswlinHalfTerms<T>
+        signature: private static void TracePswlinHalfTerms<T>(...)
+        line_range: [2326, 2375]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TracePswlinNiTerms
+        signature: private static void TracePswlinNiTerms(string scope, int, int, int, int, string, float xSum, float xHalf, ...)
+        line_range: [2377, 2429]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2384, form: "float_parameter", context: "float parameter list (trace-only, compiled to JSON via SolverTrace)."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BuildWakeGeometry
+        signature: private static WakeGeometryData BuildWakeGeometry(LinearVortexPanelState, InviscidSolverState, int nWake, double, double)
+        line_range: [2434, 2444]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2441, form: "float branch dispatch", context: "useLegacyKernelPrecision || useLegacyPanelingPrecision -> BuildWakeGeometryCore<float>; otherwise BuildWakeGeometryCore<double>. Standard-branch gate verified."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BuildWakeGeometryCore<T>
+        signature: private static WakeGeometryData BuildWakeGeometryCore<T>(LinearVortexPanelState, InviscidSolverState, int nWake, double, double) where T : IFloatingPointIeee754<T>
+        line_range: [2446, 2577]
+        allocations:
+          - {line: 2464, kind: "new T[nWake]", hot_path: false, note: "x coordinates (per sweep)."}
+          - {line: 2465, kind: "new T[nWake]", hot_path: false, note: "y."}
+          - {line: 2466, kind: "new T[nWake]", hot_path: false, note: "nx."}
+          - {line: 2467, kind: "new T[nWake]", hot_path: false, note: "ny."}
+          - {line: 2468, kind: "new T[max(nWake-1,1)]", hot_path: false, note: "panelAngle."}
+          - {line: 2471, kind: "new T[pointCount] (via WakeSpacing.BuildStretchedDistances)", hot_path: false, note: "Spacing array alloc delegated to WakeSpacing."}
+          - {line: 2551, kind: "new double[nWake] x5 via ToDoubleArray", hot_path: false, note: "Convert T->double for the returned WakeGeometryData (5 arrays)."}
+          - {line: 2554, kind: "new WakeGeometryData", hot_path: false, note: "Immutable result wrapper."}
+        io_or_locks: []
+        float_usage:
+          - {line: 2635, form: "float local", context: "float pxf, pyf, pxSq, pySq inside `if (typeof(T) == typeof(float))` — legacy-parity branch only."}
+          - {line: 2639, form: "MathF.Sqrt", context: "parity branch."}
+        mathf_calls:
+          - {line: 2639, symbol: "MathF.Sqrt"}
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 2477, fortran_ref: "xpanel.f:2224 (X(I) = XTE - 0.0001*NY(I))", note: "wakeOffset = 1.0e-4 matches Fortran hard-coded 0.0001. Correct but flagged as S7 hard-coded constant (no parameterization)."}
+        modernization_candidates:
+          - kind: longer_wake
+            summary: "Wake max-distance hardcoded to Math.Max(chord, ds1). Fortran uses WAKLEN*CHORD with WAKLEN (default 1.0) user-settable via /OPER OPTIONS/. Managed port has no equivalent parameter."
+            rationale: "Long-wake (post-stall, low-Re gliders) needs 2-5 chord wake lengths. Parameterize via AnalysisSettings.WakeLengthRatio (default 1.0)."
+            risk: low
+          - kind: longer_wake
+            summary: "Wake count (nWake) is supplied by caller; WakeGeometryGenerator defaults to max(6, panels/8 + 2). Fortran caps at IWX. Managed has no cap or explicit ceiling."
+            rationale: "Long-wake support (50-100+ stations) needs explicit max check and allocation audit."
+            risk: medium
+          - kind: longer_wake
+            summary: "wakeOffset hardcoded to 1.0e-4 (TE displacement). Matches Fortran but could be parameterized for very thin/sharp TEs or unconventional airfoils."
+            rationale: "Sub-micron TE geometries may need proportional offset."
+            risk: low
+      - name: ComputeWakePanelState<T>
+        signature: private static void ComputeWakePanelState<T>(LinearVortexPanelState, InviscidSolverState, int wakeNodeIndex, T x, T y, T fallbackNormalX, T fallbackNormalY, double, double, out T, out T, out T) where T : IFloatingPointIeee754<T>
+        line_range: [2579, 2684]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2633, form: "float cast via typeof check", context: "parity branch casts psiXT,psiYT to float via float.CreateChecked."}
+          - {line: 2635, form: "float local pxf/pyf/pxSq/pySq", context: "parity branch."}
+        mathf_calls:
+          - {line: 2639, symbol: "MathF.Sqrt"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 2646, issue: "divide_zero_guard", note: "usedFallback flag triggers on non-finite psi or magnitude <= 1e-30; good. Fortran has no such guard so fallback branch may desync subtle parity."}
+        fortran_divergence:
+          - {line: 2647, fortran_ref: "xpanel.f:2238 (NX(I+1) = -PSI_X / SQRT(PSI_X**2 + PSI_Y**2))", note: "Managed adds fallback to panel-normal when psi magnitude is near zero; Fortran divides directly and produces NaN/Inf. Fallback is a hardening-only divergence; does not affect converged parity cases."}
+        modernization_candidates: []
+      - name: EstimateFirstWakeSpacing<T>
+        signature: private static T EstimateFirstWakeSpacing<T>(LinearVortexPanelState) where T : IFloatingPointIeee754<T>
+        line_range: [2686, 2736]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2713, form: "typeof(T)==typeof(float) branch", context: "parity uses upper only; standard averages upper+lower."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 2714, fortran_ref: "xpanel.f:2201 (DS1 = 0.5*(UPPERDELTA + LOWERDELTA))", note: "Comment explains Fortran effective behavior (LOWERDELTA often 0 for collapsed TE panel), but parity path hardcodes 0.5*upper while Fortran writes 0.5*(upper+lower). For airfoils with non-zero LOWERDELTA the parity path diverges from literal Fortran — valid only if empirical LOWERDELTA~=0 across Selig."}
+        modernization_candidates:
+          - kind: longer_wake
+            summary: "ds1 minimum floor hardcoded at 1.0e-4; not tied to chord or TE scale."
+            rationale: "For chord=0.01 airfoils, floor == chord → single-panel wake."
+            risk: low
+      - name: ComputeTrailingEdgeWakeNormal<T>
+        signature: private static void ComputeTrailingEdgeWakeNormal<T>(LinearVortexPanelState, out T nx, out T ny) where T : IFloatingPointIeee754<T>
+        line_range: [2738, 2765]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 2756, issue: "divide_zero_guard", note: "smod <= 1e-12 fallback to (0, -1). Reasonable."}
+        fortran_divergence:
+          - {line: 2756, fortran_ref: "xpanel.f:2219-2223 (SX=0.5*(YP(N)-YP(1)); SY=0.5*(XP(1)-XP(N)))", note: "Fortran does no zero-check; divides by SMOD directly. Guard is defensive only."}
+        modernization_candidates: []
+      - name: ToDoubleArray<T>
+        signature: private static double[] ToDoubleArray<T>(T[] values) where T : IFloatingPointIeee754<T>
+        line_range: [2767, 2777]
+        allocations:
+          - {line: 2770, kind: "new double[values.Length]", hot_path: false, note: "Per-wake-build conversion."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TraceWakeGeometry
+        signature: private static void TraceWakeGeometry(IReadOnlyList<double>, IReadOnlyList<double>, IReadOnlyList<double>, IReadOnlyList<double>, IReadOnlyList<double>)
+        line_range: [2779, 2831]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TraceWakeSpacing
+        signature: private static void TraceWakeSpacing(IReadOnlyList<double>, double firstSpacing)
+        line_range: [2833, 2861]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: WakeGeometryData (ctor)
+        signature: public WakeGeometryData(double[] x, double[] y, double[] normalX, double[] normalY, double[] panelAngle)
+        line_range: [2865, 2872]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: minor
+      top_findings:
+        - "S7: Wake length is hardcoded at Math.Max(chord, ds1). Fortran XYWAKE uses WAKLEN*CHORD with WAKLEN being a user-settable variable (default 1.0). Managed port has no equivalent knob. Long-wake support (post-stall 2-5 chord, low-Re 5-10 chord) requires parameterizing via AnalysisSettings.WakeLengthRatio."
+        - "S7: Wake station count (nWake) is passed in from the caller with no internal cap. Fortran caps at IWX (compile-time). For 100+ station wakes, allocations in FillAnalyticalWakeCoupling (wakeSurfaceInfluence[n,nWake]) and per-row scratch grow linearly; verify SolverBuffers can absorb."
+        - "S7: EstimateFirstWakeSpacing parity branch uses 0.5*UPPERDELTA instead of Fortran's 0.5*(UPPER+LOWER). Empirically equivalent when LOWERDELTA~=0 (collapsed TE), but would diverge on blunt/rounded TE airfoils."
+        - "S1/S2 parity gating CORRECT: all float paths (BackSubstituteAirfoilColumn, BackSubstituteWakeColumn, ComputeWakeSourceSensitivitiesAtCoreSingle, legacyWakeRow accumulation in FillAnalyticalWakeCoupling, LegacySingleLength/WideProductSum/etc.) are gated by inviscidState.UseLegacyKernelPrecision or useLegacyWakeSourceKernelPrecision. Verified — no leakage into standard branch."
+        - "P1 allocations per wake-geometry build: 5 ToDoubleArray conversions plus 5 T[] source arrays per BuildWakeGeometryCore call; per-field-point new float[nWake]/new T[nWake] in PSWLIN kernels; per-wake-row new double[n] cijRow + airfoilSourceRow in FillAnalyticalWakeCoupling. Called once per viscous solve (~O(N+NW) allocations per sweep point), acceptable for polar sweeps but should be pooled via SolverBuffers for tight warm-start loops."
+        - "S4 correctness: wake-row CIJ*DIJ accumulation (lines 607-643) condenses Fortran's two-pass loops 70+80 into one. Semantics preserved (verified). Sharp-TE gate (line 474 rhs[n-1]=0) correctly mirrors xpanel.f:2019 DO 34 J SHARP branch."
+        - "S5 correctness: 1/(x1-x0) and 1/(x0-x2) divisions (lines 980, 1276, 1752, 1893) have no epsilon guard; the algorithm assumes non-degenerate wake panels. Long-wake / coarse-step configurations may hit near-collinearity. Fortran has the same unguarded division."
+        - "X1: Hard-coded hex patch at line 1046 (BD971D0F) for alpha=-10 sourceIndex=8 parity fix. Parity-branch only. Keep as-is; add a TODO to replicate the underlying REAL rounding generically."
+        - "X2: FillWakeApproximation (line 349) is a heuristic decay fallback that has no Fortran analogue; only reachable from BuildNumericalDIJ. Safe (validation path) but document as debug-only to prevent accidental solver routing."
+      estimated_fix_effort: "3-5 days for S7 wake parameterization (AnalysisSettings.WakeLengthRatio + WakeStationCount with defaults preserving current behavior; propagate through ViscousSolverEngine and PolarSweepRunner); 1 day for per-wake-row scratch pooling via SolverBuffers; 0.5 day to document/gate FillWakeApproximation."
+ledger_summary:
+  total_files: 1
+  total_methods_audited: 28
+  parity_blockers: 0
+  standard_blockers: 0
+  notes: >-
+    InfluenceMatrixBuilder is called once per viscous solve (verified: single
+    call site in ViscousSolverEngine.cs:1847; no per-iteration invocation).
+    Per-sweep allocations dominate; BackSubstituteAirfoilColumn and
+    BackSubstituteWakeColumn allocate float[] scratch per column (N+NW per
+    sweep) on the parity path — minor GC pressure. The PSWLIN kernels
+    (CoreSingle and Core<T>) each allocate 2 x nWake arrays per field-point
+    call, giving O((N+NW)*nWake) doubles per sweep; acceptable at 80x25 but
+    grows quadratically with wake length.
+
+    No per-Newton-iteration allocations identified. No I/O, locks, or async
+    calls on hot path. SolverTrace.Event calls use anonymous objects (closure
+    allocations), but all are gated by SolverTrace.IsActive — verified.
+
+    Standard-branch correctness verdict: MINOR. The analytical DIJ path is
+    a faithful QDCALC port. The main gaps are feature-parity with Fortran's
+    user-configurable wake length (WAKLEN), and the numerical-DIJ path's
+    heuristic wake fallback (FillWakeApproximation) which should either be
+    upgraded to share the analytical wake-row assembly or explicitly
+    restricted to debug/validation use.
+
+    Parity branch is covered by careful float gating and documented
+    hex-level patches (line 1046); the legacy state is mature and should not
+    be touched without GDB-verified motivation.
+
+    Key S7 recommendation: add AnalysisSettings.WakeLengthRatio (default 1.0
+    to preserve behavior) + AnalysisSettings.WakeStationCount (override for
+    the Fortran N/8+2 default) so long-wake regimes become first-class.
+    These are prerequisites for robust post-stall and low-Re analysis.

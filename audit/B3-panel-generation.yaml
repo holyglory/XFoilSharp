@@ -1,0 +1,642 @@
+agent: B3
+ledger_path: audit/B3-panel-generation.yaml
+audit_started: 2026-04-17T12:45:00Z
+audit_completed: 2026-04-17T12:50:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs
+    lines: 1311
+    branch_relevance: both
+    methods:
+      - name: Distribute
+        signature: "public static void Distribute(double[] inputX, double[] inputY, int inputCount, LinearVortexPanelState panel, int desiredNodeCount = 160, double curvatureWeight = 1.0, double trailingEdgeDensityRatio = 0.15, double curvatureDensityRatio = 0.2, bool useLegacyPrecision = false)"
+        line_range: [36, 70]
+        allocations: []
+        io_or_locks:
+          - line: 60
+            kind: "File.Create via StreamWriter (XFOIL_DUMP_PANELS env-var gated)"
+            severity: "low"
+            note: "Env-var-gated diagnostic dump path. Never engaged in sweep/hot path; still a P5 surface."
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: DistributeCore<T>
+        signature: "private static void DistributeCore<T>(double[] inputX, double[] inputY, int inputCount, LinearVortexPanelState panel, int desiredNodeCount, double curvatureWeight, double trailingEdgeDensityRatio, double curvatureDensityRatio) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [75, 652]
+        allocations:
+          - line: 108
+            kind: "new T[nb] x5 (sb, xb, yb, xbp, ybp)"
+            hot_path: false
+            note: "Per-analysis; Distribute is called once per polar sweep by PolarSweepRunner/LinearVortexInviscidSolver, not per-alpha/per-Newton. Acceptable."
+          - line: 131
+            kind: "new T[nb] (w5)"
+            hot_path: false
+          - line: 187
+            kind: "new T[nb] x3 (w1, w2, w3)"
+            hot_path: false
+          - line: 278
+            kind: "new T[nb] (w6)"
+            hot_path: false
+          - line: 282
+            kind: "new T[nn] (snew), nn = 5*(n-1)+1"
+            hot_path: false
+          - line: 324
+            kind: "new T[nn] x4 (ww1-ww4)"
+            hot_path: false
+          - line: 541
+            kind: "new T[n] x3 (sOut, xOut, yOut)"
+            hot_path: false
+          - line: 574
+            kind: "new T[finalN+1] x3 per duplicated-S corner"
+            hot_path: false
+            note: "Nested reallocation when corner nodes are inserted; rare degenerate-geometry path."
+          - line: 614
+            kind: "new T[finalN] x3 (finalArc, finalXp, finalYp)"
+            hot_path: false
+        io_or_locks: []
+        float_usage:
+          - line: 673
+            form: "float temporaries in AddRoundedBaseWithWideScaledCurvatureTerms parity branch"
+            context: "typeof(T)==typeof(float) branch in helper; parity-only"
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - line: 336
+            fortran_ref: "f_xfoil/src/xfoil.f PANGEN (common-block W1/W2/W3 carry)"
+            note: "Managed port copies w1/w2/w3 into ww1/ww2/ww3 via Array.Copy with a bounded legacyCarryCount to emulate the Fortran COMMON carry; verified intentional per surrounding comment. No divergence, informational."
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "PANGEN Newton loop hard-coded to 20 iterations and rtf=0.667 TE clustering"
+            rationale: "Magic constants carried from Fortran. Modern panelers allow user-tunable TE density and relax-iter cap; suitable for the standard branch."
+            risk: medium
+      - name: AddRoundedBaseWithWideScaledCurvatureTerms<T>
+        signature: "private static T AddRoundedBaseWithWideScaledCurvatureTerms<T>(T leftBase, T rightBase, T scale, T left1, T right1, T left2, T right2) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [663, 698]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - line: 682
+            form: "float locals lb, rb, sc, l1, r1, l2, r2, p1, p2, inner, scaled, baseSum"
+            context: "Gated by typeof(T)==typeof(float); parity-only branch."
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: FindLeadingEdge<T>
+        signature: "private static T FindLeadingEdge<T>(T[] x, T[] xp, T[] y, T[] yp, T[] s, int n) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [708, 773]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - line: 753
+            issue: "division_without_guard"
+            note: "dsle = -res / ress with no ress==0 guard; in practice ress>0 for near-LE geometry but degenerate inputs could divide by 0."
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: EvaluateSecondDerivative<T>
+        signature: "private static T EvaluateSecondDerivative<T>(T s, T[] values, T[] derivatives, T[] parameters, int count) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [782, 808]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeCurvature<T>
+        signature: "private static T ComputeCurvature<T>(T ss, T[] x, T[] xp, T[] y, T[] yp, T[] s, int n) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [818, 913]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - line: 875
+            issue: "minimum_clamp"
+            note: "sd clamped to 0.001*ds before cubing; matches Fortran guard."
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SolveTridiagonalSegment<T>
+        signature: "private static void SolveTridiagonalSegment<T>(T[] lower, T[] diagonal, T[] upper, T[] rhs, int offset, int count) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [922, 943]
+        allocations:
+          - line: 930
+            kind: "new T[count] x4 (segLower, segDiag, segUpper, segRhs)"
+            hot_path: false
+            note: "Called at most twice per Distribute invocation (sharp-LE case only). Could use ArrayPool<T> to eliminate transient allocation, but this is per-analysis, not per-station. P1 observation is of 'P3' on the P1 allocation priority from the plan focus directive; Distribute itself is invoked once per polar sweep so the three internal Solve calls do NOT constitute per-Newton-iteration allocations."
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: "TracePangen* / TraceCurvatureEvaluation / TraceBufferSplineNode (12 helpers)"
+        signature: "various private static trace helpers"
+        line_range: [948, 1303]
+        allocations:
+          - line: 955
+            kind: "new { ... } anonymous objects per call"
+            hot_path: false
+            note: "All guarded by SolverTrace.IsActive early-return; trace is disabled outside debugging. Arguments are not pre-constructed (only boxed when IsActive is true)."
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Max<T>
+        signature: "private static T Max<T>(T a, T b) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [1308, 1310]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: minor
+      top_findings:
+        - "P1 focus directive: the three TridiagonalSolver.Solve calls inside DistributeCore operate IN-PLACE on ww1/ww2/ww3/ww4 (and on the w* segment arrays in SolveTridiagonalSegment). TridiagonalSolver.Solve itself does NOT allocate scratch; it destroys input arrays in place. Per-solve scratch is reused correctly. The only per-Solve allocation is SolveTridiagonalSegment's 4 segment copies, called <=2 times per Distribute invocation in the sharp-LE branch."
+        - "Distribute is called once per polar sweep (PolarSweepRunner wires it before the alpha loop). Internal T[] allocations are per-analysis, not per-station — they do NOT violate P1's hot-path criterion. No SolverBuffers reuse needed."
+        - "P5 XFOIL_DUMP_PANELS StreamWriter branch (line 60-69) is an env-var-gated diagnostic. Low severity."
+        - "PANGEN Newton magic constants (20 iterations, rtf=0.667, cvavg=10 override, 6*curvatureWeight) lifted verbatim from Fortran; standard-branch modernization candidate."
+        - "DistributeCore<T> is the parity reference for paneling; float specialization is reached only via useLegacyPrecision=true argument. Gating verified."
+      estimated_fix_effort: "0.5 days (P5 dump guard + ArrayPool adoption in SolveTridiagonalSegment)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/PanelMeshGenerator.cs
+    lines: 273
+    branch_relevance: standard
+    methods:
+      - name: Generate (overload 1)
+        signature: "public PanelMesh Generate(AirfoilGeometry geometry, int panelCount)"
+        line_range: [21, 24]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Generate (overload 2)
+        signature: "public PanelMesh Generate(AirfoilGeometry geometry, int panelCount, PanelingOptions panelingOptions)"
+        line_range: [29, 105]
+        allocations:
+          - line: 49
+            kind: "normalized.Points.ToArray() + two Select(...).ToArray() for spline ctor"
+            hot_path: false
+            note: "Per-analysis only (called by Hess-Smith default-mesh path, not per-alpha)."
+          - line: 51
+            kind: "new CubicSpline x2"
+            hot_path: false
+          - line: 64
+            kind: "new AirfoilPoint[panelCount+1]"
+            hot_path: false
+          - line: 73
+            kind: "new Panel[panelCount]"
+            hot_path: false
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 29
+            severity: "major"
+            issue: "NOT a port of PANGEN. Uses Gaussian-weighted density distribution on top of curvature samples — a managed invention (per the file-header audit comment). Running the Hess-Smith default-mesh path through this yields a mesh that does NOT match Fortran PANGEN, which is likely part of the standard-branch 1.8M% CD error when the Hess-Smith path is exercised."
+        numerical_stability:
+          - line: 82
+            issue: "divide_by_zero_guard"
+            note: "Explicit length<=1e-10 throw; acceptable."
+          - line: 194
+            issue: "divide_by_small"
+            note: "denominator<=1e-16 guard in EstimateCurvature is OK."
+        fortran_divergence:
+          - line: 57
+            fortran_ref: "f_xfoil/src/xfoil.f PANGEN"
+            note: "Gaussian LE/TE weighting replaces Fortran curvature-diffusion smoother + Newton redistribution. Fundamentally different algorithm."
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Replace with a thin wrapper around CosineClusteringPanelDistributor (the real PANGEN port) so standard branch uses the parity distributor with double throughout."
+            rationale: "Two paneling algorithms produce two different meshes; downstream solver cannot match Fortran on the non-parity path as long as this approximate distribution exists."
+            risk: medium
+      - name: BuildWeightedDistribution
+        signature: "private static double[] BuildWeightedDistribution(CubicSpline xSpline, CubicSpline ySpline, double totalLength, int panelCount, PanelingOptions panelingOptions)"
+        line_range: [110, 182]
+        allocations:
+          - line: 118
+            kind: "new double[sampleCount] x3 (sampleParameters, samplePoints as AirfoilPoint[], curvature)"
+            hot_path: false
+          - line: 147
+            kind: "new double[sampleCount] (density)"
+            hot_path: false
+          - line: 162
+            kind: "new double[sampleCount] (cumulative)"
+            hot_path: false
+          - line: 171
+            kind: "new double[panelCount+1] (result)"
+            hot_path: false
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 152
+            severity: "minor"
+            issue: "Hard-coded sigma values (0.06 LE, 0.035 TE) and exponent 2 Gaussian shape; not derived from chord/Re scale."
+        numerical_stability:
+          - line: 151
+            issue: "relative_tol_magic"
+            note: "1e-12 threshold on maxCurvature; OK since curvature is nondimensionalized by sbref."
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Parameterize sigma and weights via PanelingOptions, or delete in favor of real PANGEN."
+            rationale: "Current design choice is opaque and untunable."
+            risk: low
+      - name: EstimateCurvature
+        signature: "private static double EstimateCurvature(AirfoilPoint previous, AirfoilPoint current, AirfoilPoint next, double spacing)"
+        line_range: [187, 200]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 187
+            severity: "minor"
+            issue: "Centered finite-difference on raw polyline is a poor estimator of spline curvature; produces noisy bunching signal near LE where panels are tightest."
+        numerical_stability: []
+        fortran_divergence:
+          - line: 187
+            fortran_ref: "f_xfoil/src/spline.f CURV"
+            note: "Fortran uses spline-based CURV; this is a centered-diff approximation only."
+        modernization_candidates:
+          - kind: [updated_correlation]
+            summary: "Replace with spline-derivative-based curvature via CubicSpline second derivatives."
+            rationale: "Spline CURV is already implemented in CosineClusteringPanelDistributor.ComputeCurvature."
+            risk: low
+      - name: Gaussian
+        signature: "private static double Gaussian(double value, double mean, double sigma)"
+        line_range: [205, 209]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: InterpolateParameter
+        signature: "private static double InterpolateParameter(IReadOnlyList<double> parameters, IReadOnlyList<double> cumulative, double target)"
+        line_range: [214, 242]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - line: 235
+            issue: "span_tol_1e-16"
+            note: "Degenerate-span fallback returns parameters[lower]; acceptable."
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: BuildArcLengthParameters
+        signature: "private static double[] BuildArcLengthParameters(IReadOnlyList<AirfoilPoint> points)"
+        line_range: [247, 258]
+        allocations:
+          - line: 249
+            kind: "new double[points.Count]"
+            hot_path: false
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - line: 254
+            fortran_ref: "f_xfoil/src/spline.f SCALC"
+            note: "Polyline arc length; matches SCALC polyline accumulation modulo that SCALC runs before spline fit, same as here."
+        modernization_candidates: []
+      - name: ComputeSignedArea
+        signature: "private static double ComputeSignedArea(IReadOnlyList<AirfoilPoint> polygon)"
+        line_range: [263, 272]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: major
+      top_findings:
+        - "S4-major: Generate() is a managed-only approximation of PANGEN, not a port. As long as Hess-Smith/default paths route here, the standard branch meshes will never agree with Fortran. Strong candidate for deletion and replacement by a call into CosineClusteringPanelDistributor."
+        - "EstimateCurvature uses polyline finite differences instead of spline curvature — noisier and biased."
+        - "Hard-coded Gaussian sigma (0.06, 0.035) and LE/TE weights hide behind PanelingOptions."
+        - "All allocations are per-analysis (no per-station call). No P1 hot-path violations."
+        - "No float/MathF usage anywhere. Clean on S1-S3."
+      estimated_fix_effort: "1-2 days (rewire to CosineClusteringPanelDistributor) OR 0.5 days (parameterize existing weights)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/PanelGeometryBuilder.cs
+    lines: 368
+    branch_relevance: both
+    methods:
+      - name: ComputeNormals (convenience)
+        signature: "public static void ComputeNormals(LinearVortexPanelState panel)"
+        line_range: [43, 44]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeNormals (precision-selecting)
+        signature: "public static void ComputeNormals(LinearVortexPanelState panel, bool useLegacyPrecision)"
+        line_range: [49, 58]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - line: 53
+            form: "generic_float_specialization_entry"
+            context: "ComputeNormalsCore<float>(panel) reached only when useLegacyPrecision==true; caller gate verified."
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeNormalsCore<T>
+        signature: "private static void ComputeNormalsCore<T>(LinearVortexPanelState panel) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [63, 129]
+        allocations:
+          - line: 72
+            kind: "new T[n] x3 (x, y, s)"
+            hot_path: false
+            note: "Per-analysis only; called once per panel resize (normally once per Distribute call by LinearVortexInviscidSolver)."
+          - line: 82
+            kind: "new T[n] x2 (xDerivative, yDerivative)"
+            hot_path: false
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputePanelAngles (convenience)
+        signature: "public static void ComputePanelAngles(LinearVortexPanelState panel, InviscidSolverState state)"
+        line_range: [142, 143]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputePanelAngles (precision-selecting)
+        signature: "public static void ComputePanelAngles(LinearVortexPanelState panel, InviscidSolverState state, bool useLegacyPrecision)"
+        line_range: [148, 164]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - line: 159
+            form: "dispatch_to_float_specialization"
+            context: "ComputePanelAnglesLegacyFloat invoked ONLY when useLegacyPrecision==true. Verified: the only call site is LinearVortexInviscidSolver.cs:128 which threads state.UseLegacyPanelingPrecision. No leak into standard branch."
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputePanelAnglesLegacyFloat
+        signature: "private static void ComputePanelAnglesLegacyFloat(LinearVortexPanelState panel, InviscidSolverState state)"
+        line_range: [166, 196]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - line: 172
+            form: "float cast"
+            context: "float sx = (float)panel.X[i+1] - (float)panel.X[i];"
+          - line: 173
+            form: "float cast"
+            context: "float sy = (float)panel.Y[i+1] - (float)panel.Y[i];"
+          - line: 175
+            form: "float literal"
+            context: "sx == 0f && sy == 0f"
+          - line: 177
+            form: "float cast"
+            context: "LegacyLibm.Atan2(-(float)panel.NormalY[i], -(float)panel.NormalX[i])"
+          - line: 181
+            form: "float"
+            context: "LegacyLibm.Atan2(sx, -sy) returns float, stored to double PanelAngle"
+          - line: 188
+            form: "MathF.PI"
+            context: "panel.PanelAngle[last] = MathF.PI"
+          - line: 192
+            form: "float cast"
+            context: "float sx = (float)panel.X[0] - (float)panel.X[last]"
+          - line: 194
+            form: "MathF.PI"
+            context: "LegacyLibm.Atan2(-sx, sy) + MathF.PI"
+        mathf_calls:
+          - line: 188
+            symbol: "MathF.PI"
+          - line: 194
+            symbol: "MathF.PI"
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputePanelAnglesCore<T>
+        signature: "private static void ComputePanelAnglesCore<T>(LinearVortexPanelState panel, InviscidSolverState state) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [201, 236]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - line: 207
+            fortran_ref: "f_xfoil/src/xpanel.f APCALC lines 26-45"
+            note: "Direct 1:1 port of APCALC; TE-panel branching, degenerate-panel normal fallback, sharp-TE PI assignment all present."
+        modernization_candidates: []
+      - name: ComputeTrailingEdgeGeometry (convenience)
+        signature: "public static void ComputeTrailingEdgeGeometry(LinearVortexPanelState panel, InviscidSolverState state)"
+        line_range: [248, 249]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeTrailingEdgeGeometry (precision-selecting)
+        signature: "public static void ComputeTrailingEdgeGeometry(LinearVortexPanelState panel, InviscidSolverState state, bool useLegacyPrecision)"
+        line_range: [254, 266]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - line: 261
+            form: "generic_float_specialization_entry"
+            context: "ComputeTrailingEdgeGeometryCore<float>; only reached when useLegacyPrecision==true. Caller gate verified (LinearVortexInviscidSolver.cs:126 threads state.UseLegacyPanelingPrecision)."
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeTrailingEdgeGeometryCore<T>
+        signature: "private static void ComputeTrailingEdgeGeometryCore<T>(LinearVortexPanelState panel, InviscidSolverState state) where T : struct, IFloatingPointIeee754<T>"
+        line_range: [271, 301]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 271
+            severity: "minor"
+            issue: "Computes only DXTE/DYTE/DXS/DYS/ANTE/ASTE/DSTE/SHARP — omits Fortran TECALC's SIGTE/GAMTE (TE source/vortex strengths). VERIFIED INTENTIONAL: SIGTE/GAMTE are computed downstream in LinearVortexInviscidSolver.UpdateTrailingEdgeStrengths (lines 1203-1243). Noted for traceability; not a parity bug."
+        numerical_stability: []
+        fortran_divergence:
+          - line: 271
+            fortran_ref: "f_xfoil/src/xfoil.f TECALC lines 2428-2473"
+            note: "Faithful geometry port; TE strength update (SIGTE/GAMTE) split out into UpdateTrailingEdgeStrengths in LinearVortexInviscidSolver."
+        modernization_candidates: []
+      - name: ComputeCompressibilityParameters
+        signature: "public static CompressibilityParameters ComputeCompressibilityParameters(double machNumber)"
+        line_range: [313, 318]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 316
+            severity: "major"
+            issue: "Formula mismatch vs Fortran COMSET. Fortran: TKLAM = MINF^2 / (1+BETA)^2. C#: bfac = M^2 / (2*(1+BETA)). These are DIFFERENT algebraic forms of the Karman-Tsien factor. C# form is the standard Laitone/Karman-Tsien linearization (used consistently via LinearVortexInviscidSolver lines 887-889 in Cp = cpInc / (beta + bfac*cpInc)), while Fortran stores TKLAM for a different Cp formula. Need to verify the downstream Cp formulas are also reformulated consistently, otherwise compressible runs (M>0) will disagree with Fortran."
+        numerical_stability:
+          - line: 315
+            issue: "sqrt_with_negative_guard_absent"
+            note: "Math.Sqrt(1 - M^2) will return NaN for M>=1; no upstream guard enforced here. Relies on caller validation."
+        fortran_divergence:
+          - line: 316
+            fortran_ref: "f_xfoil/src/xfoil.f COMSET lines 1030-1035"
+            note: "Fortran returns TKLAM (M^2/(1+beta)^2) via COMMON; C# returns a different KT-factor. Also C# does NOT compute BETA_MSQ/TKL_MSQ/CPSTAR/QSTAR. Sonic-condition outputs are unavailable on the managed path — standard-branch modernization gap."
+        modernization_candidates:
+          - kind: [updated_correlation]
+            summary: "Restore full COMSET output set (BETA_MSQ, TKL_MSQ, CPSTAR, QSTAR) or document that compressible correction chain is intentionally simplified."
+            rationale: "Downstream solvers may silently miss sonic-limit checks."
+            risk: medium
+      - name: ContinuousAtan2 (double)
+        signature: "public static double ContinuousAtan2(double y, double x, double referenceAngle)"
+        line_range: [333, 345]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - line: 333
+            fortran_ref: "f_xfoil/src/xutils.f ATANC lines 78-112"
+            note: "Uses Math.Truncate(...) instead of Fortran INT(...) which truncates toward zero for positive values and toward -inf for negative; for the composed argument sign(pi,dtheta)+dtheta both variants produce the same integer in-range. Semantically equivalent."
+        modernization_candidates: []
+      - name: ContinuousAtan2 (legacy precision overload)
+        signature: "public static double ContinuousAtan2(double y, double x, double referenceAngle, bool useLegacyPrecision)"
+        line_range: [351, 367]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - line: 358
+            form: "float literal"
+            context: "const float twoPi = 2.0f * MathF.PI"
+          - line: 360
+            form: "LegacyLibm.Atan2((float)y, (float)x)"
+            context: "float atan2f parity"
+          - line: 361
+            form: "float cast + arithmetic"
+            context: "float deltaTheta = newAngle - (float)referenceAngle"
+          - line: 364
+            form: "float arithmetic"
+            context: "float correction = deltaTheta - twoPi * MathF.Truncate(...)"
+          - line: 366
+            form: "float cast"
+            context: "(float)referenceAngle + correction"
+        mathf_calls:
+          - line: 358
+            symbol: "MathF.PI"
+          - line: 364
+            symbol: "MathF.Truncate / MathF.CopySign / MathF.PI"
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: minor
+      top_findings:
+        - "S1-priority finding (per directive): ComputePanelAnglesLegacyFloat is correctly gated. Single call site is LinearVortexInviscidSolver.cs:128 which threads state.UseLegacyPanelingPrecision. The standard branch goes through ComputePanelAnglesCore<double> exclusively. No leak."
+        - "ContinuousAtan2(..., bool) also guards its float path behind useLegacyPrecision; the standard-precision overload ContinuousAtan2(y,x,ref) delegates to pure double."
+        - "ComputeCompressibilityParameters uses a different algebraic form of the KT factor than Fortran COMSET (M^2/(2(1+beta)) vs TKLAM=M^2/(1+beta)^2). Consumers pair bfac with Cp = cpInc/(beta + bfac*cpInc) which is algebraically consistent with the C# form, but the mapping comment cites COMSET directly — potential source of confusion. Also Fortran COMSET's sonic-condition outputs (CPSTAR/QSTAR) and Mach sensitivities (BETA_MSQ/TKL_MSQ) are NOT computed here — standard-branch gap."
+        - "ComputeNormalsCore<T> allocates 5 T[] per call — per-analysis only, not hot-path."
+        - "All public API preserves a useLegacyPrecision=false default, so accidental parity activation is not possible without opt-in from the state flag chain."
+      estimated_fix_effort: "0.5 days (document KT-factor alternate form; optionally add CPSTAR/QSTAR outputs)"
+
+ledger_summary:
+  total_files: 3
+  total_methods_audited: 27
+  parity_blockers: 0
+  standard_blockers: 1
+  notes: |
+    Panel-generation cluster is in relatively good shape for the parity branch.
+    S1 priority check PASSED: ComputePanelAnglesLegacyFloat is correctly
+    gated behind useLegacyPrecision and its single call site threads the
+    flag from state.UseLegacyPanelingPrecision. Same pattern verified for
+    ComputeNormalsCore<float>, ComputeTrailingEdgeGeometryCore<float>, and
+    ContinuousAtan2 float overload.
+
+    P1 priority check: the three TridiagonalSolver.Solve calls inside
+    DistributeCore operate on already-allocated ww1/ww2/ww3/ww4 (reused
+    across 20 Newton iterations) and SolveTridiagonalSegment internally
+    allocates 4 segment scratch arrays. Distribute is invoked once per
+    polar sweep (PolarSweepRunner, LinearVortexInviscidSolver) — not per
+    alpha, not per Newton iteration — so internal allocations are
+    per-analysis rather than hot-path. ArrayPool adoption in
+    SolveTridiagonalSegment would eliminate the only remaining transient
+    allocation but is not a P1 violation under the plan's definition.
+
+    Standard-branch blocker: PanelMeshGenerator.Generate is an invented
+    Gaussian-weighted mesh, NOT a PANGEN port (header comment makes this
+    explicit). Any downstream code that uses PanelMeshGenerator in the
+    non-parity branch inherits a different mesh than Fortran and cannot
+    achieve parity. Likely contributes to the 1.8M% standard-branch CD
+    divergence for runs that enter via AirfoilAnalysisService with the
+    Hess-Smith default mesh path. Recommendation: replace with a thin
+    wrapper over CosineClusteringPanelDistributor in a future phase.
+
+    Secondary standard-branch finding: ComputeCompressibilityParameters
+    uses M^2/(2(1+beta)) (Karman-Tsien/Laitone linearization form) while
+    Fortran COMSET stores TKLAM = M^2/(1+beta)^2. Downstream Cp formula in
+    LinearVortexInviscidSolver is algebraically consistent with the C#
+    form, but the mapping comment cites COMSET which would produce a
+    different numeric value for the same variable name. Needs a documented
+    reconciliation. Also COMSET's sonic-condition outputs (CPSTAR, QSTAR)
+    and Mach sensitivities (BETA_MSQ, TKL_MSQ) are simply absent on the
+    managed path.
+
+    No P3/P4/P5 violations in production hot paths. One P5 (StreamWriter)
+    exists in Distribute but is env-var-gated (XFOIL_DUMP_PANELS).

@@ -1,0 +1,557 @@
+agent: D2
+ledger_path: audit/D2-diagnostics.yaml
+audit_started: 2026-04-17T12:43:00Z
+audit_completed: 2026-04-17T12:49:20Z
+assignment: src/XFoil.Solver/Diagnostics/ (2 files)
+passes_executed: [1, 2, 3, 4]
+
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Diagnostics/DebugFlags.cs
+    lines: 7
+    branch_relevance: both
+    role: "Managed-only runtime flag gate (XFOIL_DISABLE_FMA)."
+    methods: []
+    fields:
+      - name: DisableFma
+        kind: "static readonly bool"
+        line: 5
+        source: "Environment.GetEnvironmentVariable('XFOIL_DISABLE_FMA') == '1'"
+        evaluated_at_type_initialization: true
+        notes: "Single env-var read at static ctor; no per-call allocation, no I/O, no lock. Confirmed only DisableFma remains — no other flags present."
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "File is trivial and correct; single static readonly bool evaluated once at type init."
+        - "No P/S/X violations. No MathF, no float, no lock, no I/O, no TODO."
+      estimated_fix_effort: 0h
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Diagnostics/JsonlTraceWriter.cs
+    lines: 1559
+    branch_relevance: both
+    role: "Managed-only JSONL diagnostics + ambient trace routing. Not a solver fidelity path."
+    legacy_mapping: "No direct Fortran analogue. Classic XFoil uses plain-text WRITE; tools/fortran-debug/json_trace.f provides the parity instrumentation this bridges."
+
+    # =====================================================================
+    # PASS 1 — METHOD INVENTORY (enumerated across 13 types in the file)
+    # =====================================================================
+    types:
+      - name: TracePersistenceLimitExceededException
+        kind: "public sealed class : InvalidOperationException"
+        line_range: [22, 47]
+        methods:
+          - name: ".ctor"
+            signature: "(long limitBytes, long projectedBytes, string kind, string scope)"
+            line_range: [24, 38]
+          # properties: LimitBytes, ProjectedBytes, Kind, Scope (auto-properties)
+
+      - name: JsonlTraceWriter
+        kind: "public sealed class : TextWriter"
+        line_range: [49, 1296]
+        methods:
+          - name: ".ctor(path, runtime, session, serializedRecordObserver)"
+            line_range: [79, 82]
+          - name: ".ctor(writer, runtime, ownsWriter, session, serializedRecordObserver)"
+            line_range: [87, 107]
+          - name: "Write(char)"
+            line_range: [116, 119]
+            override: true
+          - name: "Write(string?)"
+            line_range: [124, 130]
+            override: true
+          - name: "WriteLine(string?)"
+            line_range: [135, 141]
+            override: true
+          - name: "Scope(string scope, object? inputs)"
+            line_range: [146, 150]
+          - name: "WriteEvent(kind, scope, data, name, values, tags)"
+            line_range: [155, 177]
+          - name: "WriteRecord(in TraceRecord, bool force)"
+            line_range: [179, 233]
+            private: true
+          - name: "EnqueuePending(in TraceRecord)"
+            line_range: [235, 243]
+            private: true
+          - name: "FlushPendingRecords()"
+            line_range: [245, 251]
+            private: true
+          - name: "TryWritePostTriggerTail(in TraceRecord)"
+            line_range: [253, 264]
+            private: true
+          - name: "WriteSerialized(in TraceRecord)"
+            line_range: [266, 273]
+            private: true
+          - name: "ObserveSerialized(in TraceRecord)"
+            line_range: [275, 283]
+            private: true
+          - name: "SerializeRecord(in TraceRecord) -> string"
+            line_range: [285, 289]
+            private_static: true
+          - name: "WriteArray(scope, name, values, data, tags)"
+            line_range: [294, 302]
+          - name: "Dispose(bool disposing)"
+            line_range: [307, 337]
+            override: true
+          - name: "CreateWriter(string path) -> StreamWriter"
+            line_range: [342, 347]
+            private_static: true
+          - name: "EnforcePersistedByteLimit(string json, in TraceRecord)"
+            line_range: [349, 367]
+            private: true
+          - name: "GetPersistedByteCount(string json) -> int"
+            line_range: [369, 374]
+            private: true
+
+      - name: JsonlTraceWriter.TraceRecord
+        kind: "private readonly record struct"
+        line_range: [376, 385]
+
+      - name: JsonlTraceWriter.TraceOutputRecord
+        kind: "private readonly record struct"
+        line_range: [387, 399]
+
+      - name: JsonlTraceWriter.TraceBitMetadata
+        kind: "private static class"
+        line_range: [401, 824]
+        methods:
+          - name: "Augment(in TraceRecord) -> TraceOutputRecord"
+            line_range: [403, 422]
+          - name: "Normalize(object?) -> object?"
+            line_range: [424, 434]
+          - name: "BuildObjectBits(rawValue, normalizedValue)"
+            line_range: [436, 448]
+          - name: "BuildValuesBits(IReadOnlyList<double>?)"
+            line_range: [450, 464]
+          - name: "AppendTypedBits(rawValue, element, prefix, destination)"
+            line_range: [466, 528]
+          - name: "AppendElementBits(element, prefix, destination)"
+            line_range: [530, 569]
+          - name: "DescribeNumberBits(JsonElement)"
+            line_range: [571, 587]
+          - name: "TryDescribeRawNumberBits(rawValue, out bits)"
+            line_range: [589, 652]
+          - name: "DescribeFloatingBits(double)"
+            line_range: [654, 669]
+          - name: "DescribeSingleBits(float)"
+            line_range: [671, 686]
+          - name: "DescribeSignedIntegerBits(long)"
+            line_range: [688, 701]
+          - name: "DescribeUnsignedIntegerBits(ulong)"
+            line_range: [703, 716]
+          - name: "IsUnsignedEnum(Type)"
+            line_range: [718, 725]
+          - name: "ShouldTreatAsFloatingPoint(string)"
+            line_range: [727, 737]
+          - name: "TryEnumerateNamedMembers(rawValue, element, out members)"
+            line_range: [739, 812]
+          - name: "GetSerializedPropertyName(PropertyInfo)"
+            line_range: [814, 823]
+
+      - name: JsonlTraceWriter.TraceFilterSettings
+        kind: "private sealed class"
+        line_range: [826, 922]
+        methods:
+          - name: ".ctor(captureSelector, triggerSelector, triggerOccurrence, ringBufferSize, postTriggerLimit)"
+            line_range: [830, 839]
+          - name: "MatchesCapture(in TraceRecord) -> bool"
+            line_range: [853, 854]
+          - name: "IsTrigger(in TraceRecord) -> bool"
+            line_range: [856, 857]
+          - name: "IsTriggerOccurrence(int) -> bool"
+            line_range: [859, 860]
+          - name: "FromEnvironment() -> TraceFilterSettings"
+            line_range: [862, 897]
+          - name: "ReadMaxTraceBytesFromEnvironment() -> long?"
+            line_range: [899, 908]
+          - name: "ParseInt(string) -> int?"
+            line_range: [910, 921]
+
+      - name: JsonlTraceWriter.TraceSelector
+        kind: "private sealed class"
+        line_range: [924, 1224]
+        methods:
+          - name: ".ctor(...)"
+            line_range: [926, 948]
+          - name: "FromEnvironment(10 env-var names) -> TraceSelector?"
+            line_range: [970, 1008]
+          - name: "Matches(in TraceRecord) -> bool"
+            line_range: [1010, 1074]
+          - name: "ParseSet(string) -> HashSet<string>?"
+            line_range: [1076, 1090]
+          - name: "ParseInt(string) -> int?"
+            line_range: [1092, 1103]
+          - name: "ParseString(string) -> string?"
+            line_range: [1105, 1109]
+          - name: "ParseKeyValuePairs(string) -> IReadOnlyDictionary<string,string>?"
+            line_range: [1111, 1140]
+          - name: "TryGetInt(source, name, out value)"
+            line_range: [1142, 1160]
+          - name: "TryGetString(source, name, out value)"
+            line_range: [1162, 1172]
+          - name: "TryFormatValue(raw, out value)"
+            line_range: [1174, 1189]
+          - name: "TryGetValue(source, name, out value)"
+            line_range: [1191, 1223]
+
+      - name: JsonlTraceWriter.TraceScope
+        kind: "private sealed class : IDisposable"
+        line_range: [1226, 1253]
+        methods:
+          - name: ".ctor(writer, scope)"
+            line_range: [1235, 1239]
+          - name: "Dispose()"
+            line_range: [1244, 1252]
+
+      - name: JsonlTraceWriter.PreciseSingleJsonConverter
+        kind: "private sealed class : JsonConverter<float>"
+        line_range: [1255, 1295]
+        methods:
+          - name: "Read(ref Utf8JsonReader, Type, JsonSerializerOptions) -> float"
+            line_range: [1260, 1263]
+          - name: "Write(Utf8JsonWriter, float, JsonSerializerOptions)"
+            line_range: [1268, 1294]
+
+      - name: MultiplexTextWriter
+        kind: "public sealed class : TextWriter"
+        line_range: [1301, 1398]
+        methods:
+          - name: ".ctor(params TextWriter[] writers)"
+            line_range: [1308, 1311]
+          - name: "Write(char)"
+            line_range: [1318, 1324]
+            override: true
+          - name: "Write(string?)"
+            line_range: [1329, 1335]
+            override: true
+          - name: "WriteLine(string?)"
+            line_range: [1340, 1346]
+            override: true
+          - name: "Flush()"
+            line_range: [1351, 1357]
+            override: true
+          - name: "Dispose(bool disposing)"
+            line_range: [1362, 1373]
+            override: true
+          - name: "TryGetWriter<TWriter>(out TWriter?)"
+            line_range: [1378, 1397]
+
+      - name: SolverTrace
+        kind: "public static class"
+        line_range: [1403, 1559]
+        fields_and_properties:
+          - name: CurrentWriter
+            kind: "private static readonly AsyncLocal<JsonlTraceWriter?>"
+            line: 1405
+          - name: IsActive
+            kind: "public static volatile bool"
+            line: 1412
+            role: "fast-path guard; false by default -> all SolverTrace.* calls early-return"
+          - name: Current
+            kind: "public static JsonlTraceWriter?"
+            line: 1414
+        methods:
+          - name: "Begin(TextWriter?)"
+            line_range: [1419, 1432]
+            sets_is_active: true
+          - name: "Begin(JsonlTraceWriter?)"
+            line_range: [1437, 1448]
+            sets_is_active: true
+            note: "IsActive set true inside; never reset to false (process-global sticky bit)."
+          - name: "Suspend()"
+            line_range: [1453, 1458]
+          - name: "Scope(string scope, object? inputs) -> IDisposable"
+            line_range: [1463, 1467]
+            is_active_guard: 1465
+          - name: "Event(kind, scope, data, name, tags)"
+            line_range: [1472, 1481]
+            is_active_guard: 1479
+          - name: "Array(scope, name, values, data, tags)"
+            line_range: [1486, 1495]
+            is_active_guard: 1493
+          - name: "Point(scope, name, value, data, tags)"
+            line_range: [1500, 1509]
+            is_active_guard: 1507
+          - name: "ScopeName(Type owner, [CallerMemberName] string memberName)"
+            line_range: [1514, 1519]
+            note: "Called unconditionally by many sites to compute the scope string — returns $\"{owner.Name}.{memberName}\" which allocates when memberName is non-empty."
+
+      - name: SolverTrace.RestoreScope
+        kind: "private sealed class : IDisposable"
+        line_range: [1521, 1546]
+
+      - name: SolverTrace.EmptyScope
+        kind: "private sealed class : IDisposable"
+        line_range: [1548, 1558]
+
+    # =====================================================================
+    # PASS 2 — ALLOCATIONS / I/O / LOCKS (P1–P6)
+    # =====================================================================
+    # Global summary: file is diagnostics infrastructure. Its own allocations, I/O,
+    # and lock are ALL gated by a module-wide fast-path flag (SolverTrace.IsActive)
+    # at every public facade entry point. Once IsActive is false (production path),
+    # the entire file costs one volatile bool read per call site.
+    io_or_locks:
+      - line: 181
+        kind: "lock (_sync)"
+        location: "JsonlTraceWriter.WriteRecord"
+        severity: low
+        behind_is_active_fast_path: true
+        rationale: >-
+          WriteRecord is only invoked via WriteEvent/WriteArray. All solver call sites
+          route through SolverTrace.Event/Array/Point/Scope, each of which short-circuits
+          with `if (!IsActive) return;` before any argument serialization or lock acquire.
+          The lock only fires when a test harness (tools/fortran-debug/ManagedTraceRunner.cs,
+          InfluenceMatrixParityDiagnosticsTests) has called SolverTrace.Begin to install
+          a writer. In production solver runs IsActive stays false and the lock is never
+          contended or even observed.
+      - line: 166
+        kind: "Interlocked.Increment(ref _sequence)"
+        location: "JsonlTraceWriter.WriteEvent"
+        severity: low
+        behind_is_active_fast_path: true
+      - line: 1246
+        kind: "Interlocked.Exchange(ref _disposed, 1)"
+        location: "JsonlTraceWriter.TraceScope.Dispose"
+        severity: low
+        behind_is_active_fast_path: true
+        note: "Only reachable if Scope() returned a live TraceScope (i.e. IsActive was true)."
+      - line: 1412
+        kind: "volatile bool IsActive"
+        location: "SolverTrace"
+        severity: low
+        rationale: "This IS the fast-path flag — correct by design."
+      - line: 1405
+        kind: "AsyncLocal<JsonlTraceWriter?> CurrentWriter"
+        location: "SolverTrace"
+        severity: low
+        behind_is_active_fast_path: true
+        note: "AsyncLocal.Value read only through SolverTrace.Current, itself gated by IsActive."
+      - line: 1539
+        kind: "Interlocked.Exchange(ref _disposed, 1)"
+        location: "SolverTrace.RestoreScope.Dispose"
+        severity: low
+        behind_is_active_fast_path: true
+      - line: 271
+        kind: "_writer.WriteLine(json) + _writer.Flush() (file I/O)"
+        location: "JsonlTraceWriter.WriteSerialized"
+        severity: medium
+        behind_is_active_fast_path: true
+        note: "File I/O + flush per record — only executed once a writer has been installed. Not on the solver hot path."
+      - line: 344
+        kind: "StreamWriter with AutoFlush=true (file I/O)"
+        location: "JsonlTraceWriter.CreateWriter"
+        severity: medium
+        behind_is_active_fast_path: true
+        note: "Construction-time I/O; not on hot path."
+    allocations_in_writer_code:
+      - line: 99
+        kind: "new Queue<TraceRecord>(...)"
+        location: "JsonlTraceWriter ctor"
+        hot_path: false
+      - line: 165
+        kind: "new TraceRecord(...) (struct record — copy, not heap alloc)"
+        location: "WriteEvent"
+        hot_path: false
+      - line: 288
+        kind: "JsonSerializer.Serialize(outputRecord, JsonOptions) (string + internal buffers)"
+        location: "SerializeRecord"
+        hot_path: false
+      - line: 373
+        kind: "Encoding.UTF8.GetByteCount(json) + _writer.NewLine"
+        location: "GetPersistedByteCount"
+        hot_path: false
+      - line: 301
+        kind: "values.ToArray() in WriteArray"
+        location: "JsonlTraceWriter.WriteArray"
+        hot_path: false
+        note: "Per-trace-record array materialization; trace-only."
+      - line: 1518
+        kind: '$"{owner.Name}.{memberName}" string interpolation'
+        location: "SolverTrace.ScopeName"
+        hot_path: conditional
+        note: >-
+          ScopeName is called UNGUARDED at many solver call sites (e.g. DragCalculator.cs:62,
+          StreamfunctionInfluenceCalculator.cs:77, InfluenceMatrixBuilder.cs:84,
+          LinearVortexInviscidSolver.cs:46). Because these sites pass the result as an argument
+          to SolverTrace.Scope/Event/Array which then check IsActive, the string allocation
+          occurs BEFORE the fast-path guard kicks in. This is a P3 violation but it is OUTSIDE
+          this file — flag for the owning caller audits (A3/A4/B2/C1).
+
+    # =====================================================================
+    # PASS 3 — FLOAT / MATHF / PRECISION (S1–S3, S6)
+    # =====================================================================
+    float_and_mathf_usage:
+      - line: 594
+        form: "case float single:"
+        context: "TryDescribeRawNumberBits — pattern-matches float values passed into the trace as data."
+        classification: acceptable
+        note: "This file INTENTIONALLY handles float as first-class; the f32 hex tag is the mechanism GDB-hex parity comparisons rely on. DO NOT change."
+      - line: 666
+        form: "(float) cast + BitConverter.SingleToInt32Bits"
+        context: "DescribeFloatingBits — serializes the f32 bit pattern of a double."
+        classification: acceptable
+        note: "Essential for XFOIL_SETBL_HEX bit-for-bit parity comparison against Fortran REAL*4."
+      - line: 671
+        form: "DescribeSingleBits(float value)"
+        context: "Bit-exact serialization of float."
+        classification: acceptable
+      - line: 1260
+        form: "PreciseSingleJsonConverter : JsonConverter<float>"
+        context: "Converter that promotes float to double on write to preserve legacy REAL payload."
+        classification: acceptable
+        note: "Line 1293 `writer.WriteNumberValue((double)value)` is the deliberate precision-preserving trick (comment lines 1288–1292 explain)."
+      - line: 677
+        form: 'value.ToString("G9", ...)'
+        context: "Only for non-finite floats in the trace."
+        classification: acceptable
+    mathf_calls: []
+    s6_precision_parity: not_applicable
+    s1_s2_s3_verdict: "No S1/S2/S3 violations. All float/Single usage here is bit-pattern tooling explicitly required for parity instrumentation, not numerical computation."
+
+    # =====================================================================
+    # PASS 4 — CORRECTNESS / FORTRAN / MODERNIZATION / X-checks
+    # =====================================================================
+    correctness_concerns: []
+    numerical_stability: []
+    fortran_divergence: []
+    modernization_candidates:
+      - kind: new_algorithm
+        summary: "Consider removing the reflection-driven TryEnumerateNamedMembers (lines 794–811)."
+        rationale: >-
+          PropertyInfo reflection per trace record adds significant allocation + JIT overhead
+          when tracing is active. Not a parity or production concern since tracing is off by
+          default, but future tooling (continuous parity CI) would benefit from a source-generated
+          alternative (System.Text.Json source-gen contexts).
+        risk: low
+      - kind: new_algorithm
+        summary: "SolverTrace.ScopeName always allocates an interpolated string at call sites."
+        rationale: >-
+          Callers compute the scope name unconditionally (e.g. `SolverTrace.ScopeName(typeof(X))`)
+          and then pass the result into a guarded API. Consider a cached per-type scope name
+          (ConcurrentDictionary<Type,string>) exposed via a method that is a no-op when !IsActive,
+          or add an IsActive gate inside ScopeName and return string.Empty otherwise.
+          This is actually a caller-side fix — the function itself is fine.
+        risk: low
+    x1_todo_findings: []
+    x2_dead_code: []
+    x3_fortran_cross_reference:
+      - target: "tools/fortran-debug/json_trace.f"
+        relation: "Conceptual peer; this file is the managed half of the parity trace bridge."
+        status: confirmed_via_header_comment
+
+    # =====================================================================
+    # CROSS-REPO CALL-SITE AUDIT (priority-focus deliverable)
+    # =====================================================================
+    solver_hot_path_call_sites:
+      verdict: ZERO
+      note: >-
+        Grep for SolverTrace.(Event|Scope|Array|Point) across the six mandated hot-path files
+        returns zero matches. The solver's critical inner loops are trace-free.
+      files_audited_zero_matches:
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/ViscousSolverEngine.cs
+          count: 0
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/BoundaryLayerSystemAssembler.cs
+          count: 0
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/ViscousNewtonAssembler.cs
+          count: 0
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/ViscousNewtonUpdater.cs
+          count: 0
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/TransitionModel.cs
+          count: 0
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/DenseLinearSystemSolver.cs
+          count: 0
+
+    non_hot_path_call_sites:
+      note: >-
+        All entries below are acceptable per the D2 assignment scope — they live outside the
+        six hot-path files. They are listed here so A3/A4/B2/C1/C2 auditors can cross-check
+        their own P1/P3/P6 findings against this inventory.
+      files:
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/InfluenceMatrixBuilder.cs
+          call_site_lines: [83, 84, 116, 118, 119, 131, 133, 135, 154, 156, 157, 169, 171, 173, 203, 205, 207, 402, 403, 479, 481, 482, 494, 496, 498, 526, 528, 529, 541, 543, 545, 556, 558, 560, 718, 720, 722, 832, 833, 849, 851, 1068, 1070, 1091, 1093, 1114, 1116, 1186, 1188, 1347, 1349, 1370, 1372, 1393, 1395, 1469, 1471, 1570, 1572, 1587, 1589, 1600, 1602, 1630, 1631, 1649, 1651, 2039, 2041, 2056, 2058, 2069, 2071, 2109, 2110, 2152, 2153, 2255, 2260, 2262, 2349, 2350, 2401, 2402, 2454, 2455, 2512, 2514, 2516, 2561, 2563, 2565, 2662, 2664, 2666, 2718, 2720, 2722, 2786, 2787, 2788, 2790, 2792, 2794, 2796, 2798, 2800, 2802, 2804, 2806, 2815, 2817, 2837, 2838, 2839, 2841, 2847, 2849]
+          guarded_with_isactive: mostly_yes
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/LinearVortexInviscidSolver.cs
+          call_site_lines: [45, 46, 101, 103, 105, 119, 120, 200, 202, 204, 215, 218, 220, 240, 245, 257, 259, 281, 283, 310, 317, 319, 339, 346, 348, 374, 375, 443, 452, 454, 460, 462, 490, 495, 500, 502, 524, 529, 534, 536, 558, 563, 566, 568, 602, 603, 671, 673, 675, 751, 752, 770, 772, 773, 856, 857, 985, 987, 989, 1016, 1017, 1039, 1041, 1042, 1112, 1113, 1188, 1190, 1192, 1207, 1208, 1231, 1233, 1235]
+          guarded_with_isactive: mostly_yes
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/StreamfunctionInfluenceCalculator.cs
+          call_site_lines: [77, 78, 384, 385, 1601, 1602, 1658, 1659, 1711, 1712, 1736, 1737, 1763, 1764, 1857, 1858, 1966, 1967, 2015, 2016, 2059, 2060, 2110, 2111, 2155, 2156, 2195, 2196, 2201, 2203, 2288, 2289]
+          guarded_with_isactive: yes
+          note: "Every helper uses the `if (!SolverTrace.IsActive) return;` sentinel at method entry."
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/DragCalculator.cs
+          call_site_lines: [61, 62, 128, 130, 229, 231]
+          guarded_with_isactive: partial
+          note: "Lines 128 and 229 call SolverTrace.Event unguarded — but Event itself short-circuits via IsActive (line 1479). Anonymous-object argument allocation DOES happen at call site before the guard. Flag for B4 auditor."
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/EdgeVelocityCalculator.cs
+          call_site_lines: [106, 107, 144, 146, 229, 230, 249, 250]
+          guarded_with_isactive: partial
+          note: "Scope/Event/Array calls unguarded; internal IsActive check applies. Argument allocation pre-guard. Flag for C1 auditor."
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/BoundaryLayerCorrelations.cs
+          call_site_lines: [215, 217, 219, 221, 452, 454, 456, 458, 679, 681, 683, 685, 832, 834, 836, 838, 889, 891, 893, 895]
+          guarded_with_isactive: yes
+          note: "Note the double-guard pattern `if (IsActive) { if (IsActive) { SolverTrace.Event(...) } }` — defensive but effectively single-guarded."
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs
+          call_site_lines: [86, 951, 952, 974, 975, 999, 1000, 1027, 1028, 1055, 1056, 1073, 1074, 1096, 1097, 1140, 1141, 1176, 1177, 1201, 1202, 1222, 1223, 1265, 1267, 1269]
+          guarded_with_isactive: yes
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/BlockTridiagonalSolver.cs
+          call_site_lines: [42, 43, 104, 105, 139, 141, 341, 343, 379]
+          guarded_with_isactive: no
+          severity: medium
+          note: >-
+            **Warning for C2 auditor:** Scope and Event calls at lines 42, 104, 139, 341, 379 are
+            UNGUARDED and the Event at line 139 is INSIDE the `for (int iv = 0; iv < nsys; iv++)`
+            forward-elimination loop — it allocates a fresh anonymous object `new { iv, ivp, precision }`
+            on every iteration of every Newton linear solve (typically 40–80 stations per iteration,
+            10–30 Newton iterations per sweep). Protected only by SolverTrace.Event's internal IsActive
+            check, so the allocation happens but the lock/I/O does not. This is a P1/P6 concern
+            for C2 to record in detail.
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/ScaledPivotLuSolver.cs
+          call_site_lines: [313, 318, 320, 345, 350, 352, 385, 392, 394, 427, 432, 434]
+          guarded_with_isactive: yes
+          note: "Uses `if (traceContext is null || SolverTrace.Current is null) return;` style — effectively an IsActive gate."
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/ParametricSpline.cs
+          call_site_lines: [701, 744, 776, 810, 840]
+          guarded_with_isactive: no
+          note: "Five unguarded SolverTrace.Event calls. Flag for B5 auditor."
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/TridiagonalSolver.cs
+          call_site_lines: [100, 184, 218, 246]
+          guarded_with_isactive: no
+          note: "Three unguarded SolverTrace.Event calls. Flag for C2 auditor."
+        - path: /home/holyglory/XFoilSharp/tests/XFoil.Core.Tests/InfluenceMatrixParityDiagnosticsTests.cs
+          call_site_lines: [662, 708]
+          guarded_with_isactive: n/a
+          note: "Test harness — appropriate."
+        - path: /home/holyglory/XFoilSharp/tools/fortran-debug/ManagedTraceRunner.cs
+          call_site_lines: [67]
+          guarded_with_isactive: n/a
+          note: "Tool harness — appropriate."
+
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "All hot-path files (ViscousSolverEngine, BoundaryLayerSystemAssembler, ViscousNewtonAssembler, ViscousNewtonUpdater, TransitionModel, DenseLinearSystemSolver) have ZERO SolverTrace calls — confirmed via grep."
+        - "The single `lock (_sync)` at line 181 is correctly behind the process-global volatile `IsActive` fast-path at every public facade (SolverTrace.Event/Array/Point/Scope lines 1465/1479/1493/1507). Production pays only a volatile-bool read per trace call."
+        - "All file I/O (_writer.WriteLine/Flush, StreamWriter construction) is reachable only once SolverTrace.Begin has installed a writer — never on a production solver run."
+        - "Float/MathF usage in this file (PreciseSingleJsonConverter, DescribeFloatingBits, DescribeSingleBits) is deliberate parity-instrumentation (f32 bit-pattern hex); NOT an S1/S2/S3 violation. The header comment at line 4 documents the design."
+        - "One observation for caller audits: many non-hot-path call sites compute `SolverTrace.ScopeName(typeof(X))` UNGUARDED, which interpolates a string before the IsActive gate. Flag for A3/A4/B2/C1/C2/B5. Specifically, BlockTridiagonalSolver.cs:139 allocates an anonymous object per-station per-Newton-iter inside the forward-elimination loop — the worst offender surfaced by this audit."
+      estimated_fix_effort: 0h
+      notes: >-
+        D2 findings do not require any change in this directory. The diagnostics subsystem is
+        correctly designed with a single volatile fast-path flag and no hot-path coupling.
+
+ledger_summary:
+  total_files: 2
+  total_methods_audited: 64  # JsonlTraceWriter.cs (63 methods/ctors) + DebugFlags.cs (0 — only a static field)
+  parity_blockers: 0
+  standard_blockers: 0
+  hot_path_trace_calls: 0
+  notes: >-
+    Pass 1 inventoried 13 types and ~64 methods/ctors in JsonlTraceWriter.cs; DebugFlags.cs
+    contains only one static readonly bool field. Priority focus (hot-path grep for
+    SolverTrace.Event|Scope|Array|Point across the six mandated files) returned zero matches.
+    All locks, file I/O, and allocations inside JsonlTraceWriter are reachable only after
+    SolverTrace.Begin installs a writer, which flips volatile IsActive to true; production
+    solver runs never do so, so the trace subsystem's cost is one volatile-bool comparison
+    per call site. Three non-hot-path files (BlockTridiagonalSolver, ParametricSpline,
+    TridiagonalSolver) have unguarded SolverTrace.Event calls that allocate argument objects
+    before the internal IsActive gate — flagged here for C2/B5 ledgers but not a D2 concern.

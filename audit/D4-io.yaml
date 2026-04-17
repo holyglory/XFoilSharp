@@ -1,0 +1,245 @@
+# D4 audit ledger - XFoil.IO
+# Scope: /home/holyglory/XFoilSharp/src/XFoil.IO/ (28 files)
+# Criteria run: X1 (TODO/FIXME/stubs) and P4 (file locks / concurrent-write hazards) only.
+# P5 file I/O is expected in IO layer and is NOT flagged as violation; noted as write/read paths where relevant.
+# All writers use File.WriteAllText / File.WriteAllLines on caller-supplied paths. No FileStream/FileShare/Mutex/lock primitives present.
+
+agent: D4
+scope: src/XFoil.IO/
+files_total: 28
+files_services: 7
+files_models: 21
+criteria_applied:
+  - X1 (TODO/FIXME/stub markers)
+  - P4 (concurrent-write hazards)
+notes:
+  - No lock/Mutex/Semaphore/Interlocked usage in any IO service.
+  - All file writes use default File.WriteAllText / File.WriteAllLines (no explicit FileShare). Last-writer-wins if two writers target the same path.
+  - Input path (outputDirectory, summaryPath, outputFileName) is entirely caller-controlled. No unique-path synthesis (no GUID / PID / timestamp suffix) in any exporter.
+  - AnalysisSessionRunner is NOT thread-safe and does not document single-writer assumption, but executes sweeps serially in a single foreach loop, so the runner itself will not self-collide; collisions only arise across multiple concurrent Run() invocations.
+
+# ---- Pass 1: file enumeration with classification ----
+
+services:
+  - path: src/XFoil.IO/Services/AirfoilDatExporter.cs
+    lines: 63
+    type: service
+    public_methods:
+      - Format(AirfoilGeometry) -> string
+      - Export(string path, AirfoilGeometry) -> void   # writes
+    findings:
+      X1: []
+      P4:
+        - severity: medium
+          method: Export
+          line: 60
+          issue: "File.WriteAllText(fullPath, ...) with no FileShare lock and no unique-path synthesis. Two concurrent callers exporting the same airfoil to the same path race (last-writer-wins; partial-content readers possible)."
+          proposed_disposition: "Document single-writer contract on the service, OR switch to FileStream with FileShare.None, OR write to temp path + atomic File.Move. Recommendation only."
+
+  - path: src/XFoil.IO/Services/PolarCsvExporter.cs
+    lines: 429
+    type: service
+    public_methods:
+      - Format(PolarSweepResult) -> string
+      - Format(ViscousPolarSweepResult) -> string
+      - Format(InviscidLiftSweepResult) -> string
+      - Format(ViscousLiftSweepResult) -> string
+      - Format(LegacyPolarFile) -> string
+      - Format(LegacyReferencePolarFile) -> string
+      - Export(path, PolarSweepResult) -> void                 # writes
+      - Export(path, ViscousPolarSweepResult) -> void          # writes
+      - Export(path, InviscidLiftSweepResult) -> void          # writes
+      - Export(path, ViscousLiftSweepResult) -> void           # writes
+      - Export(path, LegacyPolarFile) -> void                  # writes
+      - Export(path, LegacyReferencePolarFile) -> void         # writes
+    private_helpers: [FormatDouble, FormatInteger, FormatBoolean, WriteFile]
+    findings:
+      X1: []
+      P4:
+        - severity: medium
+          method: WriteFile (called by all 6 Export overloads)
+          line: 417
+          issue: "Centralized writer uses File.WriteAllText(fullPath, content, Utf8WithoutBom). No FileShare, no temp+rename, no unique-path suffix. Two concurrent sweeps writing to the same CSV path will race: file is truncated/overwritten, and readers can observe partial writes."
+          proposed_disposition: "Either document single-writer/per-path contract, add FileStream(..., FileMode.Create, FileAccess.Write, FileShare.None) to surface collisions as IOException, or atomically stage to <path>.tmp then File.Move to enforce all-or-nothing writes. Recommendation only."
+
+  - path: src/XFoil.IO/Services/AnalysisSessionRunner.cs
+    lines: 420
+    type: service
+    public_methods:
+      - ctor()                                                  # default DI
+      - ctor(parser, naca, analysis, polarExporter, legacyPolar, legacyRefPolar, legacyDump, legacyDumpArchive)
+      - Run(string manifestPath, string outputDirectory) -> AnalysisSessionRunResult
+    private_helpers:
+      - RunSweep, ImportLegacyPolar, ImportLegacyReferencePolar, ImportLegacyPolarDump
+      - ExportInviscidAlphaSweep, ExportInviscidLiftSweep, ExportViscousAlphaSweep, ExportViscousLiftSweep
+      - LoadGeometry, CreateInviscidSettings, CreateViscousSettings, CreateArtifact, NormalizeKind, SweepRequiresGeometry, RequireGeometry, SanitizeFileName, LoadManifest, CreateReadOptions, CreateWriteOptions
+    findings:
+      X1:
+        - severity: low
+          line: 237
+          text: "// Surrogate displacement-coupled pipeline replaced by Newton solver."
+          proposed_disposition: "Comment is historical context, not an action item. Keep or drop once legacy surrogate path is fully removed; no code change."
+        - severity: low
+          line: 264
+          text: "// Surrogate displacement-coupled pipeline replaced by Newton solver."
+          proposed_disposition: "Same as line 237. Historical context."
+      P4:
+        - severity: high
+          method: Run
+          line: 110-121
+          issue: "summaryPath = Path.Combine(fullOutputDirectory, \"session-summary.json\") — fixed filename per outputDirectory. Two concurrent Run() calls pointed at the same outputDirectory will both truncate and rewrite session-summary.json with unsynchronized File.WriteAllText. Same race exists for each sweep artifact written via polarExporter.Export(outputPath, ...), especially when sweep.Output is unset and the synthesized name collides (SanitizeFileName(artifactName)+.csv with duplicate artifactName)."
+          proposed_disposition: "Either (a) document that outputDirectory must be unique per concurrent Run invocation, (b) stamp outputDirectory with a per-run suffix (GUID/timestamp) inside Run, or (c) take an advisory lock file in outputDirectory at start of Run. Recommendation only."
+        - severity: medium
+          method: RunSweep
+          line: 136-140
+          issue: "outputFileName defaults to SanitizeFileName(artifactName)+.csv; artifactName defaults to $\"{index+1:D2}-{kind}\" if sweep.Name is blank. Within a single Run this is unique, but across concurrent Runs using the same outputDirectory the filenames will collide deterministically (inviscid-alpha → 01-inviscid-alpha.csv for every session)."
+          proposed_disposition: "Document concurrency contract; same mitigations as above. Recommendation only."
+        - severity: medium
+          method: ExportViscousAlphaSweep, ExportViscousLiftSweep
+          line: 255, 281
+          issue: "Uses System.IO.File.WriteAllLines(outputPath, lines) bypassing polarExporter.WriteFile (no shared Utf8WithoutBom encoding, no directory create). Adds an additional write-path that isn't routed through the central WriteFile helper."
+          proposed_disposition: "Route these through PolarCsvExporter or add a local helper that matches WriteFile semantics (Directory.CreateDirectory + Utf8WithoutBom). Same concurrent-write hazard as all other Export paths."
+        - severity: info
+          method: Run
+          line: 96
+          issue: "Directory.CreateDirectory(fullOutputDirectory) is idempotent and concurrent-safe; acceptable."
+          proposed_disposition: none
+
+  - path: src/XFoil.IO/Services/LegacyPolarDumpArchiveWriter.cs
+    lines: 148
+    type: service
+    public_methods:
+      - Export(string summaryPath, LegacyPolarDumpFile dump) -> LegacyPolarDumpExportResult   # writes many files
+    private_helpers: [FormatDouble, FormatBoolean]
+    findings:
+      X1: []
+      P4:
+        - severity: high
+          method: Export
+          line: 74, 91, 124
+          issue: "One call writes N+2 files derived from summaryPath: the summary, <base>.geometry.csv, and <base>.point{NNN}.side{S}.csv for every operating point/side. All use File.WriteAllText with no FileShare lock and no unique-path suffix. Two concurrent exports pointed at the same summaryPath will race on every derived path. Additionally, if two different dumps share an AirfoilName but differ in contents and a caller derives summaryPath from airfoil metadata, the side file name collision is silent."
+          proposed_disposition: "Add a contract comment that summaryPath must be unique per concurrent Export invocation; optionally synthesize a run-id subdirectory under summaryPath's directory. Recommendation only."
+
+  - path: src/XFoil.IO/Services/LegacyPolarDumpImporter.cs
+    lines: 302
+    type: service
+    public_methods:
+      - Import(string path) -> LegacyPolarDumpFile   # reads only
+    private_helpers: [ReadGeometry, ReadSideSamples, ResolveMach, ReadSingles, ReadInt32, ReadSingle, ReadFixedString, ReadRecord]
+    findings:
+      X1: []
+      P4:
+        - severity: info
+          issue: "Read-only importer. File.OpenRead with no explicit FileShare; default read-share is acceptable. No write hazard."
+          proposed_disposition: none
+
+  - path: src/XFoil.IO/Services/LegacyPolarImporter.cs
+    lines: 463
+    type: service
+    public_methods:
+      - Import(string path) -> LegacyPolarFile   # reads only
+    private_helpers: [FloatRegex, VersionLineRegex, NameLineRegex, VariationLineRegex, TripLineRegex, MainParameterLineRegex, PropulsorLineRegex, ParseColumns, ParseRecords, ApplyLegacyDefaults, GetValue, CreateUniqueKey, StripDuplicateSuffix, GetDuplicateIndex, NormalizeKey, ParseDouble, ParseInt]
+    findings:
+      X1: []
+      P4:
+        - severity: info
+          issue: "Read-only importer using File.ReadAllLines. No write hazard."
+          proposed_disposition: none
+
+  - path: src/XFoil.IO/Services/LegacyReferencePolarImporter.cs
+    lines: 81
+    type: service
+    public_methods:
+      - Import(string path) -> LegacyReferencePolarFile   # reads only
+    findings:
+      X1: []
+      P4:
+        - severity: info
+          issue: "Read-only importer using StreamReader. No write hazard."
+          proposed_disposition: none
+
+models:
+  - path: src/XFoil.IO/Models/AnalysisSessionArtifact.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/AnalysisSessionManifest.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/AnalysisSessionRunResult.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyMachVariationType.cs
+    type: enum
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarColumn.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarDumpExportResult.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarDumpFile.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarDumpGeometryPoint.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarDumpOperatingPoint.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarDumpSide.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarDumpSideSample.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarFile.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarRecord.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyPolarTripSetting.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyReferencePolarBlock.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyReferencePolarBlockKind.cs
+    type: enum
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyReferencePolarFile.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyReferencePolarPoint.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/LegacyReynoldsVariationType.cs
+    type: enum
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/SessionAirfoilDefinition.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+  - path: src/XFoil.IO/Models/SessionSweepDefinition.cs
+    type: dto
+    findings: { X1: [], P4: [] }
+
+# ---- Summary ----
+
+summary:
+  X1_stubs_todos:
+    count: 2
+    severity_breakdown: { low: 2, medium: 0, high: 0 }
+    notes: "Both X1 hits are descriptive comments about the retired surrogate viscous pipeline in AnalysisSessionRunner (lines 237, 264). No code stubs, no TODO/FIXME markers, no NotImplementedException/NotSupportedException throws anywhere in XFoil.IO."
+  P4_concurrent_write_hazards:
+    count: 6
+    severity_breakdown: { info: 3, medium: 3, high: 2 }
+    systemic_pattern: |
+      Every writer in XFoil.IO uses File.WriteAllText / File.WriteAllLines on a fully caller-controlled path, with no FileShare restriction, no atomic temp+rename, and no unique-path suffixing. This is safe so long as callers supply unique per-run paths. Two observed collision surfaces:
+        1. AnalysisSessionRunner.Run writes a fixed "session-summary.json" inside outputDirectory. Two concurrent Run() calls pointed at the same outputDirectory collide deterministically on the summary plus every auto-named artifact (01-inviscid-alpha.csv, etc.).
+        2. LegacyPolarDumpArchiveWriter.Export fans out 1 summary + 1 geometry + 2*N side CSVs under a common basePath derived from summaryPath. Two concurrent calls sharing summaryPath collide on every derived file.
+    recommended_mitigations:
+      - "Option A (doc-only): Add an xml-doc 'single-writer per path' contract to each Export method and to AnalysisSessionRunner.Run."
+      - "Option B (API): Synthesize a per-run subdirectory (GUID or UTC-ticks) inside outputDirectory/summaryPath's parent before writing."
+      - "Option C (atomicity): Write to <path>.tmp then File.Move(path, overwrite:true) so partial writes are never observable."
+      - "Option D (fail-fast): Use new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None) so the second concurrent writer fails loudly instead of silently overwriting."
+  deliverable_status: complete

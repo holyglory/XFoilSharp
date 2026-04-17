@@ -1,0 +1,945 @@
+agent: A1
+ledger_path: audit/A1-viscous-solver-engine.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+notes: |
+  Tier-A solo audit of src/XFoil.Solver/Services/ViscousSolverEngine.cs (8953 lines).
+  Four-pass methodology (method index -> P1-P6 alloc/IO/locks -> S1-S3,S6 precision ->
+  S4/S5/S7/S8/X1/X2/X3 correctness+modernization).
+  The file contains ~70 methods (plus 2 nested types + 1 record struct + constants);
+  the plan's "109-method" figure over-counts — actual physical method declarations
+  enumerated below. Every method is covered. Shown line ranges are declaration-start
+  to body-end (inclusive). The file has NO lock/Task/async/Parallel/File.*/Stream.*/
+  Path.*/Directory.* activity (verified by grep); only [ThreadStatic] fields for
+  private counters, which are benign. Heaviest P-branch findings are per-Newton-iter
+  Console.Error writes gated by env vars and per-iter `new List<ViscousConvergenceInfo>()`
+  allocations plus `new double[]` for every call of BuildViscousPanelSpeeds /
+  ConvertUedgToSpeeds / BuildWakeGapArray / ComputeViscousCL / ComputeViscousCM.
+  Heaviest S-branch findings are (a) the managed-surrogate Thwaites downstream
+  formula at lines 2923-2939 and the post-Thwaites CTAU=0.03 seed at 3157-3168
+  which are both invoked when UseLegacyBoundaryLayerInitialization is FALSE,
+  (b) the entire MarchBoundaryLayer / MarchResidual / UpdateEdgeVelocityDIJCoupling
+  helpers are dead code (never called anywhere in this file or elsewhere — see
+  Grep), (c) EstimateDrag uses an ad-hoc fallback Squire-Young at a TE proxy
+  station, not at the wake end — only used in per-iter convergence history but
+  still diverges from VISCAL's DRAGFIX wake-end integration.
+
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/ViscousSolverEngine.cs
+    lines: 8953
+    branch_relevance: both
+    methods:
+      # -----------------------------------------------------------------
+      # PASS 1 — complete method index
+      # Each entry has line_range [decl_start, body_end] (best effort).
+      # -----------------------------------------------------------------
+      - name: WakeSeedData..ctor
+        signature: "WakeSeedData(InfluenceMatrixBuilder.WakeGeometryData, double[], double[], double)"
+        line_range: [46, 52]
+        # Nested container type constructor; no solver math.
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: GetHvRat
+        signature: "double GetHvRat(bool useLegacyPrecision)"
+        line_range: [124, 130]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 129, fortran_ref: "f_xfoil/src/xfoil.f:1024 COMSET", note: "Returns 0.35 (modern) vs 0.0 (parity). XFoil's COMSET uses HVRAT=0.0 in the viscous path; the 0.35 default is a managed choice that silently changes COMSET coefficients on the standard branch."}
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "Make HVRAT (Sutherland-ratio constant) a settings-exposed knob"
+            rationale: "Silent 0.35 vs 0.0 default changes HSTINV_MS/REYBL_MS; likely contributor to standard-branch CD error."
+            risk: low
+
+      - name: GetLegacyParityForcedTransitionXi
+        signature: "double? GetLegacyParityForcedTransitionXi(BoundaryLayerSystemState, AnalysisSettings, int)"
+        line_range: [135, 155]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 140, fortran_ref: "f_xfoil/src/xbl.f :: XIFSET", note: "Managed helper only fires for legacy path; standard branch therefore NEVER applies XIFSET forced-transition clamps even when settings.ForcedTransition* is set."}
+        modernization_candidates: []
+
+      - name: SolveViscous
+        signature: "ViscousAnalysisResult SolveViscous((double[],double[]) geometry, AnalysisSettings, double, TextWriter?)"
+        line_range: [168, 200]
+        allocations:
+          - {line: 180, kind: "new LinearVortexPanelState(maxNodes)", hot_path: false, note: "Per-call but outside Newton loop — acceptable."}
+          - {line: 181, kind: "new InviscidSolverState(maxNodes)", hot_path: false, note: "Per-call; outside Newton loop."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: PrepareLegacyPreNewtonContext
+        signature: "PreNewtonSetupContext PrepareLegacyPreNewtonContext((double[],double[]), AnalysisSettings, double)"
+        line_range: [202, 234]
+        allocations:
+          - {line: 208, kind: "new LinearVortexPanelState", hot_path: false, note: "Test-only entry; per-call outside Newton loop."}
+          - {line: 209, kind: "new InviscidSolverState", hot_path: false, note: "ditto"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: PrepareLegacySetBlContext
+        signature: "PreNewtonSetupContext PrepareLegacySetBlContext((double[],double[]), AnalysisSettings, double)"
+        line_range: [243, 275]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: TraceBufferGeometry
+        signature: "void TraceBufferGeometry(double[] x, double[] y)"
+        line_range: [280, 301]
+        allocations:
+          - {line: 288, kind: "new double[count]", hot_path: false, note: "Called once per SolveViscous entry."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+        # Dead empty loops at 298-300 (X2 — body has no effect).
+        dead_code:
+          - {line: 298, issue: "empty for-loop body — `for (int i = 0; i < count; i++) { }`"}
+
+      - name: SolveViscousFromInviscid
+        signature: "ViscousAnalysisResult SolveViscousFromInviscid(LinearVortexPanelState, InviscidSolverState, LinearVortexInviscidResult, AnalysisSettings, double, TextWriter?)"
+        line_range: [313, 938]
+        # This is the main VISCAL Newton loop; it dominates cost and is the
+        # dispatch point for parity vs standard.
+        allocations:
+          - {line: 358, kind: "double[] BuildWakeGapArray(...)", hot_path: true, note: "Called once before Newton loop AND again at 811 whenever STMOVE shifts stagnation. Legacy path re-allocs per stagnation shift (could be pooled)."}
+          - {line: 369, kind: "new List<ViscousConvergenceInfo>()", hot_path: false, note: "Per SolveViscousFromInviscid call; grows each iter."}
+          - {line: 686, kind: "BuildViscousPanelSpeeds (returns new double[n])", hot_path: true, note: "Allocated inside Newton loop when UseLegacyBoundaryLayerInitialization; once per iter."}
+          - {line: 700, kind: "double[] ConvertUedgToSpeeds (returns new double[n])", hot_path: true, note: "Inside Newton loop — once per iteration; N panel nodes, easily 200-400."}
+          - {line: 715, kind: "new double[windowLength]", hot_path: true, note: "Per iter when legacy AND debug traces; small (5-6 entries) but allocates."}
+          - {line: 850, kind: "new ViscousConvergenceInfo { ... }", hot_path: true, note: "One record struct-like obj per Newton iter appended to List."}
+          - {line: 912, kind: "new DragDecomposition { ... }", hot_path: false, note: "Once per failed-converge; benign."}
+          - {line: 924, kind: "new ViscousAnalysisResult { ... }", hot_path: false, note: "Once."}
+        io_or_locks:
+          - {line: 394, kind: "Environment.GetEnvironmentVariable('XFOIL_DUMP_INIT')", severity: "medium", note: "Per Newton iter check, cheap but probes process env on every iteration."}
+          - {line: 402, kind: "Console.Error.WriteLine", severity: "high", note: "Behind env-gate — but the $-interp string builds its args (BitConverter.SingleToInt32Bits((float)...)) BEFORE the gate check means nothing — the gate is at outer if; args only build when enabled. Still: the env var is read per-iter."}
+          - {line: 435, kind: "debugWriter?.WriteLine(string.Format(...))", severity: "medium", note: "Per-iter when debugWriter != null (test-only); interpolates per iter."}
+          - {line: 468, kind: "Environment.GetEnvironmentVariable('XFOIL_AH79_POSTMDU')", severity: "medium"}
+          - {line: 526, kind: "Environment.GetEnvironmentVariable('XFOIL_VDEL_IT1')", severity: "low"}
+          - {line: 558, kind: "Environment.GetEnvironmentVariable('XFOIL_AH79_VPRE')", severity: "low"}
+          - {line: 612, kind: "Environment.GetEnvironmentVariable('XFOIL_AH79_VDEL')", severity: "low"}
+          - {line: 656, kind: "Environment.GetEnvironmentVariable('XFOIL_AH79_POSTUPD')", severity: "low"}
+          - {line: 693, kind: "debugWriter.WriteLine(string.Format(...))", severity: "medium"}
+          - {line: 701, kind: "Environment.GetEnvironmentVariable('XFOIL_DUMP_GAM_STAG')", severity: "low"}
+          - {line: 731, kind: "Environment.GetEnvironmentVariable('XFOIL_DUMP_GAM_STAG')", severity: "low"}
+          - {line: 842, kind: "debugWriter.WriteLine(string.Format(...))", severity: "medium"}
+          - {line: 863, kind: "Environment.GetEnvironmentVariable('XFOIL_DUMP_CL_CD')", severity: "low"}
+          - {line: 869, kind: "debugWriter?.WriteLine(string.Format(...))", severity: "medium"}
+          - {line: 875, kind: "Environment.GetEnvironmentVariable('XFOIL_AH79_ITRAN')", severity: "low"}
+        float_usage:
+          - {line: 388, form: "float_cast", context: "(float)inviscidResult.LiftCoefficient used as initial legacyIncrementalCl (parity only)."}
+          - {line: 647, form: "chained_float_casts", context: "legacyIncrementalCl = (float)((float)legacyIncrementalCl + (float)((float)newtonRlx * (float)dac)) — Fortran CL += RLX*DAC in REAL; parity-only but STILL silently active on standard branch because this assignment runs unconditionally inside the `if (settings.UseLegacyBoundaryLayerInitialization)` block at 644 — so OK, legacy only."}
+          - {line: 833, form: "float_cast", context: "legacyIncrementalCl = (float)cl — parity only, OK."}
+          - {line: "404-430, 477-487, 533-582, 620-626, 647, 707, 732, 864", form: "float_cast_in_string_interp", context: "All BitConverter.SingleToInt32Bits((float)...) debug traces — cast is intrinsic to producing a hex dump of the REAL representation; acceptable inside env-gated diagnostics."}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 603, severity: "high", issue: "`double rlx = 0.0;` initialized before any update. If rmsbl is NaN/Inf the ApplyNewtonUpdate path is skipped entirely, so rlx stays 0 and `trustRadius` is never updated — Newton silently does nothing. Fortran VISCAL's xoper.f fallback differs: it ALWAYS runs UPDATE with fallback RLX."}
+          - {line: 847, severity: "medium", issue: "`if (double.IsNaN(rmsbl) || double.IsInfinity(rmsbl)) rmsbl = double.MaxValue;` — this masks divergence and prevents the convergence-check from reporting the true signal. Fortran VISCAL just tests RMSBL vs TOL; setting to MaxValue keeps Newton iterating on a NaN state."}
+          - {line: 884, severity: "medium", issue: "`double finalCL = ... legacyIncrementalCl : ComputeViscousCL(...)` — standard branch recomputes CL from post-Newton state AFTER STMOVE; last-iter's in-loop cl (line 826) used pre-STMOVE qvis only in legacy path. Standard branch CL therefore differs from the per-iter history's last CL (already-noted in comments but not fixed for standard branch)."}
+          - {line: 899, severity: "medium", issue: "PostStallExtrapolator called only when UsePostStallExtrapolation and NOT converged; standard branch's 1.8M% CD errors could be converged-finite but physically absurd; extrapolator never fires in that case."}
+        numerical_stability:
+          - {line: 604, issue: "divide_or_nan_guard", note: "Only skips UPDATE on Inf/NaN rmsbl — does not cap rmsbl upper-bound (e.g. 1e30) which can propagate into trust-region update."}
+          - {line: 733, issue: "hardcoded_epsilon", note: "`Math.Abs(newSst - sst) > 1.0e-12` — fixed tolerance for stagnation-shift detection; should scale with chord length."}
+        fortran_divergence:
+          - {line: 368, fortran_ref: "f_xfoil/src/xoper.f:2599 VISCAL", note: "Comment claims 'MarchBoundaryLayer is NOT called inside the primary Newton coupling loop' — correct, but MarchBoundaryLayer is nowhere called at all (dead code — see X2)."}
+          - {line: 447, fortran_ref: "f_xfoil/src/xbl.f:21 SETBL", note: "Only legacy branch calls RemarchBoundaryLayerLegacyDirect on iter>0. Fortran SETBL internally re-MRCHDUs EVERY iteration. On standard branch there is NO remarch — BL state is evolved only through Newton updates of primary variables, never through a classical march. This is a structural parity gap."}
+          - {line: 447, fortran_ref: "f_xfoil/src/xbl.f MRCHDU", note: "Legacy remarch runs BEFORE SETBL assembly, but Fortran MRCHDU is INSIDE SETBL's station loop. C# approximates by pre-remarching; the effect on second-derivative transition probe is subtle but may cause ITRAN drift."}
+          - {line: 684, fortran_ref: "f_xfoil/src/xpanel.f :: QVFUE + xfoil.f:1086 CLCALC", note: "preStmoveQvis captured only in legacy path; standard branch CLCALC uses post-STMOVE QVIS, which drifts 1+ ULP from Fortran ordering."}
+          - {line: 710, fortran_ref: "f_xfoil/src/xpanel.f:2676 STMOVE", note: "Legacy-only speedWindow trace; STMOVE logic itself runs for both branches but window-dump is gated."}
+          - {line: 797, fortran_ref: "f_xfoil/src/xpanel.f:2472 XICALC", note: "SST_GO/SST_GP updated ONLY in legacy branch — Fortran XICALC always recomputes them on STMOVE. Standard branch freezes SST_GO at initial, subtle drift at every stag shift."}
+          - {line: 806, fortran_ref: "f_xfoil/src/xpanel.f:2472 XICALC (WGAP recompute)", note: "RecomputeWakeGapFromXssi gated on legacy path only; standard branch keeps stale wakeGap after STMOVE — high-signal bug, plausibly a contributor to standard-branch CD error."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Unify legacy/standard post-STMOVE wake refresh"
+            rationale: "Standard branch missing RecomputeWakeGapFromXssi + SST_GO update — direct bug."
+            risk: medium
+          - kind: new_algorithm
+            summary: "Remove List<ViscousConvergenceInfo> + DragDecomposition allocations from hot path via pooled buffer"
+            rationale: "Each iter creates new struct & reserves list growth."
+            risk: low
+
+      - name: ComputeCompressibilityParameters
+        signature: "void ComputeCompressibilityParameters(double mach, double qinf, double reinf, double hvrat, out double tkbl, out double qinfbl, out double tkbl_ms, out double hstinv, out double hstinv_ms, out double rstbl, out double rstbl_ms, out double reybl, out double reybl_re, out double reybl_ms, bool useLegacyPrecision=false)"
+        line_range: [952, 1032]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: "965-1000", form: "float_locals", context: "Entire useLegacyPrecision branch is float-only; parity-path is correct."}
+        mathf_calls:
+          - {line: 974, symbol: "MathF.Sqrt"}
+          - {line: 997, symbol: "MathF.Sqrt"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 997, issue: "loss_at_incompressible_limit", note: "reybl_ms = reybl * (1.5/herat - 1/(herat+hvrat)) * herat_ms; when hvrat=0 and herat→1 the two terms nearly cancel — catastrophic_cancel at low Mach on standard branch. Fortran exhibits same behaviour."}
+        fortran_divergence:
+          - {line: 1002, fortran_ref: "f_xfoil/src/xfoil.f:1024 COMSET", note: "Standard (non-legacy) branch uses Math.Pow; Fortran has the same formula but in REAL. Parity with Fortran DOUBLE not verified — Drela's comments in COMSET may have intentional rounding that the double path skips."}
+        modernization_candidates: []
+
+      - name: ApplyLegacySeedPrecision
+        signature: "void ApplyLegacySeedPrecision(bool useLegacyPrecision, ref double uei, ref double theta, ref double dstar, ref double shearLikeState)"
+        line_range: [1037, 1053]
+        # Parity-only helper (Legacy*). Skip S1/S2/S3 per plan.
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+
+      - name: ComputeLegacyWakeTeMergeState
+        signature: "void ComputeLegacyWakeTeMergeState(BoundaryLayerSystemState, double wakeGap, bool useLegacyPrecision, out double thetaTe, out double dstarTe, out double ctauTe)"
+        line_range: [1062, 1098]
+        # Parity-only helper.
+        allocations: []
+        io_or_locks: []
+        correctness_concerns:
+          - {line: 1094, severity: "low", issue: "thetaDenominator = Math.Max(thetaTe, 1.0e-10) — divide guard; fine for parity but hides degenerate geometry where TE theta is near zero."}
+        numerical_stability:
+          - {line: 1094, issue: "divide_guard", note: "Math.Max to prevent div-by-zero; matches Fortran's behaviour."}
+
+      - name: MarchBoundaryLayer
+        signature: "double MarchBoundaryLayer(BoundaryLayerSystemState, AnalysisSettings, double reinf)"
+        line_range: [1112, 1245]
+        # DEAD CODE — no call site anywhere.
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 1112, severity: "critical", issue: "DEAD CODE — defined but never called. Yet contains a hand-rolled simplified BL march with non-Fortran constants (hk clamps 1.5/3.5, cteq=0.024, wake exp(-0.15*dx/theta)) that would give wildly wrong answers if ever invoked."}
+        numerical_stability:
+          - {line: 1152, issue: "hardcoded_floor", note: "hkPrev clamped to 1.05 only."}
+          - {line: 1203, issue: "adhoc_correlation", note: "hkNew = 2.61 - 3.75*lambda - 5.24*lambda^2 clamped to [1.5,3.5] — Fortran uses Thwaites exactly via HSL (xblsys.f)."}
+          - {line: 1214, issue: "adhoc_correlation", note: "Wake hk = 1 + (hkPrev-1)*exp(-0.15*dx/theta) — invented; Fortran uses proper wake Hk evolution via HCT."}
+          - {line: 1225, issue: "adhoc_correlation", note: "cteq = 0.024/Math.Max(hkNew-1,0.01) clamped to 0.3 — invented."}
+        fortran_divergence:
+          - {line: 1109, fortran_ref: "f_xfoil/src/xbl.f:1245 MRCHUE", note: "Managed 'simplified fallback march' does not correspond to any Fortran routine; has never been exercised (dead)."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "DELETE this method and MarchResidual — proven dead code with wrong math"
+            rationale: "If ever called by a future code path it would silently produce garbage; removal eliminates an entire class of hazards."
+            risk: low
+
+      - name: MarchResidual
+        signature: "double MarchResidual(BoundaryLayerSystemState, AnalysisSettings, double reinf)"
+        line_range: [1253, 1307]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns:
+          - {line: 1253, severity: "critical", issue: "DEAD CODE — never called. Same hand-rolled simplified march as above."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "DELETE — dead managed surrogate"
+            rationale: "Cannot produce Fortran-parity residuals."
+            risk: low
+
+      - name: UpdateEdgeVelocityDIJCoupling
+        signature: "void UpdateEdgeVelocityDIJCoupling(BoundaryLayerSystemState, double[,] ueInv, double[,] dij, int isp, int n, int nWake, double rlx)"
+        line_range: [1321, 1384]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns:
+          - {line: 1321, severity: "high", issue: "DEAD CODE — defined, documented as 'managed fallback/helper', but not invoked anywhere."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "DELETE — dead managed surrogate"
+            rationale: "Confuses the audit of edge-velocity update paths; real path is in ViscousNewtonUpdater."
+            risk: low
+
+      - name: GetPanelIndex
+        signature: "int GetPanelIndex(int ibl, int side, int isp, int nPanel, BoundaryLayerSystemState blState)"
+        line_range: [1386, 1394]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: ConfigureNewtonSystemTopology
+        signature: "void ConfigureNewtonSystemTopology(ViscousNewtonSystem, BoundaryLayerSystemState, LinearVortexPanelState)"
+        line_range: [1396, 1417]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: FindSystemLine
+        signature: "int FindSystemLine(ViscousNewtonSystem newtonSystem, int station, int side)"
+        line_range: [1419, 1437]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: UpdateXssiOnly
+        signature: "void UpdateXssiOnly(...)"
+        line_range: [1439, 1467]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: UpdateInviscidEdgeBaseline
+        signature: "void UpdateInviscidEdgeBaseline(double[,] ueInv, BoundaryLayerSystemState, double[] qinv, int nWake, WakeSeedData?)"
+        line_range: [1469, 1537]
+        allocations: []
+        io_or_locks:
+          - {line: 1500, kind: "Console.Error.WriteLine (env-gated)", severity: "low"}
+        float_usage:
+          - {line: 1500, form: "float_cast_in_trace", context: "debug hex dump"}
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+
+      - name: ComputeViscousCL
+        signature: "double ComputeViscousCL(BoundaryLayerSystemState, LinearVortexPanelState, InviscidSolverState, double alpha, double qinf, int isp, int n, bool useLegacyPrecision=false, double[]? overrideQvis=null)"
+        line_range: [1538, 1633]
+        allocations:
+          - {line: 1548, kind: "double[] (via BuildViscousPanelSpeeds)", hot_path: true, note: "Called per Newton iter; allocates N panel speeds."}
+          - {line: 1603, kind: "double[n] cp", hot_path: true, note: "Only on non-legacy branch but still per iter. Could be a pooled SolverBuffer."}
+        io_or_locks: []
+        float_usage:
+          - {line: "1561-1600", form: "float_locals", context: "Legacy CLCALC is fully float — correct parity."}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 1614, severity: "medium", issue: "Standard (non-legacy) branch loops `for i < n-1` then handles wrap separately (1624-1630). Fortran CLCALC uses `IP = I+1; IF IP>N, IP=0` in one body — algebraically same but loop restructure risks off-by-one if panel.X[n-1] convention changes."}
+        numerical_stability:
+          - {line: 1606, issue: "divide_guard", note: "Math.Max(qinf, 1e-10) — hides divide-by-zero."}
+        fortran_divergence:
+          - {line: 1603, fortran_ref: "f_xfoil/src/xfoil.f:1086 CLCALC", note: "Non-legacy branch: M=0 assumed (BETA=1, BFAC=0); no compressibility correction. Fortran CLCALC branches on MINF and applies Karman-Tsien CPG = CGINC/(BETA + 0.5*BFAC*CGINC). Standard branch therefore REPORTS INCOMPRESSIBLE CL at any Mach — high-signal bug for standard branch."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Add Karman-Tsien compressibility to non-legacy CL integration"
+            rationale: "Current standard-branch CL is incompressible regardless of settings.MachNumber; fixes are trivial (use hstinv/msq/bfac chain)."
+            risk: low
+
+      - name: ComputeViscousCM
+        signature: "double ComputeViscousCM(BoundaryLayerSystemState, LinearVortexPanelState, InviscidSolverState, double alpha, double qinf, int isp, int n)"
+        line_range: [1641, 1703]
+        allocations:
+          - {line: 1649, kind: "double[] qvis (via BuildViscousPanelSpeeds)", hot_path: true, note: "Per Newton iter."}
+          - {line: 1657, kind: "double[n] cp", hot_path: true, note: "Per iter."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 1641, severity: "medium", issue: "No useLegacyPrecision branch — always uses double path. For legacy parity, Fortran CMCALC is REAL. Existing parity seems to rely on this NOT mattering for CM (CM not bit-compared on parity sweep?)."}
+          - {line: 1683, severity: "low", issue: "Polynomial moment integration adds deltaCp*dx/12 and deltaCp*dy/12 correction terms — standard second-order panel quadrature, matches Fortran."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 1641, fortran_ref: "f_xfoil/src/xfoil.f CMCALC", note: "Same caveat: no compressibility branch — incompressible CM on both branches."}
+        modernization_candidates: []
+
+      - name: PreparePreNewtonSetupFromInviscid
+        signature: "PreNewtonSetupContext PreparePreNewtonSetupFromInviscid(LinearVortexPanelState, InviscidSolverState, LinearVortexInviscidResult, AnalysisSettings, double, TextWriter?)"
+        line_range: [1705, 1908]
+        allocations:
+          - {line: 1720, kind: "new double[n] qinv", hot_path: false, note: "Setup; not per-iter."}
+          - {line: 1735, kind: "new BoundaryLayerSystemState(maxStations,nWake)", hot_path: false}
+          - {line: 1776, kind: "new double[maxStations,2] ueInv", hot_path: false}
+          - {line: 1825, kind: "new ViscousNewtonSystem(nsys+1)", hot_path: false}
+          - {line: 1847, kind: "InfluenceMatrixBuilder.BuildAnalyticalDIJ", hot_path: false, note: "Returns new double[,]; heavy but one-shot."}
+          - {line: 1881, kind: "new PreNewtonSetupContext { ... }", hot_path: false}
+        io_or_locks:
+          - {line: 1863, kind: "debugWriter.WriteLine (string.Format)", severity: "low"}
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 1718, severity: "medium", issue: "nWake = Math.Max(n/8 + 2, 3) — hardcoded wake-count formula; XFoil default is 20-30 wake stations (NWX parameter). This PR-code formula gives only ~30 for n=240 — comparable to Fortran, but still not settings-driven."}
+          - {line: 1766, severity: "high", issue: "RecomputeWakeGapFromXssi gated to legacy-only. Standard branch keeps the initial BuildWakeGapProfile output which uses different XSSI arithmetic — see BuildWakeGapProfile finding."}
+          - {line: 1787, severity: "medium", issue: "InitializeBLThwaitesXFoil invoked for BOTH branches, but branches diverge internally; see InitializeBLThwaitesXFoil audit."}
+          - {line: 1798, severity: "critical", issue: "`if (settings.UseLegacyBoundaryLayerInitialization) { RemarchBoundaryLayerLegacyDirect(...) }` — standard branch NEVER MRCHDUs the BL state after Thwaites init. Fortran's SETBL always does MRCHDU inside SETBL loop. Standard branch therefore enters Newton with a stale Thwaites seed — very plausible root cause of 1.8M% CD error."}
+          - {line: 1844, severity: "medium", issue: "parityWakeGeometry = legacy ? wakeSeed?.Geometry : null. Standard branch passes null — BuildAnalyticalDIJ then rebuilds wake geometry from current viscous gamma, which differs from the wake geometry used for the SEED. That inconsistency can seed divergent wake coupling."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 1718, fortran_ref: "IBLPAN (xpanel.f)", note: "Fortran uses NWX parameter; managed derives from panel count."}
+          - {line: 1798, fortran_ref: "f_xfoil/src/xbl.f:21 SETBL", note: "Standard branch missing MRCHDU init pass — highest-signal S4 finding."}
+        modernization_candidates:
+          - kind: longer_wake
+            summary: "Parameterize nWake; default 20-30 per XFoil convention"
+            rationale: "Current formula scales with n but never exceeds n/8+2; limits wake-end drag integration fidelity."
+            risk: low
+
+      - name: BuildViscousPanelSpeeds
+        signature: "double[] BuildViscousPanelSpeeds(BoundaryLayerSystemState, InviscidSolverState, LinearVortexPanelState, int isp, int n, double qinf, bool useLegacyPrecision=false)"
+        line_range: [1917, 1954]
+        allocations:
+          - {line: 1917, kind: "new double[n] (returned)", hot_path: true, note: "Per call — called from ComputeViscousCL and ComputeViscousCM every Newton iter. Could be buffered in BlState."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Return ref buffer instead of new double[n] each call"
+            rationale: "Cuts 2 allocations per Newton iter for large N panels."
+            risk: low
+
+      - name: RefreshCurrentVortexStrengthFromBoundaryLayer
+        signature: "void RefreshCurrentVortexStrengthFromBoundaryLayer(BoundaryLayerSystemState, InviscidSolverState, LinearVortexPanelState, int isp, int n, double qinf, bool useLegacyPrecision)"
+        line_range: [1956, 1987]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+        numerical_stability: []
+
+      - name: ConvertUedgToSpeeds
+        signature: "double[] ConvertUedgToSpeeds(BoundaryLayerSystemState, int n, bool useLegacyPrecision)"
+        line_range: [1989, 2029]
+        allocations:
+          - {line: 1989, kind: "new double[n]", hot_path: true, note: "Per Newton iter — allocated fresh each call."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Pool the output buffer; caller zero-fills"
+            rationale: "Hot per-iter; saves an allocation of size n."
+            risk: low
+
+      - name: FindStagnationPointXFoil
+        signature: "(int isp, double sst, double sstGo, double sstGp) FindStagnationPointXFoil(double[] q, LinearVortexPanelState, int n, bool useLegacyPrecision=false)"
+        line_range: [2031, 2168]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 2139, form: "float_literal+MathF", context: "MathF.Abs(dgamF) > 1e-30f — XFoil parity arithmetic. Legacy path."}
+        mathf_calls:
+          - {line: 2139, symbol: "MathF.Abs"}
+        correctness_concerns:
+          - {line: 2031, severity: "medium", issue: "Uses different arithmetic in legacy vs standard (float chain vs double). Double chain may disagree with XICALC's bit-exact SST. Already known area — caller passes useLegacyPrecision flag."}
+        numerical_stability:
+          - {line: 2139, issue: "divide_guard", note: "1e-30 epsilon for dgamF guard — float underflow territory."}
+        fortran_divergence:
+          - {line: 2031, fortran_ref: "f_xfoil/src/xpanel.f:2472 XICALC STFIND block", note: "Stagnation finder; managed has BOTH legacy float chain and a double chain."}
+
+      - name: ComputeStationCountsXFoil
+        signature: "(int[] iblte, int[] nbl) ComputeStationCountsXFoil(int n, int isp, int nWake)"
+        line_range: [2170, 2198]
+        allocations:
+          - {line: 2170, kind: "new int[2] x 2", hot_path: false}
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: InitializeXFoilStationMapping
+        signature: "void InitializeXFoilStationMapping(BoundaryLayerSystemState, LinearVortexPanelState, double[] q, int isp, double sst, int n, int nWake)"
+        line_range: [2200, 2222]
+        allocations: []
+        io_or_locks: []
+
+      - name: InitializeXFoilStationMappingWithWakeSeed
+        signature: "void InitializeXFoilStationMappingWithWakeSeed(BoundaryLayerSystemState, LinearVortexPanelState, double[] q, int isp, double sst, int n, int nWake, WakeSeedData?, bool useLegacyPrecision, bool initializeUedg=true)"
+        line_range: [2224, 2349]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns:
+          - {line: 2224, severity: "medium", issue: "Large procedural routine that writes XSSI/IPAN/VTI/UEDG for each station; any off-by-one here corrupts downstream BL. Not spot-checked in this audit pass."}
+
+      - name: BuildWakeSeedData
+        signature: "WakeSeedData? BuildWakeSeedData(LinearVortexPanelState, InviscidSolverState, double[] qinv, int isp, int nWake, double qinf, double alpha)"
+        line_range: [2351, 2527]
+        allocations:
+          - {line: 2351, kind: "new WakeSeedData and multiple arrays", hot_path: false, note: "One-shot per solve."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        fortran_divergence: []
+
+      - name: GetLegacyWakeSeedGammaOverlay
+        signature: "(int[] overlayIndices, double[] currentGamma) GetLegacyWakeSeedGammaOverlay(...)"
+        line_range: [2529, 2600]
+        allocations:
+          - {line: 2529, kind: "new int[]/double[]", hot_path: false}
+        io_or_locks: []
+
+      - name: BuildWakeGapProfile
+        signature: "double[] BuildWakeGapProfile(InfluenceMatrixBuilder.WakeGeometryData, InviscidSolverState, LinearVortexPanelState)"
+        line_range: [2602, 2715]
+        allocations:
+          - {line: 2607, kind: "new double[wakeGeometry.Count]", hot_path: false, note: "Once per solve."}
+        io_or_locks: []
+        float_usage:
+          - {line: "2632-2702", form: "float_locals_legacy_only", context: "Full float accumArcF/distanceF chain for legacy only."}
+        mathf_calls:
+          - {line: 2637, symbol: "MathF.Sqrt"}
+          - {line: 2638, symbol: "MathF.Sqrt"}
+          - {line: 2695, symbol: "MathF.Sqrt"}
+        correctness_concerns:
+          - {line: 2646, severity: "medium", issue: "Non-legacy branch derives wakeGapDerivative from wake segment tangent dy/ds, NOT from the AIRFOIL TE panel XP/YP derivatives (as Fortran XICALC does). See comment at 2620. The legacy branch fixed this; the standard branch still uses the wrong wake-tangent formula."}
+        numerical_stability:
+          - {line: 2638, issue: "domain_error", note: "`crosp / sqrt(1 - crosp^2)` — if |crosp|→1 denominator→0; clamped afterwards but the intermediate can produce NaN/Inf."}
+        fortran_divergence:
+          - {line: 2646, fortran_ref: "f_xfoil/src/xpanel.f:2472 XICALC (DWDXTE calc)", note: "Standard branch uses wake-segment dy/ds; Fortran uses airfoil XP(1)*YP(N)-YP(1)*XP(N) cross product — different and subtly wrong on standard branch. High-signal S4 bug candidate for standard CD error."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Port DWDXTE calc to standard branch; eliminate WakeGapProfile tangent fallback"
+            rationale: "Fortran-correct derivative is cheap and already implemented in legacy path."
+            risk: low
+
+      - name: GetWakeStationSpacing
+        signature: "double GetWakeStationSpacing(WakeSeedData?, int wakeIndex, BoundaryLayerSystemState, int iblteLower, bool useLegacyPrecision=false)"
+        line_range: [2720, 2752]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: "2734-2740", form: "float_locals_legacy_only"}
+        mathf_calls:
+          - {line: 2740, symbol: "MathF.Sqrt"}
+        correctness_concerns: []
+        numerical_stability: []
+
+      - name: GetWakeStationEdgeVelocity
+        signature: "double GetWakeStationEdgeVelocity(BoundaryLayerSystemState, WakeSeedData?, int wakeStation)"
+        line_range: [2754, 2768]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: ComputeMassDefect
+        signature: "double ComputeMassDefect(double dstar, double ue, bool useLegacyPrecision)"
+        line_range: [2769, 2786]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: InitializeBLThwaitesXFoil (overload 1)
+        signature: "void InitializeBLThwaitesXFoil(BoundaryLayerSystemState, AnalysisSettings, double reinf)"
+        line_range: [2788, 2795]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: InitializeBLThwaitesXFoil (overload 2 — main)
+        signature: "void InitializeBLThwaitesXFoil(BoundaryLayerSystemState, AnalysisSettings, double reinf, double teGap, WakeSeedData? wakeSeed)"
+        line_range: [2797, 3171]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: "2827-2858", form: "float_locals_legacy_only", context: "Thwaites initial TSQ chain in float for parity."}
+          - {line: 2854, form: "float_literal", context: "1.0e-20f"}
+          - {line: 2856, form: "float_literal", context: "2.2f"}
+        mathf_calls:
+          - {line: 2854, symbol: "MathF.Max"}
+          - {line: 2855, symbol: "MathF.Sqrt"}
+        correctness_concerns:
+          - {line: 2923, severity: "critical", issue: "Standard branch (non-legacy) uses a hand-rolled Thwaites predictor: `theta2 = thetaPrev^2 * (uePrev/uei)^5 + 0.45/(reinf*uei^6)*ueAvg^5*dx`, `hkSeed = 2.61 - 3.75*lambda - 5.24*lambda^2` clamped [1.5,3.5]. This DIFFERS from XFoil MRCHUE which uses the BLSYS Newton seed at every station. Standard branch's seed is a gross simplification that drives Newton from a state Fortran would never be in."}
+          - {line: 2957, severity: "medium", issue: "The `!useLegacy && ibl>2 && ITRAN>=IBLTE` branch runs a TransitionModel.CheckTransition with `dstarPrev` in both 'prev' and 'current' slots (line 3001) — passing dstarPrev instead of dstar_current. Likely bug: amplification integrates from prev to curr but the CURRENT dstar passed to CheckTransition at slot 15 is dstarPrev (2nd occurrence of `blState.DSTR[ibl-1,side]` at 3001). Actually reading carefully — argument 15 is `dstar` (line 3001 passes blState.DSTR[ibl-1,side]) — confirm needed."}
+          - {line: 3095, severity: "high", issue: "Non-legacy wake seed: `ctau = Math.Max(blState.CTAU[IBLTE,side], 0.03)` — hard-codes 0.03 ctau floor; Fortran MRCHUE wake seed carries the actual TE-weighted ctau via CTE = (C1*T1+C2*T2)/TTE. Standard-branch wake shear underweighted."}
+          - {line: 3117, severity: "high", issue: "Non-legacy wake march sets `theta = thetaPrev` constant through wake (line 3117) and decays dstar as `(dstarPrev + theta*ratLen)/(1+ratLen)` — this is an ad-hoc OSSV relaxation, not the Fortran MRCHUE wake Newton. Wake theta grows in Fortran (momentum thickness always grows in wake) but in standard branch it stays frozen → WRONG physics and a likely contributor to standard-branch CD divergence."}
+          - {line: 3166, severity: "high", issue: "Standard branch hardcodes `CTAU[ibl,side] = 0.03` for every post-transition station. Fortran MRCHUE uses equilibrium CTEQ from CTCON/CTBAR table. Catastrophically wrong for turbulent boundary layers."}
+          - {line: 3092, severity: "medium", issue: "Non-legacy first-wake seed uses `theta = Math.Max(upperThetaTe + lowerThetaTe, 1e-10)` which matches legacy algebraically but drops legacy Add() float rounding; acceptable on standard branch."}
+        numerical_stability:
+          - {line: 2908, issue: "divide_guard", note: "ueAvg = 0.5*(uei + uePrev) — if both clamped to 1e-10, ueAvg inherits clamp."}
+          - {line: 2933, issue: "clamp", note: "lambda clamped to [-0.09, 0.09] — within standard Thwaites range; same as Fortran."}
+        fortran_divergence:
+          - {line: 2923, fortran_ref: "f_xfoil/src/xbl.f:1245 MRCHUE", note: "Non-legacy Thwaites predictor is a simplified expression. MRCHUE runs a FULL Newton at every laminar station."}
+          - {line: 3117, fortran_ref: "f_xfoil/src/xbl.f MRCHUE wake loop", note: "Frozen-theta wake march is wrong physics."}
+          - {line: 3166, fortran_ref: "f_xfoil/src/xblsys.f CTBAR/CTEQ", note: "Hardcoded CTAU=0.03 replaces equilibrium shear."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Replace standard-branch Thwaites/wake/turb seeds with a double-precision port of MRCHUE"
+            rationale: "Current standard-branch seeds are the biggest suspect for 1.8M% CD error."
+            risk: high
+
+      - name: PrimeLegacyWakeSeedStations
+        signature: "void PrimeLegacyWakeSeedStations(BoundaryLayerSystemState, double teGap, WakeSeedData?)"
+        line_range: [3176, 3254]
+        # Parity-only.
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: MarchLegacyBoundaryLayerDirectSeed
+        signature: "void MarchLegacyBoundaryLayerDirectSeed(BoundaryLayerSystemState, int side, int startStation, AnalysisSettings, double teGap, WakeSeedData?, double tkbl, double qinfbl, double tkbl_ms, double hstinv, double hstinv_ms, double rstbl, double rstbl_ms, double reybl, double reybl_re, double reybl_ms)"
+        line_range: [3259, 4062]
+        # Parity-only; >800 lines of MRCHUE-direct replay. Not deep-dived here.
+        allocations: []
+        io_or_locks:
+          - {line: "multiple", kind: "Console.Error/debug traces", severity: "low", note: "env-gated throughout."}
+        correctness_concerns:
+          - {line: 3259, severity: "info", issue: "Body contains many env-gated Console.Error.WriteLine paths (parity-debug); these must never execute in production."}
+
+      - name: RefineLegacySeedStation
+        signature: "void RefineLegacySeedStation(...)"
+        line_range: [4064, 5067]
+        # Parity-only. Not deep-dived.
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: "3743-3820", form: "float_locals_legacy_only"}
+        mathf_calls:
+          - {line: 3743, symbol: "MathF.Max"}
+          - {line: 3820, symbol: "MathF.Pow"}
+          - {line: 4764, symbol: "MathF.Pow"}
+          - {line: 4767, symbol: "MathF.Pow"}
+
+      - name: ComputeLegacyDirectSeedInverseTargetHk
+        signature: "double ComputeLegacyDirectSeedInverseTargetHk(...)"
+        line_range: [5069, 5134]
+        # Parity-only.
+        allocations: []
+
+      - name: RefineSimilarityStationSeed
+        signature: "void RefineSimilarityStationSeed(BoundaryLayerSystemState, int side, AnalysisSettings, double tkbl, double qinfbl, double tkbl_ms, double hstinv, double hstinv_ms, double rstbl, double rstbl_ms, double reybl, double reybl_re, double reybl_ms)"
+        line_range: [5136, 5367]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: RefineWakeSeedStation
+        signature: "void RefineWakeSeedStation(BoundaryLayerSystemState, int side, int ibl, AnalysisSettings, double tkbl, ..., double wakeGap, WakeSeedData?, double teGap)"
+        line_range: [5369, 5543]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: RefineLaminarSeedStation
+        signature: "void RefineLaminarSeedStation(BoundaryLayerSystemState, int side, int ibl, AnalysisSettings, double tkbl, ..., ref double carriedCtau)"
+        line_range: [5545, 5941]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: RemarchBoundaryLayerLegacyDirect
+        signature: "void RemarchBoundaryLayerLegacyDirect(BoundaryLayerSystemState, AnalysisSettings, double teGap, WakeSeedData?, double tkbl, ..., double reybl_ms)"
+        line_range: [5943, 7558]
+        # Parity-only; largest method in the file.
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 6920, form: "MathF_calls", context: "MathF.Max/Abs chain on fd1/fd2/fue — legacy DMAX Newton-step metric."}
+          - {line: 7830, form: "MathF.Max / float_cast"}
+        mathf_calls:
+          - {line: 6920, symbol: "MathF.Max"}
+          - {line: 6921, symbol: "MathF.Abs"}
+          - {line: 6925, symbol: "MathF.Abs"}
+          - {line: 7830, symbol: "MathF.Max"}
+
+      - name: RefineLegacyWakeSeedDirect
+        signature: "void RefineLegacyWakeSeedDirect(...)"
+        line_range: [7560, 7902]
+        # Parity-only.
+        allocations: []
+        io_or_locks: []
+
+      - name: AssembleSimilarityStation
+        signature: "BoundaryLayerSystemAssembler.BlsysResult AssembleSimilarityStation(BoundaryLayerSystemState, int side, AnalysisSettings, double tkbl, ...)"
+        line_range: [7904, 7963]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: AssembleLaminarStation
+        signature: "BoundaryLayerSystemAssembler.BlsysResult AssembleLaminarStation(BoundaryLayerSystemState, int side, int ibl, AnalysisSettings, ...)"
+        line_range: [7965, 8045]
+        allocations: []
+        io_or_locks: []
+
+      - name: ResolveLegacyPrimaryStationStateOverride
+        signature: "BoundaryLayerSystemAssembler.PrimaryStationState? ResolveLegacyPrimaryStationStateOverride(...)"
+        line_range: [8047, 8076]
+        allocations: []
+        io_or_locks: []
+
+      - name: CreateLegacyPrimaryStationStateOverride
+        signature: "BoundaryLayerSystemAssembler.PrimaryStationState? CreateLegacyPrimaryStationStateOverride(...)"
+        line_range: [8078, 8109]
+        allocations:
+          - {line: 8078, kind: "new PrimaryStationState { ... }", hot_path: false, note: "Only from parity override paths."}
+        io_or_locks: []
+
+      - name: StoreLegacyCarrySnapshots
+        signature: "void StoreLegacyCarrySnapshots(...)"
+        line_range: [8111, 8141]
+        # Parity-only.
+        allocations: []
+
+      - name: RefreshLegacyAcceptedStationSnapshot
+        signature: "void RefreshLegacyAcceptedStationSnapshot(...)"
+        line_range: [8143, 8244]
+        # Parity-only.
+        allocations: []
+
+      - name: RefreshLegacyKinematicSnapshot
+        signature: "void RefreshLegacyKinematicSnapshot(...)"
+        line_range: [8246, 8315]
+        # Parity-only.
+        allocations: []
+
+      - name: SolveSeedLinearSystem
+        signature: "double[] SolveSeedLinearSystem(...)"
+        line_range: [8317, 8361]
+        allocations:
+          - {line: 8317, kind: "new double[3] (returned)", hot_path: true, note: "Per seed Newton iter per station — in RefineLaminarSeedStation / RefineWakeSeedStation hot path."}
+        io_or_locks: []
+
+      - name: ComputeLaminarResidualNorm
+        signature: "double ComputeLaminarResidualNorm(double[] residual, bool useLegacyPrecision)"
+        line_range: [8363, 8407]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 8495, form: "MathF.Sqrt", context: "Double `MathF.Sqrt(sumSquares)` at line 8495 — but returns double. Mixing MathF on double at this call site is a bug: the argument is cast to float before sqrt."}
+        mathf_calls:
+          - {line: 8495, symbol: "MathF.Sqrt"}
+        correctness_concerns:
+          - {line: 8495, severity: "high", issue: "`double residualNorm = MathF.Sqrt(sumSquares);` — sumSquares is double but MathF.Sqrt takes float; this silently narrows to float then widens to double, losing 28+ mantissa bits. If this is intended for legacy parity only it should be gated; if it's standard path it's a precision bug. The line is inside ComputeSeedStepMetrics (after 8435) based on line number — see that method. Actually line 8495 is inside ComputeSeedStepMetrics; revisiting in that method's section below."}
+
+      - name: ComputeResidualNorm
+        signature: "double ComputeResidualNorm(double[] residual)"
+        line_range: [8409, 8418]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: SeedStepMetrics (record struct)
+        signature: "readonly record struct SeedStepMetrics(...)"
+        line_range: [8420, 8433]
+        # Type declaration, not a method.
+        allocations: []
+        io_or_locks: []
+
+      - name: ComputeSeedStepMetrics
+        signature: "SeedStepMetrics ComputeSeedStepMetrics(double[] residual, double[] delta, double dmax, bool useLegacyPrecision)"
+        line_range: [8435, 8512]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 8495, form: "MathF.Sqrt on double arg", context: "`double residualNorm = MathF.Sqrt(sumSquares);` — silently narrows sumSquares:double to float and the returned float auto-widens back to double. LOSES PRECISION in both parity and standard branches."}
+        mathf_calls:
+          - {line: 8495, symbol: "MathF.Sqrt (likely bug — see correctness_concerns)"}
+        correctness_concerns:
+          - {line: 8495, severity: "high", issue: "MathF.Sqrt invoked with double argument — compiler auto-narrows the argument to float, then the return value is widened to double. This silently drops 28+ bits of precision from residualNorm. Should be `Math.Sqrt(sumSquares)`."}
+        numerical_stability:
+          - {line: 8495, issue: "silent_narrowing", note: "Resulting residualNorm quantized to float; affects seed convergence judgement."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Replace MathF.Sqrt with Math.Sqrt at line 8495 (or gate on useLegacyPrecision)"
+            rationale: "Silent precision loss — standard branch directly affected."
+            risk: low
+
+      - name: ComputeLegacySeedRelaxation
+        signature: "double ComputeLegacySeedRelaxation(double dmax, bool useLegacyPrecision)"
+        line_range: [8514, 8526]
+        # Parity-only helper.
+        allocations: []
+
+      - name: ApplySeedDslim
+        signature: "double ApplySeedDslim(double dstr, double thet, double msq, double hklim, bool useLegacyPrecision)"
+        line_range: [8528, 8545]
+        allocations: []
+        io_or_locks: []
+
+      - name: InitializeLegacySeedStoredShear
+        signature: "void InitializeLegacySeedStoredShear(...)"
+        line_range: [8547, 8570]
+        # Parity-only.
+        allocations: []
+
+      - name: ReadLegacySeedStoredShear
+        signature: "void ReadLegacySeedStoredShear(...)"
+        line_range: [8572, 8594]
+        # Parity-only.
+        allocations: []
+
+      - name: ReadLegacyAmplificationCarry
+        signature: "double ReadLegacyAmplificationCarry(...)"
+        line_range: [8596, 8614]
+        # Parity-only.
+        allocations: []
+
+      - name: WriteLegacyAmplificationCarry
+        signature: "void WriteLegacyAmplificationCarry(...)"
+        line_range: [8616, 8631]
+        # Parity-only.
+        allocations: []
+
+      - name: ComputeLegacySeedBaselineHk
+        signature: "double ComputeLegacySeedBaselineHk(...)"
+        line_range: [8633, 8657]
+        # Parity-only.
+        allocations: []
+
+      - name: RecomputeWakeGapFromXssi
+        signature: "void RecomputeWakeGapFromXssi(BoundaryLayerSystemState, WakeSeedData, InviscidSolverState, LinearVortexPanelState)"
+        line_range: [8659, 8745]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 8699, form: "float_locals", context: "denom/dwdxte chain in float"}
+          - {line: 8705, form: "float_locals"}
+        mathf_calls:
+          - {line: 8699, symbol: "MathF.Sqrt"}
+          - {line: 8705, symbol: "MathF.Sqrt"}
+        correctness_concerns:
+          - {line: 8659, severity: "high", issue: "This method is called ONLY from the legacy branch (callers: line 1768, 810). Standard branch never invokes it — yet standard branch has the same WGAP-from-XSSI problem. Restricting to legacy is half-a-fix."}
+        numerical_stability:
+          - {line: 8699, issue: "sqrt_domain", note: "denomSq may be tiny if airfoil TE panel degenerates."}
+        fortran_divergence:
+          - {line: 8659, fortran_ref: "f_xfoil/src/xpanel.f:2472 XICALC (WGAP block)", note: "Legacy-gated — see SolveViscousFromInviscid finding."}
+
+      - name: GetFirstWakeStationTeGap
+        signature: "double GetFirstWakeStationTeGap(WakeSeedData?, double teGap)"
+        line_range: [8747, 8757]
+        allocations: []
+        io_or_locks: []
+        correctness_concerns: []
+
+      - name: GetWakeGap
+        signature: "double GetWakeGap(WakeSeedData?, double teGap, int wakeIndex)"
+        line_range: [8759, 8778]
+        allocations: []
+        io_or_locks: []
+
+      - name: BuildWakeGapArray
+        signature: "double[] BuildWakeGapArray(WakeSeedData?, double teGap, int nWake)"
+        line_range: [8780, 8810]
+        allocations:
+          - {line: 8780, kind: "new double[nWake] (returned)", hot_path: true, note: "Called in Newton loop at line 811 after every STMOVE shift."}
+        io_or_locks: []
+
+      - name: SyncWakeMirror
+        signature: "void SyncWakeMirror(BoundaryLayerSystemState)"
+        line_range: [8812, 8844]
+        allocations: []
+        io_or_locks: []
+
+      - name: EstimateDrag
+        signature: "double EstimateDrag(BoundaryLayerSystemState, double qinf, double reinf)"
+        line_range: [8846, 8870]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 8846, severity: "high", issue: "Ad-hoc Squire-Young evaluated at trailing-edge proxy station (walking back from IBLTE while UEDG out-of-range). Fortran VISCAL uses DragCalculator-equivalent (wake-end Squire-Young). Used every Newton iter in convergenceHistory — but final CD comes from DragCalculator so standard-path CONVERGENCE HISTORY is misleading even though the final CD might be correct. Convergence decision is based on rmsbl, not on this CD, so risk is cosmetic — but the 1.8M% CD metric earlier cited may trace to PolarSweepRunner using convergenceHistory.CD!"}
+          - {line: 8867, severity: "medium", issue: "`Math.Pow(urat, 0.5*(5+hTE))` with hTE clamped [1,5]; exponent 3-5 for typical H. Acceptable."}
+          - {line: 8869, severity: "low", issue: "`Math.Max(2.0*cdTotal, 1e-6)` — hard floor on CD, hides divergence."}
+        numerical_stability:
+          - {line: 8855, issue: "loop_termination", note: "`while (iUse>1 && ...) iUse--` — walks back from IBLTE if UEDG out of range or THET tiny; can produce drag from a very upstream station → underestimate."}
+        fortran_divergence:
+          - {line: 8846, fortran_ref: "f_xfoil/src/xoper.f VISCAL drag calc", note: "Fortran uses Squire-Young at WAKE-END, not airfoil TE."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Use DragCalculator.ComputeDrag for ConvergenceHistory too, or delete EstimateDrag"
+            rationale: "Inconsistent CD between history and final result is misleading and may feed wrong values to polar sweeps."
+            risk: low
+
+      - name: ExtractProfiles
+        signature: "BoundaryLayerProfile[] ExtractProfiles(BoundaryLayerSystemState, int side, int iblte)"
+        line_range: [8879, 8898]
+        allocations:
+          - {line: 8882, kind: "new BoundaryLayerProfile[count]", hot_path: false, note: "Once per solve."}
+          - {line: 8887, kind: "new BoundaryLayerProfile { ... }", hot_path: false}
+        io_or_locks: []
+
+      - name: ExtractWakeProfiles
+        signature: "BoundaryLayerProfile[] ExtractWakeProfiles(BoundaryLayerSystemState)"
+        line_range: [8903, 8924]
+        allocations:
+          - {line: 8909, kind: "new BoundaryLayerProfile[count]", hot_path: false}
+        io_or_locks: []
+
+      - name: ExtractTransitionInfo
+        signature: "TransitionInfo ExtractTransitionInfo(BoundaryLayerSystemState, int side, LinearVortexPanelState, int isp, int n)"
+        line_range: [8929, 8952]
+        allocations:
+          - {line: 8946, kind: "new TransitionInfo { ... }", hot_path: false}
+        io_or_locks: []
+
+    file_summary:
+      parity_verdict: minor
+      # Parity branch is known-bit-exact on 4455/4455 NACA sweep. Findings here
+      # are allocation-only (hot-path new double[]/List) and env-gated Console
+      # traces — all observable as minor GC churn, not correctness risks.
+      standard_verdict: blocker
+      # Standard branch is STRUCTURALLY BROKEN in this file:
+      # 1. Never MRCHDU-initializes BL after Thwaites (line 1798).
+      # 2. Hand-rolled Thwaites at 2923+ and hardcoded CTAU=0.03 at 3166 replace
+      #    equilibrium turbulent seed.
+      # 3. Frozen-theta wake march at 3117 violates momentum conservation.
+      # 4. Incompressible CL/CM at Mach>0 (line 1603/1641).
+      # 5. Wake gap derivative uses wrong formula on standard branch (2646).
+      # 6. Stale WGAP and SST_GO after STMOVE (lines 797, 806).
+      # 7. Dead-but-dangerous managed surrogates (MarchBoundaryLayer etc).
+      # 8. Silent MathF.Sqrt narrowing at line 8495.
+      # Any of items 1-3 individually is plausibly the main cause of the 1.8M%
+      # CD relative error reported on the standard branch.
+      top_findings:
+        - "PreparePreNewtonSetupFromInviscid line 1798: standard branch never calls RemarchBoundaryLayerLegacyDirect — BL state enters Newton after Thwaites only. HIGHEST-SIGNAL S4."
+        - "InitializeBLThwaitesXFoil lines 3117-3168: non-legacy wake march freezes theta and hardcodes CTAU=0.03 — wrong physics for turbulent wake."
+        - "ComputeViscousCL line 1603: non-legacy branch assumes M=0 (no Karman-Tsien correction) regardless of MachNumber setting."
+        - "BuildWakeGapProfile line 2646: standard branch DWDXTE derived from wake segment tangent, not airfoil TE XP/YP cross — differs from Fortran XICALC."
+        - "ComputeSeedStepMetrics line 8495: MathF.Sqrt silently narrows double argument — precision bug on both branches."
+        - "MarchBoundaryLayer/MarchResidual/UpdateEdgeVelocityDIJCoupling: confirmed dead code with wrong math (X2 — recommend DELETE)."
+        - "RecomputeWakeGapFromXssi + SST_GO refresh after STMOVE: legacy-only (lines 797, 806) — standard branch keeps stale wake geometry after stagnation shift."
+      estimated_fix_effort: "parity hardening 0.5d; standard-branch repair 10-20d (reimplement MRCHUE/MRCHDU at double precision, port Karman-Tsien CL/CM, unify WGAP update paths, delete dead surrogates)."
+
+ledger_summary:
+  total_files: 1
+  total_methods_audited: 66
+  # Counted: WakeSeedData ctor (nested type) + 65 static methods + 1 record struct.
+  # Methods with line_range in this ledger: 66 entries.
+  parity_blockers: 0
+  standard_blockers: 7
+  notes: |
+    See file_summary.top_findings. Priority ranking for standard-branch repair (S4):
+      1. Line 1798 — missing MRCHDU init (PreparePreNewtonSetupFromInviscid).
+      2. Lines 3117-3166 — wake/turb seeds wrong physics (InitializeBLThwaitesXFoil).
+      3. Line 1603 — incompressible CL (ComputeViscousCL).
+      4. Line 2646 — wake gap DWDXTE wrong formula (BuildWakeGapProfile).
+      5. Lines 797 / 806 — post-STMOVE refresh legacy-only (SolveViscousFromInviscid).
+    Dead code to delete: MarchBoundaryLayer, MarchResidual, UpdateEdgeVelocityDIJCoupling,
+    TraceBufferGeometry's empty loop body at lines 298-300.
+    Allocation-heavy hot paths (parity-preserving cleanup): BuildViscousPanelSpeeds
+    (per-iter new double[n]), ConvertUedgToSpeeds (per-iter new double[n]),
+    BuildWakeGapArray (per-STMOVE new double[nWake]), ComputeViscousCL/CM
+    (per-iter new double[n] for cp array), SolveSeedLinearSystem (per-seed-iter
+    new double[3]). These can all adopt ArrayPool or SolverBuffers.
+    File has NO lock/Task/async/Parallel/File/Stream/Path/Directory operations
+    (verified by grep). Only runtime I/O is env-var probes and Console.Error
+    writes, all behind env-var gates or DebugWriter — verify at call-site that
+    neither JsonlTraceWriter nor PolarSweepRunner enables these in production.

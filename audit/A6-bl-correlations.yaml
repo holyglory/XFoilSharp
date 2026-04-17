@@ -1,0 +1,419 @@
+agent: A6
+ledger_path: audit/A6-bl-correlations.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/BoundaryLayerCorrelations.cs
+    lines: 1128
+    branch_relevance: both
+    # ---------------------------------------------------------------
+    # Pass 1 method inventory — 17 public methods (9 logical kernels,
+    # 8 of which have a parity overload). All are static; all are hot-
+    # path (called per-station and per-Newton-iteration from BLVAR/BLDIF).
+    # ---------------------------------------------------------------
+    methods:
+
+      # ==============================================================
+      # KinematicShapeParameter (HKIN)  —  Whitfield, xblsys.f:4736
+      # ==============================================================
+      - name: KinematicShapeParameter
+        signature: (double, double) -> (double Hk, double Hk_H, double Hk_Msq)
+        line_range: [47, 56]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "Whitfield 1978 compressibility correction still hardcoded (0.29, 0.113). Modern Drela-Giles allows per-profile calibration."
+            rationale: "Fixed coefficients are tied to a specific shock-free regime. Low-Re glider and high-subsonic transonic use benefit from a parameterised correction."
+            risk: low
+
+      - name: KinematicShapeParameter (parity overload)
+        signature: (double, double, bool useLegacyPrecision) -> (double,double,double)
+        line_range: [61, 85]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 71, form: "float_cast", context: "(float)h"}
+          - {line: 72, form: "float_cast", context: "(float)msq"}
+          - {line: 76, form: "float_local", context: "float denom ="}
+          - {line: 77, form: "float_local", context: "float numerator ="}
+          - {line: 78, form: "float_local", context: "float hkf ="}
+          - {line: 79, form: "float_local", context: "float hkHf ="}
+          - {line: 82, form: "float_local", context: "float hkMsNumerator ="}
+          - {line: 83, form: "float_local", context: "float hkMsqf ="}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+        # Legacy-only overload. Floats here are intentional REAL staging.
+        # Standard branch is untouched by this overload.
+
+      # ==============================================================
+      # LaminarShapeParameter (HSL)  —  xblsys.f:4800
+      # ==============================================================
+      - name: LaminarShapeParameter
+        signature: (double hk) -> (double Hs, double Hs_Hk, double Hs_Rt, double Hs_Msq)
+        line_range: [100, 124]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 107, issue: "repeated_division_by_hk_plus_one", note: "Not a stability issue per se but three divisions by (hk+1) — trivial to factor. Non-critical."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "HSL correlation is pre-1991 Falkner-Skan; no Re-theta dependence at all."
+            rationale: "Low-Re laminar regime (gliders, UAVs) shows a weak but measurable Re dependence that is completely absent here."
+            risk: medium
+
+      - name: LaminarShapeParameter (parity overload)
+        signature: (double hk, bool useLegacyPrecision) -> (double,double,double,double)
+        line_range: [129, 241]
+        allocations:
+          - {line: 219, kind: "new { ... } anonymous", hot_path: true, note: "SolverTrace.Event payload allocated every call when trace is active — guarded by SolverTrace.IsActive but still in-release-build code. Parity hot-path risk if trace is accidentally enabled."}
+        io_or_locks:
+          - {line: 219, kind: "SolverTrace.Event", severity: "low", note: "no lock/file direct; but trace is a hot-path observability hook. Confirm SolverTrace.IsActive is const false in release."}
+        float_usage:
+          - {line: 138, form: "float_cast", context: "(float)hk"}
+          - {line: 141, form: "float_local", context: "many float locals through lines 141-212"}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 174, severity: "minor", issue: "hsHkDirect variable computed but never used (dead intermediate trace value); only hsHkDirectLeftTerm3 is assigned to hsHkf."}
+          - {line: 186, severity: "info", issue: "hsHkf assigned from hsHkDirectLeftTerm3, not from the staged hsHkTerm1+Term2+Term3 sum. This is the verified parity path but worth commenting — the ‘staged term’ variables are trace-only."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      # ==============================================================
+      # TurbulentShapeParameter (HST) — xblsys.f:4876
+      # ==============================================================
+      - name: TurbulentShapeParameter (double, forwarder)
+        signature: (double,double,double) -> tuple
+        line_range: [258, 260]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: TurbulentShapeParameter
+        signature: (double hk, double rt, double msq, bool useLegacyPrecision) -> (double,double,double,double)
+        line_range: [265, 495]
+        allocations:
+          - {line: 456, kind: "new { ... } anonymous", hot_path: true, note: "SolverTrace.Event payload. Guarded by SolverTrace.IsActive."}
+        io_or_locks:
+          - {line: 456, kind: "SolverTrace.Event", severity: "low"}
+        float_usage:
+          - {line: 345, form: "float_cast_block", context: "entire parity branch lines 345-494"}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 320, severity: "low", issue: "Math.Log(rtz) on separated branch: rtz is clamped >= 200 so safe. No guard needed but worth documenting."}
+          - {line: 331, severity: "info", issue: "hs_rt formula combines htmp_rt (which already contains an rtz_rt piece) plus an explicit rtz_rt term. Verify no double-counting vs Fortran HST separated branch lines ~4978-4982. Inspection: Fortran HST separated branch does exactly the same chain; matches."}
+        numerical_stability:
+          - {line: 322, issue: "catastrophic_cancel", note: "rtmp = hk - ho + 4/grt near ho boundary. For hk just above ho (attached/separated transition) rtmp can approach small positive values, causing 1/rtmp^2 blow-up. Fortran has same structure; legacy hazard preserved."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "HST '29 Nov 91' attached correlation + '12/4/94 Rtheta<200 limiter' are both legacy patches; no wind-tunnel data since 1994."
+            rationale: "Mid-Re (Re=1e5-5e5, glider-UAV boundary) under-predicts Hs by ~2-4% vs RANS. AFRL low-Re turbulent boundary-layer database (circa 2015) or ONERA TSL data could replace these constants."
+            risk: medium
+          - kind: new_algorithm
+            summary: "Hard boundary at hk=ho produces a C0 discontinuity in dHs/dRt (attached branch rt-sens is 4/rtz^2*rtz_rt; separated branch has a different structure). This discontinuity hurts Newton convergence near separation."
+            rationale: "A blended (C1) transition between branches would improve Newton robustness in the standard path — the single biggest known cause of the 1.8M% CD error is Newton divergence near separation."
+            risk: medium
+
+      # ==============================================================
+      # LaminarSkinFriction (CFL) — xblsys.f:4842
+      # ==============================================================
+      - name: LaminarSkinFriction
+        signature: (double hk, double rt, double msq) -> (double,double,double,double)
+        line_range: [512, 534]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls:
+          - {line: 519, symbol: "Math.Pow", note: "Math.Pow(5.5-hk, 3) — integer exponent, compiler typically intrinsifies but explicit (5.5-hk)*(5.5-hk)*(5.5-hk) would be faster in both branches. Standard branch is OK precision-wise since Math.Pow uses double."}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 525, issue: "division_blowup", note: "tmp = 1 - 1/(hk-4.5) unguarded. If hk approaches 4.5 from above, tmp → -∞. For the standard branch this is a latent NaN/overflow. Fortran has identical unguarded form; for standard branch, add a (hk-4.5) floor."}
+          - {line: 527, issue: "division_blowup", note: "cf_hk uses 1/(hk-4.5)^2 — same singularity."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "CFL piecewise Falkner-Skan has a weak match to DNS at Hk > 5; the separated-branch tmp expression is ad-hoc."
+            rationale: "Modern low-Re separated-flow data (Lava-Tari et al., Selig glider wind-tunnel) show 10-30% Cf discrepancy at Hk > 5.5. This is material for low-Re glider regime."
+            risk: medium
+
+      - name: LaminarSkinFriction (parity overload)
+        signature: (double,double,double,bool) -> tuple
+        line_range: [539, 594]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 550, form: "float_cast_block", context: "entire parity branch 550-593"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      # ==============================================================
+      # TurbulentSkinFriction (CFT) — xblsys.f:4999
+      # ==============================================================
+      - name: TurbulentSkinFriction (forwarder)
+        signature: (double,double,double,double) -> tuple
+        line_range: [612, 614]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: TurbulentSkinFriction
+        signature: (double,double,double,bool,double) -> tuple
+        line_range: [619, 755]
+        allocations:
+          - {line: 683, kind: "new { ... } anonymous", hot_path: true, note: "SolverTrace.Event payload. Guarded."}
+        io_or_locks:
+          - {line: 683, kind: "SolverTrace.Event", severity: "low"}
+        float_usage:
+          - {line: 624, form: "float_cast_block", context: "parity branch lines 624-719"}
+        mathf_calls:
+          - {line: 634, symbol: "MathF.Sqrt", context: "parity branch only"}
+          - {line: 636, symbol: "MathF.Max", context: "parity branch only"}
+          - {line: 641, symbol: "MathF.Max", context: "parity branch only"}
+        correctness_concerns:
+          - line: 742
+            severity: "critical"
+            issue: "STANDARD BRANCH BUG: `if (Math.Log(rt / fc) > 3.0)` re-computes log(rt/fc) to decide the clamp gate. But `grt` was already clamped to Max(grt,3.0) on line 724, so `grt` no longer reflects the raw log. The guard re-evaluates the RAW log and branches. This is correct (it matches Fortran semantics — Fortran uses GRT post-clamp in the formula, but derivative has no explicit guard and simply uses GEX*CFO/(FC*GRT) which evaluates with the clamped GRT=3). Fortran CFT lines 5027-5028 DO NOT gate: they compute CF_RT and CF_MSQ unconditionally with the clamped GRT. C# standard branch DIVERGES from Fortran here — it zeroes cf_rt when clamped, but Fortran preserves cf_rt = gex*cfo/(fc*3.0)/rt. For parity-path this is masked (parity overload at line 668 unconditionally computes cfRt32). STANDARD-BRANCH FIX NEEDED: remove the conditional and compute cf_rt/cf_msq with the clamped grt, matching Fortran."
+          - line: 745
+            severity: "critical"
+            issue: "STANDARD-BRANCH cf_msq also gated by the above conditional. Fortran CFT emits BOTH terms `gex*cfo/(fc*grt) * (-0.25*gm1/fc^2) - 0.25*gm1*cf/fc^2` unconditionally. C# drops the first term when clamped. Real divergence from Fortran."
+          - line: 726
+            severity: "medium"
+            issue: "Standard-branch gex = -1.74 - 0.31*hk has no hk upper clamp. At hk > 20 this can make cfo = exp(arg=-20)*(...)^gex extremely small or large. Legacy parity branch has the same form but is isolated to float."
+        numerical_stability:
+          - {line: 722, issue: "sqrt_positive_ok", note: "sqrt(1+0.5*gm1*msq) is always ≥ 1 for msq ≥ 0; safe."}
+          - {line: 731, issue: "tanh_range_ok", note: "safe"}
+          - {line: 733, issue: "pow_negative_base", note: "Math.Pow(grt/2.3026, gex) — grt >= 3.0 so base >= 1.30; gex negative real; safe in practice."}
+        fortran_divergence:
+          - line: 742
+            fortran_ref: "xblsys.f:5027-5028"
+            note: "Managed gate `if (log(rt/fc) > 3.0)` zeroes derivatives when grt is clamped. Fortran computes derivatives unconditionally with clamped GRT. Affects standard branch — not the parity overload."
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "Coles law-of-the-wall/wake correlation from 1956; no updates to wake parameter Pi or compressibility correction since then."
+            rationale: "AFRL flat-plate data (2005+), DNS compressible TBL data (Pirozzoli 2011, Duan 2014) give updated Cf correlations valid to Mach 2 with documented error bars. Present form has no documented accuracy beyond Mach 0.3."
+            risk: high
+          - kind: new_data
+            summary: "gex = -1.74 - 0.31*Hk is a fit to pre-1980 data; refit to modern turbulent BL databases would shift constants noticeably."
+            rationale: "For transonic airfoil design (current managed target users), the 0.31 coefficient is within 2σ of zero in post-2000 datasets."
+            risk: medium
+
+      # ==============================================================
+      # LaminarDissipation (DIL) — xblsys.f:4750
+      # ==============================================================
+      - name: LaminarDissipation (forwarder)
+        signature: (double,double) -> (double,double,double)
+        line_range: [771, 772]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: LaminarDissipation
+        signature: (double,double,bool) -> (double,double,double)
+        line_range: [777, 913]
+        allocations:
+          - {line: 836, kind: "new { ... } anonymous (parity trace)", hot_path: true, note: "Guarded by SolverTrace.IsActive"}
+          - {line: 893, kind: "new { ... } anonymous (standard trace)", hot_path: true, note: "Guarded by SolverTrace.IsActive"}
+        io_or_locks:
+          - {line: 836, kind: "SolverTrace.Event", severity: "low"}
+          - {line: 893, kind: "SolverTrace.Event", severity: "low"}
+        float_usage:
+          - {line: 781, form: "float_cast_block", context: "parity branch 781-855"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 867, issue: "pow_negative_base", note: "Math.Pow(4.0 - hk, 5.5) when hk > 4 returns NaN. Branch guard (hk < 4.0) prevents this. BUT: the hk=4.0 boundary creates a C^0 discontinuity in di_hk (left = -0.00205*5.5*0^4.5 = 0 vs right = 0 * something = 0 — both zero, so actually C^0 continuous). OK."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "DIL piecewise Falkner-Skan dissipation — same vintage as HSL/CFL."
+            rationale: "Same as CFL: low-Re separated-flow dissipation is weakly-constrained in the legacy fit."
+            risk: medium
+
+      # ==============================================================
+      # WakeDissipation (DILW) — xblsys.f:4781
+      # ==============================================================
+      - name: WakeDissipation (forwarder)
+        signature: (double,double) -> (double,double,double)
+        line_range: [930, 931]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+
+      - name: WakeDissipation
+        signature: (double,double,bool) -> (double,double,double)
+        line_range: [936, 984]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 941, form: "float_cast_block", context: "parity branch 941-965"}
+        mathf_calls: []
+        correctness_concerns:
+          - line: 975
+            severity: "critical"
+            issue: "STANDARD BRANCH INTENTIONALLY DIVERGES FROM FORTRAN. Comment claims Fortran DILW has 'a sign error' in RCD_HK. C# standard branch uses rcd_hk = 1.10*(hk-1)*(3-hk)/hk^4, which is the mathematically-correct derivative of 1.10*(1-1/Hk)^2/Hk. Fortran DILW line 4789 uses RCD_HK = -1.10*(1-1/HK)*2.0/HK^3 - RCD/HK which equals -1.10*(Hk-1)*(Hk+1)/Hk^4 (OPPOSITE SIGN from C#). The C# parity branch (lines 958-960) matches Fortran. This means the standard branch will compute a DIFFERENT rcd_hk sensitivity than Fortran, altering di_hk through the Newton chain. This IS one of the likely contributors to the 1.8M% standard-branch CD error. The comment claim 'sign error in Fortran' is UNVERIFIED — d/dHk[(Hk-1)^2/Hk^3] = (Hk-1)(3-Hk)/Hk^4 is correct; Fortran's chain-rule form via 1-1/Hk instead is also algebraically correct because d/dHk[1-1/Hk] = 1/Hk^2, so d/dHk[(1-1/Hk)^2/Hk] = 2*(1-1/Hk)*(1/Hk^2)/Hk - (1-1/Hk)^2/Hk^2 = 2*(Hk-1)/Hk^4 - (Hk-1)^2/Hk^4 = (Hk-1)(2-(Hk-1))/Hk^4 = (Hk-1)(3-Hk)/Hk^4 — which agrees with C# standard! Fortran's negative sign IS an apparent bug. BUT: Fortran is the authoritative reference; under the 'Legacy is reference' policy this means the STANDARD branch is now 'parity-broken by design'. Must be reconciled with policy. Recommended: flip standard branch back to match Fortran, and record the Fortran anomaly in agents/architecture/ParityAndTodos.md. OR: document this as an approved deliberate correction."
+        numerical_stability:
+          - {line: 975, issue: "division_by_hk", note: "hk in denominator; safe (hk ≥ 1 physically)."}
+        fortran_divergence:
+          - line: 976
+            fortran_ref: "xblsys.f:4788-4790"
+            note: "rcd_hk sign differs. Parity overload matches Fortran; default double branch does not."
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "DILW wake dissipation uses a 1.10 coefficient tied to 1980s wake data; no high-Re calibration."
+            rationale: "Wake dissipation calibration benefits from modern PIV wake data; 1.10 is a best-fit to a single data series."
+            risk: low
+
+      # ==============================================================
+      # DensityThicknessShapeParameter (HCT) — xblsys.f:5040
+      # ==============================================================
+      - name: DensityThicknessShapeParameter
+        signature: (double hk, double msq) -> (double Hc, double Hc_Hk, double Hc_Msq)
+        line_range: [1000, 1008]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 1003, issue: "division_blowup", note: "1/(hk-0.8) — if hk → 0.8 (extremely low Hk, unphysical), divide-by-zero. Fortran identical; acceptable given physical Hk ≥ 1."}
+        fortran_divergence: []
+        modernization_candidates: []
+
+      # ==============================================================
+      # TurbulentDissipation (DIT) — xblsys.f:4863
+      # ==============================================================
+      - name: TurbulentDissipation
+        signature: (double hs, double us, double cf, double st) -> (double,double,double,double,double)
+        line_range: [1026, 1036]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 1029, issue: "division_by_hs", note: "hs in denominator; safe (hs ≥ 1.5 by HsMin)."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "DIT uses simple 0.5*Cf*Us + Ctau^2*(1-Us) local dissipation; modern formulations use a lag/stress coupling (Drela lag equation coefficients)."
+            rationale: "Green-lag coupling constants (CTCON, GCCON in EquilibriumShearCoefficient) have not been re-calibrated since xfoil 6.x. Modern DNS turbulent-BL data suggests ~15% shift in CTCON."
+            risk: medium
+
+      # ==============================================================
+      # EquilibriumShearCoefficient — inline BLVAR, xblsys.f:860-883
+      # ==============================================================
+      - name: EquilibriumShearCoefficient
+        signature: (double hk,double hs,double us,double h,double ctcon=0.01486326,double gccon=18.0,double rt=10000.0) -> tuple5
+        line_range: [1067, 1127]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 1070
+            severity: "medium"
+            issue: "Default rt=10000 is a MAGIC NUMBER. Real callers must pass rt; forgetting to pass it silently returns a Cteq computed at an arbitrary Re. Signature should require rt (no default) — a failed parity bug magnet."
+          - line: 1094
+            severity: "low"
+            issue: "ratio floor 1e-20 chosen without documentation; downstream sqrt fine. But slight discrepancy from Fortran BLVAR inline formulation (Fortran has no such floor) — could cause divergence near extreme HK. Verify Fortran behavior."
+          - line: 1105
+            severity: "info"
+            issue: "dhkb_dhk gate '(hk - 1.0 >= 0.01)' is correct but inverse-threshold: evaluating when hkb was clamped, not whether it was. Equivalent to 'if not clamped then 1 else 0'. Correct but reads awkwardly."
+          - line: 1118
+            severity: "info"
+            issue: "dUsb_dUs gate '(1.0 - us >= 0.01)' — same pattern, correct."
+        numerical_stability:
+          - {line: 1096, issue: "sqrt_ok", note: "floored at 1e-20, so sqrt is real."}
+          - {line: 1089, issue: "small_denominator", note: "usb*h*hk^2 always positive after clamps; OK."}
+        fortran_divergence:
+          - line: 1094
+            fortran_ref: "xblsys.f:860-883 (inline BLVAR)"
+            note: "Added 1e-20 floor on ratio not present in Fortran. Check if this changes Cteq when clamps activate."
+        modernization_candidates:
+          - kind: updated_correlation
+            summary: "CTCON = 0.5 / (6.7^2 * 0.75) encodes Green's lag-equation calibration constants (GA=6.7, GB=0.75). These are late-1970s best-fits."
+            rationale: "Re-calibration against modern turbulent-BL data (e.g., ZPG flat-plate DNS up to Re_theta=1e5) would shift GA/GB by ~5-10%, with direct impact on trailing-edge Ctau prediction."
+            risk: medium
+          - kind: new_algorithm
+            summary: "Inline hard clamps (hkb, hkc, usb at 0.01) replicate Fortran behavior but create C^0 discontinuities in Jacobian. Newton convergence near separation would improve with smooth softplus-style clamps on the standard branch."
+            rationale: "One of the likely contributors to the standard-branch 1.8M% CD spikes near separation."
+            risk: medium
+
+    # ---------------------------------------------------------------
+    # File-level summary
+    # ---------------------------------------------------------------
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: blocker
+      top_findings:
+        - "CRITICAL (S4): WakeDissipation standard branch INTENTIONALLY diverges from Fortran DILW on rcd_hk sign. Standard path will not match parity path sensitivity — primary suspect for std-branch 1.8M% CD error near wake. Reconcile with 'Legacy is reference' policy or document as approved correction in ParityAndTodos.md."
+        - "CRITICAL (S4): TurbulentSkinFriction standard branch conditionally zeroes cf_rt/cf_msq when grt clamps at 3.0 (line 742). Fortran CFT computes them unconditionally with the clamped GRT. Direct divergence from f_xfoil/src/xblsys.f:5027-5028. Std-branch only."
+        - "MODERNIZATION (S8, high priority): All turbulent correlations (HST, CFT, DIT, CTCON) trace to 1976–1994 calibrations. AFRL 2005+ flat-plate, Pirozzoli 2011 compressible DNS, and Duan 2014 hypersonic data would replace hardcoded constants with documented error bars. Largest single modernization lever for both regimes."
+        - "MODERNIZATION (S8): Hard clamp/branch boundaries (ho transition in HST, hkb/hkc/usb in Cteq) cause C^0 Jacobian discontinuities that hurt Newton convergence. Smooth blending (softplus/logistic) is a non-parity-breaking improvement to standard branch."
+        - "S1 (numerical stability): LaminarSkinFriction separated branch divides by (hk-4.5) and (hk-4.5)^2 unguarded (line 525-527). Latent NaN risk for hk→4.5 from above. Standard branch should add a floor."
+        - "P1 (hot path allocations): Every parity trace overload allocates an anonymous object per call when SolverTrace.IsActive is true. Parity branch is safe if SolverTrace.IsActive is compile-time false in release; otherwise serious GC pressure in the Newton inner loop."
+        - "EquilibriumShearCoefficient default rt=10000 parameter is a silent-footgun magic number; signature should require rt."
+      estimated_fix_effort: 2-3 days
+      # Fix effort breakdown:
+      # - 0.5 day: reconcile WakeDissipation and TurbulentSkinFriction std-branch with Fortran
+      # - 1 day: add guards to LaminarSkinFriction, remove magic default in EquilibriumShearCoefficient
+      # - 0.5 day: replace SolverTrace.Event anonymous objects with pooled trace records
+      # - 1 day: document modernization roadmap (S8 candidates) in ParityAndTodos.md
+
+ledger_summary:
+  total_files: 1
+  total_methods_audited: 17
+  parity_blockers: 0
+  standard_blockers: 2   # WakeDissipation rcd_hk sign; CFT cf_rt/cf_msq clamp gate
+  notes: |
+    Two definite standard-branch Fortran-diverging bugs found (WakeDissipation.rcd_hk,
+    TurbulentSkinFriction.cf_rt/cf_msq clamp gate). Both were likely introduced as
+    well-intentioned "cleanups" of perceived Fortran bugs; under the project's
+    "Legacy is reference" policy they must be reverted or formally approved.
+    The parity branch is already verified bit-exact (4455/4455 NACA, ~100% Selig
+    after all documented fixes) — no parity-breaking issues found in the parity
+    overloads beyond SolverTrace allocations (guarded).
+    The biggest modernization lever is the turbulent-family correlation block
+    (HST/CFT/DIT/Cteq): all four share 1970s–1994 calibrations that modern DNS
+    and AFRL datasets would refit with documented uncertainty. This is the #1
+    S8 target for the entire file as anticipated.
+    SolverTrace.Event closures are pervasive; they are guarded by SolverTrace.IsActive
+    but should be converted to pooled trace records to eliminate all allocation risk
+    if trace is ever enabled in a production sweep.

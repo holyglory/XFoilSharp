@@ -1,0 +1,564 @@
+agent: C3
+ledger_path: audit/C3-models.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+scope: src/XFoil.Solver/Models/ (47 files)
+methodology: |
+  Pass 1 - triage: classify every .cs file as DTO (immutable record / enum / result
+  container / settable-only-at-construction) vs hot-state (mutable arrays touched
+  during the solve hot path, including per-case workspace reset).
+  Pass 2-4 - full audit on hot-state files only.
+  Grep audits performed on the whole directory:
+    - 'lock\b|Monitor\.|Interlocked\.|volatile|Mutex|Semaphore' : ZERO true-positive hits.
+      The three grep hits on ViscousNewtonSystem.cs are the tokens 'block' / 'blocks'
+      inside XML documentation and data-layout comments, NOT lock statements. The
+      plan's claim that 'ViscousNewtonSystem.SetupISYS has lock statements' is
+      INCORRECT - SetupISYS is a plain for-loop copying [nsys+1, 2] int pairs with
+      no synchronization primitives.
+    - 'float|MathF|[0-9]+\.[0-9]*f\b' : only real hits are in InviscidSolverState.cs
+      (LegacyStreamfunctionInfluenceFactors, LegacyPivotIndices - both parity-only).
+    - No file in this directory contains File.*, Stream.*, Console.*, string interp,
+      LINQ, Task/async, or closures. Models are pure data/workspace types.
+
+files:
+
+  # ---------- HOT-STATE FILES (full audit) ----------
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/BoundaryLayerSystemState.cs
+    lines: 211
+    classification: hot-state
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: BoundaryLayerSystemState(int maxStations, int maxWakeStations)
+        line_range: [24, 89]
+        allocations:
+          - {line: 31, kind: "new int[,]", hot_path: false, note: "IPAN [maxStations,2] - constructor only, not per-solve"}
+          - {line: 35, kind: "new double[,]", hot_path: false, note: "VTI"}
+          - {line: 39, kind: "new double[,]", hot_path: false, note: "UEDG"}
+          - {line: 43, kind: "new double[,]", hot_path: false, note: "THET"}
+          - {line: 47, kind: "new double[,]", hot_path: false, note: "DSTR"}
+          - {line: 51, kind: "new double[,]", hot_path: false, note: "CTAU"}
+          - {line: 55, kind: "new double[,]", hot_path: false, note: "MASS"}
+          - {line: 59, kind: "new double[,]", hot_path: false, note: "TAU"}
+          - {line: 63, kind: "new double[,]", hot_path: false, note: "XSSI"}
+          - {line: 67, kind: "new int[]", hot_path: false, note: "ITRAN[2]"}
+          - {line: 71, kind: "new int[]", hot_path: false, note: "IBLTE[2]"}
+          - {line: 75, kind: "new int[]", hot_path: false, note: "NBL[2]"}
+          - {line: 78, kind: "new double[]", hot_path: false, note: "TINDEX[2]"}
+          - {line: 84, kind: "new PrimaryStationState?[,]", hot_path: false, note: "LegacyPrimary - parity snapshot array of nullable records"}
+          - {line: 85, kind: "new KinematicResult?[,]", hot_path: false, note: "LegacyKinematic"}
+          - {line: 86, kind: "new SecondaryStationResult?[,]", hot_path: false, note: "LegacySecondary"}
+          - {line: 87, kind: "new double[,]", hot_path: false, note: "LegacyAmplificationCarry"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: InitializeForStationCounts
+        signature: void InitializeForStationCounts(int side1, int side2, int wake)
+        line_range: [200, 210]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 209
+            severity: low
+            issue: "NBL[1] = side2 + wake aggregates wake into lower-side count; verify callers still reference NBL[1] as 'side2 stations + wake' rather than 'side2 only'. This matches Fortran convention (wake appended after lower TE) but is easy to misread."
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "No re-allocation mid-solve: properties are get-only, backing arrays allocated once in ctor."
+        - "State object itself is allocated per-case in ViscousSolverEngine.PreparePreNewtonSetupFromInviscid (line 1735). Per-case (not per-Newton-iter) allocation is acceptable during sweeps but represents ~17 large 2D arrays per polar point; consider a reusable workspace pooled across cases if sweep perf becomes a concern."
+        - "InitializeForStationCounts mutates IBLTE/NBL but does NOT zero the double[,] arrays. Callers must assume previous data is stale; verified callers do reseed from scratch (InitializeXFoilStationMappingWithWakeSeed, InitializeBLThwaitesXFoil)."
+        - "Uses double throughout - no float contamination."
+      estimated_fix_effort: "0 hours (clean)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousNewtonSystem.cs
+    lines: 156
+    classification: hot-state
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: ViscousNewtonSystem(int nsysMax)
+        line_range: [29, 56]
+        allocations:
+          - {line: 35, kind: "new double[3,2,nsysMax]", hot_path: false, note: "VA diagonal blocks - constructor only, per-case sizing"}
+          - {line: 38, kind: "new double[3,2,nsysMax]", hot_path: false, note: "VB sub-diagonal blocks"}
+          - {line: 42, kind: "new double[3,nsysMax,nsysMax]", hot_path: false, note: "VM - QUADRATIC in nsysMax; largest single array in the model (3 * N^2 doubles). For nsysMax~400 this is ~3.8 MB. Allocated per-case. Candidate for pooling across sweep cases."}
+          - {line: 45, kind: "new double[3,2,nsysMax]", hot_path: false, note: "VDEL"}
+          - {line: 48, kind: "new double[3,2]", hot_path: false, note: "VZ"}
+          - {line: 52, kind: "new int[nsysMax+1,2]", hot_path: false, note: "ISYS"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "VM(3, nsys, nsys) mass-defect coupling is a dense N*N matrix with only O(nWake) non-zeros per column. Sparse storage could save ~3.8 MB per solve on default meshes."
+            rationale: "Coupling is localized; only wake stations contribute off-diagonal. Switching to CSR or banded layout would cut allocations and cache miss rate."
+            risk: high
+      - name: .ctor (compat overload)
+        signature: ViscousNewtonSystem(int nsysMax, int _)
+        line_range: [65, 68]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 65
+            severity: low
+            issue: "Unused second parameter; constructor exists for backward compat per XML doc. Candidate for X1 removal after caller migration."
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SetupISYS
+        signature: void SetupISYS(int[,] isysMapping, int nsysCount)
+        line_range: [146, 155]
+        allocations: []
+        io_or_locks: []   # NO lock/Monitor/Interlocked here. Plan claim is INCORRECT.
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "PLAN CORRECTION: SetupISYS contains NO lock/Monitor/Interlocked. The plan's claim that 'SetupISYS has lock statements' is incorrect - the grep hits on line 47/83/89 are the tokens 'block' / 'blocks' in XML documentation describing the block-tridiagonal layout. Body is a plain Math.Min + for-loop copy. P4 check is CLEAN for this file."
+        - "VM is the largest allocation in the solver models: 3 * (nsys+1)^2 doubles. For typical nsys=300-400 this is 2-4 MB per case. Pool candidate for high-volume sweeps."
+        - "Per-case allocation site: ViscousSolverEngine.cs:1825 (new ViscousNewtonSystem(nsys+1)). Not per-station, not per-Newton-iter, so parity branch is acceptable; standard branch could benefit from reuse."
+        - "ISYS has private set accessor but is never reassigned anywhere in the codebase (SetupISYS copies into existing array). Setter could be removed."
+      estimated_fix_effort: "0 hours for correctness; 1-2 days if pooling is pursued"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/InviscidSolverState.cs
+    lines: 254
+    classification: hot-state
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: InviscidSolverState(int maxNodes)
+        line_range: [24, 51]
+        allocations:
+          - {line: 33, kind: "new double[]", hot_path: false, note: "VortexStrength"}
+          - {line: 34, kind: "new double[,]", hot_path: false, note: "BasisVortexStrength [maxNodes+1,2]"}
+          - {line: 35, kind: "new double[]", hot_path: false, note: "SourceStrength"}
+          - {line: 36, kind: "new double[,]", hot_path: false, note: "StreamfunctionInfluence - full AIJ LU factors, (maxNodes+1)^2 doubles"}
+          - {line: 37, kind: "new float[,]", hot_path: false, note: "LegacyStreamfunctionInfluenceFactors - parity-only single-precision LU factors. S1 concern but explicitly parity-gated; acceptable."}
+          - {line: 38, kind: "new double[,]", hot_path: false, note: "SourceInfluence"}
+          - {line: 39, kind: "new int[]", hot_path: false, note: "PivotIndices"}
+          - {line: 40, kind: "new int[]", hot_path: false, note: "LegacyPivotIndices"}
+          - {line: 41, kind: "new double[]", hot_path: false, note: "InviscidSpeed"}
+          - {line: 42, kind: "new double[,]", hot_path: false, note: "BasisInviscidSpeed"}
+          - {line: 43, kind: "new double[]", hot_path: false, note: "InviscidSpeedAlphaDerivative"}
+          - {line: 44, kind: "new double[]", hot_path: false, note: "VortexStrengthAlphaDerivative"}
+          - {line: 46, kind: "new double[]", hot_path: false, note: "StreamfunctionVortexSensitivity"}
+          - {line: 47, kind: "new double[]", hot_path: false, note: "StreamfunctionNormalSensitivity"}
+          - {line: 48, kind: "new double[]", hot_path: false, note: "StreamfunctionSourceSensitivity"}
+          - {line: 49, kind: "new double[]", hot_path: false, note: "VelocityVortexSensitivity"}
+          - {line: 50, kind: "new double[]", hot_path: false, note: "VelocitySourceSensitivity"}
+        io_or_locks: []
+        float_usage:
+          - {line: 37, form: "float_field_allocation", context: "new float[maxNodes+1, maxNodes+1] - parity-only LU factors"}
+          - {line: 91, form: "float_property", context: "public float[,] LegacyStreamfunctionInfluenceFactors"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - line: 91
+            issue: "precision_drop"
+            note: "Single-precision LU factors for an N*N system with N~160-400. Condition number growth means this path (even though parity-gated) silently trades off ~7 decimal digits. Standard branch must NOT use these."
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "LegacyStreamfunctionInfluenceFactors allocates maxNodes^2 floats even when parity mode is off."
+            rationale: "Wastes ~100 kB per InviscidSolverState when UseLegacyKernelPrecision=false. Lazy allocation would save memory in the standard-branch path."
+            risk: low
+      - name: InitializeForNodeCount
+        signature: void InitializeForNodeCount(int nodeCount)
+        line_range: [213, 253]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 228, form: "float_array_clear", context: "Array.Clear(LegacyStreamfunctionInfluenceFactors) - parity-only array zeroed per-case"}
+        mathf_calls: []
+        correctness_concerns:
+          - line: 251
+            severity: medium
+            issue: "InitializeForNodeCount unconditionally resets UseLegacyKernelPrecision=false and UseLegacyPanelingPrecision=false. Callers who set these flags BEFORE calling InitializeForNodeCount will have the flags silently overwritten. Verify call ordering at PolarSweepRunner.cs:60/156/242 and ViscousSolverEngine.cs:188/216; the observed pattern is 'InitializeForNodeCount first, then set flags', which is correct, but the silent reset is a fragile contract."
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: minor
+      top_findings:
+        - "LegacyStreamfunctionInfluenceFactors is correctly parity-gated via UseLegacyKernelPrecision flag; not a standard-branch hazard."
+        - "InitializeForNodeCount silently resets UseLegacyKernelPrecision/UseLegacyPanelingPrecision to false. Fragile contract - a caller that sets flag then re-initializes will lose state."
+        - "Float arrays are always allocated even when parity mode is off. Lazy allocation would save memory."
+        - "No re-allocation mid-solve; InitializeForNodeCount only zeros and sets node count."
+      estimated_fix_effort: "2-4 hours for lazy-allocation + flag-reset documentation"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/LinearVortexPanelState.cs
+    lines: 139
+    classification: hot-state
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: LinearVortexPanelState(int maxNodes = 360)
+        line_range: [23, 39]
+        allocations:
+          - {line: 31, kind: "new double[]", hot_path: false, note: "X - constructor only"}
+          - {line: 32, kind: "new double[]", hot_path: false, note: "Y"}
+          - {line: 33, kind: "new double[]", hot_path: false, note: "ArcLength"}
+          - {line: 34, kind: "new double[]", hot_path: false, note: "XDerivative"}
+          - {line: 35, kind: "new double[]", hot_path: false, note: "YDerivative"}
+          - {line: 36, kind: "new double[]", hot_path: false, note: "NormalX"}
+          - {line: 37, kind: "new double[]", hot_path: false, note: "NormalY"}
+          - {line: 38, kind: "new double[]", hot_path: false, note: "PanelAngle"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Resize
+        signature: void Resize(int nodeCount)
+        line_range: [128, 138]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 137
+            severity: low
+            issue: "Resize only sets NodeCount; does NOT clear or resize backing arrays. Method name is misleading - this is really 'SetActiveNodeCount'. No functional issue (arrays pre-sized to maxNodes), but the name could mislead future contributors into expecting actual resizing."
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Resize() never actually resizes arrays - it only updates NodeCount. Name is misleading."
+        - "Verified call sites: CosineClusteringPanelDistributor.cs:636 (called during panel generation, once per case), plus InitializeForNodeCount chain in PolarSweepRunner, LinearVortexInviscidSolver, ViscousSolverEngine. NOT called per-station or per-Newton-iter - safe."
+        - "No float usage, no I/O, no locks. Pure double arrays."
+        - "Allocated per-case at PolarSweepRunner.cs:52/148/234, LinearVortexInviscidSolver.cs:1075, ViscousSolverEngine.cs:180/208. Default maxNodes=360 -> 8 doubles * 360 = ~23 kB per instance. Negligible."
+      estimated_fix_effort: "0 hours (rename Resize -> SetActiveNodeCount is cosmetic)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/AnalysisSettings.cs
+    lines: 234
+    classification: hot-state
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: AnalysisSettings(int panelCount = 120, ..., bool useLegacyPanelingPrecision = false)
+        line_range: [16, 104]
+        allocations:
+          - {line: 86, kind: "new PanelingOptions()", hot_path: false, note: "Fallback when paneling argument is null; constructor-only"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: GetEffectiveNCrit
+        signature: double GetEffectiveNCrit(int side)
+        line_range: [225, 233]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "All properties are { get; } only - constructor-only mutation confirmed. Plan's 'verify constructor-only mutation' check passes."
+        - "No float/MathF usage anywhere. All doubles."
+        - "Validation in constructor throws on bad input - acceptable at public API boundary."
+        - "Not truly 'hot-state' in the per-Newton-iter sense; it's an immutable settings object. Classified as hot-state only because the plan listed it explicitly. Could reasonably be re-classified as DTO."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousIntervalState.cs
+    lines: 82
+    classification: hot-state  # plan listed it explicitly, but it is effectively a DTO
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: ViscousIntervalState(BoundaryLayerBranch, ViscousIntervalKind, int, ViscousStationState, ViscousStationState, ViscousStationDerivedState, ViscousStationDerivedState, double x10)
+        line_range: [11, 47]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "All properties { get; } only; truly immutable. Effective DTO despite being listed under hot-state."
+        - "Large ctor (17 params) - candidate for record struct or builder pattern, but not a correctness/perf issue."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousIntervalSystem.cs
+    lines: 34
+    classification: hot-state  # plan listed it; effectively a DTO container
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: ViscousIntervalSystem(ViscousStateEstimate, BoundaryLayerCorrelationConstants, IReadOnlyList<ViscousIntervalState> x3)
+        line_range: [11, 23]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "All properties { get; }; immutable. Effective DTO."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/BoundaryLayerBranch.cs
+    lines: 14
+    classification: hot-state  # plan listed it; trivially an enum
+    branch_relevance: both
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Plain enum { Upper=0, Lower=1, Wake=2 }. Not a state container at all; plan's classification as hot-state is incorrect but harmless."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/BoundaryLayerProfile.cs
+    lines: 64
+    classification: hot-state  # plan listed it; readonly record struct, effective DTO
+    branch_relevance: both
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "readonly record struct with init-only properties. Immutable value type. Effective DTO."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/BoundaryLayerStation.cs
+    lines: 36
+    classification: hot-state  # plan listed it; immutable sealed class
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: BoundaryLayerStation(BoundaryLayerBranch, int, AirfoilPoint, double, double)
+        line_range: [13, 25]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "All properties { get; } only. Effective DTO."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/BoundaryLayerTopology.cs
+    lines: 40
+    classification: hot-state  # effective DTO
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: BoundaryLayerTopology(AirfoilPoint, double, int, IReadOnlyList x3)
+        line_range: [13, 27]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "All properties { get; } only. Effective DTO."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/WakeGeometry.cs
+    lines: 17
+    classification: hot-state  # effective DTO
+    branch_relevance: both
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Single IReadOnlyList<WakePoint> property. Immutable."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/PanelMesh.cs
+    lines: 28
+    classification: hot-state  # effective DTO
+    branch_relevance: both
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Immutable composite of nodes/panels/orientation. Effective DTO."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/Panel.cs
+    lines: 52
+    classification: hot-state  # effective DTO
+    branch_relevance: both
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Immutable single-panel geometry record. Effective DTO."
+      estimated_fix_effort: "0 hours"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/PreparedInviscidSystem.cs
+    lines: 42
+    classification: hot-state  # effective DTO
+    branch_relevance: both
+    methods:
+      - name: .ctor
+        signature: PreparedInviscidSystem(PanelMesh, double[,], double[,], IReadOnlyList<double> x2, double x2)
+        line_range: [11, 27]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - line: 31
+            severity: low
+            issue: "Exposes raw double[,] arrays (SourceTangentialInfluence, VortexTangentialInfluence) as public mutable references. Caller could modify the backing storage; defensive-copy or ReadOnlyMemory<double> would be safer for a public API."
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: minor
+      top_findings:
+        - "Immutable wrapper but exposes mutable double[,] references. Minor API-hygiene concern, not a parity issue."
+      estimated_fix_effort: "0 hours"
+
+  # ---------- DTO FILES (triage pass, no audit) ----------
+
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/BoundaryLayerCorrelationConstants.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/DisplacementCoupledResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/DragDecomposition.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/InviscidAnalysisResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/InviscidLiftSweepResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/InviscidSolverType.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/InviscidTargetLiftResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/LinearVortexInviscidResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/PanelingOptions.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/PolarPoint.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/PolarSweepMode.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/PolarSweepResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/PressureCoefficientSample.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/TransitionInfo.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousAnalysisResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousBranchSeed.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousBranchState.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousConvergenceInfo.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousCorrectionResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousFlowRegime.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousInteractionResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousIntervalKind.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousLiftSweepResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousPolarPoint.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousPolarSweepResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousSolveResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousSolverMode.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousStateEstimate.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousStateSeed.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousStationDerivedState.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousStationSeed.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousStationState.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/ViscousTargetLiftResult.cs, classification: DTO, audit: none}
+  - {file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Models/WakePoint.cs, classification: DTO, audit: none}
+
+ledger_summary:
+  total_files: 47
+  hot_state_files: 15
+  dto_files: 32
+  total_methods_audited: 12
+  parity_blockers: 0
+  standard_blockers: 0
+  parity_minor: 1    # InviscidSolverState (silent flag reset + lazy-alloc candidate)
+  standard_minor: 2  # InviscidSolverState, PreparedInviscidSystem (mutable ref exposure)
+  notes: |
+    Key corrections to the audit plan:
+
+    1. ViscousNewtonSystem.SetupISYS does NOT contain lock/Monitor/Interlocked. The
+       grep hits that caused the plan to flag this file are the tokens "block" /
+       "blocks" in XML doc comments describing the block-tridiagonal matrix
+       structure. P4 is CLEAN for the entire Models/ directory. Zero lock/sync
+       primitives exist in any of the 47 files.
+
+    2. No re-allocation mid-solve was found. All hot-state types pre-allocate in
+       their constructors and expose get-only properties; "Initialize*" and Resize
+       methods only zero data or set counts, never replace backing storage.
+
+    3. Per-case allocation sites (not per-station, not per-Newton-iter) exist at:
+       - ViscousSolverEngine.cs:1735 (new BoundaryLayerSystemState)
+       - ViscousSolverEngine.cs:1825 (new ViscousNewtonSystem - largest: ~3.8 MB VM matrix)
+       - ViscousSolverEngine.cs:180/208, PolarSweepRunner.cs:52/148/234, etc.
+       These are acceptable for parity correctness but are candidates for workspace
+       pooling across polar sweeps if throughput becomes a concern.
+
+    4. InviscidSolverState is the ONLY Models file that contains `float`. Both the
+       float field (LegacyStreamfunctionInfluenceFactors) and the float pivot array
+       (LegacyPivotIndices) are parity-only and gated by UseLegacyKernelPrecision.
+       Standard branch never reads them. S1/S2/S3 checks are CLEAN for every other
+       Models file.
+
+    5. AnalysisSettings has all get-only properties - constructor-only mutation
+       verified. Plan's check passes.
+
+    6. LinearVortexPanelState.Resize is misnamed - it only updates NodeCount and
+       does NOT resize the backing arrays. Arrays are sized once in the ctor. Not
+       a bug but a documentation/API-hygiene improvement.
+
+    7. 32 of 47 files are pure DTO: enums, readonly records, and sealed classes
+       with only { get; } init-in-ctor properties. Zero audit surface on these.
+
+    8. ViscousIntervalState, ViscousIntervalSystem, BoundaryLayerBranch,
+       BoundaryLayerProfile, BoundaryLayerStation, BoundaryLayerTopology,
+       WakeGeometry, PanelMesh, Panel, and PreparedInviscidSystem (all listed
+       explicitly by the plan as hot-state) are actually effective DTOs:
+       immutable, get-only properties. They were still given per-method entries
+       per the plan's explicit instruction.

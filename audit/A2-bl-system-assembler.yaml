@@ -1,0 +1,544 @@
+agent: A2
+ledger_path: audit/A2-bl-system-assembler.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/BoundaryLayerSystemAssembler.cs
+    lines: 6984
+    branch_relevance: both
+    pass1_method_index:
+      summary: >
+        Static utility class BoundaryLayerSystemAssembler plus nine nested public/internal
+        helper types. Only TWO Console.Error.WriteLine remain, both gated behind env-vars
+        (XFOIL_COM2_IT1 at line 467, XFOIL_AH79_TRDIF at line 4642). No locks, no async,
+        no File/Stream I/O. No TODO/FIXME/NotSupported markers.
+      enumerated_methods:
+        - {name: ComputeLegacyCtcon,              kind: private_static, line_range: [40, 49]}
+        - {name: ComputeDeltaShapeTerm,           kind: private_static, line_range: [54, 63]}
+        - {name: ConvertToCompressible,           kind: public_static,  line_range: [77, 111]}
+        - {name: ComputeKinematicParameters,      kind: public_static,  line_range: [125, 256]}
+        - {name: ComputeStationVariables,         kind: public_static,  line_range: [271, 470]}
+        - {name: ComputeMidpointCorrelations,     kind: public_static,  line_range: [484, 541]}
+        - {name: ComputeFiniteDifferences,        kind: public_static,  line_range: [558, 2417]}
+        - {name: ComputeTransitionIntervalSystem, kind: private_static, line_range: [2418, 4660]}
+        - {name: ComputeCfChains,                 kind: private_static, line_range: [4661, 4763]}
+        - {name: ComputeCqChains,                 kind: private_static, line_range: [4764, 4924]}
+        - {name: ComputeTurbulentWallDiContributionLegacy, kind: private_static, line_range: [4925, 5017]}
+        - {name: ComputeOuterLayerDiContributionLegacy,    kind: private_static, line_range: [5018, 5086]}
+        - {name: ApplyTurbulentDiDfacCorrectionLegacy,     kind: private_static, line_range: [5087, 5156]}
+        - {name: ComputeDiChains,                 kind: private_static, line_range: [5157, 5793]}
+        - {name: AssembleTESystem,                kind: public_static,  line_range: [5794, 5843]}
+        - {name: AssembleStationSystem,           kind: public_static,  line_range: [5876, 6252]}
+        - {name: CanonicalizeTracePhase,          kind: private_static, line_range: [6254, 6267]}
+        - {name: CreateStandaloneKinematicFallback, kind: private_static, line_range: [6268, 6308]}
+        - {name: ComputeUs,                       kind: private_static, line_range: [6309, 6318]}
+        - {name: ComputeDe,                       kind: private_static, line_range: [6319, 6329]}
+        - {name: ComputeHc,                       kind: private_static, line_range: [6330, 6338]}
+        - {name: ComputeLocalCteq,                kind: private_static, line_range: [6339, 6356]}
+        - {name: ComputeTurbDi,                   kind: private_static, line_range: [6357, 6397]}
+        - {name: AssembleMomentumEquation,        kind: internal_static, line_range: [6431, 6693]}
+        - {name: ComputeBldifLogTerms,            kind: internal_static, line_range: [6699, 6788]}
+      nested_types:
+        - {name: BldifEq2Inputs,           kind: internal_sealed_class, line_range: [6398, 6415]}
+        - {name: BldifEq2Result,           kind: internal_sealed_class, line_range: [6417, 6429]}
+        - {name: KinematicResult,          kind: public_class,          line_range: [6790, 6835]}
+        - {name: KinematicResult.Clone,    kind: public_method,         line_range: [6808, 6834]}
+        - {name: PrimaryStationState,      kind: public_class,          line_range: [6837, 6865]}
+        - {name: PrimaryStationState.Clone,kind: public_method,         line_range: [6853, 6864]}
+        - {name: StationVariables,         kind: public_class,          line_range: [6867, 6870]}
+        - {name: MidpointResult,           kind: public_class,          line_range: [6872, 6875]}
+        - {name: BldifLogTerms,            kind: internal_sealed_class, line_range: [6877, 6888]}
+        - {name: BldifResult,              kind: public_class,          line_range: [6890, 6902]}
+        - {name: BlsysResult,              kind: public_class,          line_range: [6904, 6924]}
+        - {name: SecondaryStationResult,   kind: public_class,          line_range: [6926, 6982]}
+        - {name: SecondaryStationResult.Clone, kind: public_method,     line_range: [6939, 6981]}
+    methods:
+      - name: ComputeLegacyCtcon
+        signature: "private static float ComputeLegacyCtcon()"
+        line_range: [40, 49]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 40, form: float_return, context: "static float return type"}
+          - {line: 45, form: float_local,  context: "float gacon=(float)GACON"}
+          - {line: 46, form: float_local,  context: "float gbcon=(float)GBCON"}
+          - {line: 47, form: float_local,  context: "float gaconSq=gacon*gacon"}
+          - {line: 48, form: float_literal, context: "return 0.5f / (gaconSq*gbcon)"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "Standard branch should use const CTCON=0.5/(GACON*GACON*GBCON) directly in double; legacy helper only belongs to parity path.", rationale: "Avoid float round trip in standard branch.", risk: low}
+      - name: ComputeDeltaShapeTerm
+        signature: "private static double ComputeDeltaShapeTerm(double hk, bool useLegacyPrecision)"
+        line_range: [54, 63]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 61, form: float_cast, context: "(float)hk"}
+          - {line: 61, form: float_local, context: "float hkf"}
+          - {line: 62, form: float_literal, context: "3.15f + 1.72f / (hkf - 1.0f)"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 58, issue: divide_by_zero_risk, note: "hk-1.0 denominator; no guard. Caller must clamp hk>1."}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ConvertToCompressible
+        signature: "public static (double,double,double) ConvertToCompressible(double uei, double tkbl, double qinfbl, double tkbl_ms, bool useLegacyPrecision=false)"
+        line_range: [77, 111]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 85, form: float_cast_block, context: "All uei/tkbl/qinfbl inputs rounded to float inside legacy branch (lines 85-97)."}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 92, issue: denominator_guard_missing, note: "denom = 1 - tkbl*uei^2/q^2; no guard against tkbl*M2>=1 beyond clamp upstream."}
+        fortran_divergence: []
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "Karman-Tsien 1941 compressibility correction — flag as obsolete for standard branch; modern codes use Prandtl-Glauert + Laitone or full isentropic.", rationale: "Karman-Tsien error grows >5% above M=0.7.", risk: medium}
+      - name: ComputeKinematicParameters
+        signature: "public static KinematicResult ComputeKinematicParameters(double u2,double t2,double d2,double dw2,double hstinv,double hstinv_ms,double gm1bl,double rstbl,double rstbl_ms,double hvrat,double reybl,double reybl_re,double reybl_ms,bool useLegacyPrecision=false)"
+        line_range: [125, 256]
+        allocations:
+          - {line: 150, kind: "new KinematicResult", hot_path: true, note: "legacy branch — per-station BLKIN allocation"}
+          - {line: 205, kind: "new KinematicResult", hot_path: true, note: "standard branch — per-station BLKIN allocation"}
+        io_or_locks: []
+        float_usage:
+          - {line: 134, form: float_cast_block, context: "legacy branch keeps entire BLKIN chain on float (lines 134-201); 13 float locals + ~40 float ops"}
+          - {line: 173, form: MathF_call, context: "MathF.Sqrt for Sutherland law legacy"}
+        mathf_calls:
+          - {line: 173, symbol: "MathF.Sqrt"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 209, issue: catastrophic_cancel_risk, note: "gm1bl * (1 - 0.5*u2sq_hstinv) — vanishes at M=sqrt(2/gm1bl)"}
+          - {line: 230, issue: catastrophic_cancel_risk, note: "sqrt(herat^3) when herat small (near choking)"}
+        fortran_divergence: []
+        modernization_candidates:
+          - {kind: updated_correlation, summary: "Standard branch still uses Sutherland 1893 (hvrat hardcoded S/T ratio). Modern CFD uses Keyes or Chapman-Rubesin with molecular DB.", rationale: "Matters at Re<1e4 or high-altitude.", risk: low}
+      - name: ComputeStationVariables
+        signature: "public static StationVariables ComputeStationVariables(int ityp,double hk,double rt,double msq,double h,double ctau,double dw,double theta,double d=NaN)"
+        line_range: [271, 470]
+        allocations:
+          - {line: 275, kind: "new StationVariables", hot_path: true, note: "per-station allocation in hottest BL inner loop; called from BLDIF/BLSYS/BLMID indirectly"}
+          - {line: 460, kind: "new StackTrace", hot_path: false, note: "behind XFOIL_COM2_IT1 env guard — debug only"}
+        io_or_locks:
+          - {line: 467, kind: "Console.Error.WriteLine", severity: medium, note: "P3 violation but gated by env var; interpolated args allocate only when flag set"}
+        float_usage:
+          - {line: 310, form: float_cast_block, context: "US2 computation always uses float (lines 310-315), NOT behind useLegacyPrecision — hot path always rounds!"}
+          - {line: 333, form: float_cast_block, context: "Equilibrium Cteq always uses float (lines 333-355)"}
+          - {line: 418, form: float_cast_block, context: "Wake DI computation always uses float (lines 418-439)"}
+          - {line: 446, form: float_cast_block, context: "Delta thickness always uses float (lines 446-452)"}
+        mathf_calls:
+          - {line: 354, symbol: "MathF.Sqrt"}
+          - {line: 418, symbol: "MathF.Max"}
+        correctness_concerns:
+          - {line: 310, severity: critical, issue: "BLVAR (xblsys.f:1360-1820) US/Cteq/DI always rounded to float regardless of useLegacyPrecision flag. STANDARD BRANCH corruption: standard callers silently receive float-rounded secondary variables, breaking double-precision chain. 1.8M% CD error root cause candidate."}
+          - {line: 446, severity: critical, issue: "Delta thickness DE always uses float even for standard branch — cf. xblsys.f BLVAR:1810-1820 where DE2 is REAL, but standard path should be double."}
+        numerical_stability:
+          - {line: 282, issue: hard_clamp, note: "hk clamped to 1.05 (non-wake) or 1.00005 (wake); matches Fortran BLVAR but masks separation bubble resolution for standard branch"}
+          - {line: 393, issue: log_domain, note: "Math.Log(rt) — rt guaranteed positive by caller but no local guard"}
+        fortran_divergence:
+          - {line: 349, fortran_ref: "xblsys.f:1415-1430", note: "CQ2 argument staging uses LegacyCtcon (float constant); standard branch would need pure double CTCON"}
+        modernization_candidates:
+          - {kind: updated_correlation, summary: "Drela-Giles e^N laminar correlations (1986) — standard branch candidate: Drela 1998 or Mack-Herbert transition.", rationale: "Selig low-Re airfoils beyond current calibration range.", risk: medium}
+          - {kind: new_data, summary: "DFAC Tanh blend (lines 393-397) hard-codes hmin=1+2.1/ln(Rt) — old magic; parameterize.", rationale: "Low-Re extrapolation unverified.", risk: low}
+      - name: ComputeMidpointCorrelations
+        signature: "public static MidpointResult ComputeMidpointCorrelations(int ityp,double hk1,double rt1,double m1,double hk2,double rt2,double m2,bool useLegacyPrecision=false)"
+        line_range: [484, 541]
+        allocations:
+          - {line: 490, kind: "new MidpointResult", hot_path: true, note: "per-station BLMID allocation"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeFiniteDifferences
+        signature: "public static BldifResult ComputeFiniteDifferences(int ityp, [23 primary doubles], bool useLegacyPrecision=false, KinematicResult? kin1/kin2, SecondaryStationResult? sec1/sec2, bool isSimilarityStation, TransitionModel.AxsetResult? laminarAxOverride, int? traceSide/traceStation/traceIteration, string? tracePhase, bool extraTurbHkClamp, bool station1IsLaminar)"
+        line_range: [558, 2417]
+        allocations:
+          - {line: 584, kind: "new BldifResult", hot_path: true, note: "HEAVY hot-path allocation — every Newton iter × every station"}
+          - {line: 585, kind: "new double[3]", hot_path: true, note: "Residual; per-call"}
+          - {line: 586, kind: "new double[3,5]", hot_path: true, note: "VS1 Jacobian block; per-call"}
+          - {line: 587, kind: "new double[3,5]", hot_path: true, note: "VS2 Jacobian block; per-call"}
+          - {line: 1194, kind: "new SecondaryStationResult", hot_path: true, note: "Secondary2Snapshot populated inline"}
+        io_or_locks: []
+        float_usage:
+          - {line: 1292, form: MathF_call, context: "MathF.Abs on (hk2-1)/(hk1-1)"}
+          - {line: 1297, form: MathF_call, context: "MathF.Min on hl*hl"}
+          - {line: 1455, form: float_cast, context: "RealP(double)=>(float)value — parity helper present even in non-legacy branch labeled CS8321"}
+        mathf_calls:
+          - {line: 1292, symbol: "MathF.Abs"}
+          - {line: 1297, symbol: "MathF.Min"}
+        correctness_concerns:
+          - {line: 558, severity: major, issue: "BLDIF chain (xblsys.f:3207-3900) produces VSM(k) [Mach sensitivity] and VSR(k) [Re sensitivity] per Fortran; managed BldifResult drops VSM/VSR entirely. Only VSX (arc-length) is carried. Standard branch cannot track MSQ/Re Newton coupling → major correctness gap."}
+          - {line: 1374, severity: minor, issue: "Similarity station residual only sets VS2[0,0]=1 and Residual[0]=-ampl2; matches Fortran xblsys.f:3422-3424, correct."}
+        numerical_stability:
+          - {line: 1343, issue: log_domain, note: "arg=|hk2-1/hk1-1|; if either Hk near 1 this hits log(0) or log(Inf)"}
+        fortran_divergence:
+          - {line: 1373, fortran_ref: "xblsys.f:3422", note: "Similarity VS2(1,1) assignment matches"}
+          - {line: 5876, fortran_ref: "xblsys.f:647-658", note: "BLSYS VSM chain transform NOT implemented (see AssembleStationSystem)"}
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "Huge 1860-line method should be decomposed. BLDIF is already split via ComputeBldifLogTerms/AssembleMomentumEquation; the energy + amplification equations remain inline.", rationale: "Maintainability + reduced allocation via buffer reuse.", risk: high}
+      - name: ComputeTransitionIntervalSystem
+        signature: "private static BldifResult ComputeTransitionIntervalSystem(...~32 params incl overrides)"
+        line_range: [2418, 4660]
+        allocations:
+          - {line: 3556, kind: "new double[5]", hot_path: true, note: "tt1"}
+          - {line: 3557, kind: "new double[5]", hot_path: true, note: "tt2"}
+          - {line: 3558, kind: "new double[5]", hot_path: true, note: "dt1"}
+          - {line: 3559, kind: "new double[5]", hot_path: true, note: "dt2"}
+          - {line: 3560, kind: "new double[5]", hot_path: true, note: "ut1"}
+          - {line: 3561, kind: "new double[5]", hot_path: true, note: "ut2"}
+          - {line: 3802, kind: "new double[5]", hot_path: true, note: "st1"}
+          - {line: 3803, kind: "new double[5]", hot_path: true, note: "st2"}
+          - {line: 3637, kind: "Clone()", hot_path: true, note: "station1KinematicOverride.Clone()"}
+          - {line: 3880, kind: "new BldifResult + Residual[3] + VS1[3,5] + VS2[3,5]", hot_path: true, note: "HEAVY allocation at lines 3880-3886"}
+          - {line: 3885, kind: "Clone()", hot_path: true, note: "transitionKinematic.Clone()"}
+          - {line: 3886, kind: "Clone()", hot_path: true, note: "turbulentPart.Secondary2Snapshot?.Clone()"}
+        io_or_locks:
+          - {line: 4642, kind: "Console.Error.WriteLine", severity: medium, note: "P3 violation but env-gated (XFOIL_AH79_TRDIF) + traceSide==2 && traceStation==69"}
+        float_usage:
+          - {line: 3442, form: MathF_call, context: "MathF.Abs((float)xtX2ForWf) — parity detection"}
+          - {line: 3991, form: MathF_call, context: "MathF.Abs((float)xt2_4_forBl)"}
+          - {line: 3992, form: MathF_call, context: "MathF.Abs((float)xt2_4_forBl)"}
+        mathf_calls:
+          - {line: 3442, symbol: "MathF.Abs"}
+          - {line: 3991, symbol: "MathF.Abs"}
+          - {line: 3992, symbol: "MathF.Abs"}
+        correctness_concerns:
+          - {line: 3544, severity: critical, issue: "xt_XF forced to 1.0 when Wf2XF!=0 (parity branch); Fortran TRDIF always computes x1*wf1_XF + x2*wf2_XF. This is a parity-only hard-coded value — standard branch should use the accumulated form. Verify the flag protects standard path."}
+          - {line: 4605, severity: minor, issue: "VSX final update mixes legacy/standard arithmetic — confirm double path does not inherit float rounding."}
+        numerical_stability:
+          - {line: 3539, issue: residual_accumulation, note: "xt_XF = x1*wf1_XF + x2*wf2_XF — parity branch skips this sum entirely; comment notes (X2-X1)/(X2-X1) != 1.0 residue"}
+        fortran_divergence:
+          - {line: 2418, fortran_ref: "xblsys.f:1924-3205 (TRDIF)", note: "TRDIF port spans 2243 lines; high-fidelity but enormous surface"}
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "TRDIF inline is 2243 lines — decompose into Tt/Dt/Ut chain helpers.", rationale: "Current monolith is the largest single private method in solver.", risk: high}
+      - name: ComputeCfChains
+        signature: "private static void ComputeCfChains(...)"
+        line_range: [4661, 4763]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeCqChains
+        signature: "private static void ComputeCqChains(...)"
+        line_range: [4764, 4924]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 4809, form: MathF_call, context: "MathF.Sqrt on ratio"}
+        mathf_calls:
+          - {line: 4809, symbol: "MathF.Sqrt"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 4809, issue: sqrt_domain, note: "sqrt(ratio); caller ensures positivity via CQ clamp"}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeTurbulentWallDiContributionLegacy
+        signature: "private static void ComputeTurbulentWallDiContributionLegacy(...)"
+        line_range: [4925, 5017]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 4925, form: float_all, context: "Entire method name suffix 'Legacy' — uses float staging"}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 4925, severity: minor, issue: "Method is parity-only by suffix; standard branch must have separate double-precision path (check callers)."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeOuterLayerDiContributionLegacy
+        signature: "private static void ComputeOuterLayerDiContributionLegacy(...)"
+        line_range: [5018, 5086]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 5018, form: float_all, context: "Legacy suffix — float path"}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 5018, severity: minor, issue: "Parity-only; ensure standard branch has equivalent double path (B-side of ComputeDiChains must not call this)."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ApplyTurbulentDiDfacCorrectionLegacy
+        signature: "private static void ApplyTurbulentDiDfacCorrectionLegacy(...)"
+        line_range: [5087, 5156]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 5087, form: float_all, context: "Legacy suffix — float path"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeDiChains
+        signature: "private static void ComputeDiChains(...)"
+        line_range: [5157, 5793]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 5157, severity: major, issue: "636-line helper with many internal branches for laminar/turbulent/wake. Must verify every branch routes non-legacy callers to double path; Legacy* helpers above call through here."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 5157, fortran_ref: "xblsys.f BLVAR + BLDIF DI chain lines 1400-1550 + 3700-3900", note: "Dissipation chain port"}
+        modernization_candidates: []
+      - name: AssembleTESystem
+        signature: "public static BldifResult AssembleTESystem(double cte,double tte,double dte,double hk2,double rt2,double msq2,double h2,double s2,double t2,double d2,double dw2,bool useLegacyPrecision=false)"
+        line_range: [5794, 5843]
+        allocations:
+          - {line: 5815, kind: "new BldifResult", hot_path: true, note: "TE system built once per outer iteration per side"}
+          - {line: 5816, kind: "new double[3]", hot_path: true, note: "Residual"}
+          - {line: 5817, kind: "new double[3,5]", hot_path: true, note: "VS1"}
+          - {line: 5818, kind: "new double[3,5]", hot_path: true, note: "VS2"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 5823, fortran_ref: "xblsys.f:1221-1231", note: "VS1[0,0]=-1, VS2[0,0]=1; Residual[0]=cte-s2. Matches Fortran VS1(1,1)=-1, VS2(1,1)=1, VSREZ(1)=CTE-S2 exactly (1-indexed→0-indexed)."}
+          - {line: 5835, fortran_ref: "xblsys.f:1229-1231", note: "VS1[2,2], VS2[2,2], Residual[2]=dte-d2-dw2. Correct mapping."}
+        modernization_candidates: []
+      - name: AssembleStationSystem
+        signature: "public static BlsysResult AssembleStationSystem(bool isWake,bool isTurbOrTran,bool isTran,bool isSimi,...28+ params)"
+        line_range: [5876, 6252]
+        allocations:
+          - {line: 5943, kind: "new BlsysResult", hot_path: true, note: "per-station Newton system — hottest hot-path allocation"}
+          - {line: 5944, kind: "new double[3]", hot_path: true, note: "Residual"}
+          - {line: 5945, kind: "new double[3,5]", hot_path: true, note: "VS1"}
+          - {line: 5946, kind: "new double[3,5]", hot_path: true, note: "VS2"}
+          - {line: 6043, kind: "Clone()", hot_path: true, note: "station2KinematicOverride.Clone() in legacy branch"}
+          - {line: 6066, kind: "Clone()", hot_path: true, note: "currentKinematic.Clone()"}
+          - {line: 6075, kind: "Clone()", hot_path: true, note: "station1KinematicOverride.Clone()"}
+          - {line: 6180, kind: "Clone()", hot_path: true, note: "station2PrimaryOverride.Clone()"}
+          - {line: 6181, kind: "new PrimaryStationState", hot_path: true, note: "fallback snapshot"}
+          - {line: 6187, kind: "Clone()", hot_path: true, note: "Kinematic2Snapshot"}
+          - {line: 6188, kind: "Clone()", hot_path: true, note: "Secondary2Snapshot"}
+        io_or_locks: []
+        float_usage:
+          - {line: 6211, form: float_cast, context: "SIMI combine: (float)((float)VS1+(float)VS2) in legacy branch"}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 6227, severity: critical, issue: "VSM chain transform NOT implemented. Fortran BLSYS (xblsys.f:647-658) computes RES_U1=VS1(K,4), RES_U2=VS2(K,4), RES_MS=VSM(K), then VSM(K)=RES_U1*U1_MS + RES_U2*U2_MS + RES_MS. Managed code comment acknowledges omission ('not directly used in the 5-column VS1/VS2 Newton system'). For STANDARD BRANCH at non-zero Mach, dropping the Mach-sensitivity column is a known gap — MSQ does couple into Newton when compressible. Candidate root-cause for 1.8M% CD error at transonic cases."}
+          - {line: 6247, severity: minor, issue: "Only VS1[k,3]/VS2[k,3] get U_UEI chain. Matches Fortran. Good."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 5909, fortran_ref: "xblsys.f:583-661 (BLSYS)", note: "Full port spans lines 5876-6252 but omits VSM/VSR accumulation (see above)."}
+          - {line: 6204, fortran_ref: "xblsys.f:617-625 (SIMI combine)", note: "Similarity VS2+=VS1; VS1=0 — matches"}
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "Allocate VS1/VS2/Residual into a SolverBuffers thread-static ring instead of per-call `new` to eliminate P1 pressure.", rationale: "Seven array allocations per Newton iter per station; for a 200-station × 50-iter sweep that's 70k array allocations per case.", risk: medium}
+          - {kind: new_algorithm, summary: "Standard branch must add VSM column + track M2 sensitivity in Newton system.", rationale: "Missing physical coupling for M>0.3.", risk: high}
+      - name: CanonicalizeTracePhase
+        signature: "private static string CanonicalizeTracePhase(string? tracePhase)"
+        line_range: [6254, 6267]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: CreateStandaloneKinematicFallback
+        signature: "private static KinematicResult CreateStandaloneKinematicFallback(double u1,double t1,double d1,double dw1,double reybl,bool useLegacyPrecision)"
+        line_range: [6268, 6308]
+        allocations:
+          - {line: 6268, kind: "new KinematicResult (via ComputeKinematicParameters)", hot_path: false, note: "fallback path, typically not hot"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeUs
+        signature: "private static double ComputeUs(double hk,double hs,double h)"
+        line_range: [6309, 6318]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 6309, issue: divide_by_zero, note: "denominator h; caller must guard h>0"}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeDe
+        signature: "private static double ComputeDe(double hk,double theta)"
+        line_range: [6319, 6329]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeHc
+        signature: "private static double ComputeHc(double hk,double msq)"
+        line_range: [6330, 6338]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeLocalCteq
+        signature: "private static double ComputeLocalCteq(double hk,double hs,double h,double rt,int ityp)"
+        line_range: [6339, 6356]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 6339, issue: sqrt_domain, note: "CTCON*HS*HKB*HKC^2/(USB*H*HK^2) — must be positive; caller ensures"}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeTurbDi
+        signature: "private static double ComputeTurbDi(double hk,double hs,double h,double cf,double ctau,double rt,int ityp)"
+        line_range: [6357, 6397]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 6357, issue: log_domain, note: "Math.Log(rt) — rt>0 required"}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: AssembleMomentumEquation
+        signature: "internal static BldifEq2Result AssembleMomentumEquation(BldifEq2Inputs input)"
+        line_range: [6431, 6693]
+        allocations:
+          - {line: 6433, kind: "new BldifEq2Result", hot_path: true, note: "per-station eq-2 helper — allocated even for already hot BLDIF"}
+        io_or_locks: []
+        float_usage:
+          - {line: 6437, form: float_cast_block, context: "All 13 inputs cast to float in legacy branch (lines 6437-6576)"}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 6540, severity: minor, issue: "VS1_22 uses SourceOrderedProductSumAdd with 0.5*zHa*H1_T1 + zCfm*Cfm_T1 + zCf1*Cf1_T1 + zT1. Cross-ref xblsys.f:3753 VS1(2,2)=Z_TL/T1 - something; this managed version lacks the -Z_TL/T1 term in the positional zT1 slot (carried via zT1 variable — verify passed correctly)."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 6470, fortran_ref: "xblsys.f:3700-3800 (energy equation)", note: "BTMP = HA+2-MA+HWA and REZT = TLOG + BTMP*ULOG - XLOG*0.5*CFX. Matches Fortran exactly."}
+        modernization_candidates: []
+      - name: ComputeBldifLogTerms
+        signature: "internal static BldifLogTerms ComputeBldifLogTerms(int bldifType,bool isSimilarityStation,double x1,double x2,double u1,double u2,double t1,double t2,double hs1,double hs2,bool useLegacyPrecision)"
+        line_range: [6699, 6788]
+        allocations:
+          - {line: 6712, kind: "new BldifLogTerms", hot_path: true, note: "per-station allocation before BLDIF"}
+        io_or_locks: []
+        float_usage:
+          - {line: 6734, form: float_cast_block, context: "Legacy branch rounds all 8 inputs (lines 6734-6746)"}
+          - {line: 6747, form: LegacyLibm, context: "LegacyLibm.Log used for parity bits"}
+          - {line: 6756, form: MathF_call, context: "MathF.Log fallback for a specific bit-pattern"}
+        mathf_calls:
+          - {line: 6756, symbol: "MathF.Log"}
+        correctness_concerns:
+          - {line: 6749, severity: minor, issue: "Hard-coded bit-pattern hack at lines 6749-6757 for alpha-0 station-4 iter-5. This is a targeted parity workaround but it's a smell: two specific float ratios trigger MathF.Log instead of LegacyLibm.Log. Review for unintended side effects in similar bit patterns."}
+          - {line: 6720, severity: minor, issue: "Legacy TLog = 0.5f*(1.0f - 1.0f) = 0; Fortran TLOG = 0.5*(1.0-BULE) = 0 since BULE=1. Matches, but hard-coded BULE=1 assumed."}
+        numerical_stability:
+          - {line: 6743, issue: divide_by_zero, note: "x2/x1, u2/u1, t2/t1, hs2/hs1 ratios; zero-at-LE similarity branch handles this separately"}
+          - {line: 6747, issue: log_domain, note: "Log of ratio — fails if x1/u1/t1/hs1 zero or negative; no local guard"}
+        fortran_divergence:
+          - {line: 6764, fortran_ref: "xblsys.f:3239-3245 (similarity branch)", note: "XLOG=1, ULOG=BULE, TLOG=0.5*(1-BULE), HLOG=0, DDLOG=0. Matches."}
+          - {line: 6778, fortran_ref: "xblsys.f:3275-3284 (non-similarity)", note: "Log ratios. Matches."}
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "Bit-pattern-specific MathF.Log fallback (line 6749) feels fragile; replace with principled evaluation strategy.", rationale: "Maintainability.", risk: low}
+      - name: KinematicResult.Clone
+        signature: "public KinematicResult Clone()"
+        line_range: [6808, 6834]
+        allocations:
+          - {line: 6810, kind: "new KinematicResult", hot_path: true, note: "called 3+ times per BLSYS/BLDIF call chain (seen at lines 3637, 6043, 6066, 6075, 6187)"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "Replace Clone allocations with struct or SolverBuffers-managed pool.", rationale: "Each Clone is 21-field copy + heap alloc.", risk: medium}
+      - name: PrimaryStationState.Clone
+        signature: "public PrimaryStationState Clone()"
+        line_range: [6853, 6864]
+        allocations:
+          - {line: 6855, kind: "new PrimaryStationState", hot_path: true, note: "invoked in BLSYS (line 6180)"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SecondaryStationResult.Clone
+        signature: "public SecondaryStationResult Clone()"
+        line_range: [6939, 6981]
+        allocations:
+          - {line: 6941, kind: "new SecondaryStationResult", hot_path: true, note: "invoked at 3886, 6188 — per-station Newton"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "37-field struct clone; replace with readonly record struct or pooled buffer.", rationale: "Heaviest Clone in the file.", risk: medium}
+    file_summary:
+      parity_verdict: major
+      standard_verdict: blocker
+      top_findings:
+        - "STANDARD BRANCH CRITICAL: VSM/VSR Mach+Re Newton-sensitivity columns silently dropped in AssembleStationSystem (lines 6227-6247). Fortran BLSYS computes RES_MS=VSM(K) then VSM(K)=RES_U1*U1_MS+RES_U2*U2_MS+RES_MS. Managed code comment admits omission. Likely root cause for 1.8M% CD error at M>0.3."
+        - "STANDARD BRANCH CRITICAL: ComputeStationVariables (lines 310-452) unconditionally uses float for US/Cteq/DI/DE computation regardless of useLegacyPrecision flag. Standard callers silently receive float-rounded secondary variables."
+        - "PARITY HOT-PATH ALLOCATIONS: AssembleStationSystem allocates new BlsysResult + 2×double[3,5] + double[3] + up to 6 Clone() calls PER STATION PER NEWTON ITER (lines 5943-5946, 6043-6188). ComputeFiniteDifferences adds the same BldifResult allocation pattern (lines 584-587). ComputeTransitionIntervalSystem allocates 8×double[5] arrays plus BldifResult (lines 3556-3803, 3880-3886). Call count in a 200-station × 50-iter sweep: ~70k allocations per case."
+        - "PARITY MEDIUM: Two Console.Error.WriteLine remain (lines 467, 4642) behind env-var guards (XFOIL_COM2_IT1, XFOIL_AH79_TRDIF). Interpolation args only build when flag set; acceptable but should be removed after parity-calibration."
+        - "STANDARD BRANCH: Hard-coded bit-pattern fallback in ComputeBldifLogTerms (line 6749) switches LegacyLibm.Log → MathF.Log for a specific float signature — fragile parity hack."
+      estimated_fix_effort: 5-10 days
+ledger_summary:
+  total_files: 1
+  total_methods_audited: 28
+  nested_types_audited: 12
+  parity_blockers: 0
+  parity_major: 6
+  standard_blockers: 3
+  standard_major: 4
+  notes: |
+    Structural integrity is high — no locks, no file I/O, no async, no TODO/NotSupported.
+    All BLPRV/BLKIN/BLVAR/BLMID/BLDIF/TESYS/BLSYS Fortran routines from xblsys.f have
+    corresponding managed ports. The parity path is well-annotated with Legacy mapping /
+    Difference from legacy / Decision comments.
+
+    Most significant gaps for STANDARD (double-precision) branch:
+      1. VSM (Mach) + VSR (Re) Newton columns dropped in BLSYS chain transform.
+      2. ComputeStationVariables always rounds US/Cteq/DI/DE to float — breaks double chain.
+      3. Legacy* suffix helpers (ComputeTurbulentWallDiContributionLegacy, etc.) are
+         parity-only; standard branch routing through ComputeDiChains needs full audit
+         to confirm no accidental float calls.
+
+    Most significant P1 allocation sites for PARITY branch:
+      - AssembleStationSystem: new BlsysResult + 3 arrays + up to 6 Clone()
+      - ComputeFiniteDifferences: new BldifResult + 3 arrays + Secondary2Snapshot alloc
+      - ComputeTransitionIntervalSystem: 8×double[5] + new BldifResult + 3 Clone()
+      - ComputeStationVariables / ComputeMidpointCorrelations / ComputeBldifLogTerms /
+        AssembleMomentumEquation: small per-call object allocations each.
+    Recommend SolverBuffers thread-static pool for VS1/VS2/Residual; convert Clone()
+    heavy result classes to readonly-record-struct or pooled reuse.
+
+    No Fortran term-by-term VS1/VS2 term audit was exhaustive — sampled 6 rows (laminar
+    amplification VS1/VS2[0,*], TE system row 2, momentum equation VS*_22/23/24/X,
+    SIMI combine). All sampled rows match xblsys.f. The one confirmed structural drop
+    is VSM/VSR.

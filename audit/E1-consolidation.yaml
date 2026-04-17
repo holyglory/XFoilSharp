@@ -1,0 +1,1035 @@
+# E1 Consolidation Ledger — XFoilSharp Solver Audit
+#
+# Source ledgers: 18 Tier A–D ledgers under /home/holyglory/XFoilSharp/audit/.
+# This file consolidates findings; it is read-only w.r.t. source and w.r.t.
+# other ledgers. All recommendations are advisory.
+
+agent: E1
+ledger_path: audit/E1-consolidation.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+inputs:
+  ledgers_count: 18
+  source_tree_mutations: 0    # all 18 agents wrote only their assigned ledger
+  parity_bit_exact_baseline_vectors: 104683   # 4455 NACA + 100228 Selig per MEMORY.md
+
+# ----------------------------------------------------------------------------
+# 1. SCHEMA VALIDATION
+# ----------------------------------------------------------------------------
+schema_validation:
+  required_top_level: [agent, ledger_path, files, ledger_summary]
+  ledgers:
+    - id: A1
+      path: audit/A1-viscous-solver-engine.yaml
+      lines: 945
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+      notes: |
+        Schema-conformant. Includes an extra top-level 'notes' block before
+        'files:' (non-required; acceptable).
+    - id: A2
+      path: audit/A2-bl-system-assembler.yaml
+      lines: 544
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+      notes: "Uses a 'pass1_method_index' sub-block in addition to 'methods'; harmless extension."
+    - id: A3
+      path: audit/A3-streamfunction-influence-calculator.yaml
+      lines: 359
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: A4
+      path: audit/A4-influence-matrix-builder.yaml
+      lines: 569
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: A5
+      path: audit/A5-transition-model.yaml
+      lines: 243
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+      notes: "Short ledger — only 6 methods in 'methods' (the big ones); 'method_index' lists the full 13-entry inventory."
+    - id: A6
+      path: audit/A6-bl-correlations.yaml
+      lines: 419
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: B1
+      path: audit/B1-viscous-newton.yaml
+      lines: 662
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: B2
+      path: audit/B2-inviscid-solvers.yaml
+      lines: 488
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: B3
+      path: audit/B3-panel-generation.yaml
+      lines: 642
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: B4
+      path: audit/B4-entry-orchestration.yaml
+      lines: 605
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: B5
+      path: audit/B5-splines-legacy-math.yaml
+      lines: 740
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: C1
+      path: audit/C1-services-remainder.yaml
+      lines: 986
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: C2
+      path: audit/C2-numerics-remainder.yaml
+      lines: 584
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: C3
+      path: audit/C3-models.yaml
+      lines: 564
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: D1
+      path: audit/D1-core.yaml
+      lines: 443
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: D2
+      path: audit/D2-diagnostics.yaml
+      lines: 557
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: D3
+      path: audit/D3-design.yaml
+      lines: 652
+      parses_as_yaml: true
+      has_agent: true
+      has_ledger_path: true
+      has_files: true
+      has_ledger_summary: true
+    - id: D4
+      path: audit/D4-io.yaml
+      lines: 245
+      parses_as_yaml: true
+      has_agent: true    # "agent: D4" present at top
+      has_ledger_path: false   # uses 'scope' instead of 'ledger_path'; reduced-criteria ledger
+      has_files: false   # uses 'services' + 'models' lists; reduced-criteria ledger
+      has_ledger_summary: false  # uses top-level 'summary' instead
+      notes: |
+        D4 adopts an alternate (but documented) reduced-scope schema appropriate
+        for IO-only P4/X1 criteria. Not malformed but does not match the strict
+        schema. Recommend accepting as-is since no additional information would
+        be gained by re-running the agent against the strict schema.
+  malformed_count: 0
+  non_strict_but_acceptable: [D4]
+
+# ----------------------------------------------------------------------------
+# 2. AGGREGATE COUNTS
+# ----------------------------------------------------------------------------
+aggregate_counts:
+  total_files_audited: 139     # A1:1 + A2:1 + A3:1 + A4:1 + A5:1 + A6:1 + B1:2 + B2:2 + B3:3 + B4:3 + B5:3 + C1:10 + C2:6 + C3:47 + D1:10 + D2:2 + D3:28 + D4:28
+  total_methods_audited_approx: 548
+    # A1:66 A2:28 A3:18 A4:28 A5:13 A6:17 B1:17 B2:28 B3:27 B4:26 B5:47 C1:40 C2:42 C3:~30 D1:30 D2:64 D3:~100 D4:0
+  parity_blockers_severity_P: 0
+    # Zero P-severity *blockers*; parity-branch is bit-exact on 104683 vectors.
+    # Parity "major" allocation hot-spots counted separately.
+  parity_major_allocation_hotspots: 11
+    # Top sites: A1 BuildViscousPanelSpeeds / ConvertUedgToSpeeds / BuildWakeGapArray /
+    # List<ViscousConvergenceInfo>; A2 AssembleStationSystem / ComputeFiniteDifferences /
+    # ComputeTransitionIntervalSystem; A3 PSILIN float[] scratch; A5 TransitionPointResult
+    # 8×double[5]; B1 USAV MaxStations×2 + ApplyTrustRegionUpdate 5× .Clone();
+    # C2 BlockTridiagonalSolver CopyToSingle 4-5 float[,,] per iter.
+  standard_blockers_severity_S_critical: 17
+    # A1: 7 (MRCHDU skip, Thwaites hand-roll, hardcoded CTAU=0.03, frozen-theta wake,
+    #        incompressible ComputeViscousCL, BuildWakeGapProfile DWDXTE, post-STMOVE refresh gap)
+    # A2: 2 (VSM Mach column dropped, ComputeStationVariables unconditional float round)
+    # A6: 2 (WakeDissipation rcd_hk sign divergence, TurbulentSkinFriction cf_rt clamp gate)
+    # B1: 3 (DAC missing CL_MS term, DCLMIN MATYP=1 assumption, ComputeStepNorm missing Ue term)
+    # B2: 2 (IntegratePressureForces clMach2=0, SPECAL Mach loop skip)
+    # B3: 1 (PanelMeshGenerator is NOT a PANGEN port)
+    # C1: 1 (ViscousStateEstimator is a managed-only heuristic bypassing BL correlations)
+    # A5: 1 (UseModernTransitionCorrections flag wired but never consumed)
+    # (total = 19; two are duplicates under the same cluster → 17 distinct bugs)
+  mathematical_mistake_findings: 28
+    # Includes all "dropped term", "wrong formula", "wrong index", and
+    # "non-Fortran closed-form heuristic" findings across ledgers.
+  float_leaks_standard_branch: 6
+    # Confirmed S1/S2/S3 leaks on NON-legacy paths (gating correct everywhere else):
+    #   A1 ComputeSeedStepMetrics line 8495 MathF.Sqrt narrowing (both branches)
+    #   A1 RecomputeWakeGapFromXssi float locals + MathF.Sqrt (legacy-gated callers only, but method body is mixed)
+    #   A2 ComputeStationVariables unconditional float for US/Cteq/DI/DE (line ~310-452)
+    #   A6 TurbulentSkinFriction cf_rt gate (standard branch writes zero when Fortran does not)
+    #   A6 WakeDissipation rcd_hk sign (intentional managed "correction" — divergence)
+    #   B5 ParametricSpline six public float[] overloads (ungated on standard API)
+    # All other *LegacyFloat/*LegacyPrecision paths are correctly gated.
+  modernization_candidates: 27
+    # S8 roll-up across files:
+    #   A1: 2 (wake refresh unification, allocation pooling)
+    #   A2: 2 (VSM/VSR port, Clone → readonly record struct)
+    #   A3: 3 (GEOLIN/DZDN, pooled trace, higher-order quadrature)
+    #   A4: 3 (WakeLengthRatio, WakeStationCount, analytical FillWakeApproximation)
+    #   A5: 9 (M1–M9 flag consumption — Drela-Giles 2003, Coder-Maughmer 2014, XFLR5 two-criterion, TSL, Hall-Hislop 1982, Arnal 1993, Mack auto-Ncrit, Braslow-Knox trip, DAEPS tightening)
+    #   A6: 4 (HST/CFT/DIT/Cteq recalibration from modern DNS; smooth clamps)
+    #   B1: 2 (DCLMIN MATYP>=2, R2 compressible)
+    #   B4: 1 (PostStallExtrapolator CDmax parameterization)
+    #   C1: 1 (WakeGeometryGenerator longer wakes + parameterized spacing)
+  x1_stubs_notsupported_todo: 15
+    # B4 AirfoilAnalysisService: 8 NotSupportedException stubs (lines 263-430) — DELETE recommended
+    # C1 ViscousLaminarCorrector: stub class → DELETE
+    # C1 ViscousStateEstimator: managed-only heuristic → DELETE or reroute callers
+    # C1 EdgeVelocityCalculator.ComputeWakeVelocities: stub returning gamTE → DELETE or implement
+    # B1 ViscousNewtonAssembler line 986: R2=1.0 TODO
+    # A4 line 1046: hex-patch TODO comment (keep, document)
+    # D4 AnalysisSessionRunner lines 237, 264: 2 descriptive historical comments
+  dead_code_findings: 9
+    # A1: MarchBoundaryLayer, MarchResidual, UpdateEdgeVelocityDIJCoupling (3 dead helpers with wrong math)
+    # A1: TraceBufferGeometry empty-body loop lines 298-300
+    # A3: pdyy triple-assign in legacy path (lines 725/729/738); unused staged *Numerator locals
+    # B2: cpM2 allocated-never-populated; FormatSingleHex unreferenced outside debug
+    # B4 PostStallExtrapolator: unused aspectRatio param
+    # C1 EdgeVelocityCalculator.ComputeWakeVelocities (stub)
+    # C2: BlockTridiagonalSolver unused float[,,] path (if BLSOLV gated off), BandMatrixSolver no production caller
+    # C3: LinearVortexPanelState.Resize that never resizes (name misleading)
+
+# ----------------------------------------------------------------------------
+# 3. ROOT-CAUSE CLUSTERS (standard-branch)
+# ----------------------------------------------------------------------------
+root_cause_clusters:
+
+  - cluster_id: RC1
+    title: "Compressibility (Mach) sensitivity dropped across BL + inviscid"
+    severity: critical
+    hypothesis: |
+      The standard (double-precision) branch silently assumes M=0 in multiple
+      independent locations. Any sweep at M>0 therefore cannot converge a
+      compressible Newton; residual sensitivity columns are zero, so the
+      solver wanders in a physically wrong direction. This cluster is the
+      single most plausible contributor to the 1.8M% CD error on compressible
+      test cases.
+    affected_files:
+      - src/XFoil.Solver/Services/BoundaryLayerSystemAssembler.cs
+      - src/XFoil.Solver/Services/ViscousNewtonAssembler.cs
+      - src/XFoil.Solver/Services/ViscousNewtonUpdater.cs
+      - src/XFoil.Solver/Services/LinearVortexInviscidSolver.cs
+      - src/XFoil.Solver/Services/ViscousSolverEngine.cs
+      - src/XFoil.Solver/Services/PanelGeometryBuilder.cs
+    affected_methods:
+      - "BoundaryLayerSystemAssembler.AssembleStationSystem (VSM/VSR chain)"
+      - "BoundaryLayerSystemAssembler.ComputeFiniteDifferences (VSM drop in BldifResult)"
+      - "ViscousNewtonUpdater.ComputeDacFromClDrift (missing CL_MS*MS_AC)"
+      - "ViscousNewtonAssembler at line 986 (R2=1.0 stub)"
+      - "LinearVortexInviscidSolver.IntegratePressureForces (clMach2=0)"
+      - "LinearVortexInviscidSolver.SolveAtAngleOfAttack (no SPECAL Mach loop)"
+      - "ViscousSolverEngine.ComputeViscousCL (no Karman–Tsien)"
+      - "PanelGeometryBuilder.ComputeCompressibilityParameters (missing CPSTAR/QSTAR, BETA_MSQ, TKL_MSQ)"
+    fortran_references:
+      - "f_xfoil/src/xblsys.f:3207-3900 (BLDIF VSM/VSR)"
+      - "f_xfoil/src/xblsys.f:647-658 (BLSYS VSM chain transform)"
+      - "f_xfoil/src/xbl.f:4430 (UPDATE DAC formula)"
+      - "f_xfoil/src/xfoil.f:1024 (COMSET constants)"
+      - "f_xfoil/src/xfoil.f:1168 (CLCALC CL_MSQ)"
+      - "f_xfoil/src/xoper.f:2458-2502 (SPECAL inner Mach/CLM loop)"
+    evidence_lines:
+      - "A2: line 178 (BLDIF VSM drop) — critical"
+      - "A2: line 335 (BLSYS VSM chain) — critical; line 505 top-finding"
+      - "B1: line 492 (DAC CL_MS drop), line 646 top-finding; line 107 R2=1.0 stub"
+      - "B2: line 215 (IntegratePressureForces clMach2=0) — critical"
+      - "B2: line 162 (SolveAtAngleOfAttack Mach Newton skip)"
+      - "A1: line 1603 (ComputeViscousCL Karman–Tsien missing) — top-finding"
+      - "B3: line 594 (ComputeCompressibilityParameters outputs)"
+    hypothesized_cd_impact: |
+      Dominant at M>0.3. For M≈0 cases this cluster contributes little or
+      nothing; however, several inviscid/viscid couplings (CL drift, SPECAL
+      convergence) can still misbehave even at low M if MS_AC is non-zero
+      during Re-sweep transitions.
+
+  - cluster_id: RC2
+    title: "BL seed not re-marched: standard branch enters Newton on raw Thwaites"
+    severity: critical
+    hypothesis: |
+      Fortran SETBL always MRCHDUs the BL state inside its station loop before
+      Newton assembly. The C# standard branch only calls
+      RemarchBoundaryLayerLegacyDirect inside the legacy-gated branch; the
+      non-legacy path feeds the Newton solver a raw Thwaites-predictor seed
+      plus hardcoded turbulent/wake patches. This is structural, not
+      tuneable.
+    affected_files:
+      - src/XFoil.Solver/Services/ViscousSolverEngine.cs
+    affected_methods:
+      - "ViscousSolverEngine.PreparePreNewtonSetupFromInviscid (line 1798)"
+      - "ViscousSolverEngine.InitializeBLThwaitesXFoil (lines 2923-3168)"
+    fortran_references:
+      - "f_xfoil/src/xbl.f:21 SETBL (the per-iteration MRCHDU inside SETBL)"
+      - "f_xfoil/src/xbl.f:1245 MRCHUE (full Newton per laminar station)"
+    evidence_lines:
+      - "A1: line 181 (SolveViscousFromInviscid:447 comment)"
+      - "A1: line 389 (PreparePreNewtonSetupFromInviscid:1798 — critical)"
+      - "A1: line 567 (InitializeBLThwaitesXFoil:2923 — critical)"
+      - "A1: line 569-571 (hardcoded CTAU=0.03 + frozen-theta wake — high)"
+    hypothesized_cd_impact: |
+      Dominant at any regime. A wrong BL seed at every station is arguably
+      the single likeliest explanation for 1.8M% relative CD error on
+      M=0 cases. RC1 and RC2 together explain most standard-branch failures.
+
+  - cluster_id: RC3
+    title: "Wake physics mis-formulated on standard branch"
+    severity: high
+    hypothesis: |
+      Three independent wake errors compound: (a) hand-rolled hardcoded
+      CTAU=0.03 wake seed; (b) frozen-theta march through the wake;
+      (c) DWDXTE derivative taken from the wake-segment tangent instead of
+      the airfoil TE cross-product; (d) post-STMOVE refresh of WGAP /
+      SST_GO restricted to legacy path.
+    affected_files:
+      - src/XFoil.Solver/Services/ViscousSolverEngine.cs
+      - src/XFoil.Solver/Services/WakeGapProfile.cs
+      - src/XFoil.Solver/Services/WakeGeometryGenerator.cs
+    affected_methods:
+      - "ViscousSolverEngine.InitializeBLThwaitesXFoil (wake seed CTAU=0.03)"
+      - "ViscousSolverEngine.BuildWakeGapProfile (DWDXTE formula divergence)"
+      - "ViscousSolverEngine.RecomputeWakeGapFromXssi (legacy-gated only)"
+      - "WakeGeometryGenerator.Generate (hard-coded wakeCount + WakeLengthRatio=1.0)"
+    fortran_references:
+      - "f_xfoil/src/xblsys.f CTBAR/CTEQ"
+      - "f_xfoil/src/xbl.f MRCHUE wake loop"
+      - "f_xfoil/src/xpanel.f:2472 XICALC (DWDXTE + WGAP recompute)"
+    evidence_lines:
+      - "A1: line 569, 570, 571, 514, 187 (all high)"
+      - "A1: line 797, 806 (post-STMOVE refresh legacy-only)"
+      - "C1: line 699, 700 (hard-coded wakeCount and WakeLengthRatio=1.0)"
+      - "A4: line 323 (same S7 finding on WAKLEN)"
+    hypothesized_cd_impact: |
+      High at any regime, particularly post-stall and low-Re where wake
+      shear dominates skin-friction CD.
+
+  - cluster_id: RC4
+    title: "Newton updater drops/under-weights terms"
+    severity: high
+    hypothesis: |
+      Newton update machinery for the standard branch differs from
+      Fortran UPDATE: DAC formula drops CL_MS*MS_AC; DCLMIN hard-codes
+      MATYP=1; StepNorm omits the |duedg|/0.25 term that XFoilRelaxation
+      includes; trust-region scalar shrink replaces per-variable DHI/DLO;
+      convergence check masks NaN rmsbl with double.MaxValue and keeps
+      iterating.
+    affected_files:
+      - src/XFoil.Solver/Services/ViscousNewtonUpdater.cs
+      - src/XFoil.Solver/Services/ViscousSolverEngine.cs
+    affected_methods:
+      - "ViscousNewtonUpdater.ComputeDacFromClDrift (CL_MS drop)"
+      - "ViscousNewtonUpdater.ApplyXFoilRelaxation (DCLMIN MATYP lock)"
+      - "ViscousNewtonUpdater.ComputeStepNorm (Ue term missing)"
+      - "ViscousNewtonUpdater.ApplyTrustRegionUpdate (trust-region theory violations)"
+      - "ViscousSolverEngine.SolveViscousFromInviscid (rlx=0 NaN masking at line 603/847)"
+    fortran_references:
+      - "f_xfoil/src/xbl.f:4247 (DCLMIN)"
+      - "f_xfoil/src/xbl.f:4430 (DAC formula)"
+      - "f_xfoil/src/xbl.f:4486 (RMSBL + UPDATE)"
+    evidence_lines:
+      - "B1: lines 316-317, 488-497, 572-596, 648-649"
+      - "A1: lines 172-174 (rlx=0, rmsbl=MaxValue masking)"
+    hypothesized_cd_impact: |
+      Compounds RC1 + RC2. Even if BL seed were correct, a broken Newton
+      updater will walk to a non-physical fixed point under NaN masking.
+
+  - cluster_id: RC5
+    title: "Precision narrowing in non-legacy paths (silent float rounds)"
+    severity: medium
+    hypothesis: |
+      Handful of methods narrow double to float or call MathF.* without
+      a useLegacyPrecision gate. These degrade the standard branch to
+      single-precision semantics in small localized regions.
+    affected_files:
+      - src/XFoil.Solver/Services/ViscousSolverEngine.cs
+      - src/XFoil.Solver/Services/BoundaryLayerSystemAssembler.cs
+      - src/XFoil.Solver/Services/ViscousNewtonUpdater.cs
+      - src/XFoil.Solver/Services/BoundaryLayerCorrelations.cs
+      - src/XFoil.Solver/Numerics/ParametricSpline.cs
+    affected_methods:
+      - "ViscousSolverEngine.ComputeSeedStepMetrics (MathF.Sqrt on double arg — line 8495)"
+      - "ViscousSolverEngine.RecomputeWakeGapFromXssi (float locals/MathF.Sqrt — legacy-gated callers only, but method body leaks precision if reused)"
+      - "BoundaryLayerSystemAssembler.ComputeStationVariables (unconditional float for US/Cteq/DI/DE — lines 310-452)"
+      - "ViscousNewtonUpdater.MirrorLowerWakeOntoUpperWake (unconditional RoundToSingle)"
+      - "BoundaryLayerCorrelations: bit-pattern hack in ComputeBldifLogTerms line 6749"
+      - "ParametricSpline: six public float[] overloads without parity gating"
+    fortran_references: []    # narrowing has no Fortran analogue — it is a port artefact
+    evidence_lines:
+      - "A1: line 908 top-finding; line 815-816 RecomputeWakeGap MathF.Sqrt"
+      - "A2: lines 506 top-finding, 527 note"
+      - "B1: line 650 top-finding"
+      - "A6: line 86 (bit-pattern hack)"
+      - "B5: line 333 top-finding"
+    hypothesized_cd_impact: |
+      Secondary. Individually small (~1e-7 relative) but adds noise to
+      a Newton iteration that is already compromised by RC1–RC4.
+
+  - cluster_id: RC6
+    title: "Panel-mesh fabricated instead of ported"
+    severity: high
+    hypothesis: |
+      PanelMeshGenerator is documented as 'not a PANGEN port'. Every
+      standard-branch inviscid/viscous solve that routes through this
+      builder meshes the airfoil with a managed heuristic
+      (Gaussian curvature clustering, sigma=0.06). Disagreement with
+      Fortran node placement propagates through every downstream kernel.
+    affected_files:
+      - src/XFoil.Solver/Services/PanelMeshGenerator.cs
+    affected_methods:
+      - "PanelMeshGenerator.Generate"
+      - "PanelMeshGenerator.EstimateCurvature"
+    fortran_references:
+      - "f_xfoil/src/xpanel.f PANGEN"
+    evidence_lines:
+      - "B3: lines 343-351 (file_summary)"
+    hypothesized_cd_impact: |
+      Background contributor. Would show up as a systematic offset
+      rather than a chaotic blow-up; nonetheless material when CD is
+      extracted via trapezoidal Cp integration.
+
+  - cluster_id: RC7
+    title: "Transition modernization flag wired but never consumed"
+    severity: medium
+    hypothesis: |
+      AnalysisSettings.UseModernTransitionCorrections is threaded through
+      PolarSweepRunner, ViscousNewtonAssembler, and ViscousSolverEngine
+      but TransitionModel.cs never reads it. The 'modern transition'
+      path is a no-op today.
+    affected_files:
+      - src/XFoil.Solver/Services/TransitionModel.cs
+    affected_methods:
+      - "ComputeAmplificationRate"
+      - "ComputeTransitionPoint"
+      - "CheckTransition"
+    fortran_references: []  # modernization concern, not parity
+    evidence_lines:
+      - "A5: lines 456 top-finding; 460-471 s8_modernization_rollup"
+    hypothesized_cd_impact: |
+      Zero today (flag dead). Blocks M1–M9 modernization roadmap.
+
+  - cluster_id: RC8
+    title: "Ad-hoc heuristics replace Fortran correlations in C1 services"
+    severity: high
+    hypothesis: |
+      ViscousStateEstimator.cs is a managed-only Thwaites+simplified-e^N
+      estimator. If any standard-branch caller invokes Estimate() for a
+      BL seed, the full BoundaryLayerCorrelations + TransitionModel
+      kernels are bypassed entirely.
+    affected_files:
+      - src/XFoil.Solver/Services/ViscousStateEstimator.cs
+    affected_methods:
+      - "EstimateSurfaceBranch"
+      - "EstimateWakeBranch"
+    fortran_references: []
+    evidence_lines:
+      - "C1: lines 535, 536 (wake-theta and H heuristics); lines 566-569 top-findings"
+    hypothesized_cd_impact: |
+      Unknown until caller graph is confirmed. C1 notes no production caller
+      has been observed but the risk is present.
+
+  - cluster_id: RC9
+    title: "Turbulent correlations: managed fix-ups diverge from Fortran"
+    severity: high
+    hypothesis: |
+      BoundaryLayerCorrelations introduces two intentional deviations from
+      Fortran on the standard branch: (a) WakeDissipation rcd_hk sign is
+      flipped vs DILW; (b) TurbulentSkinFriction zeros cf_rt/cf_msq when
+      GRT saturates at 3.0 (Fortran computes them unconditionally). Both
+      violate 'Legacy is reference' policy and change Newton Jacobians.
+    affected_files:
+      - src/XFoil.Solver/Services/BoundaryLayerCorrelations.cs
+    affected_methods:
+      - "WakeDissipation"
+      - "TurbulentSkinFriction"
+    fortran_references:
+      - "f_xfoil/src/xblsys.f:5027-5028 (CFT gating)"
+      - "f_xfoil/src/xblsys.f DILW"
+    evidence_lines:
+      - "A6: lines 577-578 top-findings"
+    hypothesized_cd_impact: |
+      Localized to separation and wake; could cause spikes in CD near
+      stall.
+
+# ----------------------------------------------------------------------------
+# 4. RANKED FIX RECOMMENDATIONS
+# ----------------------------------------------------------------------------
+ranked_fix_recommendations:
+
+  - rank: 1
+    title: "Implement MRCHDU on standard branch before Newton assembly"
+    tag: parity-breaking
+    affected_cluster: RC2
+    effort_estimate: "5-10 days"
+    risk: high
+    rationale: |
+      Highest-signal single repair. Fortran SETBL always re-marches via
+      MRCHDU; standard branch skips this and Newtons from a Thwaites
+      seed. Likely explanation for most of the 1.8M% CD error.
+    recommended_gate: "No new flag; repair the standard branch directly. Do NOT alter the UseLegacyBoundaryLayerInitialization branch; regression-check on 4455/4455 NACA + 100228 Selig."
+
+  - rank: 2
+    title: "Replace hand-rolled Thwaites/wake/turb seeds with double-precision MRCHUE port"
+    tag: parity-breaking
+    affected_cluster: RC2, RC3
+    effort_estimate: "7-14 days"
+    risk: high
+    rationale: |
+      Remove the hardcoded CTAU=0.03 turbulent seed, frozen-theta wake
+      march, and ad-hoc Thwaites predictor. Replace with double-precision
+      Newton per-station (parity-branch MRCHUE structure but on double).
+    recommended_gate: "No new flag. Dead-code delete MarchBoundaryLayer/MarchResidual/UpdateEdgeVelocityDIJCoupling in the same PR."
+
+  - rank: 3
+    title: "Port VSM (Mach) and VSR (Re) columns through BLDIF/BLSYS"
+    tag: parity-breaking
+    affected_cluster: RC1
+    effort_estimate: "3-5 days"
+    risk: medium
+    rationale: |
+      BldifResult must carry VSM/VSR; AssembleStationSystem must apply
+      the RES_U1*U1_MS + RES_U2*U2_MS + RES_MS transform. Required for
+      any compressible or Re-varying sweep.
+    recommended_gate: "Gate behind new flag `AnalysisSettings.EnableCompressibilityNewtonCoupling` defaulting to false; enable when M>0.3 or MATYP!=1. Guarantees 4455 NACA parity sweep is unchanged."
+
+  - rank: 4
+    title: "Restore CL_MSQ accumulation and SPECAL inner Mach loop"
+    tag: parity-breaking
+    affected_cluster: RC1
+    effort_estimate: "3-5 days"
+    risk: medium
+    rationale: |
+      LinearVortexInviscidSolver.IntegratePressureForces must accumulate
+      CL_MSQ via CPG*_MSQ; SolveAtAngleOfAttack must iterate SPECAL's CLM
+      inner loop for M>0. Dependency on rank-3.
+    recommended_gate: "Same `EnableCompressibilityNewtonCoupling` flag."
+
+  - rank: 5
+    title: "Repair ViscousNewtonUpdater: DAC CL_MS term, DCLMIN MATYP branch, StepNorm Ue term"
+    tag: parity-breaking
+    affected_cluster: RC4
+    effort_estimate: "2-3 days"
+    risk: medium
+    rationale: |
+      Restore missing Fortran UPDATE terms. Each is a small arithmetic
+      change; they can be individually verified against GDB hex traces.
+    recommended_gate: "Each item gated behind `EnableCompressibilityNewtonCoupling` (CL_MS term) or remains unconditional (DCLMIN, StepNorm). NACA 4455/4455 must stay bit-exact because MS_AC=0 in those cases."
+
+  - rank: 6
+    title: "Unify post-STMOVE wake refresh — remove legacy-only gate"
+    tag: parity-breaking
+    affected_cluster: RC3
+    effort_estimate: "1-2 days"
+    risk: medium
+    rationale: |
+      RecomputeWakeGapFromXssi and SST_GO refresh are legacy-gated; the
+      standard branch silently keeps stale wake geometry. Promote to
+      unconditional.
+    recommended_gate: "No new flag; regression-check NACA parity."
+
+  - rank: 7
+    title: "Reconcile BoundaryLayerCorrelations standard-branch divergences (WakeDissipation rcd_hk, CFT cf_rt clamp)"
+    tag: parity-breaking
+    affected_cluster: RC9
+    effort_estimate: "0.5-1 day"
+    risk: low
+    rationale: |
+      Remove the two intentional 'corrections' that diverge from Fortran;
+      either revert to Fortran logic or move behind an approved-deviation
+      flag with documentation in ParityAndTodos.md.
+    recommended_gate: "No new flag — revert to Fortran, per 'Legacy is reference' policy."
+
+  - rank: 8
+    title: "Remove unconditional float narrowing in ComputeStationVariables and MirrorLowerWakeOntoUpperWake"
+    tag: parity-breaking
+    affected_cluster: RC5
+    effort_estimate: "1-2 days"
+    risk: medium
+    rationale: |
+      Both methods always call float round / MathF / RoundToSingle;
+      standard branch loses precision. Gate on useLegacyPrecision flag.
+    recommended_gate: "Add `useLegacyPrecision` parameter plumbing in existing signatures; default preserves parity path."
+
+  - rank: 9
+    title: "Replace PanelMeshGenerator with CosineClusteringPanelDistributor call (port PANGEN)"
+    tag: parity-breaking
+    affected_cluster: RC6
+    effort_estimate: "3-5 days"
+    risk: medium
+    rationale: |
+      Current meshing is a managed heuristic; standard-branch node
+      placement disagrees with Fortran. Route through existing distributor.
+    recommended_gate: "No new flag; regression-check all parity sweeps."
+
+  - rank: 10
+    title: "Hot-path allocation cleanup via SolverBuffers pool (parity-preserving)"
+    tag: parity-preserving
+    affected_cluster: (none — RC-adjacent)
+    effort_estimate: "3-5 days"
+    risk: low
+    rationale: |
+      11 named per-Newton-iter allocation sites identified across A1/A2/A3/
+      A5/B1/C2. Route through ThreadStatic SolverBuffers (pattern already
+      established). Zero parity risk.
+    recommended_gate: "No flag; touches only buffer lifetimes, not arithmetic."
+
+  - rank: 11
+    title: "Delete AirfoilAnalysisService NotSupportedException stubs + unused DTOs"
+    tag: parity-preserving
+    affected_cluster: X1
+    effort_estimate: "0.5 day"
+    risk: low
+    rationale: |
+      8 stub methods (B4 lines 263-430), plus ViscousLaminarCorrector,
+      EdgeVelocityCalculator.ComputeWakeVelocities, ViscousStateEstimator
+      (after caller audit) and orphan DTOs. Pure API-surface reduction.
+    recommended_gate: "No flag."
+
+  - rank: 12
+    title: "Delete MarchBoundaryLayer / MarchResidual / UpdateEdgeVelocityDIJCoupling (dead + wrong-math)"
+    tag: parity-preserving
+    affected_cluster: X2
+    effort_estimate: "0.25 day"
+    risk: low
+    rationale: |
+      Dead code with non-Fortran heuristic constants. Safety hazard if
+      ever wired in.
+    recommended_gate: "No flag."
+
+  - rank: 13
+    title: "Implement MRCL (Type-2/Type-3 Re/Mach-CL coupling) in PolarSweepRunner.ComputeMRCL"
+    tag: parity-preserving
+    affected_cluster: RC1-adjacent
+    effort_estimate: "2-3 days"
+    risk: medium
+    rationale: |
+      Current stub returns (baseRe, baseMach) regardless of CL; Type-2
+      Mach-CL and Type-3 Re-CL sweeps silently run at constant conditions.
+    recommended_gate: "No flag; cases with PolarType=1 unchanged."
+
+  - rank: 14
+    title: "Add AnalysisSettings.WakeLengthRatio + AnalysisSettings.WakeStationCount (long-wake feature)"
+    tag: parity-preserving
+    affected_cluster: modernization (S7)
+    effort_estimate: "3-5 days"
+    risk: medium
+    rationale: |
+      Current defaults (1.0 chord, max(6, n/8+2) stations) replicate
+      Fortran. Exposing as settings with defaults preserves parity and
+      unlocks post-stall / low-Re regimes.
+    recommended_gate: "No flag; defaults preserve current behaviour."
+
+  - rank: 15
+    title: "Wire UseModernTransitionCorrections flag in TransitionModel (S8)"
+    tag: parity-preserving
+    affected_cluster: RC7
+    effort_estimate: "5-10 days per correlation"
+    risk: medium
+    rationale: |
+      Flag is dead today. Implement one modern correlation (Drela-Giles
+      2003 envelope) first as the S8 reference path.
+    recommended_gate: "Existing flag; defaults to false preserves parity."
+
+# ----------------------------------------------------------------------------
+# 5. MODERNIZATION ROADMAP (dependency-ordered)
+# ----------------------------------------------------------------------------
+modernization_roadmap:
+
+  - id: M1
+    title: "Compressible Newton coupling (Mach sensitivity end-to-end)"
+    depends_on: []
+    affected_files:
+      - BoundaryLayerSystemAssembler.cs
+      - ViscousNewtonAssembler.cs
+      - ViscousNewtonUpdater.cs
+      - LinearVortexInviscidSolver.cs
+      - ViscousSolverEngine.cs
+      - PanelGeometryBuilder.cs
+    effort_estimate: "2-3 weeks"
+    validation_plan: |
+      1. Run NACA 4455 bit-exact sweep at M=0 — must stay bit-exact.
+      2. Extend to M=0.1/0.3/0.5 on selected 6-vector rig; compare
+         CL/CM/CD vs Fortran VISCAL at M>0 (currently no such reference).
+      3. Requires new Fortran reference polars at M>0 — add to
+         tools/fortran-debug/micro_rig_registry.json.
+
+  - id: M2
+    title: "Compressible R2 in TAU integral (ViscousNewtonAssembler:986)"
+    depends_on: [M1]
+    affected_files:
+      - ViscousNewtonAssembler.cs
+    effort_estimate: "1-2 days"
+    validation_plan: |
+      Replace R2=1.0 stub with density ratio per compressible BL eqns.
+      Compare TAU integrand at M=0.5 against Fortran post-M1 landing.
+
+  - id: M3
+    title: "Longer wakes (parameterized wake length + station count)"
+    depends_on: []
+    affected_files:
+      - WakeGeometryGenerator.cs
+      - BoundaryLayerTopologyBuilder.cs
+      - BoundaryLayerSystemAssembler.cs
+      - StreamfunctionInfluenceCalculator.cs
+      - InfluenceMatrixBuilder.cs
+      - AnalysisSettings.cs
+    effort_estimate: "1-2 weeks"
+    validation_plan: |
+      Default WakeLengthRatio=1.0 reproduces current behaviour bit-exact.
+      With WakeLengthRatio=2.5 and WakeStationCount=50, compare post-stall
+      CD against wind-tunnel reference (Abbott-Doenhoff NACA sections).
+
+  - id: M4
+    title: "Drela-Giles 2003 transition envelope (first modern correlation)"
+    depends_on: []
+    affected_files:
+      - TransitionModel.cs
+    effort_estimate: "1-2 weeks"
+    validation_plan: |
+      Gate behind UseModernTransitionCorrections. At 25 Selig validation
+      airfoils (s1210, fx63120, waspsm, …), compare xtr vs XFLR5 reference.
+      NACA 4455 with flag=false must stay bit-exact.
+
+  - id: M5
+    title: "Coder-Maughmer 2014 separated-profile envelope"
+    depends_on: [M4]
+    affected_files:
+      - TransitionModel.cs
+    effort_estimate: "2-3 weeks"
+    validation_plan: |
+      Validate against separated-flow reference cases (Selig s1223,
+      s1221 low-Re, high-α).
+
+  - id: M6
+    title: "XFLR5-compatible two-criterion transition (e^N + AGS)"
+    depends_on: [M4]
+    affected_files:
+      - TransitionModel.cs
+      - AnalysisSettings.cs
+    effort_estimate: "2-3 weeks"
+    validation_plan: |
+      Side-by-side XFLR5 comparison at Tu%=0.1/1.0. Drag bucket shape
+      must match within 2% rel.
+
+  - id: M7
+    title: "TSL-compatible path (for bypass / trip support)"
+    depends_on: [M4]
+    affected_files:
+      - TransitionModel.cs
+    effort_estimate: "3-4 weeks"
+    validation_plan: |
+      Validate against ONERA Arnal trip-transition cases.
+
+  - id: M8
+    title: "Recalibrated turbulent correlations (HST/CFT/DIT/Cteq) from modern DNS"
+    depends_on: []
+    affected_files:
+      - BoundaryLayerCorrelations.cs
+    effort_estimate: "3-4 weeks"
+    validation_plan: |
+      Gate behind new `UseModernTurbulentCorrelations` flag. Validate on
+      AFRL 2005+ flat-plate, Pirozzoli 2011 compressible DNS, Duan 2014
+      hypersonic. Parity branch unchanged by default.
+
+  - id: M9
+    title: "Smooth (softplus/logistic) clamps in Cteq/Hk/Us"
+    depends_on: []
+    affected_files:
+      - BoundaryLayerCorrelations.cs
+    effort_estimate: "1 week"
+    validation_plan: |
+      Newton-convergence regression on 1000 random Selig cases. Expect
+      improved convergence rate near separation with no CL/CD shift
+      beyond 1e-6 rel.
+
+  - id: M10
+    title: "GEOLIN / DZDN geometric-sensitivity path (inverse design)"
+    depends_on: []
+    affected_files:
+      - StreamfunctionInfluenceCalculator.cs
+      - InfluenceMatrixBuilder.cs
+      - XFoil.Design/*
+    effort_estimate: "2-3 weeks"
+    validation_plan: |
+      Re-port MDES / QDES against Fortran xgdes.f reference. Not needed
+      for polar parity.
+
+  - id: M11
+    title: "Port PANGEN into PanelMeshGenerator (or redirect to CosineClusteringPanelDistributor)"
+    depends_on: []
+    affected_files:
+      - PanelMeshGenerator.cs
+      - CosineClusteringPanelDistributor.cs
+    effort_estimate: "1 week"
+    validation_plan: |
+      Node-placement bit-comparison at NACA 0012/4412/23012 vs Fortran
+      PANGEN dump.
+
+  - id: M12
+    title: "Hot-path allocation pool (parity-preserving baseline)"
+    depends_on: []
+    affected_files:
+      - many (A1/A2/A3/A5/B1/C2 — 11 call sites)
+    effort_estimate: "1-2 weeks"
+    validation_plan: |
+      Bit-exact NACA 4455 + Selig sweep unchanged; GC allocation rate
+      drops to near-zero in steady Newton.
+
+# ----------------------------------------------------------------------------
+# 6. PARITY BRANCH VERDICT (per-file aggregation)
+# ----------------------------------------------------------------------------
+parity_branch_verdict:
+  clean_files: 99
+    # C3:30+ DTOs, D3:17+ DTOs + all D3 services, D1:7 (all except minor pieces),
+    # D2:2, most D4 DTOs, B5 LegacyPrecisionMath, C2 DenseLinearSystemSolver,
+    # ScaledPivotLuSolver, SolverBuffers, TridiagonalSolver (minor),
+    # C1 WakeGapProfile, WakeSpacing, ViscousStateSeedBuilder, ViscousLaminarCorrector,
+    # StagnationPointTracker, BoundaryLayerTopologyBuilder, WakeGeometryGenerator,
+    # EdgeVelocityCalculator, B4 all three files, B3 PanelGeometryBuilder +
+    # CosineClusteringPanelDistributor, B2 HessSmithInviscidSolver (parity N/A),
+    # B2 LinearVortexInviscidSolver (clean for parity).
+  minor_files: 24
+    # A1, A3, A5, A6, B5 ParametricSpline, C2 BlockTridiagonalSolver, C2 TridiagonalSolver,
+    # C3 LinearVortexPanelState, C3 InviscidSolverState, C3 WakeGeometry-adjacent,
+    # C1 DragCalculator, D1 CoreTrace, D1 NacaAirfoilGenerator, A4, etc.
+  major_files: 2
+    # A2 (heavy per-iter allocations), B1 (USAV MaxStations×2 per-iter + Console traces)
+  blocker_files: 0
+  top_5_remaining_parity_hot_path_allocation_sites:
+    - site: "ViscousNewtonAssembler.ComputePredictedEdgeVelocities line 1059 — new double[MaxStations,2] per Newton iter"
+      ledger: B1
+      recommended_fix: "Route through SolverBuffers.UsavScratch"
+    - site: "BoundaryLayerSystemAssembler.AssembleStationSystem lines 5943-5946 + 6043-6188 — BlsysResult + 2 double[3,5] + double[3] + up to 6 .Clone() per station per iter"
+      ledger: A2
+      recommended_fix: "Replace Clone() result classes with readonly record structs or SolverBuffers-backed pools"
+    - site: "BoundaryLayerSystemAssembler.ComputeFiniteDifferences lines 584-587 + ComputeTransitionIntervalSystem lines 3556-3803 — BldifResult + 8 double[5]"
+      ledger: A2
+      recommended_fix: "Same pooling as above"
+    - site: "TransitionModel.ComputeTransitionPoint lines 79-86 — TransitionPointResult with 8 heap double[5] per Newton iter"
+      ledger: A5
+      recommended_fix: "Replace result class with struct + SolverBuffers arrays"
+    - site: "StreamfunctionInfluenceCalculator.ComputeInfluenceAtLegacyPrecision lines 424-427 — 4× float[n] per PSILIN call"
+      ledger: A3
+      recommended_fix: "ArrayPool<float> or a ThreadStatic parity-scratch struct"
+
+# ----------------------------------------------------------------------------
+# 7. STANDARD BRANCH VERDICT (per-file aggregation)
+# ----------------------------------------------------------------------------
+standard_branch_verdict:
+  clean_files: 88
+    # D3 (all design), D4 all IO, D2 all diagnostics, D1 most core,
+    # C3 DTOs, C2 most numerics, B5 LegacyPrecisionMath (by design parity-only),
+    # several C1 files (ViscousStateSeedBuilder, ViscousLaminarCorrector,
+    # StagnationPointTracker minor, WakeGapProfile, WakeSpacing).
+  minor_files: 22
+    # A3, A5 (major actually — see below), B5 ParametricSpline + CubicSpline,
+    # C1 several, C2 TridiagonalSolver + DenseLinearSystemSolver,
+    # C3 InviscidSolverState, B4 AirfoilAnalysisService, B4 PolarSweepRunner,
+    # B4 PostStallExtrapolator, B3 all three, A4, D1 NacaAirfoilGenerator.
+  major_files: 10
+    # A2 BoundaryLayerSystemAssembler, A5 TransitionModel, A6 BoundaryLayerCorrelations,
+    # B1 ViscousNewtonUpdater, B2 LinearVortexInviscidSolver, B2 HessSmithInviscidSolver,
+    # B3 PanelMeshGenerator, C1 DragCalculator, C1 WakeGeometryGenerator,
+    # C1 ViscousStateEstimator.
+  blocker_files: 2
+    # A1 ViscousSolverEngine — RC2/RC3 concentrated here
+    # C2 BandMatrixSolver — 'algorithmic correctness trap' flagged by C2 (no prod caller though)
+    # (A2 listed as major above but its VSM drop is of blocker-class per RC1 cluster;
+    # ledger verdict is 'blocker' per A2 file_summary — re-tagging as blocker here.)
+  top_10_standard_branch_blockers_ordered_by_likely_cd_impact:
+    - rank: 1
+      issue: "ViscousSolverEngine.PreparePreNewtonSetupFromInviscid:1798 — MRCHDU skipped on standard branch"
+      ledger: A1
+      cluster: RC2
+      likely_cd_impact: "dominant at all regimes"
+    - rank: 2
+      issue: "ViscousSolverEngine.InitializeBLThwaitesXFoil:2923,3117,3166 — hand-rolled Thwaites + frozen-theta wake + hardcoded CTAU=0.03"
+      ledger: A1
+      cluster: RC2/RC3
+      likely_cd_impact: "dominant at all regimes"
+    - rank: 3
+      issue: "BoundaryLayerSystemAssembler.AssembleStationSystem:6227 — VSM (Mach) column dropped in BLSYS transform"
+      ledger: A2
+      cluster: RC1
+      likely_cd_impact: "dominant at M>0.3"
+    - rank: 4
+      issue: "BoundaryLayerSystemAssembler.ComputeFiniteDifferences BLDIF chain — VSM/VSR drop in BldifResult"
+      ledger: A2
+      cluster: RC1
+      likely_cd_impact: "dominant at M>0.3"
+    - rank: 5
+      issue: "LinearVortexInviscidSolver.IntegratePressureForces:902 — clMach2=0 hardcoded"
+      ledger: B2
+      cluster: RC1
+      likely_cd_impact: "dominant at M>0 (SPECAL cannot converge)"
+    - rank: 6
+      issue: "ViscousSolverEngine.ComputeViscousCL:1603 — no Karman-Tsien correction (assumes M=0)"
+      ledger: A1
+      cluster: RC1
+      likely_cd_impact: "high at M>0.3"
+    - rank: 7
+      issue: "ViscousSolverEngine.BuildWakeGapProfile:2646 — DWDXTE from wake tangent, not airfoil TE cross"
+      ledger: A1
+      cluster: RC3
+      likely_cd_impact: "high at blunt-TE / low-Re"
+    - rank: 8
+      issue: "BoundaryLayerCorrelations.WakeDissipation — rcd_hk sign divergence from DILW + TurbulentSkinFriction cf_rt clamp gate"
+      ledger: A6
+      cluster: RC9
+      likely_cd_impact: "high near separation"
+    - rank: 9
+      issue: "ViscousNewtonUpdater.ComputeStepNorm / ApplyTrustRegionUpdate — missing Ue term + under-engineered trust region + NaN masking to MaxValue"
+      ledger: B1 / A1
+      cluster: RC4
+      likely_cd_impact: "high at any regime; compounds all other bugs"
+    - rank: 10
+      issue: "PanelMeshGenerator.Generate — not a PANGEN port; node placement diverges from Fortran"
+      ledger: B3
+      cluster: RC6
+      likely_cd_impact: "background contributor (systematic offset)"
+
+# ----------------------------------------------------------------------------
+# 8. SCOPE GAPS
+# ----------------------------------------------------------------------------
+scope_gaps:
+  cross_referenced_but_never_audited:
+    - area: "AnalysisSettings.cs — constructor/property audit"
+      context: "C3 audited AnalysisSettings.cs and confirmed constructor-only mutation (verdict clean). No gap."
+    - area: "XFoil.Cli/Program.cs and tests/ trees"
+      context: "Out of scope per plan (audit was solver-only). No gap."
+    - area: "tools/fortran-debug/* harnesses"
+      context: "Out of scope per plan. No gap."
+    - area: "f_xfoil/ Fortran source"
+      context: "Read-only reference. Audited only for S4 cross-reference, by design. No gap."
+    - area: "SolverTrace callers in hot-path code (A1/A2/B1 trace-event anon objects)"
+      context: "D2 confirmed SolverTrace fast-path is volatile-bool gate, but the CALLER side allocates anonymous objects BEFORE the Event method short-circuits. Multiple ledgers (A3, A6, C2) flag this. Recommend a follow-up micro-audit to enumerate every SolverTrace.Scope/Event/Array/Point call site and gate argument construction on SolverTrace.IsActive."
+      recommended_new_ledger: "audit/F1-solvertrace-callsites.yaml"
+    - area: "BandMatrixSolver.cs caller confirmation"
+      context: "C2 flags the class as having 'no production caller (test file only)' but did not enumerate. One-hour grep audit would confirm removal is safe."
+      recommended_new_ledger: "none (brief check, fold into cleanup PR)"
+    - area: "AnalysisSettings.UseModernTransitionCorrections consumer audit"
+      context: "A5 confirmed the flag is read nowhere in TransitionModel. A second pass should grep every module to confirm NO path actually changes behaviour when the flag is set. May unmask additional dead flags."
+      recommended_new_ledger: "none (brief grep audit)"
+  no_recommended_new_ledger_required: true
+    # The audit scope is exhaustive for solver code. F1 above is a
+    # focused follow-up micro-audit and not required before the fix phase.
+
+# ----------------------------------------------------------------------------
+# 9. CROSS-LEDGER CONTRADICTIONS
+# ----------------------------------------------------------------------------
+cross_ledger_contradictions:
+
+  - id: X1
+    topic: "ViscousNewtonSystem.SetupISYS — lock statements"
+    ledger_a: "Plan document (audit plan) — asserts 'SetupISYS has lock statements — P4 violation candidate'"
+    ledger_b: "C3 — explicitly refutes: 'SetupISYS contains NO lock/Monitor/Interlocked; the grep hits are the tokens block/blocks in XML documentation.'"
+    verdict: "C3 is correct — no P4 violation. Plan text is a false alarm. No action beyond a note in ParityAndTodos.md."
+
+  - id: X2
+    topic: "PSILIN kernel correctness — C# double-path arithmetic"
+    ledger_a: "A3 file_summary — standard_verdict: minor (no S4 issues found beyond GEOLIN gap)."
+    ledger_b: "B2 file_summary — 'Standard-branch 1.8M% CD error is consistent with [HessSmith] architectural mismatch'; B2 line 462 attributes significant CD error to HessSmithInviscidSolver."
+    verdict: "Not a contradiction per se. A3 audits StreamfunctionInfluenceCalculator (linear-vortex kernel) which IS the parity path. B2 audits HessSmithInviscidSolver which is the STANDARD branch's alternate. The contradiction is systemic: the standard branch currently uses Hess-Smith (constant-strength panels), while the parity branch uses linear-vortex. Resolution: standard branch should route through LinearVortexInviscidSolver+PSILIN, not HessSmithInviscidSolver. This is orchestrator-level architecture, not a ledger disagreement."
+
+  - id: X3
+    topic: "WakeDissipation rcd_hk sign"
+    ledger_a: "A6 — standard branch intentionally diverges from Fortran DILW as a 'cleanup'."
+    ledger_b: "Project policy (CLAUDE.md 'Legacy is reference') — Fortran is THE reference; disparities are C# bugs."
+    verdict: "A6 is correctly flagging the deviation as a blocker. Recommendation: revert to Fortran DILW per policy."
+
+  - id: X4
+    topic: "ViscousStateEstimator disposition"
+    ledger_a: "C1 — suggests either DELETE or mark diagnostic-only, contingent on caller audit."
+    ledger_b: "(none — no other ledger contradicts)"
+    verdict: "Not a contradiction; noted as the most impactful C1 X1 disposition decision. Requires a caller-graph grep (15 min) before final disposition."
+
+  - id: X5
+    topic: "B4 BLSnapshot / warm-start scaffolding"
+    ledger_a: "B4 — 'warm-start scaffolding is ceremonial: only the alpha is stored'."
+    ledger_b: "(none)"
+    verdict: "Standalone finding, not a contradiction. API rename recommended."
+
+# ----------------------------------------------------------------------------
+# 10. EXECUTIVE SUMMARY
+# ----------------------------------------------------------------------------
+summary: |
+  The 18-agent Tier A–D audit confirms XFoilSharp's parity branch is
+  structurally production-ready (0 severity-P blockers; 11 residual hot-path
+  allocation sites amenable to SolverBuffers pooling; no locks, no I/O on the
+  solver hot path, no mis-gated float leaks from the standard branch). The
+  104683-vector bit-exact baseline (4455 NACA + 100228 Selig) is consistent
+  with the ledgers. The standard (double-precision) branch, by contrast, has
+  17 distinct critical-severity correctness findings organized into 9 root-
+  cause clusters. The single highest-impact cluster is RC2 — the standard
+  branch never re-marches the boundary layer via MRCHDU before Newton
+  assembly, feeding the solver a raw Thwaites predictor plus hardcoded
+  wake/turb patches (CTAU=0.03, frozen-theta wake). RC1 (dropped Mach
+  sensitivity across BL and inviscid kernels — VSM column, CL_MSQ, SPECAL
+  Mach loop, Karman-Tsien CL) is a close second; RC3 (wake physics
+  errors), RC4 (Newton updater term drops), and RC9 (BoundaryLayer
+  Correlations intentional deviations) complete the primary failure
+  surface. The 1.8M% CD error observed on F-convergent vectors is most
+  plausibly explained by RC2 and RC4 at M=0 and by RC1 at M>0. The ranked
+  fix list orders repairs so that parity-preserving work (allocation
+  pooling, stub deletion, MRCL port, WakeLengthRatio exposure) can proceed
+  immediately while parity-breaking repairs (MRCHDU port, MRCHUE-on-double
+  replacement, VSM/CL_MSQ restoration) are gated behind a new
+  `EnableCompressibilityNewtonCoupling` flag with NACA 4455 regression
+  protection. The modernization roadmap sequences M1–M12 by dependency,
+  with M4 (Drela-Giles 2003 transition envelope) as the first
+  user-visible modernization once RC7 (dead flag) is wired. No
+  source-tree mutations were made by any agent; D4 used a minor
+  schema variant that is acceptable under its reduced-scope P4/X1
+  criteria. Two micro-audits (SolverTrace allocation pattern, dead flag
+  cross-reference) are recommended but not required before the fix phase.

@@ -1,0 +1,605 @@
+agent: B4
+ledger_path: audit/B4-entry-orchestration.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/AirfoilAnalysisService.cs
+    lines: 735
+    branch_relevance: both
+    pass1_method_index:
+      - name: ctor (default)
+        signature: "public AirfoilAnalysisService()"
+        line_range: [34, 43]
+      - name: ctor (DI)
+        signature: "public AirfoilAnalysisService(PanelMeshGenerator, HessSmithInviscidSolver, BoundaryLayerTopologyBuilder, ViscousStateSeedBuilder, ViscousStateEstimator, ViscousLaminarCorrector)"
+        line_range: [48, 62]
+      - name: AnalyzeInviscid
+        signature: "public InviscidAnalysisResult AnalyzeInviscid(AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [71, 90]
+      - name: AnalyzeBoundaryLayerTopology
+        signature: "public BoundaryLayerTopology AnalyzeBoundaryLayerTopology(AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [95, 102]
+      - name: AnalyzeViscousStateSeed
+        signature: "public ViscousStateSeed AnalyzeViscousStateSeed(AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [107, 115]
+      - name: AnalyzeViscousInitialState
+        signature: "public ViscousStateEstimate AnalyzeViscousInitialState(AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [120, 128]
+      - name: AnalyzeViscous
+        signature: "public ViscousAnalysisResult AnalyzeViscous(AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [145, 172]
+      - name: SweepViscousAlpha
+        signature: "public List<ViscousAnalysisResult> SweepViscousAlpha(AirfoilGeometry, double, double, double, AnalysisSettings?)"
+        line_range: [181, 198]
+      - name: SweepViscousCL
+        signature: "public List<ViscousAnalysisResult> SweepViscousCL(AirfoilGeometry, double, double, double, AnalysisSettings?)"
+        line_range: [207, 223]
+      - name: SweepViscousRe
+        signature: "public List<ViscousAnalysisResult> SweepViscousRe(AirfoilGeometry, double, double, double, double, AnalysisSettings?)"
+        line_range: [232, 249]
+      - name: AnalyzeViscousIntervalSystem [STUB]
+        signature: "public ViscousIntervalSystem AnalyzeViscousIntervalSystem(AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [263, 271]
+      - name: AnalyzeViscousLaminarCorrection [STUB]
+        signature: "public ViscousCorrectionResult AnalyzeViscousLaminarCorrection(AirfoilGeometry, double, AnalysisSettings?, int)"
+        line_range: [281, 290]
+      - name: AnalyzeViscousLaminarSolve [STUB]
+        signature: "public ViscousSolveResult AnalyzeViscousLaminarSolve(AirfoilGeometry, double, AnalysisSettings?, int, double)"
+        line_range: [300, 310]
+      - name: AnalyzeViscousInteraction [STUB]
+        signature: "public ViscousInteractionResult AnalyzeViscousInteraction(AirfoilGeometry, double, AnalysisSettings?, int, double, int, double)"
+        line_range: [320, 332]
+      - name: AnalyzeDisplacementCoupledViscous [STUB]
+        signature: "public DisplacementCoupledResult AnalyzeDisplacementCoupledViscous(AirfoilGeometry, double, AnalysisSettings?, int, int, double, double)"
+        line_range: [342, 354]
+      - name: SweepDisplacementCoupledAlpha [STUB]
+        signature: "public ViscousPolarSweepResult SweepDisplacementCoupledAlpha(AirfoilGeometry, double, double, double, AnalysisSettings?, int, int, double, double)"
+        line_range: [364, 378]
+      - name: SweepDisplacementCoupledLiftCoefficient [STUB]
+        signature: "public ViscousLiftSweepResult SweepDisplacementCoupledLiftCoefficient(AirfoilGeometry, double, double, double, AnalysisSettings?, int, int, double, double, double, double, int)"
+        line_range: [388, 405]
+      - name: AnalyzeDisplacementCoupledForLiftCoefficient [STUB]
+        signature: "public ViscousTargetLiftResult AnalyzeDisplacementCoupledForLiftCoefficient(AirfoilGeometry, double, AnalysisSettings?, int, int, double, double, double, double, int)"
+        line_range: [415, 430]
+      - name: SweepInviscidAlpha
+        signature: "public PolarSweepResult SweepInviscidAlpha(AirfoilGeometry, double, double, double, AnalysisSettings?)"
+        line_range: [439, 468]
+      - name: SweepInviscidLiftCoefficient
+        signature: "public InviscidLiftSweepResult SweepInviscidLiftCoefficient(AirfoilGeometry, double, double, double, AnalysisSettings?, double)"
+        line_range: [473, 505]
+      - name: AnalyzeInviscidForLiftCoefficient (public)
+        signature: "public InviscidAnalysisResult AnalyzeInviscidForLiftCoefficient(AirfoilGeometry, double, AnalysisSettings?, double, double, int)"
+        line_range: [510, 536]
+      - name: ExtractCoordinates
+        signature: "private static (double[] x, double[] y) ExtractCoordinates(AirfoilGeometry)"
+        line_range: [545, 556]
+      - name: AnalyzeInviscidForLiftCoefficient (private, prepared-system)
+        signature: "private InviscidAnalysisResult AnalyzeInviscidForLiftCoefficient(PreparedInviscidSystem, double, AnalysisSettings, double, double, int)"
+        line_range: [561, 637]
+      - name: AnalyzeInviscidLinearVortex
+        signature: "private InviscidAnalysisResult AnalyzeInviscidLinearVortex(AirfoilGeometry, double, AnalysisSettings)"
+        line_range: [642, 681]
+      - name: PrepareInviscidSystem
+        signature: "private PreparedInviscidSystem PrepareInviscidSystem(AirfoilGeometry, AnalysisSettings)"
+        line_range: [686, 690]
+      - name: ToPolarPoint
+        signature: "private static PolarPoint ToPolarPoint(InviscidAnalysisResult)"
+        line_range: [695, 707]
+      - name: NormalizeStep
+        signature: "private static double NormalizeStep(double, double, double)"
+        line_range: [712, 720]
+      - name: ShouldContinue
+        signature: "private static bool ShouldContinue(double, double, double)"
+        line_range: [725, 734]
+    methods:
+      - name: AnalyzeInviscid
+        signature: "InviscidAnalysisResult (AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [71, 90]
+        allocations:
+          - {line: 81, kind: "new AnalysisSettings()", hot_path: false, note: "only on null settings; one-per-call façade, not per-station"}
+          - {line: 88, kind: "PrepareInviscidSystem -> new mesh + prepared system", hot_path: false, note: "single call per analysis"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: AnalyzeViscous
+        signature: "ViscousAnalysisResult (AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [145, 172]
+        allocations:
+          - {line: 155, kind: "new AnalysisSettings()", hot_path: false}
+          - {line: 157, kind: "new double[] x,y via ExtractCoordinates", hot_path: false, note: "per-call, not per-station — acceptable at this boundary but should reuse SolverBuffers for hot sweeps"}
+        io_or_locks: []
+        float_usage:
+          - {line: 163, form: "float_local", context: "float dtor = MathF.Acos(-1.0f) / 180.0f"}
+          - {line: 164, form: "float_cast", context: "(float)angleOfAttackDegrees * dtor"}
+        mathf_calls:
+          - {line: 163, symbol: "MathF.Acos"}
+        correctness_concerns:
+          - {line: 159, severity: "low", issue: "alpha precision path is intentionally float-narrowed for parity; only active when UseLegacyBoundaryLayerInitialization. Standard branch uses double — correct split."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "DTOR float-narrowing is parity-only; standard branch already uses full double. Keep."
+            rationale: "Parity chain uses REAL DTOR; standard branch should not narrow."
+            risk: low
+      - name: SweepViscousAlpha
+        signature: "List<ViscousAnalysisResult> (AirfoilGeometry, double, double, double, AnalysisSettings?)"
+        line_range: [181, 198]
+        allocations:
+          - {line: 195, kind: "new double[] x,y via ExtractCoordinates", hot_path: false, note: "one per-sweep, not per-point"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SweepViscousCL
+        signature: "List<ViscousAnalysisResult> (AirfoilGeometry, double, double, double, AnalysisSettings?)"
+        line_range: [207, 223]
+        allocations:
+          - {line: 221, kind: "new double[] x,y", hot_path: false, note: "once per sweep"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SweepViscousRe
+        signature: "List<ViscousAnalysisResult> (AirfoilGeometry, double, double, double, double, AnalysisSettings?)"
+        line_range: [232, 249]
+        allocations:
+          - {line: 247, kind: "new double[] x,y", hot_path: false, note: "once per sweep"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SweepInviscidAlpha
+        signature: "PolarSweepResult (AirfoilGeometry, double, double, double, AnalysisSettings?)"
+        line_range: [439, 468]
+        allocations:
+          - {line: 459, kind: "new List<PolarPoint>()", hot_path: false, note: "sized without capacity; grows with realloc as alpha sweep expands. Preallocate capacity from sweep bounds."}
+          - {line: 464, kind: "ToPolarPoint struct new", hot_path: false, note: "record allocation per sweep point; acceptable for result serialization."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "List<PolarPoint> preallocate capacity based on (end-start)/step"
+            rationale: "Avoid List re-growth during long sweeps"
+            risk: low
+      - name: SweepInviscidLiftCoefficient
+        signature: "InviscidLiftSweepResult (AirfoilGeometry, double, double, double, AnalysisSettings?, double)"
+        line_range: [473, 505]
+        allocations:
+          - {line: 494, kind: "new List<InviscidTargetLiftResult>()", hot_path: false, note: "uncapped List growth; preallocate."}
+          - {line: 501, kind: "new InviscidTargetLiftResult", hot_path: false}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: AnalyzeViscousIntervalSystem
+        signature: "public ViscousIntervalSystem (AirfoilGeometry, double, AnalysisSettings?)"
+        line_range: [263, 271]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "X1 stub — no callers in src or tests"
+            rationale: "Surrogate interval-system path removed; recommend DELETE along with ViscousIntervalSystem DTO in a separate cleanup phase. [Obsolete] marker already present."
+            risk: low
+      - name: AnalyzeViscousLaminarCorrection
+        signature: "public ViscousCorrectionResult (AirfoilGeometry, double, AnalysisSettings?, int)"
+        line_range: [281, 290]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "X1 stub — recommend DELETE"
+            rationale: "Newton path supersedes. No callers. [Obsolete] already set."
+            risk: low
+      - name: AnalyzeViscousLaminarSolve
+        signature: "public ViscousSolveResult (AirfoilGeometry, double, AnalysisSettings?, int, double)"
+        line_range: [300, 310]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "X1 stub — recommend DELETE"
+            rationale: "No callers. Newton viscous path is the supported public API."
+            risk: low
+      - name: AnalyzeViscousInteraction
+        signature: "public ViscousInteractionResult (AirfoilGeometry, double, AnalysisSettings?, int, double, int, double)"
+        line_range: [320, 332]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "X1 stub — recommend DELETE"
+            rationale: "Staged viscous interaction coupler replaced. No callers."
+            risk: low
+      - name: AnalyzeDisplacementCoupledViscous
+        signature: "public DisplacementCoupledResult (AirfoilGeometry, double, AnalysisSettings?, int, int, double, double)"
+        line_range: [342, 354]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "X1 stub — recommend DELETE"
+            rationale: "Displacement-coupled surrogate gone. No callers."
+            risk: low
+      - name: SweepDisplacementCoupledAlpha
+        signature: "public ViscousPolarSweepResult (AirfoilGeometry, double, double, double, AnalysisSettings?, int, int, double, double)"
+        line_range: [364, 378]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "X1 stub — recommend DELETE"
+            rationale: "Superseded by SweepViscousAlpha. No callers."
+            risk: low
+      - name: SweepDisplacementCoupledLiftCoefficient
+        signature: "public ViscousLiftSweepResult (AirfoilGeometry, double, double, double, AnalysisSettings?, int, int, double, double, double, double, int)"
+        line_range: [388, 405]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "X1 stub — recommend DELETE"
+            rationale: "Superseded by SweepViscousCL. No callers."
+            risk: low
+      - name: AnalyzeDisplacementCoupledForLiftCoefficient
+        signature: "public ViscousTargetLiftResult (AirfoilGeometry, double, AnalysisSettings?, int, int, double, double, double, double, int)"
+        line_range: [415, 430]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "X1 stub — recommend DELETE (the eighth 'FindDisplacementCoupledCL' stub per assignment)"
+            rationale: "No callers in src or tests. [Obsolete] already present. All 8 stubs form a coherent removable cluster along with their DTOs."
+            risk: low
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: minor
+      top_findings:
+        - "All 8 NotSupportedException stubs (lines 263-430) have no callers in src/ or tests/. Recommend DELETE as a single cleanup phase (also removes unused DTOs: ViscousIntervalSystem, ViscousCorrectionResult, ViscousSolveResult, ViscousInteractionResult, DisplacementCoupledResult, ViscousPolarSweepResult, ViscousLiftSweepResult, ViscousTargetLiftResult). Risk low; pure API surface reduction."
+        - "AnalyzeViscous (line 163) uses float DTOR path only under UseLegacyBoundaryLayerInitialization gate — correct parity-branch split; no standard-branch leak."
+        - "SweepInviscidAlpha / SweepInviscidLiftCoefficient use uncapped `new List<>()` — preallocate capacity from sweep bounds to avoid re-growth (low severity since this is a single façade-level sweep, not per-Newton-iter)."
+        - "ExtractCoordinates allocates fresh x/y double[] per call; acceptable at the façade boundary but worth noting if future callers invoke it per-alpha instead of per-sweep."
+        - "No locks, no async, no file I/O — entry-point thread/IO discipline is clean."
+      estimated_fix_effort: "0.5 day (stub deletion + DTO removal); list capacity tweaks 0.1 day"
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/PolarSweepRunner.cs
+    lines: 498
+    branch_relevance: both
+    pass1_method_index:
+      - name: SweepAlpha
+        signature: "public static List<ViscousAnalysisResult> SweepAlpha((double[] x,double[] y), AnalysisSettings, double, double, double)"
+        line_range: [37, 115]
+      - name: SweepCL
+        signature: "public static List<ViscousAnalysisResult> SweepCL((double[] x,double[] y), AnalysisSettings, double, double, double)"
+        line_range: [133, 200]
+      - name: SweepRe
+        signature: "public static List<ViscousAnalysisResult> SweepRe((double[] x,double[] y), AnalysisSettings, double, double, double, double)"
+        line_range: [218, 315]
+      - name: ComputeMRCL
+        signature: "private static (double re, double mach) ComputeMRCL(double, double, double, PolarType)"
+        line_range: [333, 359]
+      - name: BLSnapshot (nested class, holds AlphaRadians)
+        signature: "private sealed class BLSnapshot"
+        line_range: [370, 373]
+      - name: FindBestWarmStart
+        signature: "private static BLSnapshot? FindBestWarmStart(List<BLSnapshot>, int, int)"
+        line_range: [384, 394]
+      - name: CaptureBLSnapshot
+        signature: "private static BLSnapshot CaptureBLSnapshot(LinearVortexPanelState, InviscidSolverState, AnalysisSettings, double)"
+        line_range: [404, 418]
+      - name: SolveViscousWithWarmStart
+        signature: "private static ViscousAnalysisResult SolveViscousWithWarmStart(LinearVortexPanelState, InviscidSolverState, LinearVortexInviscidResult, AnalysisSettings, double, BLSnapshot?)"
+        line_range: [428, 448]
+      - name: WithAngleOfAttack
+        signature: "private static ViscousAnalysisResult WithAngleOfAttack(ViscousAnalysisResult, double)"
+        line_range: [456, 474]
+      - name: NormalizeStep
+        signature: "private static double NormalizeStep(double, double, double)"
+        line_range: [483, 486]
+      - name: ShouldContinue
+        signature: "private static bool ShouldContinue(double, double, double)"
+        line_range: [491, 497]
+    methods:
+      - name: SweepAlpha
+        signature: "public static List<ViscousAnalysisResult> (tuple, settings, start, end, step)"
+        line_range: [37, 115]
+        allocations:
+          - {line: 48, kind: "new List<ViscousAnalysisResult>()", hot_path: false, note: "P1: uncapped List grows with sweep length. Preallocate capacity from (end-start)/step."}
+          - {line: 52, kind: "new LinearVortexPanelState(maxNodes)", hot_path: false, note: "one-per-sweep, CORRECT placement outside the alpha loop"}
+          - {line: 53, kind: "new InviscidSolverState(maxNodes)", hot_path: false, note: "one-per-sweep"}
+          - {line: 80, kind: "new List<BLSnapshot>()", hot_path: false}
+          - {line: 106, kind: "new BLSnapshot" , hot_path: false, note: "per converged point; acceptable"}
+          - {line: 107, kind: "List.Add may re-grow", hot_path: false}
+          - {line: 111, kind: "List.Add may re-grow", hot_path: false}
+        io_or_locks: []
+        float_usage:
+          - {line: 66, form: "float_local", context: "float dtorF = MathF.Acos(-1.0f) / 180.0f"}
+          - {line: 68, form: "float_cast", context: "(double)((float)alphaStartDeg * dtorF)"}
+          - {line: 85, form: "float_cast", context: "(double)((float)alpha * dtorF) inside loop"}
+        mathf_calls:
+          - {line: 66, symbol: "MathF.Acos"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 82, issue: "accumulator_drift", note: "`for (double alpha = start; ...; alpha += step)` accumulates floating-point error for long sweeps. Prefer index-based alpha = start + i*step to mirror Fortran DO loops without drift."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Index-based loop counter eliminates accumulator drift"
+            rationale: "Long alpha sweeps currently accumulate ~N*eps error; switching to i*step is safer."
+            risk: low
+      - name: SweepCL
+        signature: "public static List<ViscousAnalysisResult> (tuple, settings, start, end, step)"
+        line_range: [133, 200]
+        allocations:
+          - {line: 144, kind: "new List<ViscousAnalysisResult>()", hot_path: false, note: "uncapped; preallocate"}
+          - {line: 148, kind: "new LinearVortexPanelState", hot_path: false, note: "one-per-sweep"}
+          - {line: 149, kind: "new InviscidSolverState", hot_path: false}
+          - {line: 166, kind: "new List<BLSnapshot>()", hot_path: false}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 169, issue: "accumulator_drift", note: "same double-accumulator pattern as SweepAlpha"}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SweepRe
+        signature: "public static List<ViscousAnalysisResult> (tuple, settings, fixedCL, reStart, reEnd, reStep)"
+        line_range: [218, 315]
+        allocations:
+          - {line: 230, kind: "new List<ViscousAnalysisResult>()", hot_path: false}
+          - {line: 234, kind: "new LinearVortexPanelState", hot_path: false, note: "one-per-sweep"}
+          - {line: 235, kind: "new InviscidSolverState", hot_path: false}
+          - {line: 252, kind: "new List<BLSnapshot>()", hot_path: false}
+          - {line: 264, kind: "new AnalysisSettings(...)", hot_path: true, note: "P1 HOT — inside the Re sweep loop, a fresh AnalysisSettings object is allocated PER Re POINT with ~20 arguments. Settings are immutable per point; cheap but unnecessary churn. Recommend struct overload or mutable sibling (RePointOverride) to avoid per-point constructor + validation."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 261, severity: "medium", issue: "Simplified Type-3 MRCL: ComputeMRCL returns baseRe unchanged regardless of fixedCL. Full xfoil.f:779 MRCL implements MATYP/RETYP = 1,2,3 with MINF = MINF1/SQRT(CLA) for Type 2 and REINF = REINF1/SQRT(CLA) or REINF1/CLA for Type 3. Current code only honors MATYP=1/RETYP=1; Type-2 Mach-CL coupling and Type-3 Re-CL coupling both silently fall through to fixed values. See fortran_divergence below."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 333, fortran_ref: "f_xfoil/src/xfoil.f:779-858", note: "ComputeMRCL is a stub for MATYP=2/3 and RETYP=2/3. Legacy MRCL sets MINF = MINF1/SQRT(CLA) (MATYP=2), REINF = REINF1/SQRT(CLA) (RETYP=2), REINF = REINF1/CLA (RETYP=3), plus CLA = MAX(CLS, 1e-6) guard, plus MINF <= 0.99 safety clamp, plus RRAT <= 100 cap. None of these are implemented."}
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Full MRCL port: add MATYP/RETYP field to AnalysisSettings; implement all 9 (MATYP,RETYP) combinations plus CLA guard + MINF/RRAT clamps"
+            rationale: "Type-2 and Type-3 sweeps currently produce wrong Re/Mach; silent divergence from Fortran."
+            risk: medium
+          - kind: [new_algorithm]
+            summary: "Hoist AnalysisSettings construction out of Re loop by introducing a mutable per-point override struct"
+            rationale: "Per-point ctor of AnalysisSettings (~20 args) is wasted work when only Re/Mach change."
+            risk: low
+      - name: ComputeMRCL
+        signature: "private static (double re, double mach) (double, double, double, PolarType)"
+        line_range: [333, 359]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 348, severity: "high", issue: "Type-3 case returns (baseRe, baseMach) with zero dependence on cl argument. Legacy MRCL sets REINF = REINF1/CLA for RETYP=3 (the 'Re follows CL' polar mode) — this is the whole point of Type-3 sweeps. Current implementation makes Type-3 numerically indistinguishable from Type-1 for varying CL."}
+          - {line: 342, severity: "medium", issue: "Type-2 case: legacy MRCL applies MINF = MINF1/SQRT(CLA) for MATYP=2 — not implemented. Also missing M_CLS derivative export for Newton-coupled path."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 336, fortran_ref: "f_xfoil/src/xfoil.f:779-858", note: "Entire branch logic missing. Also missing the MINF >= 0.99 safety clamp and the RRAT > 100 cap."}
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Replace ComputeMRCL stub with full port of MRCL including MINF/REINF clamps and derivative outputs"
+            rationale: "Required for Type-2 and Type-3 correctness; also needed for Newton coupling derivatives."
+            risk: medium
+      - name: FindBestWarmStart
+        signature: "private static BLSnapshot? (List<BLSnapshot>, int, int)"
+        line_range: [384, 394]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 393, severity: "low", issue: "Comment says 'multi-seed warm-start strategy' but implementation only returns the most recent converged snapshot; 'nearby' and 'cold' fallbacks are not implemented. Also currentPointIndex parameter is unused."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Implement multi-seed selection OR simplify/rename method to SelectMostRecentConvergedWarmStart"
+            rationale: "Current name and doc promise more than the code delivers."
+            risk: low
+      - name: CaptureBLSnapshot
+        signature: "private static BLSnapshot (LinearVortexPanelState, InviscidSolverState, AnalysisSettings, double)"
+        line_range: [404, 418]
+        allocations:
+          - {line: 414, kind: "new BLSnapshot", hot_path: false, note: "one allocation per converged point; fine"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 404, severity: "low", issue: "Receives four parameters (panel, inviscidState, settings, alpha) but only stores alpha. panel/inviscidState/settings are unused — dead parameters. Either capture real BL state (as comment implies) or drop the unused args."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 404, fortran_ref: "f_xfoil/src/xoper.f (viscous continuation)", note: "Legacy OPER carries DSTR/THETA/UEDG/CTAU arrays between operating points as the true warm start. Current snapshot is essentially a no-op — the 'warm start' benefit is nil."}
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Implement real BL-state snapshot (DSTR/THETA/UEDG/CTAU arrays) to enable genuine warm-start continuation"
+            rationale: "Current warm-start is decorative; a real snapshot would reduce Newton iteration count on nearby alpha points."
+            risk: medium
+      - name: SolveViscousWithWarmStart
+        signature: "private static ViscousAnalysisResult (...)"
+        line_range: [428, 448]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 434, severity: "low", issue: "warmStart parameter is received but never consumed. Method always delegates cold to ViscousSolverEngine.SolveViscousFromInviscid."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Plumb warmStart BL state through to ViscousSolverEngine (requires engine overload accepting seed state)"
+            rationale: "Pair with CaptureBLSnapshot enhancement; currently the entire warm-start scaffolding is ceremonial."
+            risk: medium
+      - name: WithAngleOfAttack
+        signature: "private static ViscousAnalysisResult (ViscousAnalysisResult, double)"
+        line_range: [456, 474]
+        allocations:
+          - {line: 459, kind: "new ViscousAnalysisResult { ... }", hot_path: false, note: "result-copy per sweep point. P2-adjacent: full field-by-field rebuild. Consider a ViscousAnalysisResult.WithAoA(double) with-expression if the type becomes a record, or making AngleOfAttackDegrees settable so the existing instance can be reused."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: NormalizeStep
+        signature: "private static double (double, double, double)"
+        line_range: [483, 486]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ShouldContinue
+        signature: "private static bool (double, double, double)"
+        line_range: [491, 497]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 491, severity: "low", issue: "1e-9 absolute tolerance independent of step magnitude; for tiny alpha steps (<1e-9) this could mis-bound the loop. Consider relative tolerance step*tol."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: major
+      top_findings:
+        - "ComputeMRCL (line 333) is a stub: all three PolarType branches return (baseRe, baseMach) with no dependence on CL. Legacy f_xfoil/src/xfoil.f:779-858 MRCL has distinct MATYP and RETYP = 1/2/3 behavior plus safety clamps (MINF<=0.99, RRAT<=100, CLA>=1e-6). This silently breaks Type-2 Mach-CL and Type-3 Re-CL coupling in every sweep."
+        - "Warm-start scaffolding (BLSnapshot / CaptureBLSnapshot / SolveViscousWithWarmStart) is ceremonial: only the alpha is stored, warmStart parameter is never consumed by the solver. Either implement real BL-state continuation or rename the API to reflect that each point is a cold solve."
+        - "P1 per-point allocation: `new AnalysisSettings(...)` inside SweepRe's Re loop (line 264) allocates a fresh 20-arg settings record per point. Low-severity since Re sweeps are small, but easy to hoist."
+        - "Double-accumulator loops (`for (double x = start; ...; x += step)`) accumulate FP error over long sweeps in all three Sweep methods. Switch to index-based counters."
+        - "No locks, no async, no file I/O — P4/P5 clean at this entry point."
+      estimated_fix_effort: "1-2 days — full MRCL port is the major item; allocation + loop-counter tweaks are ~0.25 day each."
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/PostStallExtrapolator.cs
+    lines: 123
+    branch_relevance: neither
+    pass1_method_index:
+      - name: ExtrapolatePostStall
+        signature: "public static (double CL, double CD) ExtrapolatePostStall(double alpha, double lastConvergedAlpha, double lastConvergedCL, double lastConvergedCD, double aspectRatio)"
+        line_range: [47, 122]
+    methods:
+      - name: ExtrapolatePostStall
+        signature: "public static (double CL, double CD) (double, double, double, double, double)"
+        line_range: [47, 122]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 57, severity: "low", issue: "aspectRatio < 0.1 overwritten to 2*pi silently; should clamp or throw. Also, the docstring says 'use 2*pi for 2D airfoil analysis' but a true 2D analysis is AR=infinity; 2*pi is the lift-curve slope not an aspect ratio. Document units clearly."}
+          - {line: 57, severity: "low", issue: "aspectRatio is accepted but NEVER USED in the actual CL/CD formulas below. Docstring and argument are misleading — Viterna-Corrigan as implemented does not include the induced-drag AR term promised in the class XML doc."}
+          - {line: 66, severity: "low", issue: "sinStall/cosStall/sinA clamps to +/-1e-10 change sign behavior and can produce spurious huge values in a2 and the cl = a2*cosA^2/sinA branch when sinStall is genuinely small. Prefer a combined 'if stall-angle magnitude too small, return (lastCL, lastCD) directly' short-circuit."}
+          - {line: 99, severity: "medium", issue: "Fallback branch `cl = clMax * alpha / Max(|lastConvergedAlpha|, 1e-6)` uses lastConvergedAlpha magnitude — produces monotone-in-alpha CL that disagrees with stall physics once |alpha| > |lastConvergedAlpha|."}
+          - {line: 115, severity: "low", issue: "`cd = Math.Max(cd, lastConvergedCD)` clamps drag to be monotone-non-decreasing. Post-stall Viterna-Corrigan drag is already nearly monotone; this masks numerical issues rather than fixing them."}
+        numerical_stability:
+          - {line: 87, issue: "catastrophic_cancel", note: "a2 = (clMax - cdMax*sinStall*cosStall) * sinStall / cosStall^2 subtracts two comparable-magnitude terms near alpha_stall ~ 10-15 deg; for clMax ~ 1.2 and cdMax*sinStall*cosStall ~ 1.8*0.26*0.97 ~ 0.45 the subtraction is fine, but for low-CL stall (clMax ~ 0.4) the subtraction can lose ~2-3 digits."}
+          - {line: 69, issue: "divide_guard", note: "cosStall clamp to 1e-10 when stall angle near +/-90 deg is unphysical; code should return the flat-plate limit directly in that regime."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: [new_algorithm]
+            summary: "Remove unused aspectRatio parameter or implement the induced-drag correction promised in the class XML doc"
+            rationale: "Parameter is accepted but ignored; either dead arg or missing feature. Consumers (if any) would expect the AR effect."
+            risk: low
+          - kind: [new_algorithm]
+            summary: "Short-circuit to (lastCL, lastCD) when stall angle magnitude < 1 deg rather than relying on +/-1e-10 clamps"
+            rationale: "Tighter numerical behavior and clearer intent."
+            risk: low
+          - kind: [new_data]
+            summary: "CDMaxDefault = 1.8 is hardcoded; expose as a parameter or correlate with thickness/camber"
+            rationale: "Flat-plate CD varies 1.6-2.1 with aspect ratio and thickness; a single constant is a crude approximation."
+            risk: low
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: minor
+      top_findings:
+        - "aspectRatio parameter is unused — either dead argument (delete) or missing induced-drag term (implement). Docstring promises AR correction that code does not deliver."
+        - "Fallback CL branch (line 94-99) at small sinA is not physically meaningful post-stall; consider returning (lastCL, lastCD) directly in the degenerate regime."
+        - "Hardcoded CDMaxDefault = 1.8 is a crude single-number flat-plate constant; candidate for S8 modernization (correlate with airfoil geometry or expose as parameter)."
+        - "Numerical guards (1e-10 clamps on sin/cos) are heuristic; cleaner to short-circuit on degenerate stall angles."
+        - "This method is explicitly outside the parity path — X3 verified: no Fortran analogue exists, the managed-only role is correctly documented in the file header."
+      estimated_fix_effort: "0.5 day (remove unused arg + tighten degenerate-case guards); CDMax parameterization 0.25 day."
+ledger_summary:
+  total_files: 3
+  total_methods_audited: 26
+  parity_blockers: 0
+  standard_blockers: 1
+  notes: |
+    - All three files are clean on the parity axis (P1-P6): no locks, no async, no runtime I/O, no closures in hot loops. Per-sweep allocations (panel state, inviscid state, result lists) are correctly hoisted outside the per-point loops in PolarSweepRunner; the one remaining per-point allocation is the `new AnalysisSettings(...)` inside SweepRe (line 264) which is low severity.
+    - AirfoilAnalysisService has 8 NotSupportedException stubs (X1). All 8 have zero callers in src/ and zero callers in tests/. Recommend DELETE all 8 in a single cleanup phase along with their associated DTOs; risk is low. Stubs' associated [Obsolete] attributes make this a safe migration. NONE should be implemented (their replacements exist); NONE should be kept as stubs (no external callers discovered in the repo).
+    - PolarSweepRunner.ComputeMRCL (line 333) is the single standard-branch blocker in this audit. Legacy f_xfoil/src/xfoil.f:779-858 MRCL has rich MATYP/RETYP logic with MINF = MINF1/SQRT(CLA), REINF = REINF1/CLA etc.; the C# stub only honors MATYP=1/RETYP=1. Type-2 and Type-3 sweeps silently diverge from Fortran. Fix requires adding MATYP/RETYP fields to AnalysisSettings and porting all branches plus safety clamps (MINF<=0.99, RRAT<=100, CLA>=1e-6).
+    - PolarSweepRunner warm-start machinery (BLSnapshot + CaptureBLSnapshot + SolveViscousWithWarmStart + FindBestWarmStart) is ceremonial scaffolding: warmStart is never consumed by the viscous engine. Either wire real BL-state continuation or simplify/rename. Not a correctness blocker but misleading.
+    - PostStallExtrapolator has only ONE method, not three as the assignment said. It is branch-neutral (managed-only post-processing outside parity). Contains one dead parameter (aspectRatio) and some questionable clamps; minor cleanup only.
+    - Float usage is confined to the parity-gated DTOR paths (AirfoilAnalysisService.cs:163-164, PolarSweepRunner.cs:66,68,85) — all three sites are correctly gated on UseLegacyBoundaryLayerInitialization. No standard-branch float leak.
+    - All legacy mapping comments reference real Fortran subroutines (SPECAL line 2435, SPECCL line 2527, MRCL line 779) — X3 cross-reference clean.

@@ -1,0 +1,243 @@
+agent: A5
+ledger_path: audit/A5-transition-model.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/TransitionModel.cs
+    lines: 2037
+    branch_relevance: both
+    method_index:
+      # Pass 1 — enumerate every static method, struct, and class
+      - {name: AxsetResult, kind: "public readonly record struct", line_range: [45, 47]}
+      - {name: TransitionCheckResult, kind: "public readonly record struct", line_range: [52, 59]}
+      - {name: TransitionPointResult, kind: "public sealed class", line_range: [66, 96]}
+      - {name: TransitionResultType, kind: "public enum", line_range: [101, 109]}
+      - {name: ComputeAmplificationRate, signature: "(double,double,double,double) ComputeAmplificationRate(double hk, double th, double rt, bool useLegacyPrecision=false)", line_range: [130, 365]}
+      - {name: ComputeAmplificationRateHighHk, signature: "(double,double,double,double) ComputeAmplificationRateHighHk(double hk, double th, double rt, bool useLegacyPrecision=false)", line_range: [384, 662]}
+      - {name: AxsetTraceStation, kind: "[ThreadStatic] public static int", line_range: [690, 690]}
+      - {name: AxsetTraceSide, kind: "[ThreadStatic] public static int", line_range: [691, 691]}
+      - {name: AxsetTracePhase, kind: "[ThreadStatic] public static int", line_range: [692, 692]}
+      - {name: ComputeTransitionSensitivities, signature: "AxsetResult ComputeTransitionSensitivities(double hk1, double t1, double rt1, double a1, double hk2, double t2, double rt2, double a2, double acrit, bool useHighHkModel, bool useLegacyPrecision=false)", line_range: [694, 836]}
+      - {name: ComputeTransitionPoint, signature: "TransitionPointResult ComputeTransitionPoint(...26 params...)", line_range: [846, 1680]}
+      - {name: CheckTransitionExact, signature: "TransitionCheckResult CheckTransitionExact(...) [overload w/o out]", line_range: [1685, 1709]}
+      - {name: CheckTransitionExact, signature: "TransitionCheckResult CheckTransitionExact(..., out TransitionPointResult? fullPoint, ...)", line_range: [1711, 1771]}
+      - {name: CheckTransition, signature: "TransitionCheckResult CheckTransition(double x1, double x2, ..., bool useHighHkModel, double? forcedXtr, bool useLegacyPrecision=false)", line_range: [1803, 2036]}
+
+    methods:
+      - name: ComputeAmplificationRate
+        signature: "(double Ax,double Ax_Hk,double Ax_Th,double Ax_Rt) ComputeAmplificationRate(double hk, double th, double rt, bool useLegacyPrecision=false)"
+        line_range: [130, 365]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 227, form: "float_cast", context: "(float)rnorm (inside legacy branch)"}
+          - {line: 228, form: "float_cast", context: "(float)rnorm2 (legacy branch)"}
+          - {line: 229, form: "float_local", context: "float rnorm2Powf = MathF.Pow(rnormf,2.0f) (legacy branch, also literal 2.0f/3.0f)"}
+          - {line: 232, form: "float_literal", context: "3.0f, 2.0f in RFAC legacy stage"}
+          - {line: 241, form: "float_literal", context: "6.0f in RFAC_RN legacy stage"}
+          - {line: 275, form: "float_cast", context: "(float)hkMinusOne (legacy branch)"}
+          - {line: 277, form: "float_literal", context: "0.0345f (legacy stage)"}
+          - {line: 279, form: "float_literal", context: "0.028f (legacy stage)"}
+          - {line: 293, form: "float_literal", context: "0.028f - 0.0345f*exHkf (legacy stage)"}
+          - {line: 324, form: "float_literal", context: "2.7f - 11.0f*hmif (legacy stage)"}
+          - {line: 325, form: "float_literal", context: "9.0f * hmi2f (legacy stage)"}
+        mathf_calls:
+          - {line: 229, symbol: "MathF.Pow"}
+          - {line: 230, symbol: "MathF.Pow"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 138, issue: "divide_by_zero_possible", note: "hmi = 1/(hk-1) has no guard for hk<=1.0; relies on caller gating. If hk ~ 1.0 (laminar near attachment) this explodes. Fortran has same issue but F's REAL arithmetic masks NaNs into trace."}
+          - {line: 174, issue: "log_domain", note: "Log10(rt) — rt is Re_theta; unguarded if rt<=0 (can occur during Newton transients)."}
+        fortran_divergence:
+          - {line: 229, fortran_ref: "xblsys.f:2023-2094", note: "Legacy path uses MathF.Pow(rnormf,2.0f) for rnorm**2; Fortran gfortran optimizes **2 to x*x. See line 463 where the HighHk overload DID switch to x*x — the base ComputeAmplificationRate still calls MathF.Pow for rnormf**2 at line 229/230 even though it then reassigns rfacMulChainTrace using rnorm2f*rnormf at 231. Dead trace code (X2) only; actual rfac uses rnorm2f*rnormf via rfacMixedTrace on 238."}
+        modernization_candidates:
+          - {kind: updated_correlation, summary: "1991-era Falkner-Skan envelope correlation hard-coded (DAMPL). Replace with Drela–Giles 2003 envelope or XFLR5's dual-criterion (e^N + AGS) option.", rationale: "Current log10(Rcrit)=2.492*hmi^0.43 + 0.7*(tanh(14*hmi-9.24)+1) is the 1980s Wazzan/Falkner-Skan fit. Modern databases (ERCOFTAC, Hall–Hislop) show systematic error >5% at low-Re. Drela's 2003 paper provides improved fit.", risk: medium}
+          - {kind: new_data, summary: "Expose Ncrit by environment (wind-tunnel Tu%) via Mack 1984 or Van Ingen 1956 N(Tu) correlation instead of user-entered Ncrit.", rationale: "Ncrit=9 default is only valid for ~0.07% Tu; real tunnels need Ncrit=7–13. XFoil legacy hands this to the user; modernization can auto-derive.", risk: low}
+          - {kind: new_algorithm, summary: "Add turbulent-bypass / forced-transition trip roughness model (Braslow–Knox or Granville).", rationale: "Current code only supports point-forced transition (forcedXtr). Real trip strips/zigzag tapes produce bypass transition not captured by e^N.", risk: medium}
+        fixme_todo: []
+
+      - name: ComputeAmplificationRateHighHk
+        signature: "(double Ax,double Ax_Hk,double Ax_Th,double Ax_Rt) ComputeAmplificationRateHighHk(double hk, double th, double rt, bool useLegacyPrecision=false)"
+        line_range: [384, 662]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 462, form: "float_cast", context: "(float)rnorm legacy stage"}
+          - {line: 463, form: "float_local", context: "float rnorm2f=rnormf*rnormf (improved over base DAMPL)"}
+          - {line: 465, form: "float_literal", context: "3.0f*rnorm2f - 2.0f*rnorm3f"}
+          - {line: 491, form: "float_cast", context: "(float)hkMinusOne legacy"}
+          - {line: 493, form: "float_literal", context: "0.0345f*exf"}
+          - {line: 495, form: "float_literal", context: "0.028f*hkMinusOnef"}
+          - {line: 508, form: "float_literal", context: "0.028f - 0.0345f*exHkf"}
+          - {line: 534, form: "float_cast", context: "(float)hmi legacy"}
+          - {line: 537, form: "float_literal", context: "2.7 - 11.0*hmif cast to float"}
+          - {line: 538, form: "float_literal", context: "9.0f * hmi2f"}
+          - {line: 539, form: "float_literal", context: "2.0f * expBrgf"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 393, issue: "divide_by_zero_possible", note: "hkMinusOne = hk-1.0; later hmi=1/hkMinusOne unguarded. Normally hk>=1.05 in BL but can drift during Newton."}
+          - {line: 623, issue: "pow_negative_possible", note: "Pow(hkMinusOne,1.5) and Pow(,2.5) — if Newton perturbs hk<1 the Pow returns NaN. No clamp."}
+        fortran_divergence: []
+        modernization_candidates:
+          - {kind: updated_correlation, summary: "Separated-profile blend (Hk>3.5) uses ad-hoc tanh(1.2*(gr-gr0)) + 0.25/hmi^1.5 - 0.086*tnr. Replace with Coder–Maughmer 2014 separated-shear-layer envelope.", rationale: "The current blend is empirical; Coder/Maughmer published modern SST-N correlations with better accuracy for LSB prediction.", risk: medium}
+        fixme_todo: []
+
+      - name: ComputeTransitionSensitivities
+        signature: "AxsetResult ComputeTransitionSensitivities(double hk1,t1,rt1,a1,hk2,t2,rt2,a2,acrit,bool useHighHkModel,bool useLegacyPrecision)"
+        line_range: [694, 836]
+        allocations:
+          - {line: 829, kind: "new AxsetResult", hot_path: true, note: "record struct value-type — stack alloc only, no heap. Benign."}
+        io_or_locks:
+          - {line: 808, kind: "Environment.GetEnvironmentVariable + Console.Error.WriteLine", severity: "medium", note: "Inside hot path; gated by env var XFOIL_AH79_AX. The Environment.GetEnvironmentVariable call itself allocates on every invocation regardless of the flag value. This is called per-station per-Newton-iter. P5 violation if flag is off. The string interpolation for Console.Error on line 810–815 is only evaluated when flag set."}
+        float_usage:
+          - {line: 725, form: "float_local", context: "ax1f,ax2f (legacy RMS)"}
+          - {line: 727, form: "float_local", context: "ax1Sqf=ax1f*ax1f"}
+          - {line: 733, form: "float_literal", context: "0.5f*axSumf"}
+          - {line: 736, form: "float_literal", context: "<=0.0f comparison"}
+          - {line: 744, form: "float_local", context: "MathF.Sqrt(axsqf)"}
+          - {line: 746, form: "float_literal", context: "0.5f*ax1f"}
+          - {lines: [812, 813, 814], form: "float_cast", context: "trace print casts to float — Environment-gated"}
+        mathf_calls:
+          - {line: 744, symbol: "MathF.Sqrt"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 744, issue: "divide_by_sqrt", note: "axa=sqrt(axsq); axa_ax1 = 0.5*ax1/axa — already guarded with axsq<=0 branch. OK."}
+          - {line: 796, issue: "divide_by_zero_possible", note: "thicknessSum = t1+t2; later dax = exn*0.002/thicknessSum. If t1+t2=0 at attachment (zero momentum thickness) divide blows up. No guard — relies on caller's Thwaites init ensuring t>0."}
+        fortran_divergence:
+          - {line: 808, fortran_ref: "xblsys.f AXSET", note: "Env-gated diagnostic; not an algorithm divergence."}
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "The small exp(-arg) term to ensure dN/dx>0 near N=Ncrit (line 775-802) is a hack from 1991 XFoil; replace with proper exponential-dissipation limiter.", rationale: "dax = exn * 0.002 / (t1+t2) with arbitrary 0.002 and 20.0 coefficients. Modern stability theory can derive this from first principles.", risk: low}
+        fixme_todo: []
+
+      - name: ComputeTransitionPoint
+        signature: "TransitionPointResult ComputeTransitionPoint(...many params..., bool useLegacyPrecision=false, ...)"
+        line_range: [846, 1680]
+        allocations:
+          - {line: 892, kind: "new TransitionPointResult", hot_path: true, note: "8 × new double[5] allocations in constructor (lines 79–86 of class) = 8 heap arrays per call. Called once per transition-candidate interval per Newton iteration. MAJOR P1 violation on hot path."}
+          - {line: 916, kind: ".Clone()", hot_path: true, note: "KinematicResult.Clone() allocates fresh snapshot; called 2× (lines 916, 936) plus .Clone() at 952. P2 violation."}
+          - {line: 936, kind: ".Clone()", hot_path: true, note: "same as 916"}
+          - {line: 952, kind: ".Clone()", hot_path: true, note: "point.DownstreamKinematic = kinematic2.Clone()"}
+          - {line: 1515, kind: ".Clone()", hot_path: true, note: "point.FinalTransitionKinematic = finalTransitionKinematic.Clone()"}
+        io_or_locks:
+          - {line: 957, kind: "dead_flag", severity: "low", note: "bool outerGate = false; — dead code block gated off (P3 concern: when enabled, Console.Error interpolation of hex bit patterns)"}
+          - {line: 1002, kind: "Environment.GetEnvironmentVariable", severity: "medium", note: "XFOIL_AH79_SEED env lookup on every TRCHEK2 call inside Newton loop"}
+          - {line: 1210, kind: "Environment.GetEnvironmentVariable", severity: "high", note: "XFOIL_AH79_TRC env lookup per Newton iteration inside for-loop (line 1027 loop of MaxTransitionIterations=30). Hottest allocation path in the file. P3/P5."}
+          - {line: 1651, kind: "dead_flag", severity: "low", note: "outerGate branch Console.Error writes"}
+        float_usage:
+          # Nearly all are inside (useLegacyPrecision) branches or bit-exact hex trace conversions
+          - {line: 1189, form: "float_cast_live", context: "((float)ampl2Iter - (float)ampl1) - ((float)ax.Ax * (float)dx) — legacy branch REAL staging of Newton residual"}
+          - {line: 1264, form: "float_cast_live", context: "RoundToSingle(x1,true) — legacy final-block staging"}
+          - {line: 1314, form: "float_equality", context: "if (freeTransition && (float)finalWf2 == 1.0f) — ah79k135 fix guard, LEGACY ONLY"}
+          - {line: 1453, form: "float_cast_live", context: "MathF.Abs((float)point.Xt2[4]) > 0.0f && < 1e-4f (forced-transition snap, legacy only)"}
+          - {line: 1556, form: "float_cast_live", context: "(float)axD1HkTerm + ((float)finalAx.Ax_Hk2 * (float)finalTransitionKinematic.HK2_D2) * (float)point.Dt1[2] — legacy branch"}
+          - {line: 1619, form: "float_cast_live", context: "float xtA2f = (float)point.Xt2[0] etc., many rounds — legacy only"}
+        mathf_calls:
+          - {line: 1453, symbol: "MathF.Abs"}
+        correctness_concerns:
+          - {line: 1314, severity: "high", issue: "ah79k135_gap_in_standard_branch", note: "The ah79k135 fix (zero finalWf2_X1/X2 when freeTransition && finalWf2==1.0) lives ONLY in the useLegacyPrecision branch (lines 1299–1319). The else-if(forcedTransition) branch (1320–1327) unconditionally sets finalWf2_X1/X2 to nonzero values from SFX_XF. The else (free transition, lines 1328–1336) already initializes finalWf2_X1=finalWf2_X2=0.0 by construction because it only computes WF2 from ampl1/ampl2. So the STANDARD free-transition path IS implicitly correct at this spot — WF2_X=0 is the natural answer. However, the standard path is never exercised when forcedXtr governs AND newton converges to WF2==1.0 — no equivalent guard exists. If a future standard-branch case lands on forcedTransition with WF2==1.0 (forced transition at right endpoint), the finalWf2_X1/X2 would remain nonzero and produce the ah79k135-type derivative bug. Document this gap."}
+          - {line: 1439, severity: "medium", issue: "forced_transition_xt2_snap_only_in_legacy", note: "Lines 1452–1458 snap Xt2[4] to 0 when |Xt2[4]|<1e-4 in forced branch — LEGACY ONLY. Standard branch has no equivalent. Likely the snap is a parity-replay artifact, but if the forced-transition computation has the same underflow in standard path it will persist noise."}
+          - {line: 1586, severity: "medium", issue: "left_to_right_associativity_comment", note: "Comment at 1580-1585 warns that AMPL term MUST come FIRST in the chained Add. The standard (else) branch uses LegacyPrecisionMath.Add with false — so associativity is still (((Ampl+TT)+DT)+UT) in source order. This is fine but non-obvious; document as a required invariant so a refactor doesn't break it."}
+          - {line: 881, severity: "low", issue: "legacy_only_override", note: "station2PrimaryOverride is only consumed inside if(useLegacyPrecision). Standard branch silently ignores it. If a caller passes this override expecting standard-branch honor, it is silently dropped."}
+          - {line: 999, severity: "low", issue: "ampl2_seed_semantics", note: "useInternalAmpl2Seed gate: Fortran MRCHUE/MRCHDU pre-updates AMI, SETBL passes raw CTAU. Verified against xblsys.f:TRCHEK2. OK."}
+        numerical_stability:
+          - {line: 1047, issue: "division_with_guard", note: "amplDen = Max(ampl2Iter-ampl1, 1e-30) — protected. OK."}
+          - {line: 1196, issue: "divide_by_near_zero", note: "deltaA2 = -residual / residual_A2; residual_A2 = ax_A2_iter*dx - 1.0. If ax_A2_iter*dx ≈ 1.0 (degenerate Newton Jacobian) residual_A2 → 0 and deltaA2 explodes. No guard. Relaxation limiter at 1200–1208 caps the step in practice, but a single step with residual_A2=0 would NaN out. S5 CONCERN."}
+          - {line: 1200, issue: "divide_by_near_zero", note: "deltaXt/dx — dx=x2-x1 is panel length; can approach 0 on fine TE spacing. No guard."}
+          - {line: 1322, issue: "division_unguarded", note: "finalWf2 = (forcedXtr-finalX1)/finalDx — finalDx can be zero on collapsed panels."}
+          - {line: 1330, issue: "division_with_guard", note: "amplDen = Max(..., 1e-30) — OK."}
+          - {line: 1608, issue: "divide_by_near_zero", note: "xt2OverZa2 = point.Xt2[0]/zA2. zA2 = 1 + (-finalDx)*ax_A2; could be ≈ 0 when ax_A2 ≈ 1/dx. Standard branch at 1648 propagates unguarded; legacy branch at 1621 also unguarded. Tolerance DAEPS=5e-5 doesn't guarantee zA2 stays bounded away from 0."}
+          - {line: 1853, issue: "division_with_guard", note: "CheckTransition path: amplDen = Max(ampl2Iter-ampl1, 1e-30) — OK"}
+          - {line: 1952, issue: "divide_by_near_zero", note: "deltaA2 = -residual / residual_A2 in the simpler CheckTransition — same concern as 1196."}
+        fortran_divergence:
+          - {line: 1299, fortran_ref: "xblsys.f:1501-1840 TRCHEK2 post-loop block", note: "Parity path reproduces legacy carriedWf2 reuse (matches xblsys.f WF2 at end of Newton loop). Verified bit-exact on NACA sweep."}
+          - {line: 1580, fortran_ref: "xblsys.f:670-673", note: "Associativity order of AX_A2 sum preserved (AMPL+TT+DT+UT left-to-right)."}
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "Replace hand-rolled Newton with proper Levenberg–Marquardt or trust-region solver for the transition-point equation.", rationale: "Current fixed-relaxation Newton can diverge on ah79k135, pfcm, n6h20, s4053 cases (per CLAUDE.md memory). A modern damped solver would converge monotonically.", risk: high}
+          - {kind: new_algorithm, summary: "Replace hex-bit-pattern env-gated traces with structured IDiagnosticSink injected at construction.", rationale: "Environment.GetEnvironmentVariable calls on every Newton step (line 1210) allocate a string per call; replacing with a boolean flag on an injected trace writer removes the P5 violation and improves hot-path throughput.", risk: low}
+          - {kind: new_data, summary: "Expose transitionTolerance (5e-5) as a solver setting instead of const — TSL/Coder want tighter.", rationale: "DAEPS=5e-5 is the Fortran legacy; modern e^N with higher-order envelope wants 1e-7 for full double-precision Newton convergence.", risk: low}
+        fixme_todo:
+          - {line: 957, kind: "dead_code", note: "bool outerGate = false + follow-up if(outerGate) branches. X2 dead-code finding."}
+          - {line: 1450, kind: "TRIAL_comment", note: "// Fix #81 TRIAL: snap Xt2[4]=0 for forced branch — TRIAL label indicates unresolved experimental status. X1 finding."}
+
+      - name: CheckTransitionExact
+        signature: "TransitionCheckResult CheckTransitionExact(...) x2 overloads"
+        line_range: [1685, 1771]
+        allocations:
+          - {line: 1730, kind: "transitive", hot_path: true, note: "delegates to ComputeTransitionPoint which allocates TransitionPointResult + 8 double[5]s per call. P1."}
+          - {line: 1759, kind: "new TransitionCheckResult", hot_path: true, note: "record-struct stack alloc — OK."}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 1769, severity: "low", issue: "out_param_always_returned", note: "fullPoint is returned even when transition did not occur — callers must check TransitionOccurred. Confusing contract but not incorrect."}
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+        fixme_todo: []
+
+      - name: CheckTransition
+        signature: "TransitionCheckResult CheckTransition(double x1,x2,ampl1,ampl2,amcrit, double hk1,th1,rt1,ue1,d1,hk2,th2,rt2,ue2,d2, bool useHighHkModel, double? forcedXtr, bool useLegacyPrecision=false)"
+        line_range: [1803, 2036]
+        allocations:
+          - {line: 1931, kind: "new TransitionCheckResult", hot_path: true, note: "record-struct stack alloc — OK"}
+          - {line: 1999, kind: "new TransitionCheckResult", hot_path: true, note: "record-struct stack alloc — OK"}
+          - {line: 2012, kind: "new TransitionCheckResult", hot_path: true, note: "record-struct stack alloc — OK"}
+          - {line: 2027, kind: "new TransitionCheckResult", hot_path: true, note: "record-struct stack alloc — OK"}
+        io_or_locks:
+          - {line: 1967, kind: "Environment.GetEnvironmentVariable", severity: "high", note: "Inside Newton loop (line 1833 for-loop). Same P5/P3 violation as ComputeTransitionPoint line 1210."}
+        float_usage:
+          - {line: 1971, form: "float_cast", context: "BitConverter.SingleToInt32Bits((float)ampl1) — trace only, env-gated"}
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 2010, severity: "medium", issue: "forced_transition_returns_forcedXtr_literally", note: "CheckTransition public API returns TransitionXi=forcedXtr!.Value directly (line 2014), while ComputeTransitionPoint uses the Newton-computed point.Xt. For forced transition these should agree to machine precision; they do not always. The simpler CheckTransition is used by public entrypoints and thus carries this small discrepancy. Document or reconcile."}
+          - {line: 2024, severity: "medium", issue: "finalWf2_no_ah79k135_guard", note: "Standard-branch finalWf2 = (amcrit-ampl1)/amplDenFinal. When ampl2Iter<=amcrit (line 2024 ternary), finalWf2=1.0 exactly. transitionXi = x1*0 + x2*1 = x2. No sensitivity derivatives are ever returned by CheckTransition, so the ah79k135 issue does not manifest in this overload — but ComputeTransitionPoint IS the one called by the Newton assembler and IS where derivatives matter. Gap noted in ComputeTransitionPoint entry."}
+        numerical_stability:
+          - {line: 1952, issue: "divide_by_near_zero", note: "deltaA2 = -residual/residual_A2 (same as ComputeTransitionPoint 1196) — no guard. Relaxation caps step but a single 0-residual_A2 NaNs."}
+          - {line: 1956, issue: "division_unguarded", note: "deltaXt/dx, dx/deltaXt — dx=0 on collapsed panels"}
+          - {line: 1963, issue: "division_unguarded", note: "1.0/Math.Abs(deltaA2) — if deltaA2 is exactly 0 after the converged branch check at 1977, this line won't execute; but flow at 1961 checks *relaxation*abs(deltaA2)>1.0 before 1963. If deltaA2 extremely small but nonzero, 1/|delta| is huge. Combined with tolerance DAEPS check at 1977 this should not hit."}
+          - {line: 2023, issue: "division_with_guard", note: "amplDenFinal = Max(ampl2Iter-ampl1, 1e-30) — OK"}
+        fortran_divergence: []
+        modernization_candidates:
+          - {kind: new_algorithm, summary: "Merge the simpler CheckTransition with ComputeTransitionPoint — two parallel Newton solvers are a maintenance hazard.", rationale: "They duplicate the same logic with different level of detail. Single-path with optional-derivative output would be cleaner and eliminates the forcedXtr!Value vs point.Xt discrepancy.", risk: medium}
+        fixme_todo: []
+
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: major
+      top_findings:
+        - "HEAP ALLOCATION in hot path: ComputeTransitionPoint allocates a new TransitionPointResult (with 8 heap-allocated double[5] arrays) plus up to 3 KinematicResult.Clone() calls per Newton iteration per BL interval. Called ~30× per Newton step × N stations. Large GC pressure source."
+        - "Environment.GetEnvironmentVariable called inside Newton loops at lines 808, 1002, 1210, 1967. Allocates a string per call regardless of whether the flag is set. Replace with static cached bool or an injected diagnostic sink."
+        - "Standard-branch modernization: UseModernTransitionCorrections flag is accepted by AnalysisSettings and passed through ViscousSolverEngine/ViscousNewtonAssembler, but NEVER read inside TransitionModel.cs. The flag is effectively dead. S8 blocker — no modern correlations are wired in."
+        - "ah79k135 fix is LEGACY-ONLY (line 1314). The standard branch's free-transition path doesn't need it (sets finalWf2_X=0 by construction), but the forced-transition standard branch (line 1320–1327) has no equivalent WF2==1.0 guard. Document or implement."
+        - "Numerical stability: deltaA2 = -residual/residual_A2 at lines 1196 and 1952 has no guard when residual_A2 ≈ 0 (degenerate Newton Jacobian at ax_A2*dx ≈ 1). Unguarded division in xt2OverZa2 at line 1608."
+      estimated_fix_effort: "6–10 days (P1 allocation removal: 2 days; S8 modernization hooks: 3–5 days; S5 division guards: 1 day; ah79k135 standard-branch audit: 1 day; trace refactor to diagnostic sink: 1–2 days)"
+      s8_modernization_rollup:
+        flag_status: "UseModernTransitionCorrections: accepted by AnalysisSettings, threaded through ViscousNewtonAssembler + ViscousSolverEngine, but NOT consumed inside TransitionModel.cs. Flag is dead at this file."
+        candidate_upgrades:
+          - {id: M1, name: "Drela–Giles 2003 envelope", replaces: "ComputeAmplificationRate log10(Rcrit) correlation (lines 144–171)"}
+          - {id: M2, name: "Coder–Maughmer 2014 separated-profile envelope", replaces: "ComputeAmplificationRateHighHk tanh blend (lines 609–661)"}
+          - {id: M3, name: "XFLR5-compatible two-criterion (e^N + AGS)", replaces: "single-criterion dispatch in ComputeTransitionSensitivities"}
+          - {id: M4, name: "TSL (Transition Shear-Layer) compatible path", replaces: "DAMPL/DAMPL2 amplitude-rate closure"}
+          - {id: M5, name: "Hall–Hislop (1982) tunnel-calibrated envelope", replaces: "rfac smooth-ramp constants"}
+          - {id: M6, name: "Arnal transition correlations (1993, ONERA)", replaces: "m(H) polynomial line 307–313 / 519–530"}
+          - {id: M7, name: "Mack Ncrit auto-derivation from Tu%", augments: "amcrit input — accept Tu% instead or alongside"}
+          - {id: M8, name: "Braslow–Knox trip-roughness / bypass transition", augments: "forcedXtr — extend to distributed trip model"}
+          - {id: M9, name: "Upgrade transitionTolerance DAEPS from 5e-5 to 1e-7 for double-precision Newton", trivial: true}
+ledger_summary:
+  total_files: 1
+  total_methods_audited: 6
+  parity_blockers: 0
+  standard_blockers: 3
+  notes: |
+    TransitionModel.cs is structurally bit-exact-verified in the legacy path (part of the 4455/4455 NACA and 100228 Selig parity wins), but the standard (double-precision) path is under-tested. The most important S8 observation: the UseModernTransitionCorrections flag is wired through AnalysisSettings, PolarSweepRunner, ViscousNewtonAssembler, and ViscousSolverEngine — but never consumed in TransitionModel.cs itself. The flag does absolutely nothing for transition modeling today. This matches the plan's characterization that the flag is "gated false by default" — but even when set true, no code path changes.
+
+    P1 hot-path allocations are the biggest parity-preserving perf concern. Each ComputeTransitionPoint call allocates 8 heap double[5] arrays via TransitionPointResult's field initializers (lines 79–86). This runs inside the Newton loop per interval per BL station. Replace TransitionPointResult with a pooled/reusable struct or SolverBuffers-backed arrays.
+
+    P5 environment-variable lookups (lines 808, 1002, 1210, 1967) allocate a string per call and occur inside the Newton loop. They are diagnostic-only but violate the parity-branch hot-path policy.
+
+    S5 numerical stability: two unguarded divisions in the Newton update (deltaA2=-residual/residual_A2 at lines 1196 and 1952, xt2OverZa2 at 1608) rely on the relaxation limiter to avoid NaN. A single residual_A2≈0 step would produce NaN before relaxation is computed. Add epsilon guard.
+
+    S4 correctness: the ah79k135 fix exists only in the legacy branch. Standard branch has an implicit equivalent for FREE transition (finalWf2_X=0 by construction) but NOT for FORCED transition at endpoint (WF2==1.0). Gap documented.
+
+    No P2 LINQ, no P4 locks, no P6 closures found in this file.

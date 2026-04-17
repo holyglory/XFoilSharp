@@ -1,0 +1,443 @@
+agent: D1
+ledger_path: audit/D1-core.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+
+# Scope note:
+#   D1 covers src/XFoil.Core/ (10 files): 4 services, 1 numerics platform bridge,
+#   1 ambient diagnostics helper, and 4 DTOs. Core has no solver hot path; none
+#   of these files participate in the Newton or station loops. Parity-branch
+#   P1-P6 findings here are near-zero weight because callers are parser/CLI /
+#   one-shot geometry generation. Standard-branch S-findings mostly apply to
+#   NacaAirfoilGenerator's classic legacy-precision path (gated by
+#   useLegacyPrecision=true; default generator path runs on double).
+
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Services/AirfoilParser.cs
+    lines: 210
+    branch_relevance: neither
+    methods:
+      - name: ParseFile
+        signature: AirfoilGeometry ParseFile(string path)
+        line_range: [17, 25]
+        allocations: []
+        io_or_locks:
+          - {line: 24, kind: "File.ReadAllLines", severity: low, note: "one-shot parser entry; never called from solver hot path"}
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ParseLines
+        signature: AirfoilGeometry ParseLines(IEnumerable<string> lines, string fallbackName = "UNNAMED")
+        line_range: [30, 82]
+        allocations:
+          - {line: 37, kind: "LINQ .Select.Where.ToList", hot_path: false, note: "entire file materialized to List<string>; zero-GC path would use Span+foreach"}
+          - {line: 47, kind: "Tokenize -> new string[]", hot_path: false, note: "string.Split allocates per line"}
+          - {line: 54, kind: "Array.Empty<double>()", hot_path: false, note: "cached singleton, acceptable"}
+          - {line: 57, kind: "ParseNumericTokens -> new List<double>", hot_path: false}
+          - {line: 61, kind: ".ToArray()", hot_path: false}
+          - {line: 66, kind: "SplitElements (builds nested List<List<string>>)", hot_path: false}
+          - {line: 77, kind: "LINQ .Select(ParsePoint).ToArray()", hot_path: false, note: "allocates enumerator closure per element"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 132, issue: "loose_equality_tolerance", note: "999 sentinel uses abs<1e-9; legacy AREAD uses exact REAL comparison"}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Reduce List<>/LINQ churn in parser"
+            rationale: "Every line is materialized through multiple List<T> layers; a linear scan with a pre-sized double[] buffer would remove ~5 allocations per file for large Selig airfoils (300+ points)."
+            risk: low
+      - name: SplitElements
+        signature: IReadOnlyList<List<string>> SplitElements(IEnumerable<string> lines)
+        line_range: [87, 118]
+        allocations:
+          - {line: 89, kind: "new List<List<string>>()", hot_path: false}
+          - {line: 90, kind: "new List<string>()", hot_path: false}
+          - {line: 103, kind: "new List<string>()", hot_path: false, note: "re-allocated per sentinel"}
+          - {line: 97, kind: "Tokenize allocates string[]", hot_path: false}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: IsElementSeparator
+        signature: bool IsElementSeparator(IReadOnlyList<string> tokens)
+        line_range: [123, 134]
+      - name: ParsePoint
+        signature: AirfoilPoint ParsePoint(string line)
+        line_range: [139, 148]
+        allocations:
+          - {line: 141, kind: "Tokenize allocates string[]", hot_path: false}
+      - name: TryParsePoint
+        signature: bool TryParsePoint(IReadOnlyList<string> tokens, out AirfoilPoint point)
+        line_range: [153, 168]
+      - name: ParseNumericTokens
+        signature: List<double> ParseNumericTokens(IReadOnlyList<string> tokens)
+        line_range: [173, 187]
+        allocations:
+          - {line: 175, kind: "new List<double>(tokens.Count)", hot_path: false}
+          - {line: 180, kind: "new List<double>() (empty on parse failure)", hot_path: false, note: "returns fresh empty list as failure signal; could return Array.Empty<double>()"}
+      - name: TryParseDouble
+        signature: bool TryParseDouble(string token, out double value)
+        line_range: [192, 199]
+      - name: Tokenize
+        signature: string[] Tokenize(string line)
+        line_range: [204, 208]
+        allocations:
+          - {line: 206, kind: "string.Split -> string[]", hot_path: false, note: "per-line allocation; only cost for parsing workflow"}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Heavy List<>/LINQ allocation pattern throughout; fine for a parser but replace with Span/array scan if zero-GC I/O ever becomes a target."
+        - "`ParseNumericTokens` returns a fresh empty List<double> on failure instead of Array.Empty."
+        - "999-sentinel uses tolerant comparison (1e-9) vs Fortran AREAD exact REAL match; acceptable for parsing but note."
+      estimated_fix_effort: "2-4 hours (only if P1 tightening is desired)"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Services/NacaAirfoilGenerator.cs
+    lines: 352
+    branch_relevance: both
+    methods:
+      - name: Generate4Digit
+        signature: AirfoilGeometry Generate4Digit(string designation, int pointCount = 161)
+        line_range: [23, 24]
+      - name: Generate4DigitClassic
+        signature: AirfoilGeometry Generate4DigitClassic(string designation, int pointCount = 161, bool useLegacyPrecision = true)
+        line_range: [29, 35]
+      - name: Generate4DigitCore<T>
+        signature: static AirfoilGeometry Generate4DigitCore<T>(string designation, int pointCount, bool useClassicXFoilGeometry) where T : struct, IFloatingPointIeee754<T>
+        line_range: [37, 256]
+        allocations:
+          - {line: 45, kind: "CoreTrace.Scope (anonymous object)", hot_path: false, note: "anonymous object boxing; only fires inside one-shot geometry gen"}
+          - {line: 75, kind: "new List<AirfoilPoint>(surfacePointCount)", hot_path: false}
+          - {line: 76, kind: "new List<AirfoilPoint>(surfacePointCount)", hot_path: false}
+          - {line: 88, kind: "CoreTrace.Event anonymous object", hot_path: false, note: "guarded by tracing hook"}
+          - {line: 155, kind: "new AirfoilPoint (upper.Add / lower.Add) x 2", hot_path: false}
+          - {line: 191, kind: "CoreTrace.Event anonymous object per node", hot_path: false, note: "allocates anonymous object per station when IsEnabled"}
+          - {line: 233, kind: "LINQ .Reverse().Concat(lower.Skip(1)).ToArray()", hot_path: false}
+          - {line: 243, kind: "CoreTrace.Event anonymous object per output point", hot_path: false}
+        io_or_locks: []
+        float_usage:
+          - {line: 34, form: "generic_float_selection", context: "Generate4DigitClassic selects T=float when useLegacyPrecision=true; legitimate parity gate"}
+          - {line: 267, form: "float local", context: "fractionSingle = float.CreateChecked(fraction) in float branch"}
+          - {line: 268, form: "float local", context: "oneMinusFractionSingle"}
+          - {line: 269, form: "float local", context: "exponentSingle"}
+          - {line: 270, form: "float local", context: "exponentPlusOneSingle"}
+          - {line: 276, form: "float local", context: "sqrtOneMinusFractionSingle"}
+          - {line: 277, form: "float local", context: "powerAnSingle"}
+          - {line: 278, form: "float local", context: "powerAnpSingle"}
+          - {line: 283, form: "float local", context: "leadingTermSingle"}
+          - {line: 284, form: "float local", context: "xSingle = (1.0f - leadingTermSingle) - powerAnpSingle"}
+          - {line: 284, form: "float_literal", context: "1.0f"}
+          - {line: 311, form: "float local", context: "xSingle"}
+          - {line: 312, form: "float local", context: "x2Single = xSingle * xSingle"}
+          - {line: 313, form: "float local", context: "x3Single"}
+          - {line: 317, form: "float local", context: "x4Single = x2Single * x2Single"}
+        mathf_calls:
+          - {line: 276, symbol: "MathF.Sqrt", note: "only in float branch (parity-legitimate)"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 144, issue: "aft_camber_near_TE", note: "m/(1-p)^2 can blow up for p->1; not an XFoil 4-digit concern but flag for S5"}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_data
+            summary: "Support NACA 5-digit / 4-digit modified / 16-series"
+            rationale: "Legacy naca.f has NACA4/NACA5 entry points; port currently rejects anything non-4-digit at line 62."
+            risk: low
+      - name: ComputeTrailingEdgeBunchedCoordinate<T>
+        signature: static (T,T,T,T,T,T) ComputeTrailingEdgeBunchedCoordinate<T>(T fraction, T oneMinusFraction, T exponent, T exponentPlusOne)
+        line_range: [261, 301]
+        float_usage:
+          - {line: 267, form: "float local chain", context: "entire float branch is parity-only"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeThicknessPowers<T>
+        signature: static (T X2, T X3, T X4) ComputeThicknessPowers<T>(T x)
+        line_range: [306, 325]
+        float_usage:
+          - {line: 311, form: "float local chain", context: "float branch preserves x4 = x2*x2 staging (parity-legitimate)"}
+      - name: MeanCamber<T>
+        signature: static (T Camber, T Slope) MeanCamber<T>(T m, T p, T x)
+        line_range: [330, 350]
+        numerical_stability:
+          - {line: 347, issue: "division_by_(1-p)^2", note: "guarded only by m<=0 or p<=0 early-return; very close p->1 could amplify; unlikely for NACA4 but flagged"}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: minor
+      top_findings:
+        - "All float/MathF usage is gated behind typeof(T)==typeof(float), which is reached only when Generate4DigitClassic is called with useLegacyPrecision=true. Standard branch (Generate4Digit or Classic(useLegacyPrecision:false)) uses T=double throughout — no S1/S2/S3 violations."
+        - "Heavy List<> / LINQ / anonymous-object allocation in geometry assembly and tracing; not a hot path (one-shot), so P-findings are low-severity."
+        - "Anonymous objects passed to CoreTrace.Event are allocated even when tracing is disabled at lines 243-252 (the IsEnabled guard is applied, but inner loop pattern is inconsistent)."
+        - "Port supports only 4-digit; NACA5/NACA4-modified absent — S8 modernization candidate."
+      estimated_fix_effort: "0.5-1 day to add NACA5 + swap inner List<> for preallocated array"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Services/AirfoilNormalizer.cs
+    lines: 66
+    branch_relevance: neither
+    methods:
+      - name: Normalize
+        signature: AirfoilGeometry Normalize(AirfoilGeometry geometry)
+        line_range: [16, 64]
+        allocations:
+          - {line: 24, kind: "new AirfoilPoint", hot_path: false}
+          - {line: 28, kind: "LINQ .OrderBy.ThenBy.First", hot_path: false, note: "OrderBy allocates a sort buffer"}
+          - {line: 48, kind: "LINQ .Select.ToArray", hot_path: false}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 28, severity: minor, issue: "leading-edge picked by min-X only; legacy LEFIND refines on spline — acceptable for preprocessing per header comment"}
+        numerical_stability:
+          - {line: 36, issue: "chord<=eps guard", note: "only triggers for degenerate input; otherwise clean"}
+        fortran_divergence:
+          - {line: 16, fortran_ref: "xgeom.f :: NORM", note: "managed port uses discrete LE (min-X) and rigid rotate/scale instead of spline-based NORM; documented in header"}
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Non-solver preprocessing helper; documented divergence from legacy NORM is intentional and covered by the header comment."
+        - "LINQ-heavy but called once per airfoil load — acceptable."
+      estimated_fix_effort: "trivial; no action recommended"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Services/AirfoilMetricsCalculator.cs
+    lines: 140
+    branch_relevance: neither
+    methods:
+      - name: Calculate
+        signature: AirfoilMetrics Calculate(AirfoilGeometry geometry)
+        line_range: [16, 74]
+        allocations:
+          - {line: 23, kind: ".ToArray()", hot_path: false}
+          - {line: 26, kind: "new AirfoilPoint", hot_path: false}
+          - {line: 40, kind: "array slice + .Reverse().OrderBy.ToArray", hot_path: false}
+          - {line: 45, kind: "array slice + .OrderBy.ToArray", hot_path: false}
+          - {line: 67, kind: "new AirfoilMetrics", hot_path: false}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 49, severity: minor, issue: "sampleCount = 200 hardcoded; header notes this is a coarse preprocessing helper, acceptable"}
+        numerical_stability:
+          - {line: 118, issue: "|deltaX|<1e-12 fallback to midpoint Y", note: "appropriate tolerance"}
+        fortran_divergence:
+          - {line: 16, fortran_ref: "xgeom.f :: LEFIND/GEOPAR", note: "uses discrete sampling instead of spline; documented in header"}
+        modernization_candidates: []
+      - name: FindLeadingEdgeIndex
+        signature: static int FindLeadingEdgeIndex(IReadOnlyList<AirfoilPoint> points)
+        line_range: [79, 91]
+      - name: InterpolateY
+        signature: static double InterpolateY(IReadOnlyList<AirfoilPoint> points, double x)
+        line_range: [96, 128]
+      - name: Distance
+        signature: static double Distance(AirfoilPoint a, AirfoilPoint b)
+        line_range: [133, 138]
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Preprocessing-only helper, documented-approximate versus spline-based GEOPAR."
+      estimated_fix_effort: "none"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Numerics/LegacyLibm.cs
+    lines: 311
+    branch_relevance: parity
+    # S1 exempt per plan: parity-only platform float kernels.
+    # Audit requirement: verify no standard-branch call site. Verified below.
+    methods:
+      - name: Pow
+        signature: static float Pow(float value, float exponent)
+        line_range: [20, 47]
+      - name: Log
+        signature: static float Log(float value)
+        line_range: [52, 79]
+      - name: Log10
+        signature: static float Log10(float value)
+        line_range: [82, 96]
+      - name: Sin
+        signature: static float Sin(float value)
+        line_range: [98, 108]
+      - name: Cos
+        signature: static float Cos(float value)
+        line_range: [110, 120]
+      - name: Sqrt
+        signature: static float Sqrt(float value)
+        line_range: [122, 149]
+      - name: Exp
+        signature: static float Exp(float value)
+        line_range: [156, 183]
+      - name: Tanh
+        signature: static float Tanh(float value)
+        line_range: [188, 215]
+      - name: Atan2
+        signature: static float Atan2(float y, float x)
+        line_range: [217, 231]
+    standard_branch_call_audit:
+      grepped_pattern: "LegacyLibm\\."
+      callers_reviewed:
+        - {file: "src/XFoil.Core/Services/NacaAirfoilGenerator.cs", lines: [277, 278], gate: "typeof(T)==typeof(float) — reached only when Generate4DigitClassic(useLegacyPrecision:true)"}
+        - {file: "src/XFoil.Solver/Numerics/LegacyPrecisionMath.cs", lines: [96, 99, 102, 105, 108, 117], gate: "useLegacyPrecision ? LegacyLibm.X : Math.X — explicit parity gate"}
+        - {file: "src/XFoil.Solver/Services/WakeSpacing.cs", lines: [196, 203, 208], gate: "only called from SolveGeometricRatioLegacyFloat, which is itself a parity-only overload"}
+        - {file: "src/XFoil.Solver/Services/LinearVortexInviscidSolver.cs", lines: [1122], gate: "inside `useLegacyPrecision ? ... : LegacyPrecisionMath.Atan2(...)` ternary"}
+        - {file: "src/XFoil.Solver/Services/PanelGeometryBuilder.cs", lines: [177, 181, 194, 360], gate: "ComputePanelAnglesLegacyFloat is a dedicated float overload; ContinuousAtan2 callers select it behind useLegacyPrecision gate"}
+        - {file: "src/XFoil.Solver/Services/BoundaryLayerCorrelations.cs", lines: [419, 635, 644, 649, 650, 657, 795, 806], gate: "all callers are `*f` float-local chains inside legacy-branch correlation overloads"}
+        - {file: "src/XFoil.Solver/Services/InfluenceMatrixBuilder.cs", lines: [938, 939, 941, 953, 954, 955, 973, 974, 975, 2180], gate: "inside PSI/PANGEN legacy float kernels (float locals only)"}
+        - {file: "src/XFoil.Solver/Services/StreamfunctionInfluenceCalculator.cs", lines: [553, 554, 564, 565, 639, 640], gate: "legacy PSILIN float kernel"}
+        - {file: "src/XFoil.Solver/Services/BoundaryLayerSystemAssembler.cs", lines: [160, 163, 1293, 1298, 5121, 5130, 5334, 6747, 6748, 6758, 6759], gate: "all in float/legacy chains (rstblf, gm1blf, tr2f, rtf, grt float locals)"}
+        - {file: "src/XFoil.Solver/Services/ViscousSolverEngine.cs", lines: [983, 990, 991, 7081], gate: "inside useLegacyPrecision branches in pre-Newton setup and seed extrapolation"}
+      conclusion: "No standard-branch (double-precision) call site of LegacyLibm was found. Every caller is either (a) inside a typeof(T)==typeof(float) generic guard, (b) inside a `useLegacyPrecision` ternary/branch, or (c) inside a dedicated `*Legacy*` / `*Float*` method name that is only dispatched to from the parity branch. LegacyLibm's parity-only discipline is intact."
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "LegacyLibm is cleanly quarantined to parity paths; no standard-branch leakage."
+        - "Missing platform support: Sin/Cos only routed on Linux; Mac/Windows fall through to MathF — could be 1 ULP gap on those OSes. Low priority because parity sweep runs on Linux."
+        - "P/Invoke exceptions (DllNotFoundException/EntryPointNotFoundException) are caught silently; fallback to MathF is intentional and documented."
+      estimated_fix_effort: "0.5-1 hour to round out Sin/Cos on Mac+Windows"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Diagnostics/CoreTrace.cs
+    lines: 139
+    branch_relevance: both
+    methods:
+      - name: Begin
+        signature: static IDisposable Begin(Action<string,string,object?>? writer)
+        line_range: [26, 36]
+        allocations:
+          - {line: 35, kind: "new RestoreScope", hot_path: false}
+      - name: Scope
+        signature: static IDisposable Scope(string scope, object? inputs = null)
+        line_range: [41, 51]
+        allocations:
+          - {line: 50, kind: "new TraceScope", hot_path: false, note: "always allocates when writer non-null; one allocation per Scope() call"}
+        io_or_locks: []
+        # P3 note: no direct Console/string interpolation here. Writer callback is provided by caller.
+      - name: Event
+        signature: static void Event(string kind, string scope, object? data = null)
+        line_range: [56, 59]
+      - name: ScopeName
+        signature: static string ScopeName(Type owner, [CallerMemberName] string memberName = "")
+        line_range: [64, 69]
+        allocations:
+          - {line: 68, kind: "$\"{owner.Name}.{memberName}\" string interpolation", hot_path: false}
+      - name: RestoreScope.Dispose
+        signature: void Dispose()
+        line_range: [87, 95]
+        io_or_locks:
+          - {line: 89, kind: "Interlocked.Exchange", severity: low, note: "P4 atomic, not a lock; used only for idempotent dispose, no solver-hot-path involvement"}
+      - name: TraceScope.Dispose
+        signature: void Dispose()
+        line_range: [116, 124]
+        io_or_locks:
+          - {line: 118, kind: "Interlocked.Exchange", severity: low, note: "P4 atomic; same disposition as above"}
+    standard_branch_call_audit:
+      console_or_formatting: "CoreTrace itself has no Console.* or string.Format calls. ScopeName uses `$\"{x}.{y}\"` but is called at scope-enter time with CallerMemberName; allocation is per-scope not per-station."
+      locks: "AsyncLocal<T> (line 19) is not a lock. Interlocked.Exchange at lines 89 and 118 are idempotent-dispose atomics, not contended locks."
+      p4_verdict: "Clean — no Monitor/lock/Mutex/Task/async constructs. Two Interlocked.Exchange calls for dispose-once semantics are acceptable."
+      p3_verdict: "Clean on CoreTrace.cs itself; however, every caller that builds an anonymous object for `inputs`/`data` pays a heap allocation whether or not a writer is installed (see NacaAirfoilGenerator line 243 and solver callers). Concern belongs to callers."
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: clean
+      top_findings:
+        - "Lightweight AsyncLocal-based trace hook; no internal locks, no I/O."
+        - "`Scope()` returns a fresh TraceScope object when enabled — one allocation per scope enter. Acceptable unless called per-station per-Newton."
+        - "Callers of Event/Scope should guard their anonymous-object construction with IsEnabled; any caller that does not will heap-allocate every call. The solver callers must be audited separately in A/B/C ledgers."
+      estimated_fix_effort: "none for the trace helper itself; caller-guard sweep belongs to caller ledgers"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Models/AirfoilFormat.cs
+    lines: 16
+    branch_relevance: neither
+    methods: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Pure enum; DTO pass. No findings."
+      estimated_fix_effort: "none"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Models/AirfoilGeometry.cs
+    lines: 48
+    branch_relevance: neither
+    methods:
+      - name: ctor
+        signature: AirfoilGeometry(string name, IReadOnlyList<AirfoilPoint> points, AirfoilFormat format, IReadOnlyList<double>? domainParameters = null)
+        line_range: [14, 39]
+        allocations:
+          - {line: 36, kind: "points.ToArray()", hot_path: false, note: "defensive copy at construction"}
+          - {line: 38, kind: "domainParameters.ToArray() ?? Array.Empty<double>()", hot_path: false}
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Immutable DTO with two defensive array copies in ctor; appropriate for a parser/generator boundary."
+      estimated_fix_effort: "none"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Models/AirfoilMetrics.cs
+    lines: 41
+    branch_relevance: neither
+    methods:
+      - name: ctor
+        signature: AirfoilMetrics(AirfoilPoint, AirfoilPoint, double, double, double, double)
+        line_range: [14, 28]
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Pure record-like immutable summary class. DTO pass."
+      estimated_fix_effort: "none"
+
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Core/Models/AirfoilPoint.cs
+    lines: 9
+    branch_relevance: neither
+    methods:
+      - name: record_struct_primary_ctor
+        signature: readonly record struct AirfoilPoint(double X, double Y)
+        line_range: [9, 9]
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "Readonly record struct — zero-alloc by design."
+      estimated_fix_effort: "none"
+
+ledger_summary:
+  total_files: 10
+  total_methods_audited: 30
+  parity_blockers: 0
+  standard_blockers: 0
+  notes: |
+    D1 (XFoil.Core) is outside the solver hot path; no P or S blockers found.
+
+    Priority focus results:
+
+    (1) LegacyLibm standard-branch leakage check: VERIFIED CLEAN.
+        A repo-wide grep for `LegacyLibm\.` returned callers in 10 source files;
+        every single one is either (a) inside `typeof(T)==typeof(float)` generic
+        guard, (b) inside an explicit `useLegacyPrecision ? LegacyLibm.X : Math.X`
+        ternary, or (c) inside a dedicated `*Legacy*Float*` / `*LegacyFloat*`
+        method that is only dispatched from the parity branch. No standard
+        (double-precision) caller. LegacyLibm discipline is intact.
+
+    (2) Airfoil parser/generator zero-GC opportunities:
+        AirfoilParser pipes every file through List<string>/LINQ; a zero-GC
+        rewrite would save ~5 allocations per file but this is a one-shot
+        preprocessing step, not a hot path — effort vs. value is weak.
+        NacaAirfoilGenerator similarly uses List<AirfoilPoint> + LINQ assembly;
+        preallocated AirfoilPoint[pointCount] would be a 1-hour cleanup.
+
+    Recommendations (non-binding — fix phase only):
+      - Tighten AirfoilParser / NacaAirfoilGenerator allocations to arrays.
+      - Round out LegacyLibm Sin/Cos on Mac + Windows for off-Linux parity.
+      - Add NACA5 / NACA4-modified to the generator (S8 modernization).
+
+    Core is a stable periphery. Recommend skipping D1 files in any aggressive
+    parity-branch perf pass; focus perf/allocation work on Solver tier (A/B/C).

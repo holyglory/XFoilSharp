@@ -1,0 +1,740 @@
+agent: B5
+ledger_path: audit/B5-splines-legacy-math.yaml
+audit_started: 2026-04-16T00:00:00Z
+audit_completed: 2026-04-16T00:00:00Z
+files:
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/ParametricSpline.cs
+    lines: 864
+    branch_relevance: both
+    methods:
+      - name: SplineBoundaryCondition (struct)
+        signature: "readonly struct with ZeroSecondDerivative/ZeroThirdDerivative/SpecifiedDerivative factories"
+        line_range: [16, 59]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: FitWithZeroSecondDerivativeBCs (double)
+        signature: "void(double[], double[], double[], int)"
+        line_range: [81, 87]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: FitWithZeroSecondDerivativeBCs (float)
+        signature: "void(float[], float[], float[], int)"
+        line_range: [88, 93]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 88, form: "float_parameter", context: "public float[] overload exposes parity single-precision API"}
+          - {line: 89, form: "float_parameter", context: "derivatives float[]"}
+          - {line: 89, form: "float_parameter", context: "parameters float[]"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Gate float overload behind a parity-only API surface"
+            rationale: "S1 violation for standard branch. Overload is reachable from non-parity callers unless gated."
+            risk: low
+      - name: FitWithBoundaryConditions (double)
+        signature: "void(double[], double[], double[], int, SplineBoundaryCondition, SplineBoundaryCondition)"
+        line_range: [109, 112]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: FitWithBoundaryConditions (float)
+        signature: "void(float[], float[], float[], int, SplineBoundaryCondition, SplineBoundaryCondition)"
+        line_range: [114, 117]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 115, form: "float_parameter", context: "public float[] overload"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Restrict float overload to parity branch"
+            rationale: "S1"
+            risk: low
+      - name: FitWithBoundaryConditionsCore<T>
+        signature: "void(T[], T[], T[], int, SplineBoundaryCondition, SplineBoundaryCondition) where T: IFloatingPointIeee754<T>"
+        line_range: [122, 207]
+        allocations:
+          - {line: 132, kind: "new T[count]", hot_path: false, note: "lowerTyped scratch; called per SEGSPL invocation during panel build — not per-Newton"}
+          - {line: 133, kind: "new T[count]", hot_path: false, note: "diagonalTyped scratch"}
+          - {line: 134, kind: "new T[count]", hot_path: false, note: "upperTyped scratch"}
+          - {line: 170, kind: "anonymous object in TraceSplineSystemRow", hot_path: false, note: "per-row trace allocation even when SolverTrace inactive (guard inside Event is too late — arg object already built)"}
+          - {line: 196, kind: "anonymous object in TraceSplineSolutionNode", hot_path: false, note: "per-node trace allocation; IsActive check in Event cannot suppress caller-side boxing"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 146, issue: "divide_no_guard", note: "dsm/dsp and dsp/dsm can divide by zero if consecutive parameters coincide; SEGSPL is expected to partition ahead of time but the core does not validate"}
+        fortran_divergence:
+          - {line: 158, fortran_ref: "spline.f:146-150", note: "N=2 dual-zero-third-derivative special case matches F; verified"}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Lift scratch arrays into SolverBuffers to eliminate per-call heap allocation"
+            rationale: "P1 — 3 x new T[count] per SPLIND call"
+            risk: low
+      - name: FitSegmented (double/float/generic)
+        signature: "void(T[], T[], T[], int)"
+        line_range: [221, 231]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 226, form: "float_parameter", context: "float[] overload"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Evaluate (double/float/generic)
+        signature: "T(T, T[], T[], T[], int)"
+        line_range: [247, 258]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 252, form: "float_parameter", context: "public float overload"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Parity-only float overload — should be marked internal or gated"
+            rationale: "S1 — exposes float path to non-parity callers"
+            risk: low
+      - name: EvaluateDerivative (double/float/generic)
+        signature: "T(T, T[], T[], T[], int)"
+        line_range: [273, 284]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 278, form: "float_parameter", context: "public float overload"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeArcLength (double/float/generic)
+        signature: "void(T[], T[], T[], int)"
+        line_range: [298, 306]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 301, form: "float_parameter", context: "public float overload"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: InvertSpline
+        signature: "double(double, double[], double[], double[], int, double)"
+        line_range: [322, 345]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 343, severity: "low", issue: "silent fallback on failure — Fortran SINVRT writes to unit 6; managed version returns initial guess with no diagnostic. Callers cannot distinguish success vs fallback."}
+        numerical_stability:
+          - {line: 334, issue: "divide_no_guard", note: "ds = -residual/slope; slope can be 0 at spline extrema — yields NaN/Inf; convergence test fails and siSaved is returned, but no explicit guard"}
+          - {line: 337, issue: "divide_no_guard", note: "ds/totalSpan — totalSpan == parameters[N-1]-parameters[0]; zero if count<2 or degenerate input. Not validated."}
+        fortran_divergence:
+          - {line: 345, fortran_ref: "spline.f:541-543", note: "Fortran writes warning to stdout; managed is silent. Minor behavior divergence."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Return (bool success, double result) or expose a diagnostic callback instead of silent fallback"
+            rationale: "S5/S8 — silent fallback masks spline-inversion failures in Newton iterations that may rely on convergence"
+            risk: low
+      - name: ApplyStartBc<T>
+        signature: "void(SplineBoundaryCondition, T[], T[], T[], int, T[], T[], T[])"
+        line_range: [350, 378]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ApplyEndBc<T>
+        signature: "void(SplineBoundaryCondition, T[], T[], T[], int, T[], T[], T[])"
+        line_range: [383, 412]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: FitSegment<T>
+        signature: "void(T[], T[], T[], int, int)"
+        line_range: [417, 449]
+        allocations:
+          - {line: 427, kind: "new T[segCount]", hot_path: false, note: "segValues scratch per segment"}
+          - {line: 428, kind: "new T[segCount]", hot_path: false, note: "segDerivatives scratch"}
+          - {line: 429, kind: "new T[segCount]", hot_path: false, note: "segParameters scratch"}
+          - {line: 434, kind: "anonymous object in TraceSplineSegment", hot_path: false, note: "per-segment trace allocation"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 422, severity: "low", issue: "segCount<2 silent return; Fortran SEGSPL STOPs on duplicate first/last point. Silent degenerate handling may mask caller bugs."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 422, fortran_ref: "spline.f:663-664", note: "Fortran STOP on duplicated first/last point; managed silently skips single-point segments"}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Copy into SolverBuffers-backed scratch to eliminate allocations"
+            rationale: "P1"
+            risk: low
+      - name: FitSegmentedCore<T>
+        signature: "void(T[], T[], T[], int)"
+        line_range: [458, 474]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: EvaluateCore<T>
+        signature: "T(T, T[], T[], T[], int)"
+        line_range: [479, 536]
+        allocations:
+          - {line: 510, kind: "anonymous object in TraceSplineEvaluation", hot_path: true, note: "SEVAL is called per-panel-refine iteration and inside STFIND LE-finder Newton; 24-field anon object allocates even when SolverTrace.IsActive=false because guard is inside Event method"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 488, issue: "divide_no_guard", note: "t = (s - parameters[iLow]) / ds; ds can be 0 if duplicate parameters leak past SEGSPL segmentation"}
+        fortran_divergence:
+          - {line: 497, fortran_ref: "spline.f:307-315", note: "cx1 built as FMA(ds, xsLow, -xHigh) + xLow; F writes DS*XSLOW - XHIGH + XLOW which is the source-ordered evaluation. Intentional parity staging — noted as such in inline comments. Verified against spline.f."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Introduce IsActive predicate check before anonymous-object construction at call site"
+            rationale: "P1/P6 — guard inside Event can't suppress caller-side allocation"
+            risk: low
+      - name: EvaluateDerivativeCore<T>
+        signature: "T(T, T[], T[], T[], int)"
+        line_range: [541, 597]
+        allocations:
+          - {line: 571, kind: "anonymous object in TraceSplineEvaluation", hot_path: true, note: "per-DEVAL call allocation; same IsActive caveat"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 554, issue: "divide_no_guard", note: "t = (s - parameters[iLow]) / ds; divide-by-zero possible for coincident params"}
+          - {line: 570, issue: "divide_no_guard", note: "result = numerator / ds"}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeArcLengthCore<T>
+        signature: "void(T[], T[], T[], int)"
+        line_range: [602, 623]
+        allocations:
+          - {line: 613, kind: "anonymous object in TraceArcLengthStep", hot_path: false, note: "per-step trace allocation"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: FindUpperIndex<T>
+        signature: "int(T, T[], int)"
+        line_range: [628, 648]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: DescribeBoundaryCondition / GetPrecisionLabel
+        signature: "string helpers"
+        line_range: [653, 669]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: TraceSplineEvaluation / TraceSplineSegment / TraceSplineSystemRow / TraceSplineSolutionNode / TraceArcLengthStep
+        signature: "trace helper methods"
+        line_range: [674, 853]
+        allocations:
+          - {line: 704, kind: "new { ... } (24 fields)", hot_path: true, note: "anonymous object with 24 double.CreateChecked conversions; allocated on the stack at the call site but passed as object → boxing to heap"}
+          - {line: 747, kind: "new { ... }", hot_path: false, note: "segment trace anonymous object"}
+          - {line: 779, kind: "new { ... }", hot_path: false, note: "system row anonymous object"}
+          - {line: 813, kind: "new { ... }", hot_path: false, note: "solution node anonymous object"}
+          - {line: 843, kind: "new { ... }", hot_path: false, note: "arc-length step anonymous object"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Short-circuit on !SolverTrace.IsActive before argument evaluation"
+            rationale: "P1/P6 — boxing 20+ doubles per SEVAL even when trace disabled"
+            risk: low
+      - name: ComputeDistance<T>
+        signature: "T(T, T)"
+        line_range: [858, 863]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 861, issue: "potential_overflow", note: "dx*dx+dy*dy may overflow for large panels; legacy SCALC has the same hazard. Not a parity bug."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Consider std::hypot-style hypotenuse for double branch (Math.Sqrt(dx*dx+dy*dy) → Math.Sqrt stable, Fortran parity must keep the contracted form)"
+            rationale: "S5 robustness"
+            risk: low
+    file_summary:
+      parity_verdict: minor
+      standard_verdict: minor
+      top_findings:
+        - "P1: per-call T[count] scratch arrays in FitWithBoundaryConditionsCore and FitSegment — 3 arrays per SPLIND invocation. Lift into SolverBuffers."
+        - "P1/P6: trace helpers build large anonymous objects (24 fields in EvaluateCore trace) unconditionally; SolverTrace.IsActive guard is inside the Event method and cannot suppress caller-side boxing."
+        - "S1: six public float[] overloads (FitWithZeroSecondDerivativeBCs, FitWithBoundaryConditions, FitSegmented, Evaluate, EvaluateDerivative, ComputeArcLength) — standard-branch S1 violations; gate to parity-only namespace or mark internal with a parity-audit attribute."
+        - "S5: InvertSpline has no slope-zero guard and silently returns the initial guess on failure; callers can't detect divergence."
+        - "X3: Fortran mapping verified against spline.f for SPLINE/SPLIND/SEGSPL/SEVAL/DEVAL/SINVRT/SCALC — contracted parity-sensitive staging (FMA for cx1/cx2, cubic factor t-t*t) documented inline and matches spline.f PRECISION='Single' trace points."
+      estimated_fix_effort: "0.5-1 day (buffer pooling + float overload gating + trace short-circuit); Fortran correctness verified."
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/CubicSpline.cs
+    lines: 167
+    branch_relevance: standard
+    methods:
+      - name: CubicSpline (constructor)
+        signature: "CubicSpline(IReadOnlyList<double>, IReadOnlyList<double>)"
+        line_range: [16, 49]
+        allocations:
+          - {line: 46, kind: ".ToArray()", hot_path: false, note: "parameters defensive copy"}
+          - {line: 47, kind: ".ToArray()", hot_path: false, note: "values defensive copy"}
+          - {line: 48, kind: "new double[] via ComputeNaturalSlopes", hot_path: false, note: "slopes array"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Evaluate
+        signature: "double(double)"
+        line_range: [58, 81]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 60, severity: "low", issue: "clamp to endpoint values on out-of-range input — differs from Fortran SEVAL which extrapolates polynomially. Deliberate managed choice, but Fortran divergence."}
+        numerical_stability:
+          - {line: 73, issue: "divide_no_guard", note: "t = (parameter - ...) / interval; interval is guaranteed nonzero by constructor validation (strictly increasing). Safe."}
+        fortran_divergence:
+          - {line: 60, fortran_ref: "spline.f:277-321", note: "Fortran SEVAL extrapolates via cubic polynomial on out-of-range input; managed clamps to endpoints. This is a behavior change, not a numeric parity bug — but flag for S4."}
+        modernization_candidates: []
+      - name: FindUpperIndex
+        signature: "int(double)"
+        line_range: [86, 105]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ComputeNaturalSlopes
+        signature: "double[](IReadOnlyList<double>, IReadOnlyList<double>)"
+        line_range: [110, 138]
+        allocations:
+          - {line: 113, kind: "new double[count]", hot_path: false, note: "a scratch"}
+          - {line: 114, kind: "new double[count]", hot_path: false, note: "b scratch"}
+          - {line: 115, kind: "new double[count]", hot_path: false, note: "c scratch"}
+          - {line: 116, kind: "new double[count]", hot_path: false, note: "d scratch"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 129, severity: "medium", issue: "only supports zero-second-derivative BC at both ends; no SPLIND mode selection. Missing the zero-third-derivative and specified-derivative modes that ParametricSpline supports. Callers requiring SEGSPL semantics must use ParametricSpline instead."}
+        numerical_stability: []
+        fortran_divergence:
+          - {line: 129, fortran_ref: "spline.f:63-171", note: "CubicSpline implements only the natural-BC subset of SPLIND. Fine for PanelMeshGenerator use case; would be wrong for LE finder or geometry splining."}
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Consider deleting CubicSpline.cs and routing PanelMeshGenerator through ParametricSpline to eliminate duplicate spline implementation"
+            rationale: "S4/S8 — two implementations of the same algorithm invite divergence. ParametricSpline already handles the same case via FitWithZeroSecondDerivativeBCs."
+            risk: medium
+      - name: SolveTriDiagonal
+        signature: "double[](double[], double[], double[], double[])"
+        line_range: [143, 166]
+        allocations:
+          - {line: 146, kind: ".Clone()", hot_path: false, note: "diagonal clone"}
+          - {line: 147, kind: ".Clone()", hot_path: false, note: "upper clone"}
+          - {line: 148, kind: ".Clone()", hot_path: false, note: "solution clone"}
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 153, issue: "divide_no_guard", note: "upper[previous] /= diagonal[previous] — no pivoting; if diagonal becomes zero during elimination (degenerate tridiag), division blows up. Tridiagonal natural-spline system is diagonally dominant, so safe in practice."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Route to shared TridiagonalSolver.Solve instead of maintaining a second Thomas implementation"
+            rationale: "Duplicate solver code; ParametricSpline already uses shared TridiagonalSolver."
+            risk: low
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: minor
+      top_findings:
+        - "Duplicate of a subset of ParametricSpline functionality — natural-BC only, uses local tridiagonal solver rather than shared TridiagonalSolver. Candidate for removal."
+        - "Evaluate clamps out-of-range input to endpoint values (not polynomial extrapolation as Fortran SEVAL does). Deliberate, but a Fortran-behavior divergence."
+        - "Only PanelMeshGenerator uses this class; fallback to ParametricSpline would eliminate duplication."
+      estimated_fix_effort: "2-4 hours (refactor PanelMeshGenerator to use ParametricSpline) or keep as-is."
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/LegacyPrecisionMath.cs
+    lines: 651
+    branch_relevance: parity
+    methods:
+      - name: DisableFma (property)
+        signature: "bool { get; set; }"
+        line_range: [23, 24]
+        allocations: []
+        io_or_locks: []
+        float_usage: []
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Fma
+        signature: "float(float, float, float)"
+        line_range: [33, 36]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 33, form: "float_parameter", context: "parity-only FMA wrapper"}]
+        mathf_calls: [{line: 36, symbol: "MathF.FusedMultiplyAdd"}]
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: GammaMinusOne
+        signature: "double(bool useLegacyPrecision)"
+        line_range: [45, 46]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 46, form: "float_literal", context: "(float)1.4f-1.0f to mimic Fortran REAL GAMM1"}]
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: RoundToSingle (two overloads)
+        signature: "double(double) / double(double, bool)"
+        line_range: [48, 51]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 48, form: "float_cast", context: "(float)value — intentional REAL narrowing for parity"}]
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: RoundBarrier
+        signature: "float(float)"
+        line_range: [54, 55]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 54, form: "float_parameter", context: "bit-round barrier to defeat extended-precision JIT"}]
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: AddRounded
+        signature: "float(float, float)"
+        line_range: [59, 64]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 59, form: "float_parameter", context: "NoInlining rounding helper"}]
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: Multiply (2-arg and 3-arg) / Add / Subtract / Negate / Divide / Average / Square / Sqrt / Pow / Exp / Log / Log10 / Tanh / Sin / Cos / Atan2 / Abs / Max / Min
+        signature: "double(double..., bool useLegacyPrecision) — gated scalar ops"
+        line_range: [66, 126]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 67, form: "float_cast", context: "Multiply parity branch casts both sides to float"}
+          - {line: 70, form: "float_cast", context: "Multiply 3-arg parity branch"}
+          - {line: 73, form: "float_cast", context: "Add parity branch"}
+          - {line: 76, form: "float_cast", context: "Subtract parity branch"}
+          - {line: 79, form: "float_cast", context: "Negate parity branch"}
+          - {line: 82, form: "float_cast", context: "Divide parity branch"}
+          - {line: 86, form: "float_cast", context: "Average parity branch"}
+          - {line: 90, form: "float_cast", context: "Square parity branch"}
+          - {line: 93, form: "MathF.Sqrt((float)value)", context: "Sqrt parity branch"}
+          - {line: 96, form: "float_cast", context: "Pow uses LegacyLibm.Pow(float,float)"}
+          - {line: 99, form: "float_cast", context: "Exp uses LegacyLibm.Exp(float)"}
+          - {line: 102, form: "float_cast", context: "Log uses LegacyLibm.Log(float)"}
+          - {line: 105, form: "float_cast", context: "Log10 uses LegacyLibm.Log10(float)"}
+          - {line: 108, form: "float_cast", context: "Tanh uses LegacyLibm.Tanh(float)"}
+          - {line: 111, form: "MathF.Sin((float)value)", context: "Sin parity branch"}
+          - {line: 114, form: "MathF.Cos((float)value)", context: "Cos parity branch"}
+          - {line: 117, form: "float_cast", context: "Atan2 uses LegacyLibm.Atan2(float,float)"}
+          - {line: 120, form: "MathF.Abs((float)value)", context: "Abs parity branch"}
+          - {line: 123, form: "MathF.Max((float)left, (float)right)", context: "Max parity branch"}
+          - {line: 126, form: "MathF.Min((float)left, (float)right)", context: "Min parity branch"}
+        mathf_calls:
+          - {line: 93, symbol: "MathF.Sqrt"}
+          - {line: 111, symbol: "MathF.Sin"}
+          - {line: 114, symbol: "MathF.Cos"}
+          - {line: 120, symbol: "MathF.Abs"}
+          - {line: 123, symbol: "MathF.Max"}
+          - {line: 126, symbol: "MathF.Min"}
+        correctness_concerns: []
+        numerical_stability:
+          - {line: 82, issue: "divide_no_guard", note: "Divide has no zero-denominator guard; matches Fortran REAL semantics (NaN/Inf propagate)"}
+          - {line: 96, issue: "domain_unchecked", note: "Pow with negative base and fractional exponent produces NaN; standard-branch uses Math.Pow with same property"}
+          - {line: 102, issue: "domain_unchecked", note: "Log(x<=0) = NaN; no guard. Relies on caller invariants."}
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: AddScaled / MultiplyAdd / MultiplySubtract / ProductThenAdd / ProductThenSubtract (scalar)
+        signature: "double(double, double, double, bool useLegacyPrecision) fused/non-fused scalar helpers"
+        line_range: [134, 173]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 136, form: "float_cast", context: "AddScaled parity branch routes through Fma"}
+          - {line: 145, form: "float_cast", context: "MultiplyAdd parity"}
+          - {line: 150, form: "float_cast", context: "MultiplySubtract parity"}
+          - {line: 160, form: "float_cast", context: "ProductThenAdd parity"}
+          - {line: 171, form: "float_cast", context: "ProductThenSubtract parity"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SumOfProducts (2/3/4/6 terms, scalar double)
+        signature: "double(... bool useLegacyPrecision) — fused-chain parity"
+        line_range: [178, 264]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 186, form: "float_cast", context: "SumOfProducts 2-term parity"}
+          - {line: 201, form: "float_cast", context: "SumOfProducts 3-term parity"}
+          - {line: 221, form: "float_cast", context: "SumOfProducts 4-term parity"}
+          - {line: 248, form: "float_cast", context: "SumOfProducts 6-term parity"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SourceOrderedProductSum (2/3 terms) / SourceOrderedProductSumAdd
+        signature: "double(... bool useLegacyPrecision) — left-associative parity"
+        line_range: [273, 332]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 285, form: "float_cast", context: "left-associative parity sum"}
+          - {line: 304, form: "float_cast", context: "3-term parity sum"}
+          - {line: 327, form: "float_cast", context: "3-term + addend parity sum"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: NativeFloatExpressionProductSum / NativeFloatExpressionProductSumAdd
+        signature: "double(... bool useLegacyPrecision) — traced contracted-native parity"
+        line_range: [342, 377]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 354, form: "float_cast", context: "traced native contraction parity"}
+          - {line: 373, form: "float_cast", context: "traced native contraction parity"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: FusedMultiplyAdd<T>
+        signature: "T(T, T, T) where T:IFloatingPointIeee754<T>"
+        line_range: [385, 398]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 388, form: "typeof(T)==typeof(float) branch", context: "generic fused helper"}]
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SumOfProducts<T> (2/3 generic) / SumOfProductsAndAdd<T>
+        signature: "T(...) where T:IFloatingPointIeee754<T>"
+        line_range: [400, 468]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 403, form: "typeof(T)==typeof(float) branch"}
+          - {line: 420, form: "typeof(T)==typeof(float) branch"}
+          - {line: 454, form: "typeof(T)==typeof(float) branch"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: WeightedProductBlend<T>
+        signature: "T(T leftWeight, T leftValue, T leftScale, T rightWeight, T rightValue, T rightScale)"
+        line_range: [470, 493]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 479, form: "typeof(T)==typeof(float) branch"}]
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: DifferenceOfProducts<T>
+        signature: "T(T, T, T, T)"
+        line_range: [495, 516]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 502, form: "typeof(T)==typeof(float) branch"}]
+        mathf_calls: []
+        correctness_concerns:
+          - {line: 507, severity: "info", issue: "Kahan-style difference-of-products (Kahan's algorithm) is not used even on double branch; double branch does plain (a*b)-(c*d). Standard branch could gain stability using FMA-based Kahan DoP."}
+        numerical_stability:
+          - {line: 515, issue: "catastrophic_cancel_candidate", note: "a*b - c*d suffers catastrophic cancellation when a*b ≈ c*d; Kahan's DoP = fma(a,b,-c*d) + fma(-c,d,c*d) eliminates this. Currently float branch uses 1-fma version, double branch uses plain subtract."}
+        fortran_divergence: []
+        modernization_candidates:
+          - kind: new_algorithm
+            summary: "Use Kahan's difference-of-products on the standard (double) branch"
+            rationale: "S5 — measurable accuracy improvement for ill-conditioned geometry kernels (panel-influence determinants)"
+            risk: low
+      - name: FusedMultiplySubtract<T> / ContractedMultiplySubtract<T>
+        signature: "T(T, T, T)"
+        line_range: [518, 553]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 521, form: "typeof(T)==typeof(float) branch"}
+          - {line: 541, form: "typeof(T)==typeof(float) branch"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: ProductThenAdd<T> / ProductThenSubtract<T>
+        signature: "T(T, T, T)"
+        line_range: [561, 583]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 564, form: "typeof(T)==typeof(float) branch"}
+          - {line: 576, form: "typeof(T)==typeof(float) branch"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SeparateMultiplySubtract<T>
+        signature: "T(T, T, T)"
+        line_range: [588, 604]
+        allocations: []
+        io_or_locks: []
+        float_usage: [{line: 595, form: "typeof(T)==typeof(float) branch"}]
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+      - name: SeparateSumOfProducts<T> (2/3 term)
+        signature: "T(... multiple-product FMA chain)"
+        line_range: [611, 650]
+        allocations: []
+        io_or_locks: []
+        float_usage:
+          - {line: 614, form: "typeof(T)==typeof(float) branch"}
+          - {line: 638, form: "typeof(T)==typeof(float) branch"}
+        mathf_calls: []
+        correctness_concerns: []
+        numerical_stability: []
+        fortran_divergence: []
+        modernization_candidates: []
+    file_summary:
+      parity_verdict: clean
+      standard_verdict: clean
+      top_findings:
+        - "All float/MathF usage is gated behind 'useLegacyPrecision' boolean or typeof(T)==typeof(float) — standard branch always takes the double path with Math.* calls. Parity-only by design per file header."
+        - "Zero heap allocations, zero string formatting, zero Console/StreamWriter. All helpers are pure scalar kernels; P1/P3/P4/P5/P6 all clean."
+        - "Zero lock/Monitor/Task/async/Interlocked/volatile. Zero file I/O. Zero NotImplementedException/TODO/FIXME."
+        - "Standard-branch call sites across solver propagate useLegacyPrecision via settings bool; default parameter is 'false' everywhere (verified via grep across src/XFoil.Solver/Services)."
+        - "S5 opportunity: DifferenceOfProducts double branch could use Kahan's DoP for catastrophic-cancellation robustness without affecting parity branch."
+      estimated_fix_effort: "< 2 hours (optional Kahan DoP on double branch). File is production-ready for parity."
+ledger_summary:
+  total_files: 3
+  total_methods_audited: 47
+  parity_blockers: 0
+  standard_blockers: 0
+  notes: >-
+    LegacyPrecisionMath is parity-only and clean — no allocations, no Console/IO, no locks,
+    and all standard-branch call sites pass useLegacyPrecision=false either via literal or
+    via settings-derived boolean (verified by grep across src/XFoil.Solver/Services:
+    41 explicit ":true" occurrences all within parity-only paths; 8 ":false" occurrences;
+    remainder propagate a settings variable whose default is false).
+
+    ParametricSpline is largely correct vs spline.f (SPLINE/SPLIND/SEGSPL/SEVAL/DEVAL/
+    SINVRT/SCALC mapping confirmed line-by-line). Main concerns:
+      (1) Six public float[] overloads expose parity-single-precision API to standard-branch
+          callers — S1 risk; should be internal or gated.
+      (2) Per-call T[count] scratch arrays inside FitWithBoundaryConditionsCore and FitSegment.
+      (3) Trace helpers build 20+ field anonymous objects per SEVAL/DEVAL; SolverTrace.IsActive
+          guard is inside Event() and cannot suppress caller-side boxing. SEVAL/DEVAL are called
+          from CosineClusteringPanelDistributor repanelling loops and LE-finder Newton iteration,
+          making this a measurable allocation site even though it is not on the viscous Newton
+          inner loop.
+      (4) InvertSpline silently returns initial guess on failure; Fortran SINVRT writes to stdout.
+          Minor behavioral divergence.
+
+    CubicSpline is a duplicate of a subset of ParametricSpline functionality (natural-BC only,
+    local Thomas solver). Used only by PanelMeshGenerator. Candidate for deletion/consolidation.
+    Evaluate() clamps out-of-range input to endpoints, which diverges from Fortran SEVAL's
+    polynomial extrapolation — deliberate managed choice, flag for S4 review.
+
+    No parity or standard blockers in these three files. Cumulative effort to address all
+    findings: roughly 1-2 engineer-days (mostly refactor + buffer pooling; correctness work
+    minimal).
