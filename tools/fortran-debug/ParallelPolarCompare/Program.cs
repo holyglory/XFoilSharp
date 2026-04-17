@@ -216,11 +216,18 @@ var lines = File.ReadAllLines(vectorFile)
 
 Console.Error.WriteLine($"Loaded {lines.Length} vectors from {vectorFile}");
 
+// Aggregate counters — these are the ONLY cross-thread synchronized values,
+// and only updated once per worker at the very end of its loop.
 int passed = 0, failed = 0, skipped = 0, bitExact = 0, finiteResults = 0;
 double maxCdRelError = 0;
 string worstCase = "";
+// Fails go to a ConcurrentBag but are rare (only when rel-err > 1%) so no hot path sync.
 var failDetails = new ConcurrentBag<string>();
-var results = new ConcurrentBag<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)>();
+// Per-worker results are appended to ThreadLocal<List> during the sweep; the per-worker
+// lists are merged into `results` once (after Parallel.For) so there is zero
+// cross-thread sync on the hot path.
+var results = new List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)>();
+var perWorkerResults = new System.Collections.Concurrent.ConcurrentBag<List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)>>();
 bool breakAtFirstUnparity = args.Contains("--break-at-first-unparity") || args.Contains("--bfp");
 // --skip-degenerate: skip cases where Fortran's stored CD is < 1e-15 (denormal/non-convergent
 // garbage from failed VISCAL where last-iter BL state is wildly diverging). These cases
@@ -254,11 +261,19 @@ int linesLen = lines.Length;
 var parallelState = new object();
 Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxParallel }, (_, workerState) =>
 {
+    // Per-worker local accumulators to eliminate hot-path cross-thread sync.
+    int localPassed = 0, localFailed = 0, localSkipped = 0, localBitExact = 0, localFinite = 0;
+    double localMaxCdRelErr = 0.0;
+    var localResults = new List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)>(capacity: 4096);
+    perWorkerResults.Add(localResults);
+
+    try
+    {
     while (true)
     {
         int i = Interlocked.Increment(ref nextIndex);
         if (i >= linesLen) return;
-        if (breakAtFirstUnparity && firstUnparityFound == 1) return;
+        if (breakAtFirstUnparity && Volatile.Read(ref firstUnparityFound) == 1) return;
         string line = lines[i];
         {
         string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -383,30 +398,26 @@ Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxP
             {
                 cdRelError = Math.Abs(cd - fortCd) / Math.Max(Math.Abs(fortCd), 1e-6);
             }
-            results.Add((naca, re, alpha, ncrit, fortCl, fortCd, cl, cd, cdRelError, cdUlp, clUlp));
+            localResults.Add((naca, re, alpha, ncrit, fortCl, fortCd, cl, cd, cdRelError, cdUlp, clUlp));
 
-            if (cdUlp == 0 && clUlp == 0)
-            {
-                Interlocked.Increment(ref bitExact);
-            }
-            if (double.IsFinite(cd) && double.IsFinite(cl))
-            {
-                Interlocked.Increment(ref finiteResults);
-            }
+            if (cdUlp == 0 && clUlp == 0) localBitExact++;
+            if (double.IsFinite(cd) && double.IsFinite(cl)) localFinite++;
 
             if (cdRelError < 0.01)
             {
-                Interlocked.Increment(ref passed);
+                localPassed++;
             }
             else
             {
-                Interlocked.Increment(ref failed);
+                localFailed++;
+                // Rare path (only on >1% CD disparity). ConcurrentBag Add here
+                // is amortized; for parity sweeps we hit this ~0 times.
                 string detail = $"FAIL: NACA {naca} Re={re} a={alpha} Nc={ncrit}: Fort CD={fortCd:F5} C# CD={cd:F5} relErr={cdRelError:P2}";
                 failDetails.Add(detail);
             }
 
-            // Break-at-first-unparity: stop processing after first non-bit-exact case
-            // (excluding degenerate F cases when --skip-degenerate is set)
+            // Break-at-first-unparity: stop processing after first non-bit-exact case.
+            // Rare path — only on non-bit-exact cases.
             bool fortDegenerate = Math.Abs(fortCd) < 1.0e-15 || double.IsNaN(fortCd) || double.IsInfinity(fortCd);
             if (breakAtFirstUnparity && (cdUlp > 0 || clUlp > 0)
                 && !(skipDegenerate && fortDegenerate))
@@ -422,22 +433,43 @@ Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxP
                 }
             }
 
-            // Thread-safe max tracking
-            double currentMax;
-            do { currentMax = maxCdRelError; }
-            while (cdRelError > currentMax && Interlocked.CompareExchange(
-                ref maxCdRelError, cdRelError, currentMax) != currentMax);
+            // Local max-tracking: no cross-thread sync. Merged once after Parallel.For.
+            if (cdRelError > localMaxCdRelErr) localMaxCdRelErr = cdRelError;
         }
         catch
         {
-            Interlocked.Increment(ref skipped);
+            localSkipped++;
         }
 
+        // Progress counter — every 1000 cases, from any thread. Relatively low
+        // frequency; Console.Error.Write takes the Console lock but at ~1/sec
+        // aggregate rate across 192 threads it does not bottleneck the sweep.
         int count = Interlocked.Increment(ref processed);
-        if (count % 100 == 0) Console.Error.Write($"\r{count}/{lines.Length}");
+        if (count % 1000 == 0) Console.Error.Write($"\r{count}/{lines.Length}");
         }
     }
+    }
+    finally
+    {
+        // Merge per-worker counters into globals ONCE per worker (no hot-path sync).
+        Interlocked.Add(ref passed, localPassed);
+        Interlocked.Add(ref failed, localFailed);
+        Interlocked.Add(ref skipped, localSkipped);
+        Interlocked.Add(ref bitExact, localBitExact);
+        Interlocked.Add(ref finiteResults, localFinite);
+        double curMax;
+        do { curMax = maxCdRelError; }
+        while (localMaxCdRelErr > curMax && Interlocked.CompareExchange(
+            ref maxCdRelError, localMaxCdRelErr, curMax) != curMax);
+    }
 });
+
+// Merge per-worker result lists into the final `results` list (single-threaded,
+// no sync needed).
+foreach (var workerList in perWorkerResults)
+{
+    results.AddRange(workerList);
+}
 // NOTE: with 192 threads and effective parallelism of ~68 cores, the gap is
 // from work imbalance at the tail — some cases take much longer than others.
 
