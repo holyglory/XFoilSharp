@@ -193,9 +193,9 @@ public static class EdgeVelocityCalculator
     // Legacy mapping: f_xfoil/src/xpanel.f :: GAMQV
     // Difference from legacy: The same inverse scaling is preserved, but the managed port returns the gamma array directly.
     // Decision: Keep the helper and preserve the original inverse mapping.
-    public static double[] SetVortexFromViscousSpeed(double[] qvis, int n, double qinf, bool useLegacyPrecision = false)
+    public static double[] SetVortexFromViscousSpeed(double[] qvis, int n, double qinf, bool useLegacyPrecision = false, double[]? destination = null)
     {
-        double[] gamma = new double[n];
+        double[] gamma = destination ?? new double[n];
         for (int i = 0; i < n; i++)
         {
             gamma[i] = useLegacyPrecision ? (float)qvis[i] : qvis[i];

@@ -1891,7 +1891,12 @@ public static class ViscousSolverEngine
             qinf,
             useLegacyPrecision,
             destination: SolverBuffers.PanelScratch4(n));
-        double[] gamma = EdgeVelocityCalculator.SetVortexFromViscousSpeed(qvis, n, qinf, useLegacyPrecision);
+        double[] gamma = EdgeVelocityCalculator.SetVortexFromViscousSpeed(
+            qvis,
+            n,
+            qinf,
+            useLegacyPrecision,
+            destination: SolverBuffers.PanelScratch5(n));
 
         for (int i = 0; i < n; i++)
         {
@@ -2385,7 +2390,8 @@ public static class ViscousSolverEngine
             qinv,
             n,
             freestreamSpeed,
-            useLegacyPrecision);
+            useLegacyPrecision,
+            destination: SolverBuffers.PanelScratch6(n));
         var overlayIndices = new HashSet<int>();
 
         bool Differs(int index)
