@@ -128,9 +128,9 @@ public static class ParametricSpline
         string startBoundary = DescribeBoundaryCondition(startBc);
         string endBoundary = DescribeBoundaryCondition(endBc);
 
-        var lowerTyped = new T[count];
-        var diagonalTyped = new T[count];
-        var upperTyped = new T[count];
+        var lowerTyped = GetPspLowerScratch<T>(count);
+        var diagonalTyped = GetPspDiagonalScratch<T>(count);
+        var upperTyped = GetPspUpperScratch<T>(count);
 
         T two = T.CreateChecked(2.0);
         T three = T.CreateChecked(3.0);
@@ -423,9 +423,9 @@ public static class ParametricSpline
             return;
         }
 
-        var segValues = new T[segCount];
-        var segDerivatives = new T[segCount];
-        var segParameters = new T[segCount];
+        var segValues = GetPspSegValuesScratch<T>(segCount);
+        var segDerivatives = GetPspSegDerivativesScratch<T>(segCount);
+        var segParameters = GetPspSegParametersScratch<T>(segCount);
 
         Array.Copy(values, offset, segValues, 0, segCount);
         Array.Copy(parameters, offset, segParameters, 0, segCount);
@@ -470,6 +470,58 @@ public static class ParametricSpline
         }
 
         FitSegment(values, derivatives, parameters, segStart, count - segStart);
+    }
+
+    // ThreadStatic scratch accessors for the SPLIND tridiagonal assembly and
+    // SEGSPL segment buffers. Dispatch on T so the same generic code reuses
+    // the correct typed pool slot. Cast via `object` is safe because the pool
+    // slot is the concrete array type matching T.
+    private static T[] GetPspLowerScratch<T>(int n)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(double))
+            return (T[])(object)SolverBuffers.PspLowerDouble(n);
+        return (T[])(object)SolverBuffers.PspLowerFloat(n);
+    }
+
+    private static T[] GetPspDiagonalScratch<T>(int n)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(double))
+            return (T[])(object)SolverBuffers.PspDiagonalDouble(n);
+        return (T[])(object)SolverBuffers.PspDiagonalFloat(n);
+    }
+
+    private static T[] GetPspUpperScratch<T>(int n)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(double))
+            return (T[])(object)SolverBuffers.PspUpperDouble(n);
+        return (T[])(object)SolverBuffers.PspUpperFloat(n);
+    }
+
+    private static T[] GetPspSegValuesScratch<T>(int n)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(double))
+            return (T[])(object)SolverBuffers.PspSegValuesDouble(n);
+        return (T[])(object)SolverBuffers.PspSegValuesFloat(n);
+    }
+
+    private static T[] GetPspSegDerivativesScratch<T>(int n)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(double))
+            return (T[])(object)SolverBuffers.PspSegDerivativesDouble(n);
+        return (T[])(object)SolverBuffers.PspSegDerivativesFloat(n);
+    }
+
+    private static T[] GetPspSegParametersScratch<T>(int n)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(double))
+            return (T[])(object)SolverBuffers.PspSegParametersDouble(n);
+        return (T[])(object)SolverBuffers.PspSegParametersFloat(n);
     }
 
     // Legacy mapping: f_xfoil/src/spline.f :: SEVAL interpolation polynomial.

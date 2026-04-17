@@ -34,7 +34,8 @@ public static class ScaledPivotLuSolver
     // Decision: Keep the wrapper because it is the natural public entry for the default precision path.
     public static void Decompose(double[,] matrix, int[] pivotIndices, int size, string? traceContext = null)
     {
-        DecomposeCore(matrix, pivotIndices, size, traceContext, "Double");
+        var scaling = SolverBuffers.LuDecomposeScalingDouble(size);
+        DecomposeCore(matrix, pivotIndices, size, traceContext, "Double", scaling);
     }
 
     /// <summary>
@@ -46,7 +47,8 @@ public static class ScaledPivotLuSolver
     // Decision: Keep the float overload because parity-sensitive kernels rely on it.
     public static void Decompose(float[,] matrix, int[] pivotIndices, int size, string? traceContext = null)
     {
-        DecomposeCore(matrix, pivotIndices, size, traceContext, "Single");
+        var scaling = SolverBuffers.LuDecomposeScalingFloat(size);
+        DecomposeCore(matrix, pivotIndices, size, traceContext, "Single", scaling);
     }
 
     /// <summary>
@@ -81,10 +83,9 @@ public static class ScaledPivotLuSolver
     // Difference from legacy: The managed core shares one generic control flow across float and double and makes the parity-sensitive fused subtract staging explicit.
     // Decision: Keep the shared core because it reduces drift between precision modes while preserving the legacy elimination order.
     [MethodImpl(MethodImplOptions.NoOptimization)]
-    private static void DecomposeCore<T>(T[,] matrix, int[] pivotIndices, int size, string? traceContext, string precision)
+    private static void DecomposeCore<T>(T[,] matrix, int[] pivotIndices, int size, string? traceContext, string precision, T[] scaling)
         where T : struct, IFloatingPointIeee754<T>
     {
-        var scaling = new T[size];
         for (int i = 0; i < size; i++)
         {
             T rowMax = T.Zero;

@@ -229,6 +229,44 @@ internal static class SolverBuffers
     internal static double[] SplineCoefC(int n) => EnsureVector(ref _splineCoefC, n);
     internal static double[] SplineCoefD(int n) => EnsureVector(ref _splineCoefD, n);
 
+    // ScaledPivotLuSolver.DecomposeCore scaling vector. Per-call double[n] /
+    // float[n] allocation; split by precision because ThreadStatic slots
+    // cannot be generic.
+    [ThreadStatic] private static double[]? _luDecomposeScalingDouble;
+    [ThreadStatic] private static float[]? _luDecomposeScalingFloat;
+    internal static double[] LuDecomposeScalingDouble(int n) => EnsureVector(ref _luDecomposeScalingDouble, n);
+    internal static float[] LuDecomposeScalingFloat(int n) => EnsureFloatVector(ref _luDecomposeScalingFloat, n);
+
+    // ParametricSpline.FitWithBoundaryConditions tridiagonal scratch. Split by
+    // precision because ThreadStatic slots can't be generic. lower/diagonal/
+    // upper each. FitSegment also needs seg value / derivative / parameter
+    // buffers.
+    [ThreadStatic] private static double[]? _pspLowerDouble;
+    [ThreadStatic] private static double[]? _pspDiagonalDouble;
+    [ThreadStatic] private static double[]? _pspUpperDouble;
+    [ThreadStatic] private static float[]? _pspLowerFloat;
+    [ThreadStatic] private static float[]? _pspDiagonalFloat;
+    [ThreadStatic] private static float[]? _pspUpperFloat;
+    [ThreadStatic] private static double[]? _pspSegValuesDouble;
+    [ThreadStatic] private static double[]? _pspSegDerivativesDouble;
+    [ThreadStatic] private static double[]? _pspSegParametersDouble;
+    [ThreadStatic] private static float[]? _pspSegValuesFloat;
+    [ThreadStatic] private static float[]? _pspSegDerivativesFloat;
+    [ThreadStatic] private static float[]? _pspSegParametersFloat;
+
+    internal static double[] PspLowerDouble(int n) => EnsureVector(ref _pspLowerDouble, n);
+    internal static double[] PspDiagonalDouble(int n) => EnsureVector(ref _pspDiagonalDouble, n);
+    internal static double[] PspUpperDouble(int n) => EnsureVector(ref _pspUpperDouble, n);
+    internal static float[] PspLowerFloat(int n) => EnsureFloatVector(ref _pspLowerFloat, n);
+    internal static float[] PspDiagonalFloat(int n) => EnsureFloatVector(ref _pspDiagonalFloat, n);
+    internal static float[] PspUpperFloat(int n) => EnsureFloatVector(ref _pspUpperFloat, n);
+    internal static double[] PspSegValuesDouble(int n) => EnsureVector(ref _pspSegValuesDouble, n);
+    internal static double[] PspSegDerivativesDouble(int n) => EnsureVector(ref _pspSegDerivativesDouble, n);
+    internal static double[] PspSegParametersDouble(int n) => EnsureVector(ref _pspSegParametersDouble, n);
+    internal static float[] PspSegValuesFloat(int n) => EnsureFloatVector(ref _pspSegValuesFloat, n);
+    internal static float[] PspSegDerivativesFloat(int n) => EnsureFloatVector(ref _pspSegDerivativesFloat, n);
+    internal static float[] PspSegParametersFloat(int n) => EnsureFloatVector(ref _pspSegParametersFloat, n);
+
     internal static double[] WakeDijRhs(int n) => EnsureVector(ref _wakeDijRhs, n);
     internal static float[] WakeDijRhsSingle(int n) => EnsureFloatVector(ref _wakeDijRhsSingle, n);
     internal static double[] AirfoilDijRhs(int n) => EnsureVector(ref _airfoilDijRhs, n);
