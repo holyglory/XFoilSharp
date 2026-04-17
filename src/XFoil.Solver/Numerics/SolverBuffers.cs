@@ -30,6 +30,13 @@ internal static class SolverBuffers
     [ThreadStatic] private static double[,]? _couplingMatrix2D;
     [ThreadStatic] private static double[,]? _couplingMatrix2DSecondary;
 
+    // BlockTridiagonalSolver parity float scratch (VA, VB, VM, VDEL, VZ).
+    [ThreadStatic] private static float[,,]? _btVaFloat;
+    [ThreadStatic] private static float[,,]? _btVbFloat;
+    [ThreadStatic] private static float[,,]? _btVmFloat;
+    [ThreadStatic] private static float[,,]? _btVdelFloat;
+    [ThreadStatic] private static float[,]? _btVzFloat;
+
     // Trust-region snapshot buffers for ApplyTrustRegionUpdate rollback.
     [ThreadStatic] private static double[,]? _snapThet;
     [ThreadStatic] private static double[,]? _snapDstr;
@@ -51,7 +58,9 @@ internal static class SolverBuffers
             || buffer.GetLength(0) < rowCount
             || buffer.GetLength(1) < columnCount)
         {
-            buffer = new double[rowCount, columnCount];
+            int nr = buffer is null ? rowCount : Math.Max(buffer.GetLength(0), rowCount);
+            int nc = buffer is null ? columnCount : Math.Max(buffer.GetLength(1), columnCount);
+            buffer = new double[nr, nc];
             _denseScratchMatrixDouble = buffer;
         }
         return buffer;
@@ -75,7 +84,9 @@ internal static class SolverBuffers
             || buffer.GetLength(0) < rowCount
             || buffer.GetLength(1) < columnCount)
         {
-            buffer = new float[rowCount, columnCount];
+            int nr = buffer is null ? rowCount : Math.Max(buffer.GetLength(0), rowCount);
+            int nc = buffer is null ? columnCount : Math.Max(buffer.GetLength(1), columnCount);
+            buffer = new float[nr, nc];
             _denseScratchMatrixFloat = buffer;
         }
         return buffer;
@@ -103,7 +114,9 @@ internal static class SolverBuffers
             || buffer.GetLength(0) < stationCount
             || buffer.GetLength(1) < 2)
         {
-            buffer = new double[stationCount, 2];
+            int nr = buffer is null ? stationCount : Math.Max(buffer.GetLength(0), stationCount);
+            int nc = buffer is null ? 2 : Math.Max(buffer.GetLength(1), 2);
+            buffer = new double[nr, nc];
             _usavScratch = buffer;
         }
         else
@@ -120,6 +133,47 @@ internal static class SolverBuffers
 
     internal static double[,] CouplingMatrix2D(int rows, int cols) => EnsureMatrix(ref _couplingMatrix2D, rows, cols);
     internal static double[,] CouplingMatrix2DSecondary(int rows, int cols) => EnsureMatrix(ref _couplingMatrix2DSecondary, rows, cols);
+
+    internal static float[,,] BtVaFloat(int d0, int d1, int d2) => EnsureFloat3D(ref _btVaFloat, d0, d1, d2);
+    internal static float[,,] BtVbFloat(int d0, int d1, int d2) => EnsureFloat3D(ref _btVbFloat, d0, d1, d2);
+    internal static float[,,] BtVmFloat(int d0, int d1, int d2) => EnsureFloat3D(ref _btVmFloat, d0, d1, d2);
+    internal static float[,,] BtVdelFloat(int d0, int d1, int d2) => EnsureFloat3D(ref _btVdelFloat, d0, d1, d2);
+    internal static float[,] BtVzFloat(int d0, int d1) => EnsureFloat2D(ref _btVzFloat, d0, d1);
+
+    private static float[,,] EnsureFloat3D(ref float[,,]? slot, int d0, int d1, int d2)
+    {
+        var buffer = slot;
+        if (buffer is null
+            || buffer.GetLength(0) < d0
+            || buffer.GetLength(1) < d1
+            || buffer.GetLength(2) < d2)
+        {
+            // Grow to max(existing, requested) in every dimension so subsequent
+            // callers with smaller requests never shrink the buffer below what
+            // an earlier larger call populated.
+            int nd0 = buffer is null ? d0 : Math.Max(buffer.GetLength(0), d0);
+            int nd1 = buffer is null ? d1 : Math.Max(buffer.GetLength(1), d1);
+            int nd2 = buffer is null ? d2 : Math.Max(buffer.GetLength(2), d2);
+            buffer = new float[nd0, nd1, nd2];
+            slot = buffer;
+        }
+        return buffer;
+    }
+
+    private static float[,] EnsureFloat2D(ref float[,]? slot, int d0, int d1)
+    {
+        var buffer = slot;
+        if (buffer is null
+            || buffer.GetLength(0) < d0
+            || buffer.GetLength(1) < d1)
+        {
+            int nd0 = buffer is null ? d0 : Math.Max(buffer.GetLength(0), d0);
+            int nd1 = buffer is null ? d1 : Math.Max(buffer.GetLength(1), d1);
+            buffer = new float[nd0, nd1];
+            slot = buffer;
+        }
+        return buffer;
+    }
 
     /// <summary>
     /// Returns a snapshot buffer sized to match <paramref name="source"/> and
@@ -155,7 +209,9 @@ internal static class SolverBuffers
             || buffer.GetLength(0) < rows
             || buffer.GetLength(1) < cols)
         {
-            buffer = new double[rows, cols];
+            int nr = buffer is null ? rows : Math.Max(buffer.GetLength(0), rows);
+            int nc = buffer is null ? cols : Math.Max(buffer.GetLength(1), cols);
+            buffer = new double[nr, nc];
             slot = buffer;
         }
         else

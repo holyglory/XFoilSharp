@@ -64,11 +64,23 @@ public static class BlockTridiagonalSolver
             // Classic XFoil's BLSOLV runs in REAL. Keep the parity path on a
             // dedicated float workspace so the control flow stays identical to
             // the default solver while the arithmetic matches the legacy kernel.
-            float[,,] va = CopyToSingle(system.VA, nsys);
-            float[,,] vb = CopyToSingle(system.VB, nsys);
-            float[,,] vm = CopyToSingle(system.VM, nsys);
-            float[,,] vdel = CopyToSingle(system.VDEL, nsys);
-            float[,] vz = CopyToSingle(system.VZ);
+            // NOTE: VA/VB/VDEL are [3, 2, nsysMax] but VM is [3, nsysMax, nsysMax].
+            // Each buffer must be sized from its own source's dims.
+            float[,,] va = CopyToSingleInto(
+                SolverBuffers.BtVaFloat(system.VA.GetLength(0), system.VA.GetLength(1), system.VA.GetLength(2)),
+                system.VA, nsys);
+            float[,,] vb = CopyToSingleInto(
+                SolverBuffers.BtVbFloat(system.VB.GetLength(0), system.VB.GetLength(1), system.VB.GetLength(2)),
+                system.VB, nsys);
+            float[,,] vm = CopyToSingleInto(
+                SolverBuffers.BtVmFloat(system.VM.GetLength(0), system.VM.GetLength(1), system.VM.GetLength(2)),
+                system.VM, nsys);
+            float[,,] vdel = CopyToSingleInto(
+                SolverBuffers.BtVdelFloat(system.VDEL.GetLength(0), system.VDEL.GetLength(1), system.VDEL.GetLength(2)),
+                system.VDEL, nsys);
+            float[,] vz = CopyToSingleInto(
+                SolverBuffers.BtVzFloat(system.VZ.GetLength(0), system.VZ.GetLength(1)),
+                system.VZ);
 
             SolveCore(
                 va,
@@ -447,12 +459,13 @@ public static class BlockTridiagonalSolver
         return T.One / safeValue;
     }
 
-    // Legacy mapping: none
-    // Difference from legacy: Managed-only marshaling helper that constructs the parity float workspace from the default double system arrays before entering the legacy-style solve path.
-    // Decision: Keep the helper because it cleanly isolates parity replay storage from the default solver storage.
-    private static float[,,] CopyToSingle(double[,,] source, int nsys)
+    // ThreadStatic buffer pool for the parity float workspace. The per-solve
+    // allocation of 4×float[,,] + 1×float[,] was ~5 MB of GC pressure per
+    // Newton iteration on 160-panel cases; routing through SolverBuffers
+    // removes that from the hot path while preserving the exact copy
+    // semantics (only indices [*,*,0..nsys) are consumed by the solver).
+    private static float[,,] CopyToSingleInto(float[,,] result, double[,,] source, int nsys)
     {
-        var result = new float[source.GetLength(0), source.GetLength(1), source.GetLength(2)];
         for (int i = 0; i < source.GetLength(0); i++)
         {
             for (int j = 0; j < source.GetLength(1); j++)
@@ -463,16 +476,11 @@ public static class BlockTridiagonalSolver
                 }
             }
         }
-
         return result;
     }
 
-    // Legacy mapping: none
-    // Difference from legacy: Managed-only marshaling helper for the TE/wake coupling matrix in the parity workspace.
-    // Decision: Keep the helper because it exists only to support the parity branch.
-    private static float[,] CopyToSingle(double[,] source)
+    private static float[,] CopyToSingleInto(float[,] result, double[,] source)
     {
-        var result = new float[source.GetLength(0), source.GetLength(1)];
         for (int i = 0; i < source.GetLength(0); i++)
         {
             for (int j = 0; j < source.GetLength(1); j++)
@@ -480,7 +488,6 @@ public static class BlockTridiagonalSolver
                 result[i, j] = (float)source[i, j];
             }
         }
-
         return result;
     }
 
