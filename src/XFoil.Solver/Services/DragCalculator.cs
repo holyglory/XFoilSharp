@@ -207,7 +207,7 @@ public static class DragCalculator
             float fShw = (float)shwake;
             float fBase = fUew / fQinf2;
             float fExp = 0.5f * (5.0f + fShw);
-            float fPow = (float)LegacyPrecisionMath.Pow(fBase, fExp, true);
+            float fPow = LegacyPrecisionMath.PowF(fBase, fExp);
             cd = 2.0f * fThw * fPow;
         }
         else

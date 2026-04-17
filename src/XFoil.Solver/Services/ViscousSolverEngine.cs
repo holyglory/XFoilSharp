@@ -1492,8 +1492,8 @@ public static class ViscousSolverEngine
         {
             // Fortran CLCALC uses REAL (float) arithmetic throughout.
             // For M=0: CPG = CGINC = 1.0 - (GAM/QINF)^2
-            float fCa = (float)LegacyPrecisionMath.Cos(alphaRadians, true);
-            float fSa = (float)LegacyPrecisionMath.Sin(alphaRadians, true);
+            float fCa = LegacyPrecisionMath.CosF((float)alphaRadians);
+            float fSa = LegacyPrecisionMath.SinF((float)alphaRadians);
             float fQinf = (float)Math.Max(qinf, 1e-10);
             float fCl = 0.0f;
 
@@ -2676,32 +2676,25 @@ public static class ViscousSolverEngine
                 float ue0f = (float)ue0;
                 float reinff = (float)reinf;
                 float bulef = 1.0f;
-                float uconf = (float)LegacyPrecisionMath.Divide(
+                float uconf = LegacyPrecisionMath.DivideF(
                     ue0f,
-                    LegacyPrecisionMath.Pow(xsi0f, bulef, true),
-                    true);
-                float tsqf = (float)LegacyPrecisionMath.Multiply(
-                    LegacyPrecisionMath.Divide(
+                    LegacyPrecisionMath.PowF(xsi0f, bulef));
+                float tsqf = LegacyPrecisionMath.MultiplyF(
+                    LegacyPrecisionMath.DivideF(
                         0.45f,
-                        LegacyPrecisionMath.Multiply(
-                            LegacyPrecisionMath.Multiply(
+                        LegacyPrecisionMath.MultiplyF(
+                            LegacyPrecisionMath.MultiplyF(
                                 uconf,
-                                LegacyPrecisionMath.Add(
-                                    LegacyPrecisionMath.Multiply(5.0f, bulef, true),
-                                    1.0f,
-                                    true),
-                                true),
-                            reinff,
-                            true),
-                        true),
-                    LegacyPrecisionMath.Pow(
+                                LegacyPrecisionMath.AddF(
+                                    LegacyPrecisionMath.MultiplyF(5.0f, bulef),
+                                    1.0f)),
+                            reinff)),
+                    LegacyPrecisionMath.PowF(
                         xsi0f,
-                        LegacyPrecisionMath.Subtract(1.0f, bulef, true),
-                        true),
-                    true);
+                        LegacyPrecisionMath.SubtractF(1.0f, bulef)));
                 tsqf = MathF.Max(tsqf, 1.0e-20f);
                 float thif = MathF.Sqrt(tsqf);
-                float dsif = (float)LegacyPrecisionMath.Multiply(2.2f, thif, true);
+                float dsif = LegacyPrecisionMath.MultiplyF(2.2f, thif);
                 thi = thif;
                 dsi = dsif;
                 
