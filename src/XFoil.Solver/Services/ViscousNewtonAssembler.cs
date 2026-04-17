@@ -428,11 +428,6 @@ public static class ViscousNewtonAssembler
                 else
                 {
                     // Regular station: use BLSYS
-                    if (Environment.GetEnvironmentVariable("XFOIL_COM2_IT1") == "1"
-                        && side == 0 && ibl >= 1 && ibl <= 3)
-                    {
-                        Console.Error.WriteLine($"C_PRE_ASSEMBLE s=1 ibl={ibl} (=F IBL={ibl+1}) t1={BitConverter.SingleToInt32Bits((float)t1):X8} d1={BitConverter.SingleToInt32Bits((float)d1):X8} u1={BitConverter.SingleToInt32Bits((float)u1):X8} t2={BitConverter.SingleToInt32Bits((float)thi):X8} d2={BitConverter.SingleToInt32Bits((float)dsi):X8} u2={BitConverter.SingleToInt32Bits((float)uei):X8}");
-                    }
                     localResult = BoundaryLayerSystemAssembler.AssembleStationSystem(
                         wake, turb || tran, tran, simi,
                         x1, xsi,
@@ -488,54 +483,17 @@ public static class ViscousNewtonAssembler
 
                 // Moved per-IV hash to after full assembly
                 // Per-station residual trace at buildCall=8 for divergence localization
-                
+
                 // Similarity residual trace for iter-0 debugging
-                if (Environment.GetEnvironmentVariable("XFOIL_DUMP_RESID_IT0") == "1"
-                    && s_buildCallCount == 1 && ibl <= 2)
-                {
-                    Console.Error.WriteLine(
-                        $"C_RES_IT0 s={side+1} i={ibl+1,4}" +
-                        $" R0={BitConverter.SingleToInt32Bits((float)localResult.Residual[0]):X8}" +
-                        $" R1={BitConverter.SingleToInt32Bits((float)localResult.Residual[1]):X8}" +
-                        $" R2={BitConverter.SingleToInt32Bits((float)localResult.Residual[2]):X8}");
-                }
+
                 // Trace VS2(3,2) at station 8 side 2 for VA parity
-                
+
                 // Trace BLVAR output at first Newton iter, station 2 side 1
-                
+
                 // Dump TRDIF VS2 row 1 at transition station, SETBL call 14
-                
+
                 // Per-station hash at SETBL call 2-18 to find divergent station
-                
-                if (Environment.GetEnvironmentVariable("XFOIL_S1210_VS") == "1"
-                    && s_buildCallCount == 1 && side == 0 && ibl == 1)
-                {
-                    for (int rr = 0; rr < 3; rr++)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_S1210_VS2 r{rr}" +
-                            $" c0={BitConverter.SingleToInt32Bits((float)localResult.VS2[rr, 0]):X8}" +
-                            $" c1={BitConverter.SingleToInt32Bits((float)localResult.VS2[rr, 1]):X8}" +
-                            $" c2={BitConverter.SingleToInt32Bits((float)localResult.VS2[rr, 2]):X8}" +
-                            $" c3={BitConverter.SingleToInt32Bits((float)localResult.VS2[rr, 3]):X8}" +
-                            $" c4={BitConverter.SingleToInt32Bits((float)localResult.VS2[rr, 4]):X8}");
-                        Console.Error.WriteLine(
-                            $"C_S1210_VS1 r{rr}" +
-                            $" c0={BitConverter.SingleToInt32Bits((float)localResult.VS1[rr, 0]):X8}" +
-                            $" c1={BitConverter.SingleToInt32Bits((float)localResult.VS1[rr, 1]):X8}" +
-                            $" c2={BitConverter.SingleToInt32Bits((float)localResult.VS1[rr, 2]):X8}" +
-                            $" c3={BitConverter.SingleToInt32Bits((float)localResult.VS1[rr, 3]):X8}" +
-                            $" c4={BitConverter.SingleToInt32Bits((float)localResult.VS1[rr, 4]):X8}");
-                    }
-                    Console.Error.WriteLine(
-                        $"C_S1210_VSX x0={BitConverter.SingleToInt32Bits((float)localResult.VSX[0]):X8}" +
-                        $" x1={BitConverter.SingleToInt32Bits((float)localResult.VSX[1]):X8}" +
-                        $" x2={BitConverter.SingleToInt32Bits((float)localResult.VSX[2]):X8}");
-                    Console.Error.WriteLine(
-                        $"C_S1210_VSREZ r0={BitConverter.SingleToInt32Bits((float)localResult.Residual[0]):X8}" +
-                        $" r1={BitConverter.SingleToInt32Bits((float)localResult.Residual[1]):X8}" +
-                        $" r2={BitConverter.SingleToInt32Bits((float)localResult.Residual[2]):X8}");
-                }
+
                 // NACA 0012 2M a=3: dump TRAN flag at call 2 side 2 station 65
                 
                 // ah79k135: dump TE station (side 2 IBL 67) at every iter for parity
@@ -579,18 +537,7 @@ public static class ViscousNewtonAssembler
                 // Fortran SETBL: DUE2 = UEDG(IBL,IS) - USAV(IBL,IS); DDS2 = D2_U2*DUE2
                 // ALL REAL per-operation.
                 double due2 = LegacyPrecisionMath.Subtract(uei, usav[ibl, side], useLegacyPrecision);
-                if (Environment.GetEnvironmentVariable("XFOIL_USAV_IT1") == "1"
-                    && side == 0 && ibl >= 1 && ibl <= 4 && s_buildCallCount == 1)
-                {
-                    Console.Error.WriteLine(
-                        $"C_USAV_SETBL s=1 ibl={ibl}" +
-                        $" UINV={BitConverter.SingleToInt32Bits((float)ueInv[ibl, side]):X8}" +
-                        $" USAV={BitConverter.SingleToInt32Bits((float)usav[ibl, side]):X8}" +
-                        $" UEDG={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                        $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, side]):X8}" +
-                        $" DUE2={BitConverter.SingleToInt32Bits((float)due2):X8}");
-                }
-                
+
                 
                 // Trace USAV/DUE2 at station 23 side 2 call 4
                 
@@ -637,22 +584,6 @@ public static class ViscousNewtonAssembler
                     LegacyPrecisionMath.Multiply(xiUle2, dule2, useLegacyPrecision),
                     useLegacyPrecision);
 
-                if (Environment.GetEnvironmentVariable("XFOIL_DUMP_RESID_IT0") == "1"
-                    && s_buildCallCount == 1 && ibl <= 2)
-                {
-                    Console.Error.WriteLine(
-                        $"C_FORCE_IT0 s={side+1} i={ibl+1,4}" +
-                        $" DUE1={BitConverter.SingleToInt32Bits((float)due1):X8}" +
-                        $" DUE2={BitConverter.SingleToInt32Bits((float)due2):X8}" +
-                        $" DDS1={BitConverter.SingleToInt32Bits((float)dds1):X8}" +
-                        $" DDS2={BitConverter.SingleToInt32Bits((float)dds2):X8}" +
-                        $" XIFORC={BitConverter.SingleToInt32Bits((float)xiForcing):X8}" +
-                        $" DULE1={BitConverter.SingleToInt32Bits((float)dule1):X8}" +
-                        $" DULE2={BitConverter.SingleToInt32Bits((float)dule2):X8}" +
-                        $" xiULE1={BitConverter.SingleToInt32Bits((float)xiUle1):X8}" +
-                        $" xiULE2={BitConverter.SingleToInt32Bits((float)xiUle2):X8}");
-                }
-
 
                 // Legacy block: xbl.f SETBL residual load into VDEL.
                 // Difference from legacy: The residual forcing terms are written with named `due/dds/xi` components rather than inline array algebra, but the resulting row construction follows the same VS1/VS2 coupling as SETBL.
@@ -685,12 +616,6 @@ public static class ViscousNewtonAssembler
                         acc += duePair2;
                         acc += xiTerm;
                         vdel[k, 0, iv] = acc;
-                        if (Environment.GetEnvironmentVariable("XFOIL_VDASM_IT1") == "1"
-                            && side == 0 && ibl == 1)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_VDASM_IT1 ibl={ibl} k={k} RES={BitConverter.SingleToInt32Bits(res):X8} V1D={BitConverter.SingleToInt32Bits(vs1Due):X8} V1S={BitConverter.SingleToInt32Bits(vs1Dds):X8} V2D={BitConverter.SingleToInt32Bits(vs2Due):X8} V2S={BitConverter.SingleToInt32Bits(vs2Dds):X8} XI={BitConverter.SingleToInt32Bits(xiTerm):X8} DU1={BitConverter.SingleToInt32Bits((float)due1):X8} DU2={BitConverter.SingleToInt32Bits((float)due2):X8} DD1={BitConverter.SingleToInt32Bits((float)dds1):X8} DD2={BitConverter.SingleToInt32Bits((float)dds2):X8}");
-                        }
                         // Per-term VDEL assembly trace at station 5 side 2 (k=0 only)
                         
                         
@@ -1095,11 +1020,6 @@ public static class ViscousNewtonAssembler
                             double ueM = -LegacyPrecisionMath.Multiply(vtiI, vtiJ, dijValue, useLegacyPrecision);
                             double contribution = LegacyPrecisionMath.Multiply(ueM, massValue, useLegacyPrecision);
                             dui = LegacyPrecisionMath.Add(dui, contribution, useLegacyPrecision);
-                            if (Environment.GetEnvironmentVariable("XFOIL_DUI2_IT1") == "1"
-                                && side == 0 && ibl == 1 && s_buildCallCount == 1)
-                            {
-                                Console.Error.WriteLine($"C_DUI2 JS={jSide+1} JBL={jbl+1,3} I={iPan+1,3} J={jPan+1,3} MASS={BitConverter.SingleToInt32Bits((float)massValue):X8} UEM={BitConverter.SingleToInt32Bits((float)ueM):X8} DUI={BitConverter.SingleToInt32Bits((float)dui):X8}");
-                            }
 
                             // DUI detail at station 29 side 2, JBL=104-105
                             
