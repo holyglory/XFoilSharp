@@ -11,6 +11,8 @@ namespace XFoil.Solver.Numerics;
 
 public sealed class DenseLinearSystemSolver
 {
+    public static readonly DenseLinearSystemSolver Shared = new();
+
     // Legacy mapping: f_xfoil/src/xsolve.f :: GAUSS.
     // Difference from legacy: The managed API accepts a dense matrix and right-hand side directly instead of reading from shared work arrays.
     // Decision: Keep the wrapper because it is the clean public entry point for the double-precision path.

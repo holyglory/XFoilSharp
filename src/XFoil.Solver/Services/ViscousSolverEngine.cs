@@ -3288,7 +3288,7 @@ public static class ViscousSolverEngine
             return;
         }
 
-        var solver = new DenseLinearSystemSolver();
+        var solver = DenseLinearSystemSolver.Shared;
         double ncrit = settings.GetEffectiveNCrit(side);
         int oldTransitionStation = blState.ITRAN[side];
         bool tran = false;
@@ -4111,7 +4111,7 @@ public static class ViscousSolverEngine
         ampl2 = ReadLegacyAmplificationCarry(blState, ibl, side, ampl2);
         
 
-        var solver = new DenseLinearSystemSolver();
+        var solver = DenseLinearSystemSolver.Shared;
         float lastDmaxFloat = 0.0f;
         // Legacy MRCHUE seeds CTI once when the march first crosses
         // transition, then carries the accepted value station-to-station.
@@ -5175,7 +5175,7 @@ public static class ViscousSolverEngine
             LegacyLaminarShearSeed,
             settings.UseLegacyBoundaryLayerInitialization);
 
-        var solver = new DenseLinearSystemSolver();
+        var solver = DenseLinearSystemSolver.Shared;
         bool directMode = true;
         double inverseTargetHk = 0.0;
 
@@ -5390,7 +5390,7 @@ public static class ViscousSolverEngine
         const int maxIterations = 25;
         const double seedTolerance = 1.0e-5;
         double gm1 = LegacyPrecisionMath.GammaMinusOne(settings.UseLegacyBoundaryLayerInitialization);
-        var solver = new DenseLinearSystemSolver();
+        var solver = DenseLinearSystemSolver.Shared;
 
         int ibm = ibl - 1;
         double theta = blState.THET[ibl, side];
@@ -5655,7 +5655,7 @@ public static class ViscousSolverEngine
             return;
         }
 
-        var solver = new DenseLinearSystemSolver();
+        var solver = DenseLinearSystemSolver.Shared;
         double residualNorm = ComputeLaminarResidualNorm(
             x1, x2, uei1, uei2, theta1, theta2, dstar1, dstar2, ampl1, ampl2, settings,
             tkbl, qinfbl, tkbl_ms,
@@ -5964,7 +5964,7 @@ public static class ViscousSolverEngine
 
         
         
-        var solver = new DenseLinearSystemSolver();
+        var solver = DenseLinearSystemSolver.Shared;
         double gm1 = LegacyPrecisionMath.GammaMinusOne(settings.UseLegacyBoundaryLayerInitialization);
         const double legacySeedTolerance = 5.0e-6;
         const double legacySeedSensitivityWeight = 1000.0;
@@ -7587,7 +7587,7 @@ public static class ViscousSolverEngine
             return;
         }
 
-        var solver = new DenseLinearSystemSolver();
+        var solver = DenseLinearSystemSolver.Shared;
 
         for (int ibl = blState.IBLTE[side] + 1; ibl < blState.NBL[side]; ibl++)
         {
