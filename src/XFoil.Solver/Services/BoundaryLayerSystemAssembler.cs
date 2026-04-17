@@ -3628,7 +3628,9 @@ public static class BoundaryLayerSystemAssembler
             // station 1 into TRDIF/BLDIF. Rebuilding it from the accepted primary
             // values loses the legacy stale-state semantics and shifts the first
             // parity boundary upstream into station-1 secondary variables.
-            ? station1KinematicOverride.Clone()
+            // Inner Clone removed: CTIS consumes kinematic1 only for read-only
+            // field access (via ComputeFiniteDifferences) and never mutates it.
+            ? station1KinematicOverride
             : ComputeKinematicParameters(
                 u1,
                 t1,
@@ -6023,7 +6025,9 @@ public static class BoundaryLayerSystemAssembler
             // live for the subsequent BLSYS assembly. Recomputing station-2
             // BLKIN here invents an extra legacy event and can shift the seed
             // path away from the carried COM2 state that BLSYS should consume.
-            ? station2KinematicOverride.Clone()
+            // Inner Clone removed: the override reference comes from blState
+            // (stable) and is read-only in downstream code.
+            ? station2KinematicOverride
             : ComputeKinematicParameters(
                 station2KinematicU,
                 station2KinematicT,
@@ -6164,16 +6168,21 @@ public static class BoundaryLayerSystemAssembler
         result.HK2_U2 = currentKinematic.HK2_U2;
         result.HK2_T2 = currentKinematic.HK2_T2;
         result.HK2_D2 = currentKinematic.HK2_D2;
+        // Snapshots are passed through to StoreLegacyCarrySnapshots which Clones
+        // them into blState. Inner Clones here were defensive duplicates — each
+        // ~300 bytes × 3 per station per Newton iter was the dominant remaining
+        // small-object allocation source during sweeps. Pass raw references;
+        // downstream Clone gives blState its per-station independent copy.
         result.Primary2Snapshot = (useLegacyPrecision && station2PrimaryOverride is not null)
-            ? station2PrimaryOverride.Clone()
+            ? station2PrimaryOverride
             : new PrimaryStationState
             {
                 U = u2,
                 T = t2,
                 D = d2ForSystem
             };
-        result.Kinematic2Snapshot = currentKinematic.Clone();
-        result.Secondary2Snapshot = bldif.Secondary2Snapshot?.Clone();
+        result.Kinematic2Snapshot = currentKinematic;
+        result.Secondary2Snapshot = bldif.Secondary2Snapshot;
 
         // Copy residuals and VSX (arc-length sensitivity from TRDIF)
         for (int k = 0; k < 3; k++)

@@ -453,7 +453,10 @@ public static class ViscousSolverEngine
         //   e. STMOVE: Relocate stagnation point
         //   f. CL/CD/CM and convergence check
         // MarchBoundaryLayer is NOT called inside the primary Newton coupling loop.
-        var convergenceHistory = new List<ViscousConvergenceInfo>();
+        // Pre-size to the max iterations so the List never resizes during the
+        // Newton loop. Each resize is a Gen0 allocation; at 100k+ cases per
+        // sweep, avoiding the 3-5 resizes per case removes noticeable pressure.
+        var convergenceHistory = new List<ViscousConvergenceInfo>(capacity: settings.MaxViscousIterations + 1);
         bool converged = false;
         int maxIter = settings.MaxViscousIterations;
         double tolerance = settings.ViscousConvergenceTolerance;
