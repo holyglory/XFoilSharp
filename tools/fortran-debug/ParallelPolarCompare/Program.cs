@@ -216,23 +216,16 @@ var lines = File.ReadAllLines(vectorFile)
 
 Console.Error.WriteLine($"Loaded {lines.Length} vectors from {vectorFile}");
 
-// Aggregate counters — merged AFTER Parallel.For from per-worker slot arrays.
-// No shared counters inside the parallel loop.
+// Aggregate counters — populated single-threaded after Parallel.ForEach.
+// Per-thread local accumulators (ThreadLocal state) aggregate into globals
+// via the finalize delegate on Parallel.ForEach.
 int passed = 0, failed = 0, skipped = 0, bitExact = 0, finiteResults = 0, processed = 0;
 double maxCdRelError = 0;
-// Fails list: sized to max workers; each worker writes its own fails into
-// its dedicated slot. Merged single-threaded after Parallel.For.
-int maxWorkers = Environment.ProcessorCount;
-var perWorkerFails = new List<string>[maxWorkers];
-var perWorkerPassed = new int[maxWorkers];
-var perWorkerFailed = new int[maxWorkers];
-var perWorkerSkipped = new int[maxWorkers];
-var perWorkerBitExact = new int[maxWorkers];
-var perWorkerFinite = new int[maxWorkers];
-var perWorkerProcessed = new int[maxWorkers];
-var perWorkerMaxCdRelErr = new double[maxWorkers];
-var perWorkerResults = new List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)>[maxWorkers];
 var results = new List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)>();
+var failDetails = new List<string>();
+// Single mutex guarding the single-threaded merge at the END of each thread's
+// work. Contended N times total (N = active threads ≈ 192), not per-case.
+var mergeLock = new object();
 bool breakAtFirstUnparity = args.Contains("--break-at-first-unparity") || args.Contains("--bfp");
 // --skip-degenerate: skip cases where Fortran's stored CD is < 1e-15 (denormal/non-convergent
 // garbage from failed VISCAL where last-iter BL state is wildly diverging). These cases
@@ -244,8 +237,46 @@ bool standardBranch = args.Contains("--standard");
 if (standardBranch) Console.Error.WriteLine("STANDARD BRANCH (modern solver, no legacy precision)");
 int firstUnparityFound = 0; // 0 = not found, 1 = found
 
-// Allow override via XFOIL_PARALLEL env var; default to ProcessorCount (avoid oversubscription)
-int defaultParallel = Environment.ProcessorCount;
+// Default parallelism: physical cores only. On x86 with SMT, hyper-threads
+// share one physical core's FPU / AVX units. Viscous CFD is FPU-bound, so
+// running 192 threads on 96 physical cores delivers essentially the same
+// throughput as 96 threads but with more sync overhead (2× sys time) and
+// lower per-thread cache / memory efficiency. Detect physical core count
+// from /proc/cpuinfo "cpu cores" × socket count; fall back to Env var or
+// half of logical CPU count.
+int defaultParallel;
+try
+{
+    // /proc/cpuinfo has one block per logical CPU; "cpu cores" is the
+    // physical core count per socket. Count unique (physical id, core id)
+    // pairs to get total physical cores — accurate for SMT systems.
+    var physicalPairs = new HashSet<(int, int)>();
+    int physicalId = 0, coreId = 0;
+    foreach (var line in System.IO.File.ReadLines("/proc/cpuinfo"))
+    {
+        if (line.StartsWith("physical id", StringComparison.Ordinal))
+        {
+            int idx = line.IndexOf(':');
+            if (idx > 0) int.TryParse(line[(idx + 1)..].Trim(), out physicalId);
+        }
+        else if (line.StartsWith("core id", StringComparison.Ordinal))
+        {
+            int idx = line.IndexOf(':');
+            if (idx > 0) int.TryParse(line[(idx + 1)..].Trim(), out coreId);
+        }
+        else if (line.Length == 0)
+        {
+            physicalPairs.Add((physicalId, coreId));
+        }
+    }
+    // Include the last block (file doesn't always end with blank).
+    physicalPairs.Add((physicalId, coreId));
+    defaultParallel = physicalPairs.Count > 0 ? physicalPairs.Count : Environment.ProcessorCount / 2;
+}
+catch
+{
+    defaultParallel = Math.Max(1, Environment.ProcessorCount / 2);
+}
 if (int.TryParse(Environment.GetEnvironmentVariable("XFOIL_PARALLEL"), out int envParallel) && envParallel > 0)
     defaultParallel = envParallel;
 // Even in --bfp mode we run in parallel; state.Stop() is called as soon as
@@ -255,35 +286,36 @@ int maxParallel = defaultParallel;
 Console.Error.WriteLine($"Using {maxParallel} parallel threads (CPU count: {Environment.ProcessorCount})");
 ThreadPool.SetMinThreads(maxParallel, maxParallel);
 ThreadPool.SetMaxThreads(maxParallel * 2, maxParallel * 2);
-// Static range chunking: each worker processes a contiguous slice of the
-// input. Zero cross-thread sync on the hot path (no Interlocked, no shared
-// counter, no lock). Load balance is uniform to within one case because
-// per-case runtime is roughly stable (~5-50 ms).
+// Dynamic work distribution via Parallel.ForEach on a range partitioner.
+// Each worker holds thread-local accumulators and merges them ONCE under
+// mergeLock when the thread finishes (~192 lock acquisitions total, zero
+// per-case sync). Work stealing prevents tail-end imbalance that static
+// chunking produced.
 int linesLen = lines.Length;
-int chunkSize = (linesLen + maxParallel - 1) / maxParallel;
-Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxParallel }, workerId =>
-{
-    int startIdx = workerId * chunkSize;
-    int endIdx = Math.Min(startIdx + chunkSize, linesLen);
-    if (startIdx >= linesLen) return;
-
-    // Per-worker local accumulators. All writes during the sweep land in local
-    // stack variables or the worker's own array slot — zero cross-thread sync.
-    int localPassed = 0, localFailed = 0, localSkipped = 0, localBitExact = 0, localFinite = 0;
-    int localProcessed = 0;
-    double localMaxCdRelErr = 0.0;
-    var localResults = new List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)>(capacity: endIdx - startIdx);
-    var localFails = new List<string>();
-    perWorkerResults[workerId] = localResults;
-    perWorkerFails[workerId] = localFails;
-
-    try
+// Chunk size: want ≥ 4× more chunks than workers for load balance,
+// but chunk size of at least 1 (obviously) and no more than 8 to
+// minimize tail imbalance on high-variance per-case times.
+int rangeChunk = Math.Max(1, Math.Min(8, linesLen / (maxParallel * 4)));
+var rangePartitioner = System.Collections.Concurrent.Partitioner.Create(0, linesLen, rangeChunk);
+Console.Error.WriteLine($"Range chunk size: {rangeChunk}, total chunks: {(linesLen + rangeChunk - 1) / rangeChunk}");
+Parallel.ForEach(
+    rangePartitioner,
+    new ParallelOptions { MaxDegreeOfParallelism = maxParallel },
+    // Thread-local init: fresh accumulator per worker.
+    () => new LocalState(),
+    // Body: process a contiguous range [range.Item1, range.Item2) using the
+    // worker's local accumulator. Zero cross-thread sync in this block.
+    (range, loopState, local) =>
     {
-    for (int i = startIdx; i < endIdx; i++)
-    {
-        if (breakAtFirstUnparity && Volatile.Read(ref firstUnparityFound) == 1) return;
-        string line = lines[i];
+        for (int i = range.Item1; i < range.Item2; i++)
         {
+            if (breakAtFirstUnparity && Volatile.Read(ref firstUnparityFound) == 1)
+            {
+                loopState.Stop();
+                return local;
+            }
+            string line = lines[i];
+            {
         string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         string naca;
         double re, alpha, ncrit, fortCl, fortCd;
@@ -346,7 +378,7 @@ Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxP
             fortClBits = BitConverter.SingleToInt32Bits((float)fortCl);
             fortCdBits = BitConverter.SingleToInt32Bits((float)fortCd);
         }
-        else return;
+        else continue;
 
         try
         {
@@ -406,20 +438,20 @@ Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxP
             {
                 cdRelError = Math.Abs(cd - fortCd) / Math.Max(Math.Abs(fortCd), 1e-6);
             }
-            localResults.Add((naca, re, alpha, ncrit, fortCl, fortCd, cl, cd, cdRelError, cdUlp, clUlp));
+            local.Results.Add((naca, re, alpha, ncrit, fortCl, fortCd, cl, cd, cdRelError, cdUlp, clUlp));
 
-            if (cdUlp == 0 && clUlp == 0) localBitExact++;
-            if (double.IsFinite(cd) && double.IsFinite(cl)) localFinite++;
+            if (cdUlp == 0 && clUlp == 0) local.BitExact++;
+            if (double.IsFinite(cd) && double.IsFinite(cl)) local.Finite++;
 
             if (cdRelError < 0.01)
             {
-                localPassed++;
+                local.Passed++;
             }
             else
             {
-                localFailed++;
+                local.Failed++;
                 string detail = $"FAIL: NACA {naca} Re={re} a={alpha} Nc={ncrit}: Fort CD={fortCd:F5} C# CD={cd:F5} relErr={cdRelError:P2}";
-                localFails.Add(detail);
+                local.Fails.Add(detail);
             }
 
             // Break-at-first-unparity: stop processing after first non-bit-exact case.
@@ -440,46 +472,36 @@ Parallel.For(0, maxParallel, new ParallelOptions { MaxDegreeOfParallelism = maxP
             }
 
             // Local max-tracking: no cross-thread sync. Merged once after Parallel.For.
-            if (cdRelError > localMaxCdRelErr) localMaxCdRelErr = cdRelError;
+            if (cdRelError > local.MaxCdRelErr) local.MaxCdRelErr = cdRelError;
         }
         catch
         {
-            localSkipped++;
+            local.Skipped++;
         }
 
-        localProcessed++;
+        local.Processed++;
         }
     }
-    }
-    finally
+        return local;
+    },
+    // Finalize: called ONCE per thread when its work is done. Merges the
+    // thread-local accumulator into the global state under mergeLock.
+    // Contention is ~maxParallel times total over the entire sweep.
+    local =>
     {
-        // Write per-worker results into this worker's dedicated slots. Each slot
-        // is written by exactly one thread, so no cross-thread sync is needed —
-        // the main thread reads all slots after Parallel.For completes.
-        perWorkerPassed[workerId] = localPassed;
-        perWorkerFailed[workerId] = localFailed;
-        perWorkerSkipped[workerId] = localSkipped;
-        perWorkerBitExact[workerId] = localBitExact;
-        perWorkerFinite[workerId] = localFinite;
-        perWorkerProcessed[workerId] = localProcessed;
-        perWorkerMaxCdRelErr[workerId] = localMaxCdRelErr;
-    }
-});
-
-// Single-threaded aggregation after Parallel.For completes. No sync.
-var failDetails = new List<string>();
-for (int w = 0; w < maxWorkers; w++)
-{
-    passed += perWorkerPassed[w];
-    failed += perWorkerFailed[w];
-    skipped += perWorkerSkipped[w];
-    bitExact += perWorkerBitExact[w];
-    finiteResults += perWorkerFinite[w];
-    processed += perWorkerProcessed[w];
-    if (perWorkerMaxCdRelErr[w] > maxCdRelError) maxCdRelError = perWorkerMaxCdRelErr[w];
-    if (perWorkerResults[w] is not null) results.AddRange(perWorkerResults[w]!);
-    if (perWorkerFails[w] is not null) failDetails.AddRange(perWorkerFails[w]!);
-}
+        lock (mergeLock)
+        {
+            passed += local.Passed;
+            failed += local.Failed;
+            skipped += local.Skipped;
+            bitExact += local.BitExact;
+            finiteResults += local.Finite;
+            processed += local.Processed;
+            if (local.MaxCdRelErr > maxCdRelError) maxCdRelError = local.MaxCdRelErr;
+            results.AddRange(local.Results);
+            failDetails.AddRange(local.Fails);
+        }
+    });
 // NOTE: with 192 threads and effective parallelism of ~68 cores, the gap is
 // from work imbalance at the tail — some cases take much longer than others.
 
@@ -598,3 +620,21 @@ if (!string.IsNullOrEmpty(splitDir))
 }
 
 return passed + failed + skipped > 100 ? 0 : 1;
+
+// Per-thread local state for the Parallel.ForEach sweep. Each thread
+// increments its own counters and appends to its own lists — zero
+// cross-thread sync while the loop body is running. The state is
+// merged under a single mutex in the finalize delegate (contended
+// only ~maxParallel times over the entire sweep).
+sealed class LocalState
+{
+    public int Passed;
+    public int Failed;
+    public int Skipped;
+    public int BitExact;
+    public int Finite;
+    public int Processed;
+    public double MaxCdRelErr;
+    public List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)> Results = new(capacity: 1024);
+    public List<string> Fails = new();
+}
