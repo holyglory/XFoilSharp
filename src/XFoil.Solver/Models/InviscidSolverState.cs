@@ -56,6 +56,12 @@ public sealed class InviscidSolverState
     public int NodeCount { get; private set; }
 
     /// <summary>
+    /// The capacity this workspace was allocated for. Pool implementations use
+    /// this to decide when to reuse vs grow the cached instance.
+    /// </summary>
+    public int MaxNodes => _maxNodes;
+
+    /// <summary>
     /// Vortex strength (gamma) at each node.
     /// </summary>
     public double[] VortexStrength { get; }

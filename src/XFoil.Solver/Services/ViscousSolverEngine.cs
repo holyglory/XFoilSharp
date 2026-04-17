@@ -120,6 +120,92 @@ public static class ViscousSolverEngine
     // Legacy mapping: f_xfoil/src/xoper.f :: COMSET viscosity-ratio usage
     // Difference from legacy: The managed solver keeps a modern default viscosity ratio and switches to the legacy value only in the parity path.
     // Decision: Keep the modern default for normal runs and preserve the legacy value in parity mode because COMSET/BLKIN depend on it.
+    // ThreadStatic pool for the per-case Newton workspace. Avoids the 3.1 MB
+    // LOH allocation of VM = double[3, nsysMax, nsysMax] (plus smaller VA/
+    // VB/VDEL arrays) on every AnalyzeViscous call, which was the dominant
+    // source of Gen2 GC pressure during sweeps.
+    [ThreadStatic] private static ViscousNewtonSystem? s_pooledNewtonSystem;
+
+    private static ViscousNewtonSystem GetPooledViscousNewtonSystem(int nsysMax)
+    {
+        var existing = s_pooledNewtonSystem;
+        if (existing != null && existing.MaxStations >= nsysMax)
+        {
+            // Reuse. Caller (BuildNewtonSystem) Array.Clears VA/VB/VM/VDEL/VZ
+            // as its first step, so stale array data is always overwritten.
+            existing.NSYS = 0;
+            existing.UpperTeLine = -1;
+            existing.FirstWakeLine = -1;
+            existing.ArcLengthSpan = 1.0;
+            return existing;
+        }
+        // Grow: over-allocate a bit so near-max sizes don't re-trigger growth.
+        int growSize = Math.Max(nsysMax, existing?.MaxStations ?? 0);
+        growSize = growSize + 16;
+        var grown = new ViscousNewtonSystem(growSize);
+        s_pooledNewtonSystem = grown;
+        return grown;
+    }
+
+    // ThreadStatic pool for InviscidSolverState. Its constructor allocates
+    // 3 LOH matrices (StreamfunctionInfluence ~207KB, LegacyStreamfunction ~103KB,
+    // SourceInfluence ~205KB). Reuse across cases eliminates 500KB+ of LOH
+    // churn per AnalyzeViscous call.
+    [ThreadStatic] private static InviscidSolverState? s_pooledInviscidState;
+
+    private static InviscidSolverState GetPooledInviscidSolverState(int maxNodes)
+    {
+        var existing = s_pooledInviscidState;
+        if (existing != null && existing.MaxNodes >= maxNodes)
+        {
+            // InitializeForNodeCount zeroes all state arrays, so the caller
+            // receives a fully reset workspace sized for the current case.
+            return existing;
+        }
+        var grown = new InviscidSolverState(Math.Max(maxNodes, (existing?.MaxNodes ?? 0) + 16));
+        s_pooledInviscidState = grown;
+        return grown;
+    }
+
+    // ThreadStatic pool for LinearVortexPanelState. Smaller (<50KB) but still
+    // per-case allocation; pooling completes the inviscid workspace cleanup.
+    [ThreadStatic] private static LinearVortexPanelState? s_pooledPanelState;
+
+    private static LinearVortexPanelState GetPooledPanelState(int maxNodes)
+    {
+        var existing = s_pooledPanelState;
+        if (existing != null && existing.MaxNodes >= maxNodes)
+        {
+            return existing;
+        }
+        var grown = new LinearVortexPanelState(Math.Max(maxNodes, (existing?.MaxNodes ?? 0) + 16));
+        s_pooledPanelState = grown;
+        return grown;
+    }
+
+    // ThreadStatic pool for BoundaryLayerSystemState. Eliminates ~64KB of
+    // per-case allocations across 16 `double[maxStations, 2]` arrays +
+    // 3 reference-type snapshot arrays. ClearAllState zeroes the pool'd
+    // instance to the same state a fresh constructor provides.
+    [ThreadStatic] private static BoundaryLayerSystemState? s_pooledBlState;
+
+    private static BoundaryLayerSystemState GetPooledBlSystemState(int maxStations, int maxWake)
+    {
+        var existing = s_pooledBlState;
+        if (existing != null
+            && existing.MaxStations >= maxStations
+            && existing.MaxWakeStations >= maxWake)
+        {
+            existing.ClearAllState();
+            return existing;
+        }
+        int grownStations = Math.Max(maxStations, (existing?.MaxStations ?? 0) + 8);
+        int grownWake = Math.Max(maxWake, (existing?.MaxWakeStations ?? 0) + 4);
+        var grown = new BoundaryLayerSystemState(grownStations, grownWake);
+        s_pooledBlState = grown;
+        return grown;
+    }
+
     private static double GetHvRat(bool useLegacyPrecision)
     {
         // Classic XFoil's main viscous solve effectively runs with HVRAT=0 in the
@@ -174,10 +260,12 @@ public static class ViscousSolverEngine
         TraceBufferGeometry(geometry.x, geometry.y);
         
 
-        // Step 1: Run inviscid analysis to get baseline
+        // Step 1: Run inviscid analysis to get baseline.
+        // ThreadStatic pool eliminates per-case 500KB+ LOH churn (3 influence
+        // matrices inside InviscidSolverState, plus the panel-state arrays).
         int maxNodes = settings.PanelCount + 40;
-        var panel = new LinearVortexPanelState(maxNodes);
-        var inviscidState = new InviscidSolverState(maxNodes);
+        var panel = GetPooledPanelState(maxNodes);
+        var inviscidState = GetPooledInviscidSolverState(maxNodes);
 
         CosineClusteringPanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
@@ -204,8 +292,8 @@ public static class ViscousSolverEngine
         double alphaRadians)
     {
         int maxNodes = settings.PanelCount + 40;
-        var panel = new LinearVortexPanelState(maxNodes);
-        var inviscidState = new InviscidSolverState(maxNodes);
+        var panel = GetPooledPanelState(maxNodes);
+        var inviscidState = GetPooledInviscidSolverState(maxNodes);
 
         CosineClusteringPanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
@@ -1539,7 +1627,7 @@ public static class ViscousSolverEngine
 
         var (iblte, nbl) = ComputeStationCountsXFoil(n, isp, nWake);
         int maxStations = Math.Max(nbl[0], nbl[1]) + nWake + 10;
-        var blState = new BoundaryLayerSystemState(maxStations, nWake);
+        var blState = GetPooledBlSystemState(maxStations, nWake);
         blState.IBLTE[0] = iblte[0];
         blState.IBLTE[1] = iblte[1];
         blState.NBL[0] = nbl[0];
@@ -1629,7 +1717,11 @@ public static class ViscousSolverEngine
         }
 
         var (isysMap, nsys) = EdgeVelocityCalculator.MapStationsToSystemLines(iblte, nbl);
-        var newtonSystem = new ViscousNewtonSystem(nsys + 1);
+        // ThreadStatic pool: avoid per-case allocation of the 3.1 MB LOH
+        // VM matrix (+ smaller VA/VB/VDEL arrays) inside ViscousNewtonSystem.
+        // The cached instance is grown to the largest seen nsys; most Selig
+        // cases converge to one size so this allocates once per worker thread.
+        var newtonSystem = GetPooledViscousNewtonSystem(nsys + 1);
         newtonSystem.SetupISYS(isysMap, nsys);
         ConfigureNewtonSystemTopology(newtonSystem, blState, panel);
 

@@ -208,4 +208,32 @@ public sealed class BoundaryLayerSystemState
         IBLTE[1] = side2 - 1;
         NBL[1] = side2 + wake;
     }
+
+    /// <summary>
+    /// Zero-clears all BL state arrays and parity snapshot slots. Used by
+    /// ThreadStatic pool implementations before handing a reused instance
+    /// to a fresh AnalyzeViscous call, ensuring the solver sees a clean
+    /// workspace identical to what `new BoundaryLayerSystemState(...)` provides.
+    /// </summary>
+    public void ClearAllState()
+    {
+        System.Array.Clear(IPAN);
+        System.Array.Clear(VTI);
+        System.Array.Clear(UEDG);
+        System.Array.Clear(THET);
+        System.Array.Clear(DSTR);
+        System.Array.Clear(CTAU);
+        System.Array.Clear(MASS);
+        System.Array.Clear(TAU);
+        System.Array.Clear(XSSI);
+        System.Array.Clear(ITRAN);
+        System.Array.Clear(IBLTE);
+        System.Array.Clear(NBL);
+        System.Array.Clear(TINDEX);
+        System.Array.Clear(LegacyPrimary);
+        System.Array.Clear(LegacyKinematic);
+        System.Array.Clear(LegacySecondary);
+        System.Array.Clear(LegacyAmplificationCarry);
+        LegacySetblLaminarShearCarry = 0.0;
+    }
 }
