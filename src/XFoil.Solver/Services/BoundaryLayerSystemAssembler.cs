@@ -454,18 +454,6 @@ public static class BoundaryLayerSystemAssembler
         v.De = de;
 
         v.Hc = hc;
-
-        if (Environment.GetEnvironmentVariable("XFOIL_COM2_IT1") == "1")
-        {
-            var st = new System.Diagnostics.StackTrace(true);
-            string callsite = "";
-            for (int f = 1; f < Math.Min(st.FrameCount, 4); f++)
-            {
-                var fr = st.GetFrame(f); if (fr == null) break;
-                callsite += $"{fr.GetMethod()?.Name}:{fr.GetFileLineNumber()}<-";
-            }
-            Console.Error.WriteLine($"C_COM2 ityp={ityp} HK={BitConverter.SingleToInt32Bits((float)hk):X8} RT={BitConverter.SingleToInt32Bits((float)rt):X8} HS={BitConverter.SingleToInt32Bits((float)v.Hs):X8} US={BitConverter.SingleToInt32Bits((float)v.Us):X8} CF={BitConverter.SingleToInt32Bits((float)v.Cf):X8} DI={BitConverter.SingleToInt32Bits((float)v.Di):X8} from={callsite}");
-        }
         return v;
     }
 
@@ -4634,16 +4622,6 @@ public static class BoundaryLayerSystemAssembler
         // transition state plus the laminar/turbulent row-3 contributions so the
         // next mismatch can be located before the combined system is solved.
 
-        
-        if (Environment.GetEnvironmentVariable("XFOIL_AH79_TRDIF") == "1"
-            && traceSide == 2 && traceStation == 69)
-        {
-            Console.Error.WriteLine(
-                $"C_TRDIF_OUT s=2 ibl=69" +
-                $" R1={BitConverter.SingleToInt32Bits((float)result.Residual[0]):X8}" +
-                $" R2={BitConverter.SingleToInt32Bits((float)result.Residual[1]):X8}" +
-                $" R3={BitConverter.SingleToInt32Bits((float)result.Residual[2]):X8}");
-        }
         return result;
     }
 

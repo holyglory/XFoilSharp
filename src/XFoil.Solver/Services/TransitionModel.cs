@@ -805,15 +805,6 @@ public static class TransitionModel
         // xblsys.f:131-141
         double axFinal = LegacyPrecisionMath.Add(axa, dax, useLegacyPrecision);
 
-        if (Environment.GetEnvironmentVariable("XFOIL_AH79_AX") == "1")
-        {
-            Console.Error.WriteLine(
-                $"C_AXSET s={AxsetTraceSide} ibl={AxsetTraceStation} ph={AxsetTracePhase}" +
-                $" A1={BitConverter.SingleToInt32Bits((float)a1):X8}" +
-                $" A2={BitConverter.SingleToInt32Bits((float)a2):X8}" +
-                $" AX={BitConverter.SingleToInt32Bits((float)axFinal):X8}");
-        }
-
 
         double ax_hk1_final = LegacyPrecisionMath.Multiply(axa_ax1, ax1_hk1, useLegacyPrecision);
         double ax_t1_final = LegacyPrecisionMath.MultiplyAdd(axa_ax1, ax1_t1, dax_t1, useLegacyPrecision);
@@ -999,18 +990,6 @@ public static class TransitionModel
         double ampl2Iter = useInternalAmpl2Seed
             ? LegacyPrecisionMath.MultiplyAdd(ax0.Ax, dx, ampl1, useLegacyPrecision)
             : ampl2;
-        if (Environment.GetEnvironmentVariable("XFOIL_AH79_SEED") == "1"
-            && traceSide == 2 && traceStation.HasValue && traceStation.Value <= 5)
-        {
-            Console.Error.WriteLine(
-                $"C_SEED_AH79 s={traceSide} i={traceStation}" +
-                $" ax0={BitConverter.SingleToInt32Bits((float)ax0.Ax):X8}" +
-                $" dx={BitConverter.SingleToInt32Bits((float)dx):X8}" +
-                $" ampl1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
-                $" x1={BitConverter.SingleToInt32Bits((float)x1):X8}" +
-                $" x2={BitConverter.SingleToInt32Bits((float)x2):X8}" +
-                $" ampl2Iter={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}");
-        }
         double lastXt = x2;
         double carriedWf1 = 1.0;
         double carriedWf2 = 0.0;
@@ -1205,17 +1184,6 @@ public static class TransitionModel
             if (LegacyPrecisionMath.Multiply(relaxation, LegacyPrecisionMath.Abs(deltaA2, useLegacyPrecision), useLegacyPrecision) > 1.0)
             {
                 relaxation = LegacyPrecisionMath.Divide(1.0, LegacyPrecisionMath.Abs(deltaA2, useLegacyPrecision), useLegacyPrecision);
-            }
-
-            if (Environment.GetEnvironmentVariable("XFOIL_AH79_TRC") == "1")
-            {
-                Console.Error.WriteLine(
-                    $"C_TRC32 s={traceSide} ibl={traceStation} oi={outerIter} tam={iter+1,2}" +
-                    $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
-                    $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
-                    $" DA={BitConverter.SingleToInt32Bits((float)deltaA2):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)relaxation):X8}" +
-                    $" AX={BitConverter.SingleToInt32Bits((float)ax.Ax):X8}");
             }
             if (LegacyPrecisionMath.Abs(deltaA2, useLegacyPrecision) < transitionTolerance)
             {
@@ -1961,18 +1929,6 @@ public static class TransitionModel
             if ((relaxation * Math.Abs(deltaA2)) > 1.0)
             {
                 relaxation = 1.0 / Math.Abs(deltaA2);
-            }
-
-
-            if (Environment.GetEnvironmentVariable("XFOIL_AH79_TRC") == "1")
-            {
-                Console.Error.WriteLine(
-                    $"C_TRC bc={ViscousNewtonAssembler.BuildCallCount} tam={iter+1,2}" +
-                    $" A1={BitConverter.SingleToInt32Bits((float)ampl1):X8}" +
-                    $" A2={BitConverter.SingleToInt32Bits((float)ampl2Iter):X8}" +
-                    $" DA={BitConverter.SingleToInt32Bits((float)deltaA2):X8}" +
-                    $" RLX={BitConverter.SingleToInt32Bits((float)relaxation):X8}" +
-                    $" AX={BitConverter.SingleToInt32Bits((float)ax.Ax):X8}");
             }
             if (Math.Abs(deltaA2) < DAEPS)
             {

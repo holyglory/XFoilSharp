@@ -34,7 +34,6 @@ public static class ViscousSolverEngine
     private const float LegacyLaminarShearSeed = 0.03f;
     private const double LegacyHvRat = 0.0;
     [ThreadStatic] private static int _mrchduCallCount;
-    [ThreadStatic] private static int _ueinvDumpCount;
 
     internal static double LegacyLaminarShearSeedValue => LegacyLaminarShearSeed;
 
@@ -391,45 +390,6 @@ public static class ViscousSolverEngine
 
         for (int iter = 0; iter < maxIter; iter++)
         {
-            if (iter == 0 && Environment.GetEnvironmentVariable("XFOIL_DUMP_INIT") == "1")
-            {
-                for (int s = 0; s < 2; s++)
-                {
-                    for (int ibl = 1; ibl <= 8 && ibl < blState.NBL[s]; ibl++)
-                    {
-                        var sec = blState.LegacySecondary[ibl, s];
-                        var kin = blState.LegacyKinematic[ibl, s];
-                        Console.Error.WriteLine(
-                            $"C_USAV s={s+1} ibl={ibl,2}" +
-                            $" UINV={BitConverter.SingleToInt32Bits((float)ueInv[ibl, s]):X8}" +
-                            $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, s]):X8}");
-                        if (sec != null && kin != null)
-                        {
-                            Console.Error.WriteLine(
-                                $"C_SEC_IT1 s={s+1} ibl={ibl,2}" +
-                                $" HK={BitConverter.SingleToInt32Bits((float)kin.HK2):X8}" +
-                                $" RT={BitConverter.SingleToInt32Bits((float)kin.RT2):X8}" +
-                                $" HS={BitConverter.SingleToInt32Bits((float)sec.Hs):X8}" +
-                                $" US={BitConverter.SingleToInt32Bits((float)sec.Us):X8}" +
-                                $" CF={BitConverter.SingleToInt32Bits((float)sec.Cf):X8}" +
-                                $" DI={BitConverter.SingleToInt32Bits((float)sec.Di):X8}");
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"C_SEC_IT1 s={s+1} ibl={ibl,2} sec={(sec==null?"NULL":"ok")} kin={(kin==null?"NULL":"ok")}");
-                        }
-                    }
-                }
-                // Wake stations side 2 (= side index 1 in C#) around JBL=65
-                for (int ibl = 62; ibl <= 66 && ibl < blState.NBL[1]; ibl++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_WAKE2 ibl={ibl+1} UEDG={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, 1]):X8}" +
-                        $" THET={BitConverter.SingleToInt32Bits((float)blState.THET[ibl, 1]):X8}" +
-                        $" DSTR={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibl, 1]):X8}" +
-                        $" MASS={BitConverter.SingleToInt32Bits((float)blState.MASS[ibl, 1]):X8}");
-                }
-            }
             
             
             debugWriter?.WriteLine(string.Format(CultureInfo.InvariantCulture,
@@ -465,28 +425,6 @@ public static class ViscousSolverEngine
                     reybl_ms);
 
                 // ah79 post-MRCHDU full dump
-                if (Environment.GetEnvironmentVariable("XFOIL_AH79_POSTMDU") == "1"
-                    && (iter == 31 || iter == 32))
-                {
-                    for (int sns = 0; sns < 2; sns++)
-                    for (int ins = 1; ins < blState.NBL[sns]; ins++)
-                    {
-                        var kin = blState.LegacyKinematic[ins, sns];
-                        var sec = blState.LegacySecondary[ins, sns];
-                        Console.Error.WriteLine(
-                            $"C_POSTMDU_FULL it={iter+1} s={sns+1} i={ins+1,3}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)blState.THET[ins, sns]):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[ins, sns]):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[ins, sns]):X8}" +
-                            $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[ins, sns]):X8}" +
-                            $" HK={(kin==null?"null":BitConverter.SingleToInt32Bits((float)kin.HK2).ToString("X8"))}" +
-                            $" RT={(kin==null?"null":BitConverter.SingleToInt32Bits((float)kin.RT2).ToString("X8"))}" +
-                            $" HS={(sec==null?"null":BitConverter.SingleToInt32Bits((float)sec.Hs).ToString("X8"))}" +
-                            $" US={(sec==null?"null":BitConverter.SingleToInt32Bits((float)sec.Us).ToString("X8"))}" +
-                            $" CF={(sec==null?"null":BitConverter.SingleToInt32Bits((float)sec.Cf).ToString("X8"))}" +
-                            $" DI={(sec==null?"null":BitConverter.SingleToInt32Bits((float)sec.Di).ToString("X8"))}");
-                    }
-                }
                 // n6h20 trace: ITRAN after MRCHDU
                 
                 // n6h20 trace: BL state AFTER MRCHDU (matches F's BLDUMP at top of UPDATE)
@@ -523,18 +461,6 @@ public static class ViscousSolverEngine
             
             // Compute XOR hash of system for parity check
             
-            if (iter == 0 && Environment.GetEnvironmentVariable("XFOIL_VDEL_IT1") == "1")
-            {
-                var vdelP = newtonSystem.VDEL;
-                int nsysP = newtonSystem.NSYS;
-                for (int jv = 0; jv < nsysP; jv++)
-                {
-                    Console.Error.WriteLine(
-                        $"C_VDEL jv={jv + 1,4} {BitConverter.SingleToInt32Bits((float)vdelP[0, 0, jv]):X8} " +
-                        $"{BitConverter.SingleToInt32Bits((float)vdelP[1, 0, jv]):X8} " +
-                        $"{BitConverter.SingleToInt32Bits((float)vdelP[2, 0, jv]):X8}");
-                }
-            }
             // Dump ALL VDEL system lines BEFORE BLSOLV (first iteration only)
             
             // Per-station VM sum at iteration 0 (first Newton step) — find divergent station
@@ -555,34 +481,6 @@ public static class ViscousSolverEngine
             // Pre-solve VDEL dump for iter 0 (RHS of Newton system)
             
 
-            if (Environment.GetEnvironmentVariable("XFOIL_AH79_VPRE") == "1"
-                && (iter == 31 || iter == 32))
-            {
-                var vdelPre = newtonSystem.VDEL;
-                var vmPre = newtonSystem.VM;
-                uint vdHash = 0, vmHash = 0;
-                int nsysPre = newtonSystem.NSYS;
-                for (int jv = 0; jv < nsysPre; jv++)
-                {
-                    for (int k = 0; k < 3; k++)
-                    {
-                        vdHash = unchecked(vdHash + (uint)(BitConverter.SingleToInt32Bits((float)vdelPre[k, 0, jv]) & 0x7FFFFFFF));
-                        for (int jvInner = 0; jvInner < nsysPre; jvInner++)
-                        {
-                            vmHash = unchecked(vmHash + (uint)(BitConverter.SingleToInt32Bits((float)vmPre[k, jvInner, jv]) & 0x7FFFFFFF));
-                        }
-                    }
-                    Console.Error.WriteLine(
-                        $"C_VDEL_PRE it={iter+1} jv={jv+1,3}" +
-                        $" V11={BitConverter.SingleToInt32Bits((float)vdelPre[0, 0, jv]):X8}" +
-                        $" V21={BitConverter.SingleToInt32Bits((float)vdelPre[1, 0, jv]):X8}" +
-                        $" V31={BitConverter.SingleToInt32Bits((float)vdelPre[2, 0, jv]):X8}" +
-                        $" V12={BitConverter.SingleToInt32Bits((float)vdelPre[0, 1, jv]):X8}" +
-                        $" V22={BitConverter.SingleToInt32Bits((float)vdelPre[1, 1, jv]):X8}" +
-                        $" V32={BitConverter.SingleToInt32Bits((float)vdelPre[2, 1, jv]):X8}");
-                }
-                Console.Error.WriteLine($"C_PRE_BL{iter+1} VM={vmHash:X8} VD={vdHash:X8}");
-            }
             // c. BLSOLV: Solve block-tridiagonal system
             BlockTridiagonalSolver.Solve(
                 newtonSystem,
@@ -609,23 +507,6 @@ public static class ViscousSolverEngine
                 double currentCl = settings.UseLegacyBoundaryLayerInitialization
                     ? legacyIncrementalCl
                     : ComputeViscousCL(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
-                if (Environment.GetEnvironmentVariable("XFOIL_AH79_VDEL") == "1"
-                    && (iter == 31 || iter == 32))
-                {
-                    var vdelD = newtonSystem.VDEL;
-                    int nsysD = newtonSystem.NSYS;
-                    for (int jv = 0; jv < nsysD; jv++)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_VDEL_ALL it={iter+1} jv={jv+1,3}" +
-                            $" V11={BitConverter.SingleToInt32Bits((float)vdelD[0, 0, jv]):X8}" +
-                            $" V21={BitConverter.SingleToInt32Bits((float)vdelD[1, 0, jv]):X8}" +
-                            $" V31={BitConverter.SingleToInt32Bits((float)vdelD[2, 0, jv]):X8}" +
-                            $" V12={BitConverter.SingleToInt32Bits((float)vdelD[0, 1, jv]):X8}" +
-                            $" V22={BitConverter.SingleToInt32Bits((float)vdelD[1, 1, jv]):X8}" +
-                            $" V32={BitConverter.SingleToInt32Bits((float)vdelD[2, 1, jv]):X8}");
-                    }
-                }
                 var (newtonRlx, updatedRms, newTrustRadius, accepted, dac) =
                     ViscousNewtonUpdater.ApplyNewtonUpdate(
                         blState, newtonSystem, settings.ViscousSolverMode,
@@ -653,20 +534,6 @@ public static class ViscousSolverEngine
                 // DN1..DN4 residual returned by ApplyNewtonUpdate.
                 rmsbl = updatedRms;
 
-                if (Environment.GetEnvironmentVariable("XFOIL_AH79_POSTUPD") == "1"
-                    && (iter == 31 || iter == 32))
-                {
-                    for (int sns = 0; sns < 2; sns++)
-                    for (int ins = 1; ins < blState.NBL[sns]; ins++)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_POSTUPD_FULL it={iter+1} s={sns+1} i={ins+1,3}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)blState.THET[ins, sns]):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)blState.DSTR[ins, sns]):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)blState.UEDG[ins, sns]):X8}" +
-                            $" C={BitConverter.SingleToInt32Bits((float)blState.CTAU[ins, sns]):X8}");
-                    }
-                }
             }
 
             
@@ -698,15 +565,6 @@ public static class ViscousSolverEngine
             // f. STMOVE: Relocate stagnation point if it has moved
             // Convert UEDG back to panel speeds, then find stagnation by sign change
             double[] currentSpeeds = ConvertUedgToSpeeds(blState, n, settings.UseLegacyBoundaryLayerInitialization);
-            if (Environment.GetEnvironmentVariable("XFOIL_DUMP_GAM_STAG") == "1" && iter <= 1)
-            {
-                // Find ALL sign changes in currentSpeeds
-                for (int dbg = 0; dbg < n - 1; dbg++)
-                {
-                    if (currentSpeeds[dbg] >= 0 && currentSpeeds[dbg+1] < 0)
-                        Console.Error.WriteLine($"C_GAM_SIGNCHG it={iter+1} i={dbg+1,3}->{dbg+2,3} L={BitConverter.SingleToInt32Bits((float)currentSpeeds[dbg]):X8} R={BitConverter.SingleToInt32Bits((float)currentSpeeds[dbg+1]):X8}");
-                }
-            }
             if (settings.UseLegacyBoundaryLayerInitialization)
             {
                 int windowStart = Math.Max(0, isp - 2);
@@ -728,8 +586,6 @@ public static class ViscousSolverEngine
                     || inviscidState.UseLegacyPanelingPrecision);
             int rawNewIsp = newIsp;
             newIsp = Math.Max(1, Math.Min(n - 2, newIsp));
-            if (Environment.GetEnvironmentVariable("XFOIL_DUMP_GAM_STAG") == "1" && iter <= 1)
-                Console.Error.WriteLine($"C_FINDSTAG it={iter+1} rawNewIsp={rawNewIsp} clampedNewIsp={newIsp} sst={BitConverter.SingleToInt32Bits((float)newSst):X8}");
             bool stagnationShifted = Math.Abs(newSst - sst) > 1.0e-12;
             
             
@@ -860,8 +716,6 @@ public static class ViscousSolverEngine
                 CD = cd,
                 CM = cm
             });
-            if (Environment.GetEnvironmentVariable("XFOIL_DUMP_CL_CD") == "1")
-                Console.Error.WriteLine($"C_CLCD it={iter+1} CL={BitConverter.SingleToInt32Bits((float)cl):X8} CD={BitConverter.SingleToInt32Bits((float)cd):X8}");
 
             // Convergence check uses rmsbl (Newton RMS from BuildNewtonSystem)
             if (rmsbl < tolerance)
@@ -872,8 +726,6 @@ public static class ViscousSolverEngine
                 break;
             }
             
-            if (Environment.GetEnvironmentVariable("XFOIL_AH79_ITRAN") == "1")
-                Console.Error.WriteLine($"C_ITRAN it={iter+1} s1={blState.ITRAN[0]} s2={blState.ITRAN[1]} nbl1={blState.NBL[0]} nbl2={blState.NBL[1]}");
         }
 
         // --- Post-convergence: package results ---
@@ -1487,21 +1339,6 @@ public static class ViscousSolverEngine
                 }
             }
         }
-        if (Environment.GetEnvironmentVariable("XFOIL_DUMP_UEINV") == "1" && _ueinvDumpCount < 2)
-        {
-            _ueinvDumpCount++;
-            for (int s = 0; s < 2; s++)
-            for (int ibl = 1; ibl <= 8 && ibl < blState.MaxStations; ibl++)
-            {
-                int iPan = blState.IPAN[ibl, s];
-                double q = (iPan >= 0 && iPan < qinv.Length) ? qinv[iPan] : 0.0;
-                Console.Error.WriteLine(
-                    $"C_UEINV[{_ueinvDumpCount}] s={s+1} ibl={ibl,2} ipan={iPan,3}" +
-                    $" VTI={BitConverter.SingleToInt32Bits((float)blState.VTI[ibl, s]):X8}" +
-                    $" QINV={BitConverter.SingleToInt32Bits((float)q):X8}" +
-                    $" UEINV={BitConverter.SingleToInt32Bits((float)ueInv[ibl, s]):X8}");
-            }
-        }
 
         for (int iw = 1; iw <= nWake; iw++)
         {
@@ -1938,14 +1775,6 @@ public static class ViscousSolverEngine
                         blState.UEDG[ibl, side],
                         useLegacyPrecision);
                     
-                    if (Environment.GetEnvironmentVariable("XFOIL_QVIS74") == "1" && iPan == 74)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_QVIS74 ibl={ibl+1} side={side+1} iPan={iPan+1}" +
-                            $" VTI={BitConverter.SingleToInt32Bits((float)blState.VTI[ibl, side]):X8}" +
-                            $" UEDG={BitConverter.SingleToInt32Bits((float)blState.UEDG[ibl, side]):X8}" +
-                            $" qvis={BitConverter.SingleToInt32Bits((float)qvis[iPan]):X8}");
-                    }
                 }
             }
         }
@@ -2041,15 +1870,6 @@ public static class ViscousSolverEngine
         // which corresponds to the true stagnation point (near-zero crossing).
         int ist = -1;
         double bestMag = double.MaxValue;
-        if (Environment.GetEnvironmentVariable("XFOIL_DUMP_GAM_STAG") == "1")
-        {
-            for (int dbg = 89; dbg < Math.Min(n, 105); dbg++)
-            {
-                Console.Error.WriteLine(
-                    $"C_GAM_STFIND i={dbg+1,3}" +
-                    $" GAM={BitConverter.SingleToInt32Bits((float)qinv[dbg]):X8}");
-            }
-        }
         for (int i = 0; i < n - 1; i++)
         {
             if (qinv[i] >= 0.0 && qinv[i + 1] < 0.0)
@@ -2247,12 +2067,6 @@ public static class ViscousSolverEngine
             blState.UEDG[0, 0] = 0.0;
         }
 
-        if (Environment.GetEnvironmentVariable("XFOIL_DUMP_GAM_STAG") == "1")
-        {
-            var stack = new System.Diagnostics.StackTrace(true);
-            int callerLine = stack.FrameCount > 1 ? stack.GetFrame(1)?.GetFileLineNumber() ?? 0 : 0;
-            Console.Error.WriteLine($"C_IPAN_INIT isp={isp} IBLTE0={blState.IBLTE[0]} IBLTE1={blState.IBLTE[1]} xssiOnly={xssiOnly} fromLine={callerLine}");
-        }
         // Stations 1..IBLTE[0]: airfoil panels ISP, ISP-1, ..., 0
         for (int ibl = 1; ibl <= blState.IBLTE[0]; ibl++)
         {
@@ -2391,65 +2205,7 @@ public static class ViscousSolverEngine
 
             var rawSpeeds = new double[nWake];
             rawSpeeds[0] = (qinv.Length > 0) ? qinv[^1] : 0.0;
-            if (Environment.GetEnvironmentVariable("XFOIL_WGEO0") == "1")
-            {
-                for (int wi = 0; wi < Math.Min(nWake, 4); wi++)
-                {
-                    Console.Error.WriteLine($"C_WGEO_PROBE iw={wi} X={BitConverter.SingleToInt32Bits((float)wakeGeometry.X[wi]):X8} Y={BitConverter.SingleToInt32Bits((float)wakeGeometry.Y[wi]):X8} NX={BitConverter.SingleToInt32Bits((float)wakeGeometry.NormalX[wi]):X8} NY={BitConverter.SingleToInt32Bits((float)wakeGeometry.NormalY[wi]):X8}");
-                }
-                Console.Error.WriteLine($"C_WGEO_PROBE qinv_last={BitConverter.SingleToInt32Bits((float)qinv[^1]):X8} qinv_len={qinv.Length} nWake={nWake}");
-            }
             // Try the fix: also compute rawSpeeds[0] via ComputeInfluenceAt at FIRST wake position
-            if (Environment.GetEnvironmentVariable("XFOIL_TEST_FIX") == "1")
-            {
-                int nLocal = panel.NodeCount;
-                if (inviscidState.UseLegacyKernelPrecision && wakeGeometry.X.Length > 0)
-                {
-                    double cosA = LegacyPrecisionMath.Cos(angleOfAttackRadians, true);
-                    double sinA = LegacyPrecisionMath.Sin(angleOfAttackRadians, true);
-                    var savedG = new double[nLocal + 1];
-                    for (int i = 0; i <= nLocal; i++) savedG[i] = inviscidState.VortexStrength[i];
-                    for (int i = 0; i <= nLocal; i++) inviscidState.VortexStrength[i] = inviscidState.BasisVortexStrength[i, 0];
-                    (_, double q1) = StreamfunctionInfluenceCalculator.ComputeInfluenceAt(
-                        nLocal, wakeGeometry.X[0], wakeGeometry.Y[0],
-                        wakeGeometry.NormalX[0], wakeGeometry.NormalY[0],
-                        false, false, panel, inviscidState, freestreamSpeed, 0.0);
-                    for (int i = 0; i <= nLocal; i++) inviscidState.VortexStrength[i] = inviscidState.BasisVortexStrength[i, 1];
-                    (_, double q2) = StreamfunctionInfluenceCalculator.ComputeInfluenceAt(
-                        nLocal, wakeGeometry.X[0], wakeGeometry.Y[0],
-                        wakeGeometry.NormalX[0], wakeGeometry.NormalY[0],
-                        false, false, panel, inviscidState, freestreamSpeed, Math.PI / 2.0);
-                    double newRs0 = LegacyPrecisionMath.SumOfProducts(q1, cosA, q2, sinA, true);
-                    Console.Error.WriteLine($"C_FIX_RS0 wgeoIdx=0 oldRs0={BitConverter.SingleToInt32Bits((float)rawSpeeds[0]):X8} newRs0={BitConverter.SingleToInt32Bits((float)newRs0):X8}");
-                    // Also try wakeGeometry.X[1]
-                    for (int i = 0; i <= nLocal; i++) inviscidState.VortexStrength[i] = inviscidState.BasisVortexStrength[i, 0];
-                    (_, double q1b) = StreamfunctionInfluenceCalculator.ComputeInfluenceAt(
-                        nLocal + 1, wakeGeometry.X[1], wakeGeometry.Y[1],
-                        wakeGeometry.NormalX[1], wakeGeometry.NormalY[1],
-                        false, false, panel, inviscidState, freestreamSpeed, 0.0);
-                    for (int i = 0; i <= nLocal; i++) inviscidState.VortexStrength[i] = inviscidState.BasisVortexStrength[i, 1];
-                    (_, double q2b) = StreamfunctionInfluenceCalculator.ComputeInfluenceAt(
-                        nLocal + 1, wakeGeometry.X[1], wakeGeometry.Y[1],
-                        wakeGeometry.NormalX[1], wakeGeometry.NormalY[1],
-                        false, false, panel, inviscidState, freestreamSpeed, Math.PI / 2.0);
-                    double rs0AtIdx1 = LegacyPrecisionMath.SumOfProducts(q1b, cosA, q2b, sinA, true);
-                    Console.Error.WriteLine($"C_FIX_RS0 wgeoIdx=1 wakeIdxParam=n+1 newRs0={BitConverter.SingleToInt32Bits((float)rs0AtIdx1):X8}");
-                    // Try MIDPOINT between wgeo[0] and wgeo[1]
-                    double mx = 0.5 * (wakeGeometry.X[0] + wakeGeometry.X[1]);
-                    double my = 0.5 * (wakeGeometry.Y[0] + wakeGeometry.Y[1]);
-                    double mnx = 0.5 * (wakeGeometry.NormalX[0] + wakeGeometry.NormalX[1]);
-                    double mny = 0.5 * (wakeGeometry.NormalY[0] + wakeGeometry.NormalY[1]);
-                    for (int i = 0; i <= nLocal; i++) inviscidState.VortexStrength[i] = inviscidState.BasisVortexStrength[i, 0];
-                    (_, double q1m) = StreamfunctionInfluenceCalculator.ComputeInfluenceAt(
-                        nLocal, mx, my, mnx, mny, false, false, panel, inviscidState, freestreamSpeed, 0.0);
-                    for (int i = 0; i <= nLocal; i++) inviscidState.VortexStrength[i] = inviscidState.BasisVortexStrength[i, 1];
-                    (_, double q2m) = StreamfunctionInfluenceCalculator.ComputeInfluenceAt(
-                        nLocal, mx, my, mnx, mny, false, false, panel, inviscidState, freestreamSpeed, Math.PI / 2.0);
-                    double rs0Mid = LegacyPrecisionMath.SumOfProducts(q1m, cosA, q2m, sinA, true);
-                    Console.Error.WriteLine($"C_FIX_RS0 mid newRs0={BitConverter.SingleToInt32Bits((float)rs0Mid):X8}");
-                    for (int i = 0; i <= nLocal; i++) inviscidState.VortexStrength[i] = savedG[i];
-                }
-            }
 
             // Fortran QWCALC: PSILIN at each wake panel computes QTAN1/QTAN2
             // from the basis gammas (GAMU). Then QISET blends: Q = Q1*cos + Q2*sin.
@@ -3803,13 +3559,6 @@ public static class ViscousSolverEngine
             if (settings.UseLegacyBoundaryLayerInitialization)
             {
                 float dmaxEndF = lastDmaxForExtrapolation;
-                if (Environment.GetEnvironmentVariable("XFOIL_MDU51_TRACE") == "1"
-                    && side == 1 && ibl == 50)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MRCHUE51_EXTRAP dmax={BitConverter.SingleToInt32Bits(dmaxEndF):X8}" +
-                        $" ibl={ibl} ITRAN[1]={blState.ITRAN[side]}");
-                }
                 if (dmaxEndF > 0.1f && ibl > 2)
                 {
                     if (ibl <= blState.IBLTE[side])
@@ -3905,13 +3654,6 @@ public static class ViscousSolverEngine
             // POST-delta — causing a mismatch that propagates as wrong COM1
             // at next station's Newton.
             bool convergedFinalNewton = (float)lastDmaxForExtrapolation <= (float)seedTolerance;
-            if (Environment.GetEnvironmentVariable("XFOIL_S9104_TRACE") == "1"
-                && side == 1 && ibl >= 99 && ibl <= 101)
-            {
-                Console.Error.WriteLine(
-                    $"C_S9104_109 ibl={ibl+1} dmax={BitConverter.SingleToInt32Bits(lastDmaxForExtrapolation):X8}" +
-                    $" conv={convergedFinalNewton} wake={wake} turb={turb}");
-            }
             if (settings.UseLegacyBoundaryLayerInitialization && !convergedFinalNewton)
             {
                 
@@ -3958,24 +3700,6 @@ public static class ViscousSolverEngine
                     finalKin, finalSecSnapshot,
                     traceLabel: "march_legacy_label109");
                 
-                if (Environment.GetEnvironmentVariable("XFOIL_S9104_TRACE") == "1"
-                    && side == 1 && ibl >= 99 && ibl <= 101)
-                {
-                    Console.Error.WriteLine(
-                        $"C_S9104_109_DONE ibl={ibl+1}" +
-                        $" effHk={BitConverter.SingleToInt32Bits((float)effectiveHk):X8}" +
-                        $" rawHK={BitConverter.SingleToInt32Bits((float)finalKin.HK2):X8}" +
-                        $" RT={BitConverter.SingleToInt32Bits((float)finalKin.RT2):X8}" +
-                        $" M2={BitConverter.SingleToInt32Bits((float)finalKin.M2):X8}" +
-                        $" H2={BitConverter.SingleToInt32Bits((float)finalKin.H2):X8}" +
-                        $" newDI={BitConverter.SingleToInt32Bits((float)finalSec.Di):X8}" +
-                        $" newHS={BitConverter.SingleToInt32Bits((float)finalSec.Hs):X8}" +
-                        $" newUS={BitConverter.SingleToInt32Bits((float)finalSec.Us):X8}" +
-                        $" newCQ={BitConverter.SingleToInt32Bits((float)finalSec.Cteq):X8}");
-                    var hsTest = BoundaryLayerCorrelations.TurbulentShapeParameter(
-                        effectiveHk, finalKin.RT2, finalKin.M2, useLegacyPrecision: true);
-                    Console.Error.WriteLine($"C_S9104_DIRECT_HST ibl={ibl+1} HS={BitConverter.SingleToInt32Bits((float)hsTest.Hs):X8}");
-                }
                 } catch (Exception ex) {
                     Console.Error.WriteLine($"C_STFLO_109_EXCEPTION ibl={ibl+1}: {ex.GetType().Name}: {ex.Message}");
                 }
@@ -4144,10 +3868,6 @@ public static class ViscousSolverEngine
         thetaSeed = LegacyPrecisionMath.RoundToSingle(thetaSeed, settings.UseLegacyBoundaryLayerInitialization);
         dstarSeed = LegacyPrecisionMath.RoundToSingle(dstarSeed, settings.UseLegacyBoundaryLayerInitialization);
         bool usesShearState = ibl >= blState.ITRAN[side];
-        if (Environment.GetEnvironmentVariable("XFOIL_STF91_TRACE") == "1")
-        {
-            Console.Error.WriteLine($"C_REFINE_ENTRY side={side} ibl={ibl+1} ITRAN={blState.ITRAN[side]+1} usesShear={usesShearState}");
-        }
         // Fortran TURB is the station-entry carry-forward flag. It only updates
         // AFTER the current station stores (xbl.f line 2385). So the post-loop
         // TRCHEK gate (`IF((.NOT.SIMI).AND.(.NOT.TURB))` at line 2311) uses the
@@ -4747,13 +4467,6 @@ public static class ViscousSolverEngine
         if (settings.UseLegacyBoundaryLayerInitialization)
         {
             float dmaxF = lastDmaxFloat;
-            if (Environment.GetEnvironmentVariable("XFOIL_MDU51_TRACE") == "1"
-                && side == 1 && ibl == 50)
-            {
-                Console.Error.WriteLine(
-                    $"C_REFINE51_EXTRAP dmax={BitConverter.SingleToInt32Bits(dmaxF):X8}" +
-                    $" ibl={ibl} ITRAN[1]={blState.ITRAN[side]} fires={dmaxF > 0.1f}");
-            }
             
             if (dmaxF > 0.1f && ibl > 2)
             {
@@ -4767,20 +4480,6 @@ public static class ViscousSolverEngine
                 float sqrtRatio = MathF.Pow(xRatio, 0.5f);
                 theta2 = (float)blState.THET[ibm, side] * sqrtRatio;
                 dstar2 = (float)blState.DSTR[ibm, side] * sqrtRatio;
-                if (Environment.GetEnvironmentVariable("XFOIL_STF91_TRACE") == "1"
-                    && side == 0 && ibl == 90)
-                {
-                    Console.Error.WriteLine(
-                        $"C_STF91_EXTRAP ibl={ibl+1} dmax={BitConverter.SingleToInt32Bits(dmaxF):X8}" +
-                        $" Xibl={BitConverter.SingleToInt32Bits((float)blState.XSSI[ibl, side]):X8}" +
-                        $" Xibm={BitConverter.SingleToInt32Bits((float)blState.XSSI[ibm, side]):X8}" +
-                        $" Tibm={BitConverter.SingleToInt32Bits((float)blState.THET[ibm, side]):X8}" +
-                        $" Dibm={BitConverter.SingleToInt32Bits((float)blState.DSTR[ibm, side]):X8}" +
-                        $" ratio={BitConverter.SingleToInt32Bits(xRatio):X8}" +
-                        $" sqrt={BitConverter.SingleToInt32Bits(sqrtRatio):X8}" +
-                        $" t2={BitConverter.SingleToInt32Bits((float)theta2):X8}" +
-                        $" d2={BitConverter.SingleToInt32Bits((float)dstar2):X8}");
-                }
                 // Fortran lines 1911-1913:
                 //   UEI = UEDG(IBL,IS)
                 //   IF(IBL.GT.2 .AND. IBL.LT.NBL(IS))
@@ -6019,24 +5718,6 @@ public static class ViscousSolverEngine
                     oldTransitionStation,
                     out double ctau,
                     out double ampl);
-                if (Environment.GetEnvironmentVariable("XFOIL_FX61_TRACE") == "1"
-                    && side == 1 && ibl == 60 && mrchduCall == 1)
-                {
-                    Console.Error.WriteLine(
-                        $"C_FX61_INIT storedCtau={BitConverter.SingleToInt32Bits((float)blState.CTAU[ibl, side]):X8}" +
-                        $" ctau={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" ampl={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                        $" ibl={ibl} oldITRAN={oldTransitionStation} ITRAN[1]={blState.ITRAN[side]} IBLTE[1]={blState.IBLTE[side]}");
-                }
-                if (Environment.GetEnvironmentVariable("XFOIL_MDU51_TRACE") == "1"
-                    && side == 1 && ibl == 50 && mrchduCall == 1)
-                {
-                    Console.Error.WriteLine(
-                        $"C_MDU51_INIT storedCtau={BitConverter.SingleToInt32Bits((float)blState.CTAU[ibl, side]):X8}" +
-                        $" ctau={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                        $" ampl={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                        $" ibl={ibl} oldITRAN={oldTransitionStation}");
-                }
                 ampl = ibl >= oldTransitionStation
                     ? ReadLegacyAmplificationCarry(blState, ibm, side, ampl)
                     : Math.Max(ampl, 0.0);
@@ -6080,31 +5761,7 @@ public static class ViscousSolverEngine
                     
                     
                     // clarkv transition station trace (side 2 ibl=50 0-based = station 51 1-based)
-                    if (Environment.GetEnvironmentVariable("XFOIL_MDU51_TRACE") == "1"
-                        && side == 1 && ibl == 50 && mrchduCall == 1)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_MDU51 it={iter + 1,2}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" CTI={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" AMI={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                            $" tran={tran} turb={turb}");
-                    }
                     // fx63120 transition station trace (side 2 ibl=60 0-based = station 61 1-based)
-                    if (Environment.GetEnvironmentVariable("XFOIL_FX61_TRACE") == "1"
-                        && side == 1 && ibl == 60 && mrchduCall == 1)
-                    {
-                        Console.Error.WriteLine(
-                            $"C_FX61 it={iter + 1,2}" +
-                            $" T={BitConverter.SingleToInt32Bits((float)theta):X8}" +
-                            $" D={BitConverter.SingleToInt32Bits((float)dstar):X8}" +
-                            $" U={BitConverter.SingleToInt32Bits((float)uei):X8}" +
-                            $" CTI={BitConverter.SingleToInt32Bits((float)ctau):X8}" +
-                            $" AMI={BitConverter.SingleToInt32Bits((float)ampl):X8}" +
-                            $" tran={tran} turb={turb}");
-                    }
                     // Trace station 83 init MRCHDU inputs
                     
                     if (wake && ibl == blState.IBLTE[side] + 1)
@@ -6318,8 +5975,6 @@ public static class ViscousSolverEngine
 
                         if (settings.UseLegacyBoundaryLayerInitialization)
                         {
-                            if (Environment.GetEnvironmentVariable("XFOIL_COM2_IT1") == "1")
-                                Console.Error.WriteLine($"C_LINE8959_FIRES side={side} ibl={ibl} IBLTE={blState.IBLTE[side]} wake={wake}");
                             // Fortran TESYS calls BLVAR(3) after BLPRV+BLKIN set COM2.
                             var wakeSec = BoundaryLayerSystemAssembler.ComputeStationVariables(
                                 3, currentKinematic.HK2, currentKinematic.RT2, currentKinematic.M2,
@@ -8124,16 +7779,6 @@ public static class ViscousSolverEngine
         blState.LegacyPrimary[ibl, side] = primary?.Clone();
         blState.LegacyKinematic[ibl, side] = kinematic?.Clone();
         blState.LegacySecondary[ibl, side] = secondary?.Clone();
-        if (Environment.GetEnvironmentVariable("XFOIL_TRACE_SEC10") == "1"
-            && side == 0 && ibl >= 1 && ibl <= 3)
-        {
-            Console.Error.WriteLine(
-                $"C_STORE_SEC s=1 ibl={ibl+1} label={traceLabel ?? "?"}" +
-                $" HS={(secondary==null?"null":BitConverter.SingleToInt32Bits((float)secondary.Hs).ToString("X8"))}" +
-                $" CF={(secondary==null?"null":BitConverter.SingleToInt32Bits((float)secondary.Cf).ToString("X8"))}" +
-                $" DI={(secondary==null?"null":BitConverter.SingleToInt32Bits((float)secondary.Di).ToString("X8"))}" +
-                $" US={(secondary==null?"null":BitConverter.SingleToInt32Bits((float)secondary.Us).ToString("X8"))}");
-        }
         
     }
 

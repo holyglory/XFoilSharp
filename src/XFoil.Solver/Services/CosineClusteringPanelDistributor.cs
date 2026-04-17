@@ -56,17 +56,6 @@ public static class CosineClusteringPanelDistributor
                 inputX, inputY, inputCount, panel, desiredNodeCount,
                 curvatureWeight, trailingEdgeDensityRatio, curvatureDensityRatio);
         }
-
-        if (Environment.GetEnvironmentVariable("XFOIL_DUMP_PANELS") is { } dumpPath
-            && !string.IsNullOrEmpty(dumpPath))
-        {
-            using var w = new System.IO.StreamWriter(dumpPath);
-            w.WriteLine($"# C# panels n={panel.NodeCount} legacy={useLegacyPrecision}");
-            for (int i = 0; i < panel.NodeCount; i++)
-            {
-                w.WriteLine($"{panel.X[i]:E15} {panel.Y[i]:E15}");
-            }
-        }
     }
 
     // Legacy mapping: f_xfoil/src/xfoil.f :: PANGEN.
