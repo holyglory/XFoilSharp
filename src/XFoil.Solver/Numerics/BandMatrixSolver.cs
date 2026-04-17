@@ -41,14 +41,19 @@ public static class BandMatrixSolver
         // Each equation eq (0,1,2) forms an independent tridiagonal system of size nsys.
         // Arrays are indexed by iv (global system line) directly.
 
+        // Pool all per-equation scratch buffers — BandMatrixSolver used to
+        // allocate 7 fresh double[nsys] arrays per call. ThreadStatic pooling
+        // eliminates ~60 KB / call of Gen0 churn in the Newton solve path.
+        double[] diag = SolverBuffers.BandDiag(nsys);
+        double[] subDiag = SolverBuffers.BandSubDiag(nsys);
+        double[] superDiag = SolverBuffers.BandSuperDiag(nsys);
+        double[] rhsEq = SolverBuffers.BandRhsEq(nsys);
+        double[] c = SolverBuffers.BandThomasC(nsys);
+        double[] d = SolverBuffers.BandThomasD(nsys);
+        double[] x = SolverBuffers.BandThomasX(nsys);
+
         for (int eq = 0; eq < 3; eq++)
         {
-            // Build dense tridiagonal system for this equation
-            double[] diag = new double[nsys];
-            double[] subDiag = new double[nsys];
-            double[] superDiag = new double[nsys];
-            double[] rhsEq = new double[nsys];
-
             for (int iv = 0; iv < nsys; iv++)
             {
                 diag[iv] = va[eq, 0, iv];
@@ -57,10 +62,7 @@ public static class BandMatrixSolver
                 rhsEq[iv] = vdel[eq, 0, iv];
             }
 
-            // Solve tridiagonal system using Thomas algorithm
-            // Forward sweep
-            double[] c = new double[nsys];
-            double[] d = new double[nsys];
+            // Solve tridiagonal system using Thomas algorithm (forward sweep).
 
             if (Math.Abs(diag[0]) < 1e-30)
             {
@@ -89,7 +91,6 @@ public static class BandMatrixSolver
             }
 
             // Back substitution
-            double[] x = new double[nsys];
             x[nsys - 1] = d[nsys - 1];
             for (int iv = nsys - 2; iv >= 0; iv--)
             {

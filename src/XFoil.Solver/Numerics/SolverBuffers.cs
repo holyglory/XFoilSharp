@@ -93,6 +93,21 @@ internal static class SolverBuffers
     [ThreadStatic] private static double[]? _wakeGapScratch;
     [ThreadStatic] private static double[]? _wakeGapProfileScratch;
 
+    // BandMatrixSolver per-equation Thomas scratch buffers.
+    [ThreadStatic] private static double[]? _bandDiag;
+    [ThreadStatic] private static double[]? _bandSubDiag;
+    [ThreadStatic] private static double[]? _bandSuperDiag;
+    [ThreadStatic] private static double[]? _bandRhsEq;
+    [ThreadStatic] private static double[]? _bandThomasC;
+    [ThreadStatic] private static double[]? _bandThomasD;
+    [ThreadStatic] private static double[]? _bandThomasX;
+
+    // CubicSpline natural-slopes tridiagonal scratch.
+    [ThreadStatic] private static double[]? _splineCoefA;
+    [ThreadStatic] private static double[]? _splineCoefB;
+    [ThreadStatic] private static double[]? _splineCoefC;
+    [ThreadStatic] private static double[]? _splineCoefD;
+
     // InfluenceMatrixBuilder.ComputeWakeSourceSensitivitiesAt* output buffers.
     // These are the `out double[] dzdm, out double[] dqdm` arrays the wake
     // kernel returns to the caller. Each call currently allocates two fresh
@@ -191,6 +206,19 @@ internal static class SolverBuffers
     internal static double[,] UeInvScratch(int rows, int cols) => EnsureMatrix(ref _ueInvScratch, rows, cols);
     internal static double[] WakeGapScratch(int n) => EnsureVector(ref _wakeGapScratch, n);
     internal static double[] WakeGapProfileScratch(int n) => EnsureVector(ref _wakeGapProfileScratch, n);
+
+    internal static double[] BandDiag(int n) => EnsureVector(ref _bandDiag, n);
+    internal static double[] BandSubDiag(int n) => EnsureVector(ref _bandSubDiag, n);
+    internal static double[] BandSuperDiag(int n) => EnsureVector(ref _bandSuperDiag, n);
+    internal static double[] BandRhsEq(int n) => EnsureVector(ref _bandRhsEq, n);
+    internal static double[] BandThomasC(int n) => EnsureVector(ref _bandThomasC, n);
+    internal static double[] BandThomasD(int n) => EnsureVector(ref _bandThomasD, n);
+    internal static double[] BandThomasX(int n) => EnsureVector(ref _bandThomasX, n);
+
+    internal static double[] SplineCoefA(int n) => EnsureVector(ref _splineCoefA, n);
+    internal static double[] SplineCoefB(int n) => EnsureVector(ref _splineCoefB, n);
+    internal static double[] SplineCoefC(int n) => EnsureVector(ref _splineCoefC, n);
+    internal static double[] SplineCoefD(int n) => EnsureVector(ref _splineCoefD, n);
 
     internal static double[] WakeDijRhs(int n) => EnsureVector(ref _wakeDijRhs, n);
     internal static float[] WakeDijRhsSingle(int n) => EnsureFloatVector(ref _wakeDijRhsSingle, n);

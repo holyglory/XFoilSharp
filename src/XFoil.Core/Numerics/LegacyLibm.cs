@@ -11,228 +11,108 @@ namespace XFoil.Core.Numerics;
 
 public static class LegacyLibm
 {
+    // Per-call `OperatingSystem.IsLinux()` / `IsMacOS()` / `IsWindows()` checks
+    // are cheap in isolation but add up inside the hot path where these
+    // wrappers fire millions of times per sweep. Resolve the platform once
+    // at static init and dispatch through cached delegates.
+    private static readonly Func<float, float, float> s_pow;
+    private static readonly Func<float, float> s_log;
+    private static readonly Func<float, float> s_log10;
+    private static readonly Func<float, float> s_sin;
+    private static readonly Func<float, float> s_cos;
+    private static readonly Func<float, float> s_sqrt;
+    private static readonly Func<float, float> s_tanh;
+    private static readonly Func<float, float> s_exp;
+    private static readonly Func<float, float, float> s_atan2;
+
+    static LegacyLibm()
+    {
+        s_pow = ResolvePow();
+        s_log = Resolve(MathF.Log, LogfMac, LogfLinux, LogfWindows);
+        s_log10 = Resolve(MathF.Log10, Log10fMac, Log10fLinux, Log10fWindows);
+        s_sin = ResolveLinuxOnly(MathF.Sin, SinfLinux);
+        s_cos = ResolveLinuxOnly(MathF.Cos, CosfLinux);
+        s_sqrt = Resolve(MathF.Sqrt, SqrtfMac, SqrtfLinux, SqrtfWindows);
+        s_tanh = Resolve(MathF.Tanh, TanhfMac, TanhfLinux, TanhfWindows);
+        s_exp = Resolve(MathF.Exp, ExpfMac, ExpfLinux, ExpfWindows);
+        s_atan2 = ResolveBinary(MathF.Atan2, Atan2fMac, Atan2fLinux, Atan2fWindows);
+    }
+
+    private static Func<float, float, float> ResolvePow()
+    {
+        try
+        {
+            if (OperatingSystem.IsMacOS()) { _ = PowfMac(1f, 1f); return PowfMac; }
+            if (OperatingSystem.IsLinux()) { _ = PowfLinux(1f, 1f); return PowfLinux; }
+            if (OperatingSystem.IsWindows()) { _ = PowfWindows(1f, 1f); return PowfWindows; }
+        }
+        catch (DllNotFoundException) { }
+        catch (EntryPointNotFoundException) { }
+        return MathF.Pow;
+    }
+
+    private static Func<float, float> Resolve(
+        Func<float, float> fallback,
+        Func<float, float> mac,
+        Func<float, float> linux,
+        Func<float, float> windows)
+    {
+        try
+        {
+            if (OperatingSystem.IsMacOS()) { _ = mac(1f); return mac; }
+            if (OperatingSystem.IsLinux()) { _ = linux(1f); return linux; }
+            if (OperatingSystem.IsWindows()) { _ = windows(1f); return windows; }
+        }
+        catch (DllNotFoundException) { }
+        catch (EntryPointNotFoundException) { }
+        return fallback;
+    }
+
+    private static Func<float, float> ResolveLinuxOnly(
+        Func<float, float> fallback,
+        Func<float, float> linux)
+    {
+        try
+        {
+            if (OperatingSystem.IsLinux()) { _ = linux(1f); return linux; }
+        }
+        catch (DllNotFoundException) { }
+        catch (EntryPointNotFoundException) { }
+        return fallback;
+    }
+
+    private static Func<float, float, float> ResolveBinary(
+        Func<float, float, float> fallback,
+        Func<float, float, float> mac,
+        Func<float, float, float> linux,
+        Func<float, float, float> windows)
+    {
+        try
+        {
+            if (OperatingSystem.IsMacOS()) { _ = mac(1f, 1f); return mac; }
+            if (OperatingSystem.IsLinux()) { _ = linux(1f, 1f); return linux; }
+            if (OperatingSystem.IsWindows()) { _ = windows(1f, 1f); return windows; }
+        }
+        catch (DllNotFoundException) { }
+        catch (EntryPointNotFoundException) { }
+        return fallback;
+    }
+
     // The parity branch must use the same single-precision libm entry points as
     // the native Fortran runtime whenever possible. MathF.Pow is close, but it
     // is not bitwise identical to powf on all targets.
-    // Legacy mapping: none; this is a managed parity-support wrapper around the host C runtime `powf`.
-    // Difference from legacy: The bridge chooses the platform DLL explicitly and falls back to `MathF.Pow` only when the native symbol cannot be loaded.
-    // Decision: Keep the bridge because parity-sensitive geometry and solver paths need access to the same single-precision libm behavior as the legacy runtime.
-    public static float Pow(float value, float exponent)
-    {
-        try
-        {
-            if (OperatingSystem.IsMacOS())
-            {
-                return PowfMac(value, exponent);
-            }
+    public static float Pow(float value, float exponent) => s_pow(value, exponent);
 
-            if (OperatingSystem.IsLinux())
-            {
-                return PowfLinux(value, exponent);
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                return PowfWindows(value, exponent);
-            }
-        }
-        catch (DllNotFoundException)
-        {
-        }
-        catch (EntryPointNotFoundException)
-        {
-        }
-
-        return MathF.Pow(value, exponent);
-    }
-
-    // Legacy mapping: none; this is a managed parity-support wrapper around the host C runtime `logf`.
-    // Difference from legacy: The bridge picks the platform `logf` entry point explicitly instead of inheriting it transitively from the Fortran runtime.
-    // Decision: Keep the bridge because separated-branch boundary-layer kernels and panel singularity formulas can be one ULP apart when `MathF.Log` differs from the native `logf`.
-    public static float Log(float value)
-    {
-        try
-        {
-            if (OperatingSystem.IsMacOS())
-            {
-                return LogfMac(value);
-            }
-
-            if (OperatingSystem.IsLinux())
-            {
-                return LogfLinux(value);
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                return LogfWindows(value);
-            }
-        }
-        catch (DllNotFoundException)
-        {
-        }
-        catch (EntryPointNotFoundException)
-        {
-        }
-
-        return MathF.Log(value);
-    }
-
-    // Parity wrapper around the host C runtime `log10f`.
-    public static float Log10(float value)
-    {
-        try
-        {
-            if (OperatingSystem.IsMacOS())
-                return Log10fMac(value);
-            if (OperatingSystem.IsLinux())
-                return Log10fLinux(value);
-            if (OperatingSystem.IsWindows())
-                return Log10fWindows(value);
-        }
-        catch (DllNotFoundException) { }
-        catch (EntryPointNotFoundException) { }
-        return MathF.Log10(value);
-    }
-
-    public static float Sin(float value)
-    {
-        try
-        {
-            if (OperatingSystem.IsLinux())
-                return SinfLinux(value);
-        }
-        catch (DllNotFoundException) { }
-        catch (EntryPointNotFoundException) { }
-        return MathF.Sin(value);
-    }
-
-    public static float Cos(float value)
-    {
-        try
-        {
-            if (OperatingSystem.IsLinux())
-                return CosfLinux(value);
-        }
-        catch (DllNotFoundException) { }
-        catch (EntryPointNotFoundException) { }
-        return MathF.Cos(value);
-    }
-
-    public static float Sqrt(float value)
-    {
-        try
-        {
-            if (OperatingSystem.IsMacOS())
-            {
-                return SqrtfMac(value);
-            }
-
-            if (OperatingSystem.IsLinux())
-            {
-                return SqrtfLinux(value);
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                return SqrtfWindows(value);
-            }
-        }
-        catch (DllNotFoundException)
-        {
-        }
-        catch (EntryPointNotFoundException)
-        {
-        }
-
-        return MathF.Sqrt(value);
-    }
-
-    // Legacy mapping: none; this is a managed parity-support wrapper around the host C runtime `expf`.
-    // Difference from legacy: The bridge picks the platform `expf` entry point explicitly instead of
-    // using MathF.Exp which may differ from libm by 1 ULP in edge cases.
-    // Decision: Keep the bridge because BLVAR transition amplification (DAMPL) and other kernels
-    // depend on native single-precision exponential to stay on the Fortran bit path.
-    public static float Exp(float value)
-    {
-        try
-        {
-            if (OperatingSystem.IsMacOS())
-            {
-                return ExpfMac(value);
-            }
-
-            if (OperatingSystem.IsLinux())
-            {
-                return ExpfLinux(value);
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                return ExpfWindows(value);
-            }
-        }
-        catch (DllNotFoundException)
-        {
-        }
-        catch (EntryPointNotFoundException)
-        {
-        }
-
-        return MathF.Exp(value);
-    }
-
-    // Legacy mapping: none; this is a managed parity-support wrapper around the host C runtime `tanhf`.
-    // Difference from legacy: The bridge picks the platform `tanhf` entry point explicitly instead of inheriting it transitively from the Fortran runtime.
-    // Decision: Keep the bridge because several boundary-layer kernels depend on native single-precision hyperbolic tangents to stay on the Fortran bit path.
-    public static float Tanh(float value)
-    {
-        try
-        {
-            if (OperatingSystem.IsMacOS())
-            {
-                return TanhfMac(value);
-            }
-
-            if (OperatingSystem.IsLinux())
-            {
-                return TanhfLinux(value);
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                return TanhfWindows(value);
-            }
-        }
-        catch (DllNotFoundException)
-        {
-        }
-        catch (EntryPointNotFoundException)
-        {
-        }
-
-        return MathF.Tanh(value);
-    }
-
-    public static float Atan2(float y, float x)
-    {
-        try
-        {
-            if (OperatingSystem.IsMacOS())
-                return Atan2fMac(y, x);
-            if (OperatingSystem.IsLinux())
-                return Atan2fLinux(y, x);
-            if (OperatingSystem.IsWindows())
-                return Atan2fWindows(y, x);
-        }
-        catch (DllNotFoundException) { }
-        catch (EntryPointNotFoundException) { }
-        return MathF.Atan2(y, x);
-    }
+    public static float Log(float value) => s_log(value);
+    public static float Log10(float value) => s_log10(value);
+    public static float Sin(float value) => s_sin(value);
+    public static float Cos(float value) => s_cos(value);
+    public static float Sqrt(float value) => s_sqrt(value);
+    public static float Tanh(float value) => s_tanh(value);
+    public static float Exp(float value) => s_exp(value);
+    public static float Atan2(float y, float x) => s_atan2(y, x);
 
     // Legacy mapping: none; this extern binds the macOS `powf` symbol used to emulate legacy runtime behavior.
-    // Difference from legacy: The symbol binding is explicit in .NET rather than implicit through the Fortran toolchain.
-    // Decision: Keep the explicit binding because it makes the parity dependency visible and testable.
     [DllImport("/usr/lib/libSystem.B.dylib", EntryPoint = "powf", ExactSpelling = true)]
     private static extern float PowfMac(float value, float exponent);
 
@@ -255,8 +135,6 @@ public static class LegacyLibm
     private static extern float Atan2fMac(float y, float x);
 
     // Legacy mapping: none; this extern binds the Linux `powf` symbol used to emulate legacy runtime behavior.
-    // Difference from legacy: The symbol binding is explicit in .NET rather than implicit through the Fortran toolchain.
-    // Decision: Keep the explicit binding because it makes the parity dependency visible and testable.
     [DllImport("libm.so.6", EntryPoint = "powf", ExactSpelling = true)]
     private static extern float PowfLinux(float value, float exponent);
 
@@ -285,8 +163,6 @@ public static class LegacyLibm
     private static extern float Atan2fLinux(float y, float x);
 
     // Legacy mapping: none; this extern binds the Windows `powf` symbol used to emulate legacy runtime behavior.
-    // Difference from legacy: The symbol binding is explicit in .NET rather than implicit through the Fortran toolchain.
-    // Decision: Keep the explicit binding because it makes the parity dependency visible and testable.
     [DllImport("ucrtbase.dll", EntryPoint = "powf", ExactSpelling = true)]
     private static extern float PowfWindows(float value, float exponent);
 
