@@ -538,7 +538,10 @@ public static class InfluenceMatrixBuilder
         InviscidSolverState inviscidState)
     {
         int size = inviscidState.NodeCount + 1;
-        var luFactors = new float[size, size];
+        // ThreadStatic pool — eliminates ~103KB LOH + int[] allocation per case.
+        // Each call overwrites the buffers, so sharing across calls is safe since
+        // the context is consumed fully before the next case begins.
+        var luFactors = XFoil.Solver.Numerics.SolverBuffers.LegacyWakeLuFactors(size);
         for (int row = 0; row < size; row++)
         {
             for (int column = 0; column < size; column++)
@@ -547,7 +550,9 @@ public static class InfluenceMatrixBuilder
             }
         }
 
-        return new LegacyWakeSolveContext(inviscidState, luFactors, (int[])inviscidState.LegacyPivotIndices.Clone());
+        var pivots = XFoil.Solver.Numerics.SolverBuffers.LegacyWakePivots(inviscidState.LegacyPivotIndices.Length);
+        Array.Copy(inviscidState.LegacyPivotIndices, pivots, inviscidState.LegacyPivotIndices.Length);
+        return new LegacyWakeSolveContext(inviscidState, luFactors, pivots);
     }
 
     private static LegacyWakeSolveContext CreateLegacyWakeSolveContext(

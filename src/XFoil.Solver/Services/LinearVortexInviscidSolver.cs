@@ -220,12 +220,13 @@ public static class LinearVortexInviscidSolver
     // Decision: Keep the helper because it isolates the basis solve stage cleanly.
     private static void SolveBasisRightHandSides(InviscidSolverState state, int systemSize)
     {
-        var rhs0 = new double[systemSize];
-        var rhs1 = new double[systemSize];
+        // ThreadStatic pool — zero-cleared on reuse via EnsureVector.
+        var rhs0 = XFoil.Solver.Numerics.SolverBuffers.BasisRhs0(systemSize);
+        var rhs1 = XFoil.Solver.Numerics.SolverBuffers.BasisRhs1(systemSize);
         if (state.UseLegacyKernelPrecision)
         {
-            var rhs0Single = new float[systemSize];
-            var rhs1Single = new float[systemSize];
+            var rhs0Single = XFoil.Solver.Numerics.SolverBuffers.BasisRhs0Single(systemSize);
+            var rhs1Single = XFoil.Solver.Numerics.SolverBuffers.BasisRhs1Single(systemSize);
             for (int i = 0; i < systemSize; i++)
             {
                 rhs0Single[i] = (float)state.BasisVortexStrength[i, 0];
@@ -584,12 +585,12 @@ public static class LinearVortexInviscidSolver
         double bFac = comp.KarmanTsienFactor;
 
         // Step 2: Compute Karman-Tsien corrected Cp at each node
-        double[] cp = new double[n];
+        double[] cp = XFoil.Solver.Numerics.SolverBuffers.CpInviscid(n);
         ComputePressureCoefficients(state.InviscidSpeed, freestreamSpeed, machNumber, cp, n, useLegacyPrecision);
 
         // Cp derivatives for CL_alpha and CL_M^2
-        double[] cpAlpha = new double[n];
-        double[] cpM2 = new double[n];
+        double[] cpAlpha = XFoil.Solver.Numerics.SolverBuffers.CpAlpha(n);
+        double[] cpM2 = XFoil.Solver.Numerics.SolverBuffers.CpM2(n);
         for (int i = 0; i < n; i++)
         {
             double qByQinf = state.InviscidSpeed[i] / freestreamSpeed;

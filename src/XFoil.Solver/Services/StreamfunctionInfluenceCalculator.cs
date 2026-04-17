@@ -390,10 +390,12 @@ public static class StreamfunctionInfluenceCalculator
         float sina = (float)Math.Sin(angleOfAttackRadians);
         
 
-        var dzdg = new float[n];
-        var dzdm = new float[n];
-        var dqdg = new float[n];
-        var dqdm = new float[n];
+        // ThreadStatic scratch — zero-cleared on reuse; filled via += then
+        // copied to state.{Stream,Velocity}{Vortex,Source}Sensitivity at end.
+        var dzdg = XFoil.Solver.Numerics.SolverBuffers.SfDzdg(n);
+        var dzdm = XFoil.Solver.Numerics.SolverBuffers.SfDzdm(n);
+        var dqdg = XFoil.Solver.Numerics.SolverBuffers.SfDqdg(n);
+        var dqdm = XFoil.Solver.Numerics.SolverBuffers.SfDqdm(n);
 
         float psi = 0f;
         float psiNi = 0f;

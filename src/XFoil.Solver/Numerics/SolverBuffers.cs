@@ -30,6 +30,15 @@ internal static class SolverBuffers
     [ThreadStatic] private static double[,]? _couplingMatrix2D;
     [ThreadStatic] private static double[,]? _couplingMatrix2DSecondary;
 
+    // StreamfunctionInfluenceCalculator per-field-node scratch (dzdg/dzdm/
+    // dqdg/dqdm). Called ~(n+1) times per inviscid assembly; each call
+    // formerly allocated 4 fresh float[n] arrays. Pooled here as zero-
+    // cleared ThreadStatic buffers.
+    [ThreadStatic] private static float[]? _sfDzdg;
+    [ThreadStatic] private static float[]? _sfDzdm;
+    [ThreadStatic] private static float[]? _sfDqdg;
+    [ThreadStatic] private static float[]? _sfDqdm;
+
     // Panel-sized double[] scratch slots for per-Newton-iter reuse inside
     // BuildViscousPanelSpeeds / ConvertUedgToSpeeds / Compute*CL/CM. A Newton
     // iteration may have up to ~5 of these alive concurrently (preStmoveQvis,
@@ -41,6 +50,22 @@ internal static class SolverBuffers
     [ThreadStatic] private static double[]? _panelScratch4;
     [ThreadStatic] private static double[]? _panelScratch5;
     [ThreadStatic] private static double[]? _panelScratch6;
+
+    // InfluenceMatrixBuilder.CreateLegacyWakeSolveContext — per-case float[size,size]
+    // (~103KB LOH) + int[size] pivot clone.
+    [ThreadStatic] private static float[,]? _legacyWakeLuFactors;
+    [ThreadStatic] private static int[]? _legacyWakePivots;
+
+    // LinearVortexInviscidSolver.SolveBasisRightHandSides — 2×double[systemSize]
+    // + 2×float[systemSize] per inviscid solve (once per AnalyzeViscous).
+    [ThreadStatic] private static double[]? _basisRhs0;
+    [ThreadStatic] private static double[]? _basisRhs1;
+    [ThreadStatic] private static float[]? _basisRhs0Single;
+    [ThreadStatic] private static float[]? _basisRhs1Single;
+    // LinearVortexInviscidSolver.IntegratePressureForces CP arrays.
+    [ThreadStatic] private static double[]? _cpInviscid;
+    [ThreadStatic] private static double[]? _cpAlpha;
+    [ThreadStatic] private static double[]? _cpM2;
 
     // InfluenceMatrixBuilder.BuildAnalyticalDIJ main dij array. Per-case LOH
     // allocation (~460KB for typical 240-panel systems); pooling eliminates
@@ -80,6 +105,47 @@ internal static class SolverBuffers
     internal static double[] Vector4DoubleSecondary => _vector4DoubleSecondary ??= new double[4];
     internal static float[,] Matrix4x4Float => _matrix4x4Float ??= new float[4, 4];
     internal static float[] Vector4Float => _vector4Float ??= new float[4];
+
+    internal static float[,] LegacyWakeLuFactors(int size) => EnsureFloat2D(ref _legacyWakeLuFactors, size, size);
+    internal static int[] LegacyWakePivots(int size)
+    {
+        var buffer = _legacyWakePivots;
+        if (buffer is null || buffer.Length < size)
+        {
+            int n = buffer is null ? size : Math.Max(buffer.Length, size);
+            buffer = new int[n];
+            _legacyWakePivots = buffer;
+        }
+        return buffer;
+    }
+
+    internal static double[] BasisRhs0(int n) => EnsureVector(ref _basisRhs0, n);
+    internal static double[] BasisRhs1(int n) => EnsureVector(ref _basisRhs1, n);
+    internal static float[] BasisRhs0Single(int n) => EnsureFloatVector(ref _basisRhs0Single, n);
+    internal static float[] BasisRhs1Single(int n) => EnsureFloatVector(ref _basisRhs1Single, n);
+    internal static double[] CpInviscid(int n) => EnsureVector(ref _cpInviscid, n);
+    internal static double[] CpAlpha(int n) => EnsureVector(ref _cpAlpha, n);
+    internal static double[] CpM2(int n) => EnsureVector(ref _cpM2, n);
+
+    internal static float[] SfDzdg(int n) => EnsureFloatVector(ref _sfDzdg, n);
+    internal static float[] SfDzdm(int n) => EnsureFloatVector(ref _sfDzdm, n);
+    internal static float[] SfDqdg(int n) => EnsureFloatVector(ref _sfDqdg, n);
+    internal static float[] SfDqdm(int n) => EnsureFloatVector(ref _sfDqdm, n);
+
+    private static float[] EnsureFloatVector(ref float[]? slot, int count)
+    {
+        var buffer = slot;
+        if (buffer is null || buffer.Length < count)
+        {
+            buffer = new float[count];
+            slot = buffer;
+        }
+        else
+        {
+            Array.Clear(buffer, 0, count);
+        }
+        return buffer;
+    }
 
     internal static double[] PanelScratch1(int n) => EnsureVector(ref _panelScratch1, n);
     internal static double[] PanelScratch2(int n) => EnsureVector(ref _panelScratch2, n);
