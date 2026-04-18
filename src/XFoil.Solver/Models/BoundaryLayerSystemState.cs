@@ -150,8 +150,24 @@ public sealed class BoundaryLayerSystemState
             return;
         }
         var slot = _secondaryStorage[ibl, side];
-        slot.CopyFrom(source);
+        if (!ReferenceEquals(source, slot))
+        {
+            slot.CopyFrom(source);
+        }
         LegacySecondary[ibl, side] = slot;
+    }
+
+    /// <summary>
+    /// Returns the pooled secondary storage slot for <paramref name="ibl"/>/<paramref name="side"/>
+    /// and publishes it as the live <see cref="LegacySecondary"/> reference.
+    /// Used by caller-in-place mutation paths that previously did
+    /// `LegacySecondary[i,s] ?? new SecondaryStationResult()`.
+    /// </summary>
+    public XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult GetOrActivateLegacySecondary(int ibl, int side)
+    {
+        var slot = _secondaryStorage[ibl, side];
+        LegacySecondary[ibl, side] = slot;
+        return slot;
     }
 
     /// <summary>Maximum stations per surface.</summary>

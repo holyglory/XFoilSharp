@@ -304,6 +304,61 @@ internal static class SolverBuffers
     internal static float[] WakeSrcDzdmSingle(int n) => EnsureFloatVector(ref _wakeSrcDzdmSingle, n);
     internal static float[] WakeSrcDqdmSingle(int n) => EnsureFloatVector(ref _wakeSrcDqdmSingle, n);
 
+    // Internal accumulator slots for ComputeWakeSourceSensitivitiesAtCore<T>.
+    // Only T=double is actually instantiated, so a double-only pool suffices
+    // even though the method signature is generic. Float runs through the
+    // dedicated WakeSrcDzdm/Dqdm Single slots above.
+    [ThreadStatic] private static double[]? _wakeSrcDzdmTypedDouble;
+    [ThreadStatic] private static double[]? _wakeSrcDqdmTypedDouble;
+    internal static double[] WakeSrcDzdmTypedDouble(int n) => EnsureVector(ref _wakeSrcDzdmTypedDouble, n);
+    internal static double[] WakeSrcDqdmTypedDouble(int n) => EnsureVector(ref _wakeSrcDqdmTypedDouble, n);
+
+    // BuildWakeGeometryCore<T> internal T[] arrays and the WakeGeometryData
+    // double[] output arrays. The geometry object is retained through the
+    // whole analysis so the typed intermediates and the double outputs both
+    // need dedicated pool slots (the generic core is instantiated for T=float
+    // under the Selig legacy path and T=double on the standard path).
+    [ThreadStatic] private static float[]? _wakeGeomXF;
+    [ThreadStatic] private static float[]? _wakeGeomYF;
+    [ThreadStatic] private static float[]? _wakeGeomNxF;
+    [ThreadStatic] private static float[]? _wakeGeomNyF;
+    [ThreadStatic] private static float[]? _wakeGeomPaF;
+    [ThreadStatic] private static double[]? _wakeGeomXD;
+    [ThreadStatic] private static double[]? _wakeGeomYD;
+    [ThreadStatic] private static double[]? _wakeGeomNxD;
+    [ThreadStatic] private static double[]? _wakeGeomNyD;
+    [ThreadStatic] private static double[]? _wakeGeomPaD;
+    // Double[] output arrays on WakeGeometryData. Separate from the typed
+    // intermediates so we never alias when T=double.
+    [ThreadStatic] private static double[]? _wakeGeomOutX;
+    [ThreadStatic] private static double[]? _wakeGeomOutY;
+    [ThreadStatic] private static double[]? _wakeGeomOutNx;
+    [ThreadStatic] private static double[]? _wakeGeomOutNy;
+    [ThreadStatic] private static double[]? _wakeGeomOutPa;
+    // WakeSpacing.BuildStretchedDistances output + its double trace.
+    [ThreadStatic] private static float[]? _wakeSpacingSF;
+    [ThreadStatic] private static double[]? _wakeSpacingSD;
+    [ThreadStatic] private static double[]? _wakeSpacingTraceD;
+
+    internal static float[] WakeGeomXFloat(int n) => EnsureFloatVector(ref _wakeGeomXF, n);
+    internal static float[] WakeGeomYFloat(int n) => EnsureFloatVector(ref _wakeGeomYF, n);
+    internal static float[] WakeGeomNxFloat(int n) => EnsureFloatVector(ref _wakeGeomNxF, n);
+    internal static float[] WakeGeomNyFloat(int n) => EnsureFloatVector(ref _wakeGeomNyF, n);
+    internal static float[] WakeGeomPaFloat(int n) => EnsureFloatVector(ref _wakeGeomPaF, n);
+    internal static double[] WakeGeomXDouble(int n) => EnsureVector(ref _wakeGeomXD, n);
+    internal static double[] WakeGeomYDouble(int n) => EnsureVector(ref _wakeGeomYD, n);
+    internal static double[] WakeGeomNxDouble(int n) => EnsureVector(ref _wakeGeomNxD, n);
+    internal static double[] WakeGeomNyDouble(int n) => EnsureVector(ref _wakeGeomNyD, n);
+    internal static double[] WakeGeomPaDouble(int n) => EnsureVector(ref _wakeGeomPaD, n);
+    internal static double[] WakeGeomOutX(int n) => EnsureVector(ref _wakeGeomOutX, n);
+    internal static double[] WakeGeomOutY(int n) => EnsureVector(ref _wakeGeomOutY, n);
+    internal static double[] WakeGeomOutNx(int n) => EnsureVector(ref _wakeGeomOutNx, n);
+    internal static double[] WakeGeomOutNy(int n) => EnsureVector(ref _wakeGeomOutNy, n);
+    internal static double[] WakeGeomOutPa(int n) => EnsureVector(ref _wakeGeomOutPa, n);
+    internal static float[] WakeSpacingSFloat(int n) => EnsureFloatVector(ref _wakeSpacingSF, n);
+    internal static double[] WakeSpacingSDouble(int n) => EnsureVector(ref _wakeSpacingSD, n);
+    internal static double[] WakeSpacingTraceD(int n) => EnsureVector(ref _wakeSpacingTraceD, n);
+
     internal static double[,] DijScratch(int rows, int cols)
     {
         var buffer = _dijScratch;

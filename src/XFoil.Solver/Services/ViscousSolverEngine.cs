@@ -6147,12 +6147,10 @@ public static class ViscousSolverEngine
                                 3, currentKinematic.HK2, currentKinematic.RT2, currentKinematic.M2,
                                 currentKinematic.H2, ctau, wakeGap, theta, wakeStrippedDstar,
                                 destination: BoundaryLayerSystemAssembler.GetPooledStationVariablesEngine());
-                            var sec = blState.LegacySecondary[ibl, side]
-                                ?? new BoundaryLayerSystemAssembler.SecondaryStationResult();
+                            var sec = blState.GetOrActivateLegacySecondary(ibl, side);
                             sec.Hs = wakeSec.Hs; sec.Us = wakeSec.Us; sec.Cf = wakeSec.Cf;
                             sec.Di = wakeSec.Di; sec.Cq = wakeSec.Cteq; sec.De = wakeSec.De;
                             sec.Hc = wakeSec.Hc;
-                            blState.LegacySecondary[ibl, side] = sec;
 
                             StoreLegacyCarrySnapshots(
                                 blState,

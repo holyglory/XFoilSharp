@@ -1275,8 +1275,21 @@ public static class InfluenceMatrixBuilder
         T tiny = T.CreateChecked(1e-30);
 
         int nWake = wake.Count;
-        var dzdmTyped = new T[nWake];
-        var dqdmTyped = new T[nWake];
+        T[] dzdmTyped;
+        T[] dqdmTyped;
+        if (typeof(T) == typeof(double))
+        {
+            dzdmTyped = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeSrcDzdmTypedDouble(nWake);
+            dqdmTyped = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeSrcDqdmTypedDouble(nWake);
+        }
+        else
+        {
+            // Other T specializations (not currently used by the sweep path)
+            // fall back to a fresh allocation; pool slots would need a
+            // dedicated typed pair per concrete T.
+            dzdmTyped = new T[nWake];
+            dqdmTyped = new T[nWake];
+        }
 
         T fieldXT = T.CreateChecked(fieldX);
         T fieldYT = T.CreateChecked(fieldY);
@@ -1863,11 +1876,28 @@ public static class InfluenceMatrixBuilder
         double angleOfAttackRadians)
         where T : struct, IFloatingPointIeee754<T>
     {
-        var x = new T[nWake];
-        var y = new T[nWake];
-        var nx = new T[nWake];
-        var ny = new T[nWake];
-        var panelAngle = new T[Math.Max(nWake - 1, 1)];
+        int paCount = Math.Max(nWake - 1, 1);
+        T[] x;
+        T[] y;
+        T[] nx;
+        T[] ny;
+        T[] panelAngle;
+        if (typeof(T) == typeof(double))
+        {
+            x = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomXDouble(nWake);
+            y = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomYDouble(nWake);
+            nx = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomNxDouble(nWake);
+            ny = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomNyDouble(nWake);
+            panelAngle = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomPaDouble(paCount);
+        }
+        else
+        {
+            x = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomXFloat(nWake);
+            y = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomYFloat(nWake);
+            nx = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomNxFloat(nWake);
+            ny = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomNyFloat(nWake);
+            panelAngle = (T[])(object)XFoil.Solver.Numerics.SolverBuffers.WakeGeomPaFloat(paCount);
+        }
 
         T ds1 = EstimateFirstWakeSpacing<T>(panelState);
         T[] s = WakeSpacing.BuildStretchedDistances(ds1, T.Max(T.CreateChecked(panelState.Chord), ds1), nWake);
@@ -1930,17 +1960,28 @@ public static class InfluenceMatrixBuilder
             }
         }
 
-        double[] sTrace = ToDoubleArray(s);
+        double[] sTrace = CopyToDoubleScratch(s, nWake, XFoil.Solver.Numerics.SolverBuffers.WakeSpacingTraceD(nWake));
         TraceWakeSpacing(sTrace, double.CreateChecked(ds1));
 
-        var geometry = new WakeGeometryData(
-            ToDoubleArray(x),
-            ToDoubleArray(y),
-            ToDoubleArray(nx),
-            ToDoubleArray(ny),
-            ToDoubleArray(panelAngle));
+        double[] xOut = CopyToDoubleScratch(x, nWake, XFoil.Solver.Numerics.SolverBuffers.WakeGeomOutX(nWake));
+        double[] yOut = CopyToDoubleScratch(y, nWake, XFoil.Solver.Numerics.SolverBuffers.WakeGeomOutY(nWake));
+        double[] nxOut = CopyToDoubleScratch(nx, nWake, XFoil.Solver.Numerics.SolverBuffers.WakeGeomOutNx(nWake));
+        double[] nyOut = CopyToDoubleScratch(ny, nWake, XFoil.Solver.Numerics.SolverBuffers.WakeGeomOutNy(nWake));
+        double[] paOut = CopyToDoubleScratch(panelAngle, paCount, XFoil.Solver.Numerics.SolverBuffers.WakeGeomOutPa(paCount));
+
+        var geometry = new WakeGeometryData(xOut, yOut, nxOut, nyOut, paOut, nWake, paCount);
         TraceWakeGeometry(geometry.X, geometry.Y, geometry.NormalX, geometry.NormalY, geometry.PanelAngle);
         return geometry;
+    }
+
+    private static double[] CopyToDoubleScratch<T>(T[] source, int count, double[] destination)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        for (int i = 0; i < count; i++)
+        {
+            destination[i] = double.CreateChecked(source[i]);
+        }
+        return destination;
     }
 
     private static void ComputeWakePanelState<T>(
@@ -2134,16 +2175,36 @@ public static class InfluenceMatrixBuilder
 
     internal sealed class WakeGeometryData
     {
+        /// <summary>
+        /// Legacy constructor — retained for tests and external callers that
+        /// don't supply pool-aware counts. Uses <c>x.Length</c> as the
+        /// authoritative size.
+        /// </summary>
         public WakeGeometryData(double[] x, double[] y, double[] normalX, double[] normalY, double[] panelAngle)
+            : this(x, y, normalX, normalY, panelAngle, x.Length, panelAngle.Length)
+        {
+        }
+
+        /// <summary>
+        /// Pool-aware constructor that records explicit counts. The backing
+        /// arrays may be ThreadStatic-pooled scratch longer than the active
+        /// range; consumers must use <see cref="Count"/> and
+        /// <see cref="PanelAngleCount"/> rather than <c>X.Length</c>.
+        /// </summary>
+        public WakeGeometryData(double[] x, double[] y, double[] normalX, double[] normalY, double[] panelAngle, int count, int panelAngleCount)
         {
             X = x;
             Y = y;
             NormalX = normalX;
             NormalY = normalY;
             PanelAngle = panelAngle;
+            Count = count;
+            PanelAngleCount = panelAngleCount;
         }
 
-        public int Count => X.Length;
+        public int Count { get; }
+
+        public int PanelAngleCount { get; }
 
         public double[] X { get; }
 
