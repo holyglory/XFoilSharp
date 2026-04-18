@@ -3826,7 +3826,8 @@ public static class ViscousSolverEngine
                     finalU2, theta, finalDsw, wakeGap,
                     hstinv, hstinv_ms, gm1, rstbl, rstbl_ms,
                     GetHvRat(true), reybl, reybl_re, reybl_ms,
-                    useLegacyPrecision: true);
+                    useLegacyPrecision: true,
+                    destination: GetEngineKinematicScratchA());
                 
                 int blvarMode = wake ? 3 : (turb || tran ? 2 : 1);
                 // Fortran xbl.f label 109 calls BLVAR sequentially for wake stations:
@@ -3844,12 +3845,11 @@ public static class ViscousSolverEngine
                     blvarMode, effectiveHk, finalKin.RT2, finalKin.M2,
                     finalKin.H2, ctau, wakeGap, theta, finalDsw);
                 
-                var finalSecSnapshot = new BoundaryLayerSystemAssembler.SecondaryStationResult
-                {
-                    Hs = finalSec.Hs, Us = finalSec.Us, Cf = finalSec.Cf,
-                    Di = finalSec.Di, Cq = finalSec.Cteq, De = finalSec.De,
-                    Hc = finalSec.Hc
-                };
+                var finalSecSnapshot = GetEngineSecondaryScratchA();
+                ResetEngineSecondaryScratch(finalSecSnapshot);
+                finalSecSnapshot.Hs = finalSec.Hs; finalSecSnapshot.Us = finalSec.Us; finalSecSnapshot.Cf = finalSec.Cf;
+                finalSecSnapshot.Di = finalSec.Di; finalSecSnapshot.Cq = finalSec.Cteq; finalSecSnapshot.De = finalSec.De;
+                finalSecSnapshot.Hc = finalSec.Hc;
                 StoreLegacyCarrySnapshots(
                     blState, ibl, side,
                     CreateLegacyPrimaryStationStateOverride(
@@ -4051,7 +4051,8 @@ public static class ViscousSolverEngine
                     iterU2, theta2, dstar2, 0.0,
                     hstinv, hstinv_ms, gm1, rstbl, rstbl_ms,
                     GetHvRat(true), reybl, reybl_re, reybl_ms,
-                    useLegacyPrecision: true);
+                    useLegacyPrecision: true,
+                    destination: GetEngineKinematicScratchC());
             }
             else
             {
@@ -4702,7 +4703,8 @@ public static class ViscousSolverEngine
                 postU2, theta2, dstar2, 0.0,
                 hstinv, hstinv_ms, gm1, rstbl, rstbl_ms,
                 GetHvRat(true), reybl, reybl_re, reybl_ms,
-                useLegacyPrecision: true);
+                useLegacyPrecision: true,
+                destination: GetEngineKinematicScratchA());
             var postTransition = TransitionModel.ComputeTransitionPoint(
                 x1, x2, postU1, postU2,
                 theta1, theta2, dstar1, dstar2,
@@ -6129,7 +6131,8 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            settings.UseLegacyBoundaryLayerInitialization);
+                            settings.UseLegacyBoundaryLayerInitialization,
+                            destination: GetEngineKinematicScratchA());
                         hk2Current = currentKinematic.HK2;
                         hk2T2 = currentKinematic.HK2_T2;
                         hk2D2 = currentKinematic.HK2_D2;
@@ -7634,7 +7637,8 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            destination: GetEngineKinematicScratchA());
 
                         double konst = 0.03 * (xsi - xPrev) / Math.Max(prevTheta, 1e-30);
                         inverseTargetHk = kinematic1.HK2;
@@ -8113,7 +8117,8 @@ public static class ViscousSolverEngine
             reybl,
             reybl_re,
             reybl_ms,
-            useLegacyPrecision: true);
+            useLegacyPrecision: true,
+            destination: GetEngineKinematicScratchA());
         var primary = CreateLegacyPrimaryStationStateOverride(
             blState,
             ibl,
