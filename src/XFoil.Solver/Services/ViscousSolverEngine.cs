@@ -4538,7 +4538,8 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization).HK2;
+                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            destination: GetEngineKinematicScratchC()).HK2;
                     double inverseTargetHkRaw = LegacyPrecisionMath.Add(hk1, inverseTargetHkDelta, useLegacySeedPrecision);
                     inverseTargetHk = LegacyPrecisionMath.Max(inverseTargetHkRaw, hmax, useLegacySeedPrecision);
                     // Trace HTARG at side 2 station 4
