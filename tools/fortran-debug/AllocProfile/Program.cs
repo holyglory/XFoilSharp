@@ -66,3 +66,45 @@ double avgBytes = (finalTotal - prevTotal) / (double)iterations;
 Console.WriteLine();
 Console.WriteLine($"Steady-state avg allocations/case: {avgBytes:N0} bytes");
 Console.WriteLine($"Gen0: {GC.CollectionCount(0)} Gen1: {GC.CollectionCount(1)} Gen2: {GC.CollectionCount(2)}");
+
+// -----------------------------------------------------------------
+// Phase-level breakdown. Repeatedly call specific sub-phases so we
+// can attribute the per-case budget to each. These numbers are upper
+// bounds — some phases overlap but the relative scale is informative.
+// -----------------------------------------------------------------
+Console.WriteLine();
+Console.WriteLine("=== Phase breakdown (per call of each phase) ===");
+
+// ExtractCoordinates cost
+{
+    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+    long b = GC.GetAllocatedBytesForCurrentThread();
+    var pointsCount = geom.Points.Count;
+    var inputX = new double[pointsCount];
+    var inputY = new double[pointsCount];
+    for (int i = 0; i < pointsCount; i++) { inputX[i] = geom.Points[i].X; inputY[i] = geom.Points[i].Y; }
+    long a = GC.GetAllocatedBytesForCurrentThread();
+    Console.WriteLine($"  ExtractCoordinates: {a - b,10:N0} bytes (once per case)");
+}
+
+// Settings ctor cost
+{
+    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+    long b = GC.GetAllocatedBytesForCurrentThread();
+    var s = MakeSettings(re, ncrit);
+    long a = GC.GetAllocatedBytesForCurrentThread();
+    Console.WriteLine($"  AnalysisSettings ctor: {a - b,10:N0} bytes");
+}
+
+// Full AnalyzeViscous trial count of bytes
+{
+    long deltas = 0; int n = 20;
+    for (int i = 0; i < n; i++)
+    {
+        long b = GC.GetAllocatedBytesForCurrentThread();
+        _ = service.AnalyzeViscous(geom, alpha, settings);
+        long a = GC.GetAllocatedBytesForCurrentThread();
+        deltas += (a - b);
+    }
+    Console.WriteLine($"  AnalyzeViscous full: {deltas / n,10:N0} bytes/call (avg of {n})");
+}

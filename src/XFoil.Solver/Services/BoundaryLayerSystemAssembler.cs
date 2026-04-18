@@ -1902,51 +1902,25 @@ public static class BoundaryLayerSystemAssembler
         // Equation 2: Momentum (von Karman) (Fortran BLDIF lines 1842-1898)
         // ================================================================
         {
-            var eq2Inputs = new BldifEq2Inputs
-            {
-                Itype = bldifType,
-                X1 = x1,
-                X2 = x2,
-                U1 = u1,
-                U2 = u2,
-                T1 = t1,
-                T2 = t2,
-                Dw1 = dw1,
-                Dw2 = dw2,
-                H1 = h1,
-                H1_T1 = h1_t1,
-                H1_D1 = h1_d1,
-                H2 = h2,
-                H2_T2 = h2_t2,
-                H2_D2 = h2_d2,
-                M1 = m1v,
-                M1_U1 = m1_u1,
-                M2 = m2v,
-                M2_U2 = m2_u2,
-                Cfm = cfm,
-                Cfm_T1 = cfm_t1,
-                Cfm_D1 = cfm_d1,
-                Cfm_U1 = cfm_u1,
-                Cfm_T2 = cfm_t2,
-                Cfm_D2 = cfm_d2,
-                Cfm_U2 = cfm_u2,
-                Cf1 = cf1,
-                Cf1_T1 = cf1_t1,
-                Cf1_D1 = cf1_d1,
-                Cf1_U1 = cf1_u1,
-                Cf2 = cf2,
-                Cf2_T2 = cf2_t2,
-                Cf2_D2 = cf2_d2,
-                Cf2_U2 = cf2_u2,
-                XLog = xlog,
-                ULog = ulog,
-                TLog = tlog,
-                DdLog = ddlog,
-                UseLegacyPrecision = useLegacyPrecision,
-                TraceSide = traceSide ?? 0,
-                TraceStation = traceStation ?? 0,
-                TraceIteration = traceIteration ?? 0
-            };
+            var eq2Inputs = GetPooledBldifEq2Inputs();
+            eq2Inputs.Itype = bldifType;
+            eq2Inputs.X1 = x1; eq2Inputs.X2 = x2;
+            eq2Inputs.U1 = u1; eq2Inputs.U2 = u2;
+            eq2Inputs.T1 = t1; eq2Inputs.T2 = t2;
+            eq2Inputs.Dw1 = dw1; eq2Inputs.Dw2 = dw2;
+            eq2Inputs.H1 = h1; eq2Inputs.H1_T1 = h1_t1; eq2Inputs.H1_D1 = h1_d1;
+            eq2Inputs.H2 = h2; eq2Inputs.H2_T2 = h2_t2; eq2Inputs.H2_D2 = h2_d2;
+            eq2Inputs.M1 = m1v; eq2Inputs.M1_U1 = m1_u1;
+            eq2Inputs.M2 = m2v; eq2Inputs.M2_U2 = m2_u2;
+            eq2Inputs.Cfm = cfm; eq2Inputs.Cfm_T1 = cfm_t1; eq2Inputs.Cfm_D1 = cfm_d1; eq2Inputs.Cfm_U1 = cfm_u1;
+            eq2Inputs.Cfm_T2 = cfm_t2; eq2Inputs.Cfm_D2 = cfm_d2; eq2Inputs.Cfm_U2 = cfm_u2;
+            eq2Inputs.Cf1 = cf1; eq2Inputs.Cf1_T1 = cf1_t1; eq2Inputs.Cf1_D1 = cf1_d1; eq2Inputs.Cf1_U1 = cf1_u1;
+            eq2Inputs.Cf2 = cf2; eq2Inputs.Cf2_T2 = cf2_t2; eq2Inputs.Cf2_D2 = cf2_d2; eq2Inputs.Cf2_U2 = cf2_u2;
+            eq2Inputs.XLog = xlog; eq2Inputs.ULog = ulog; eq2Inputs.TLog = tlog; eq2Inputs.DdLog = ddlog;
+            eq2Inputs.UseLegacyPrecision = useLegacyPrecision;
+            eq2Inputs.TraceSide = traceSide ?? 0;
+            eq2Inputs.TraceStation = traceStation ?? 0;
+            eq2Inputs.TraceIteration = traceIteration ?? 0;
             BldifEq2Result eq2 = AssembleMomentumEquation(eq2Inputs);
 
             result.Residual[1] = eq2.Residual;
@@ -6433,7 +6407,24 @@ public static class BoundaryLayerSystemAssembler
 
     internal static BldifEq2Result AssembleMomentumEquation(BldifEq2Inputs input)
     {
-        var result = new BldifEq2Result();
+        var result = GetPooledBldifEq2Result();
+        // Zero all fields so the pooled instance behaves like a fresh one —
+        // most fields are reassigned unconditionally below, but the
+        // legacy/standard branches skip different subsets.
+        result.Residual = 0;
+        result.Ha = 0; result.Ma = 0; result.Xa = 0; result.Ta = 0; result.Hwa = 0;
+        result.CfxCenter = 0; result.CfxPanels = 0; result.Cfx = 0; result.Btmp = 0;
+        result.CfxCfm = 0; result.CfxCf1 = 0; result.CfxCf2 = 0; result.CfxT2 = 0;
+        result.CfxX1 = 0; result.CfxX2 = 0;
+        result.ZCfx = 0; result.ZHa = 0; result.ZHwa = 0; result.ZMa = 0;
+        result.ZXl = 0; result.ZUl = 0; result.ZTl = 0;
+        result.ZCfm = 0; result.ZCf1 = 0; result.ZCf2 = 0;
+        result.ZT1 = 0; result.ZT2 = 0;
+        result.ZX1XlogTerm = 0; result.ZX1CfxTerm = 0; result.ZX1 = 0;
+        result.ZX2XlogTerm = 0; result.ZX2CfxTerm = 0; result.ZX2 = 0;
+        result.ZU1 = 0; result.ZU2 = 0;
+        result.VS1_22 = 0; result.VS1_23 = 0; result.VS1_24 = 0; result.VS1_X = 0;
+        result.VS2_22 = 0; result.VS2_23 = 0; result.VS2_24 = 0; result.VS2_X = 0;
 
         if (input.UseLegacyPrecision)
         {
@@ -7155,6 +7146,14 @@ public static class BoundaryLayerSystemAssembler
     internal static MidpointResult GetPooledMidpointResult() => _pooledMidpoint ??= new MidpointResult();
     internal static BldifLogTerms GetPooledBldifLogTerms() => _pooledBldifLogTerms ??= new BldifLogTerms();
     internal static StationVariables GetPooledStationVariablesEngine() => _pooledStationVarsEngine ??= new StationVariables();
+
+    // Pool slots for BldifEq2Inputs / BldifEq2Result — ComputeFiniteDifferences
+    // allocated both per call which meant ~2 allocations of ~40-field class
+    // instances per station per Newton iter (~100KB per case).
+    [ThreadStatic] private static BldifEq2Inputs? _pooledBldifEq2Inputs;
+    [ThreadStatic] private static BldifEq2Result? _pooledBldifEq2Result;
+    internal static BldifEq2Inputs GetPooledBldifEq2Inputs() => _pooledBldifEq2Inputs ??= new BldifEq2Inputs();
+    internal static BldifEq2Result GetPooledBldifEq2Result() => _pooledBldifEq2Result ??= new BldifEq2Result();
 
     internal static BlsysResult GetPooledBlsysResult()
     {

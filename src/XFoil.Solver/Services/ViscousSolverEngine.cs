@@ -2338,17 +2338,17 @@ public static class ViscousSolverEngine
             return null;
         }
 
-        (int[] overlayIndices, double[] currentGamma) = GetLegacyWakeSeedGammaOverlay(
+        (int[] overlayIndices, int overlayCount, double[] currentGamma) = GetLegacyWakeSeedGammaOverlay(
             inviscidState,
             qinv,
             qinvCount,
             isp,
             freestreamSpeed);
         double[]? restoredGamma = null;
-        if (overlayIndices.Length > 0)
+        if (overlayCount > 0)
         {
-            restoredGamma = XFoil.Solver.Numerics.SolverBuffers.WakeSeedRestoredGamma(overlayIndices.Length);
-            for (int overlay = 0; overlay < overlayIndices.Length; overlay++)
+            restoredGamma = XFoil.Solver.Numerics.SolverBuffers.WakeSeedRestoredGamma(overlayCount);
+            for (int overlay = 0; overlay < overlayCount; overlay++)
             {
                 int index = overlayIndices[overlay];
                 restoredGamma[overlay] = inviscidState.VortexStrength[index];
@@ -2437,7 +2437,7 @@ public static class ViscousSolverEngine
         {
             if (restoredGamma is not null)
             {
-                for (int overlay = 0; overlay < overlayIndices.Length; overlay++)
+                for (int overlay = 0; overlay < overlayCount; overlay++)
                 {
                     inviscidState.VortexStrength[overlayIndices[overlay]] = restoredGamma[overlay];
                 }
@@ -2445,7 +2445,7 @@ public static class ViscousSolverEngine
         }
     }
 
-    private static (int[] overlayIndices, double[] currentGamma) GetLegacyWakeSeedGammaOverlay(
+    private static (int[] overlayIndices, int overlayCount, double[] currentGamma) GetLegacyWakeSeedGammaOverlay(
         InviscidSolverState inviscidState,
         double[] qinv,
         int qinvCount,
@@ -2456,7 +2456,7 @@ public static class ViscousSolverEngine
         int n = Math.Min(inviscidState.NodeCount, qinvCount);
         if (!useLegacyPrecision || n <= 0)
         {
-            return (Array.Empty<int>(), Array.Empty<double>());
+            return (Array.Empty<int>(), 0, Array.Empty<double>());
         }
 
         double[] currentGamma = EdgeVelocityCalculator.SetVortexFromViscousSpeed(
@@ -2465,7 +2465,11 @@ public static class ViscousSolverEngine
             freestreamSpeed,
             useLegacyPrecision,
             destination: SolverBuffers.PanelScratch6(n));
-        var overlayIndices = new HashSet<int>();
+        // Pooled bitset replaces HashSet<int> — indices fit densely in 0..n,
+        // so a bool[n] dedupes allocations for the two loops below. The
+        // sorted-order `OrderBy + ToArray` step is just a scan in index order
+        // over the bitset.
+        bool[] bitset = SolverBuffers.OverlayBitset(n);
 
         bool Differs(int index)
             => BitConverter.SingleToInt32Bits((float)inviscidState.VortexStrength[index]) !=
@@ -2483,7 +2487,7 @@ public static class ViscousSolverEngine
                 continue;
             }
 
-            overlayIndices.Add(index);
+            bitset[index] = true;
         }
 
         int stagnationIndex = Math.Max(0, Math.Min(n - 1, isp));
@@ -2507,14 +2511,23 @@ public static class ViscousSolverEngine
             {
                 for (int runIndex = runStart; runIndex <= runEnd; runIndex++)
                 {
-                    overlayIndices.Add(runIndex);
+                    bitset[runIndex] = true;
                 }
             }
 
             runStart = -1;
         }
 
-        return (overlayIndices.OrderBy(index => index).ToArray(), currentGamma);
+        int[] overlayIndices = SolverBuffers.OverlayIndicesBuffer(n);
+        int overlayCount = 0;
+        for (int index = 0; index < n; index++)
+        {
+            if (bitset[index])
+            {
+                overlayIndices[overlayCount++] = index;
+            }
+        }
+        return (overlayIndices, overlayCount, currentGamma);
     }
 
     // Legacy mapping: legacy-derived from XFoil WGAP wake profile behavior

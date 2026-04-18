@@ -359,6 +359,28 @@ internal static class SolverBuffers
     internal static double[] WakeSpacingSDouble(int n) => EnsureVector(ref _wakeSpacingSD, n);
     internal static double[] WakeSpacingTraceD(int n) => EnsureVector(ref _wakeSpacingTraceD, n);
 
+    // Overlay bitset + sorted index buffer replacing HashSet<int> + OrderBy +
+    // ToArray in GetLegacyWakeSeedGammaOverlay. Bitset is sized per case by
+    // panel count; the output int[] is sized to panel count too and the
+    // caller uses an explicit count return value.
+    [ThreadStatic] private static bool[]? _overlayBitset;
+    [ThreadStatic] private static int[]? _overlayIndices;
+
+    internal static bool[] OverlayBitset(int n)
+    {
+        var buf = _overlayBitset;
+        if (buf is null || buf.Length < n) { buf = new bool[n]; _overlayBitset = buf; }
+        else { Array.Clear(buf, 0, n); }
+        return buf;
+    }
+
+    internal static int[] OverlayIndicesBuffer(int n)
+    {
+        var buf = _overlayIndices;
+        if (buf is null || buf.Length < n) { buf = new int[n]; _overlayIndices = buf; }
+        return buf;
+    }
+
     internal static double[,] DijScratch(int rows, int cols)
     {
         var buffer = _dijScratch;
