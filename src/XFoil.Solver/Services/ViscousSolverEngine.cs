@@ -249,6 +249,38 @@ public static class ViscousSolverEngine
     private static TransitionModel.TransitionPointResult GetPooledTransitionPointSeed()
         => s_pooledTransitionPointSeed ??= new TransitionModel.TransitionPointResult();
 
+    // Scratch slot for "save-before-overwrite" patterns against
+    // blState.LegacySecondary — the Newton loop reads the existing
+    // secondary snapshot, saves it, then calls a refresh helper that
+    // overwrites the pooled storage slot in place. A dedicated
+    // ThreadStatic preservation buffer lets us copy fields out without
+    // allocating per call.
+    [ThreadStatic] private static BoundaryLayerSystemAssembler.SecondaryStationResult? s_preservedLegacySecondary;
+
+    private static BoundaryLayerSystemAssembler.SecondaryStationResult? PreserveLegacySecondary(
+        BoundaryLayerSystemAssembler.SecondaryStationResult? source)
+    {
+        if (source is null)
+        {
+            return null;
+        }
+        var slot = s_preservedLegacySecondary ??= new BoundaryLayerSystemAssembler.SecondaryStationResult();
+        slot.CopyFrom(source);
+        return slot;
+    }
+
+    // Same pattern for PrimaryStationState — ResolveLegacyPrimaryStationStateOverride
+    // wants to return a snapshot value that survives downstream pool overwrites.
+    [ThreadStatic] private static BoundaryLayerSystemAssembler.PrimaryStationState? s_resolvedLegacyPrimary;
+
+    private static BoundaryLayerSystemAssembler.PrimaryStationState CopyLegacyPrimaryIntoResolvedScratch(
+        BoundaryLayerSystemAssembler.PrimaryStationState source)
+    {
+        var slot = s_resolvedLegacyPrimary ??= new BoundaryLayerSystemAssembler.PrimaryStationState();
+        slot.CopyFrom(source);
+        return slot;
+    }
+
     private static TransitionModel.TransitionPointResult GetPooledTransitionPointPostLoop()
         => s_pooledTransitionPointPostLoop ??= new TransitionModel.TransitionPointResult();
 
@@ -3826,7 +3858,7 @@ public static class ViscousSolverEngine
                         : 0.0;
                     var preservedSecondary = useAcceptedSecondaryRefresh
                         ? null
-                        : blState.LegacySecondary[ibl, side]?.Clone();
+                        : PreserveLegacySecondary(blState.LegacySecondary[ibl, side]);
                     RefreshLegacyAcceptedStationSnapshot(
                         blState,
                         side,
@@ -7803,18 +7835,22 @@ public static class ViscousSolverEngine
             return null;
         }
 
-        return blState.LegacyPrimary[ibl, side]?.Clone()
-            ?? CreateLegacyPrimaryStationStateOverride(
-                blState,
-                ibl,
-                side,
-                tkbl,
-                qinfbl,
-                tkbl_ms,
-                uei,
-                theta,
-                dstar,
-                useLegacyPrecision);
+        var live = blState.LegacyPrimary[ibl, side];
+        if (live is not null)
+        {
+            return CopyLegacyPrimaryIntoResolvedScratch(live);
+        }
+        return CreateLegacyPrimaryStationStateOverride(
+            blState,
+            ibl,
+            side,
+            tkbl,
+            qinfbl,
+            tkbl_ms,
+            uei,
+            theta,
+            dstar,
+            useLegacyPrecision);
     }
 
     private static BoundaryLayerSystemAssembler.PrimaryStationState? CreateLegacyPrimaryStationStateOverride(
@@ -7863,10 +7899,9 @@ public static class ViscousSolverEngine
         {
         }
 
-        blState.LegacyPrimary[ibl, side] = primary?.Clone();
-        blState.LegacyKinematic[ibl, side] = kinematic?.Clone();
-        blState.LegacySecondary[ibl, side] = secondary?.Clone();
-        
+        blState.SetLegacyPrimary(ibl, side, primary);
+        blState.SetLegacyKinematic(ibl, side, kinematic);
+        blState.SetLegacySecondary(ibl, side, secondary);
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHUE/MRCHDU downstream BLKIN refresh
@@ -7949,9 +7984,18 @@ public static class ViscousSolverEngine
             station1KinematicOverride: blState.LegacyKinematic[ibm, side],
             station1SecondaryOverride: blState.LegacySecondary[ibm, side]);
 
-        // Preserve MRCHUE COM carry values (PreUpdateT/PreUpdateD) across the refresh.
+        // Preserve MRCHUE COM carry values (PreUpdateT/PreUpdateD) across the
+        // refresh. Capture the pre-update fields as local copies BEFORE the
+        // SetLegacyPrimary call — the pooled storage slot is overwritten in
+        // place by CopyFrom, so any reference into it would see the new data
+        // after the assignment.
         var oldPrimary = blState.LegacyPrimary[ibl, side];
-        blState.LegacyPrimary[ibl, side] = acceptedResult.Primary2Snapshot?.Clone()
+        double? savedPreUpdateT = oldPrimary?.PreUpdateT;
+        double? savedPreUpdateD = oldPrimary?.PreUpdateD;
+        double? savedPreUpdateDFull = oldPrimary?.PreUpdateDFull;
+        bool hadSavedPreUpdate = savedPreUpdateT.HasValue;
+
+        var sourcePrimary = acceptedResult.Primary2Snapshot
             ?? CreateLegacyPrimaryStationStateOverride(
                 blState,
                 ibl,
@@ -7963,16 +8007,15 @@ public static class ViscousSolverEngine
                 theta,
                 dstar,
                 useLegacyPrecision: true);
-        // Preserve MRCHUE COM carry values across the refresh.
-        if (oldPrimary?.PreUpdateT.HasValue == true && blState.LegacyPrimary[ibl, side] is { } newPrimary)
+        blState.SetLegacyPrimary(ibl, side, sourcePrimary);
+        if (hadSavedPreUpdate && blState.LegacyPrimary[ibl, side] is { } newPrimary)
         {
-            newPrimary.PreUpdateT = oldPrimary.PreUpdateT;
-            newPrimary.PreUpdateD = oldPrimary.PreUpdateD;
-            newPrimary.PreUpdateDFull = oldPrimary.PreUpdateDFull;
+            newPrimary.PreUpdateT = savedPreUpdateT;
+            newPrimary.PreUpdateD = savedPreUpdateD;
+            newPrimary.PreUpdateDFull = savedPreUpdateDFull;
         }
-        blState.LegacyKinematic[ibl, side] = acceptedResult.Kinematic2Snapshot?.Clone();
-        blState.LegacySecondary[ibl, side] = preservedSecondary?.Clone()
-            ?? acceptedResult.Secondary2Snapshot?.Clone();
+        blState.SetLegacyKinematic(ibl, side, acceptedResult.Kinematic2Snapshot);
+        blState.SetLegacySecondary(ibl, side, preservedSecondary ?? acceptedResult.Secondary2Snapshot);
     }
 
     private static void RefreshLegacyKinematicSnapshot(
@@ -8038,8 +8081,8 @@ public static class ViscousSolverEngine
             dForSystem,
             useLegacyPrecision: true);
 
-        blState.LegacyPrimary[ibl, side] = primary;
-        blState.LegacyKinematic[ibl, side] = kinematic.Clone();
+        blState.SetLegacyPrimary(ibl, side, primary);
+        blState.SetLegacyKinematic(ibl, side, kinematic);
     }
 
 

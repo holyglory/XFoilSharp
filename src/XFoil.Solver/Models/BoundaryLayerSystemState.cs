@@ -86,6 +86,72 @@ public sealed class BoundaryLayerSystemState
         LegacySecondary = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult?[maxStations, 2];
         LegacyAmplificationCarry = new double[maxStations, 2];
         LegacySetblLaminarShearCarry = 0.0;
+
+        // Snapshot storage pool — the Legacy* arrays hold references to the
+        // corresponding pool slots (or null when the slot is inactive). Pre-
+        // allocating here turns per-Newton-iter `?.Clone()` stores into
+        // field-copy writes with zero per-call heap churn.
+        _primaryStorage = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState[maxStations, 2];
+        _kinematicStorage = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult[maxStations, 2];
+        _secondaryStorage = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult[maxStations, 2];
+        for (int ibl = 0; ibl < maxStations; ibl++)
+        {
+            for (int side = 0; side < 2; side++)
+            {
+                _primaryStorage[ibl, side] = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState();
+                _kinematicStorage[ibl, side] = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult();
+                _secondaryStorage[ibl, side] = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult();
+            }
+        }
+    }
+
+    private readonly XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState[,] _primaryStorage;
+    private readonly XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult[,] _kinematicStorage;
+    private readonly XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult[,] _secondaryStorage;
+
+    /// <summary>
+    /// Assigns the Legacy*[ibl, side] snapshot from <paramref name="source"/>.
+    /// Copies field-wise into the pre-allocated pool slot when <paramref name="source"/>
+    /// is non-null; clears the live reference to null when <paramref name="source"/>
+    /// is null. Replaces `LegacyPrimary[i, s] = source?.Clone()` without
+    /// allocating a fresh instance per call.
+    /// </summary>
+    public void SetLegacyPrimary(int ibl, int side, XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState? source)
+    {
+        if (source is null)
+        {
+            LegacyPrimary[ibl, side] = null;
+            return;
+        }
+        var slot = _primaryStorage[ibl, side];
+        slot.CopyFrom(source);
+        LegacyPrimary[ibl, side] = slot;
+    }
+
+    /// <summary>Snapshot assignment for <see cref="LegacyKinematic"/>.</summary>
+    public void SetLegacyKinematic(int ibl, int side, XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult? source)
+    {
+        if (source is null)
+        {
+            LegacyKinematic[ibl, side] = null;
+            return;
+        }
+        var slot = _kinematicStorage[ibl, side];
+        slot.CopyFrom(source);
+        LegacyKinematic[ibl, side] = slot;
+    }
+
+    /// <summary>Snapshot assignment for <see cref="LegacySecondary"/>.</summary>
+    public void SetLegacySecondary(int ibl, int side, XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult? source)
+    {
+        if (source is null)
+        {
+            LegacySecondary[ibl, side] = null;
+            return;
+        }
+        var slot = _secondaryStorage[ibl, side];
+        slot.CopyFrom(source);
+        LegacySecondary[ibl, side] = slot;
     }
 
     /// <summary>Maximum stations per surface.</summary>

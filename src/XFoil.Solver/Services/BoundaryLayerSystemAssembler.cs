@@ -6855,15 +6855,19 @@ public static class BoundaryLayerSystemAssembler
         public double? PreUpdateDFull;
         public PrimaryStationState Clone()
         {
-            return new PrimaryStationState
-            {
-                U = U,
-                T = T,
-                D = D,
-                PreUpdateT = PreUpdateT,
-                PreUpdateD = PreUpdateD,
-                PreUpdateDFull = PreUpdateDFull
-            };
+            var clone = new PrimaryStationState();
+            clone.CopyFrom(this);
+            return clone;
+        }
+
+        public void CopyFrom(PrimaryStationState source)
+        {
+            U = source.U;
+            T = source.T;
+            D = source.D;
+            PreUpdateT = source.PreUpdateT;
+            PreUpdateD = source.PreUpdateD;
+            PreUpdateDFull = source.PreUpdateDFull;
         }
     }
 
@@ -7020,46 +7024,20 @@ public static class BoundaryLayerSystemAssembler
         // Decision: Keep the clone helper because it makes the stale-state parity behavior explicit and testable.
         public SecondaryStationResult Clone()
         {
-            return new SecondaryStationResult
-            {
-                Hc = Hc,
-                Hc_T = Hc_T,
-                Hc_D = Hc_D,
-                Hc_U = Hc_U,
-                Hc_MS = Hc_MS,
-                Hs = Hs,
-                Hs_T = Hs_T,
-                Hs_D = Hs_D,
-                Hs_U = Hs_U,
-                Hs_MS = Hs_MS,
-                Us = Us,
-                Us_T = Us_T,
-                Us_D = Us_D,
-                Us_U = Us_U,
-                Us_MS = Us_MS,
-                Cq = Cq,
-                Cq_T = Cq_T,
-                Cq_D = Cq_D,
-                Cq_U = Cq_U,
-                Cq_MS = Cq_MS,
-                Cf = Cf,
-                Cf_T = Cf_T,
-                Cf_D = Cf_D,
-                Cf_U = Cf_U,
-                Cf_MS = Cf_MS,
-                Cf_RE = Cf_RE,
-                Di = Di,
-                Di_S = Di_S,
-                Di_T = Di_T,
-                Di_D = Di_D,
-                Di_U = Di_U,
-                Di_MS = Di_MS,
-                De = De,
-                De_T = De_T,
-                De_D = De_D,
-                De_U = De_U,
-                De_MS = De_MS
-            };
+            var clone = new SecondaryStationResult();
+            clone.CopyFrom(this);
+            return clone;
+        }
+
+        public void CopyFrom(SecondaryStationResult source)
+        {
+            Hc = source.Hc; Hc_T = source.Hc_T; Hc_D = source.Hc_D; Hc_U = source.Hc_U; Hc_MS = source.Hc_MS;
+            Hs = source.Hs; Hs_T = source.Hs_T; Hs_D = source.Hs_D; Hs_U = source.Hs_U; Hs_MS = source.Hs_MS;
+            Us = source.Us; Us_T = source.Us_T; Us_D = source.Us_D; Us_U = source.Us_U; Us_MS = source.Us_MS;
+            Cq = source.Cq; Cq_T = source.Cq_T; Cq_D = source.Cq_D; Cq_U = source.Cq_U; Cq_MS = source.Cq_MS;
+            Cf = source.Cf; Cf_T = source.Cf_T; Cf_D = source.Cf_D; Cf_U = source.Cf_U; Cf_MS = source.Cf_MS; Cf_RE = source.Cf_RE;
+            Di = source.Di; Di_S = source.Di_S; Di_T = source.Di_T; Di_D = source.Di_D; Di_U = source.Di_U; Di_MS = source.Di_MS;
+            De = source.De; De_T = source.De_T; De_D = source.De_D; De_U = source.De_U; De_MS = source.De_MS;
         }
     }
 
