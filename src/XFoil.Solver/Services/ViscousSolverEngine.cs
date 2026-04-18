@@ -3437,7 +3437,8 @@ public static class ViscousSolverEngine
                         // carried wake BLVAR state, causing 31K+ ULP theta.
                         var wakeSec = BoundaryLayerSystemAssembler.ComputeStationVariables(
                             3, currentKinematic.HK2, currentKinematic.RT2, currentKinematic.M2,
-                            currentKinematic.H2, ctau, wakeGap, theta, wakeStrippedDstar);
+                            currentKinematic.H2, ctau, wakeGap, theta, wakeStrippedDstar,
+                            destination: BoundaryLayerSystemAssembler.GetPooledStationVariablesEngine());
                         var secSnapshot = GetEngineSecondaryScratchA();
                         ResetEngineSecondaryScratch(secSnapshot);
                         secSnapshot.Hs = wakeSec.Hs; secSnapshot.Us = wakeSec.Us; secSnapshot.Cf = wakeSec.Cf;
@@ -3843,7 +3844,8 @@ public static class ViscousSolverEngine
                 }
                 var finalSec = BoundaryLayerSystemAssembler.ComputeStationVariables(
                     blvarMode, effectiveHk, finalKin.RT2, finalKin.M2,
-                    finalKin.H2, ctau, wakeGap, theta, finalDsw);
+                    finalKin.H2, ctau, wakeGap, theta, finalDsw,
+                    destination: BoundaryLayerSystemAssembler.GetPooledStationVariablesEngine());
                 
                 var finalSecSnapshot = GetEngineSecondaryScratchA();
                 ResetEngineSecondaryScratch(finalSecSnapshot);
@@ -6143,7 +6145,8 @@ public static class ViscousSolverEngine
                             // Fortran TESYS calls BLVAR(3) after BLPRV+BLKIN set COM2.
                             var wakeSec = BoundaryLayerSystemAssembler.ComputeStationVariables(
                                 3, currentKinematic.HK2, currentKinematic.RT2, currentKinematic.M2,
-                                currentKinematic.H2, ctau, wakeGap, theta, wakeStrippedDstar);
+                                currentKinematic.H2, ctau, wakeGap, theta, wakeStrippedDstar,
+                                destination: BoundaryLayerSystemAssembler.GetPooledStationVariablesEngine());
                             var sec = blState.LegacySecondary[ibl, side]
                                 ?? new BoundaryLayerSystemAssembler.SecondaryStationResult();
                             sec.Hs = wakeSec.Hs; sec.Us = wakeSec.Us; sec.Cf = wakeSec.Cf;

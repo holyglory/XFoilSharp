@@ -271,9 +271,16 @@ public static class BoundaryLayerSystemAssembler
     // Decision: Keep the grouped managed structure and preserve the legacy clamps and branch selection across laminar, turbulent, and wake modes.
     public static StationVariables ComputeStationVariables(
         int ityp, double hk, double rt, double msq, double h,
-        double ctau, double dw, double theta, double d = double.NaN)
+        double ctau, double dw, double theta, double d = double.NaN,
+        StationVariables? destination = null)
     {
-        var v = new StationVariables();
+        var v = destination ?? new StationVariables();
+        // Ensure a reused destination starts at zero so the caller sees the
+        // same semantics as a fresh instance.
+        if (destination is not null)
+        {
+            v.Cf = 0; v.Hs = 0; v.Di = 0; v.Cteq = 0; v.Us = 0; v.De = 0; v.Hc = 0;
+        }
 
         // Legacy block: xblsys.f BLVAR Hk clamp and secondary correlation setup.
         // Difference from legacy: The managed code keeps the same clamp thresholds, but the phases are separated into named variable blocks instead of one long straight-line routine.
@@ -474,9 +481,14 @@ public static class BoundaryLayerSystemAssembler
         int ityp,
         double hk1, double rt1, double m1,
         double hk2, double rt2, double m2,
-        bool useLegacyPrecision = false)
+        bool useLegacyPrecision = false,
+        MidpointResult? destination = null)
     {
-        var r = new MidpointResult();
+        var r = destination ?? new MidpointResult();
+        if (destination is not null)
+        {
+            r.Cfm = 0; r.Cfm_Hka = 0; r.Cfm_Rta = 0; r.Cfm_Ma = 0;
+        }
 
         double hka = useLegacyPrecision
             ? LegacyPrecisionMath.Average(hk1, hk2, true)
@@ -1114,7 +1126,7 @@ public static class BoundaryLayerSystemAssembler
         }
 
         // --- Midpoint Cf with chain derivatives (Fortran BLMID lines 1177-1188) ---
-        var mid = ComputeMidpointCorrelations(flowType, hk1, rt1, msq1, hk2, rt2, msq2, useLegacyPrecision);
+        var mid = ComputeMidpointCorrelations(flowType, hk1, rt1, msq1, hk2, rt2, msq2, useLegacyPrecision, destination: GetPooledMidpointResult());
         double cfm = mid.Cfm;
         double cfm_hka = mid.Cfm_Hka;
         double cfm_rta = mid.Cfm_Rta;
@@ -1219,7 +1231,8 @@ public static class BoundaryLayerSystemAssembler
             t2,
             hs1,
             hs2,
-            useLegacyPrecision);
+            useLegacyPrecision,
+            destination: GetPooledBldifLogTerms());
         double xlog = logTerms.XLog;
         double ulog = logTerms.ULog;
         double tlog = logTerms.TLog;
@@ -6697,9 +6710,15 @@ public static class BoundaryLayerSystemAssembler
         double t2,
         double hs1,
         double hs2,
-        bool useLegacyPrecision)
+        bool useLegacyPrecision,
+        BldifLogTerms? destination = null)
     {
-        var result = new BldifLogTerms();
+        var result = destination ?? new BldifLogTerms();
+        if (destination is not null)
+        {
+            result.XLog = 0; result.ULog = 0; result.TLog = 0; result.HLog = 0; result.DdLog = 0;
+            result.XRatio = 0; result.URatio = 0; result.TRatio = 0; result.HRatio = 0;
+        }
 
         if (useLegacyPrecision)
         {
@@ -7120,6 +7139,22 @@ public static class BoundaryLayerSystemAssembler
         => _pooledTrchekFinalUpstream ??= new KinematicResult();
     internal static KinematicResult GetPooledTrchekFinalTransitionKinematic()
         => _pooledTrchekFinalTransition ??= new KinematicResult();
+
+    // Pool slots for StationVariables / MidpointResult / BldifLogTerms used
+    // by ComputeStationVariables / ComputeMidpointCorrelations /
+    // ComputeBldifLogTerms. ComputeFiniteDifferences consumes its midpoint
+    // + logterms results and discards them within one station's assembly,
+    // so a single slot per type suffices. The public ComputeStationVariables
+    // call is also invoked from a few wake-secondary refresh sites — a
+    // dedicated engine slot is exposed separately.
+    [ThreadStatic] private static StationVariables? _pooledStationVarsCFD;
+    [ThreadStatic] private static MidpointResult? _pooledMidpoint;
+    [ThreadStatic] private static BldifLogTerms? _pooledBldifLogTerms;
+    [ThreadStatic] private static StationVariables? _pooledStationVarsEngine;
+    internal static StationVariables GetPooledStationVariablesCFD() => _pooledStationVarsCFD ??= new StationVariables();
+    internal static MidpointResult GetPooledMidpointResult() => _pooledMidpoint ??= new MidpointResult();
+    internal static BldifLogTerms GetPooledBldifLogTerms() => _pooledBldifLogTerms ??= new BldifLogTerms();
+    internal static StationVariables GetPooledStationVariablesEngine() => _pooledStationVarsEngine ??= new StationVariables();
 
     internal static BlsysResult GetPooledBlsysResult()
     {
