@@ -393,14 +393,10 @@ internal static class SolverBuffers
             buffer = new double[nr, nc];
             _dijScratch = buffer;
         }
-        else
-        {
-            // The caller writes every cell it cares about, but the array may
-            // have stale rows/cols beyond the current (n, totalSize). Zero
-            // those to be safe — clearing the full buffer is cheap relative
-            // to the N^2 work that follows.
-            Array.Clear(buffer, 0, buffer.Length);
-        }
+        // Caller (BuildAnalyticalDIJ + FillAnalyticalWakeCoupling) writes every
+        // cell in [0..totalSize) × [0..totalSize) before reading, so we don't
+        // clear on reuse — the zero-clear of an N² double matrix costs ~260 KB
+        // of memory bandwidth per case, amplified across 96 threads.
         return buffer;
     }
 
@@ -416,10 +412,8 @@ internal static class SolverBuffers
             buffer = new double[nr, nc];
             _wakeSurfaceInfluenceScratch = buffer;
         }
-        else
-        {
-            Array.Clear(buffer, 0, buffer.Length);
-        }
+        // See DijScratch — caller writes every cell it reads. Skip the
+        // reuse clear to save memory-bandwidth overhead.
         return buffer;
     }
 

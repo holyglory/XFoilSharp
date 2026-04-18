@@ -284,18 +284,39 @@ if (int.TryParse(Environment.GetEnvironmentVariable("XFOIL_PARALLEL"), out int e
 // but debugging needs any unparity fast, not necessarily the lowest-index one.
 int maxParallel = defaultParallel;
 Console.Error.WriteLine($"Using {maxParallel} parallel threads (CPU count: {Environment.ProcessorCount})");
-ThreadPool.SetMinThreads(maxParallel, maxParallel);
-ThreadPool.SetMaxThreads(maxParallel * 2, maxParallel * 2);
+// NOTE: Earlier versions did ThreadPool.SetMinThreads(maxParallel, maxParallel),
+// which on this machine (192 logical CPUs) actually *lowered* the worker
+// floor from the runtime's detected 192 → 96. Parallel.ForEach uses the
+// ThreadPool as its worker pool, and throttling the pool below physical-core
+// count can prevent the loop from ramping up to MaxDegreeOfParallelism
+// quickly. Ensure min ≥ detected logical count; only raise, never lower.
+ThreadPool.GetMinThreads(out int curMinW, out int curMinIo);
+int wantMinW = Math.Max(curMinW, Math.Max(maxParallel, Environment.ProcessorCount));
+int wantMinIo = Math.Max(curMinIo, Math.Max(maxParallel, Environment.ProcessorCount));
+if (wantMinW > curMinW || wantMinIo > curMinIo)
+{
+    ThreadPool.SetMinThreads(wantMinW, wantMinIo);
+}
+ThreadPool.GetMinThreads(out int postMinW, out int postMinIo);
+ThreadPool.GetMaxThreads(out int postMaxW, out int postMaxIo);
+Console.Error.WriteLine($"ThreadPool: min(worker={postMinW},io={postMinIo}) max(worker={postMaxW},io={postMaxIo})");
 // Dynamic work distribution via Parallel.ForEach on a range partitioner.
 // Each worker holds thread-local accumulators and merges them ONCE under
 // mergeLock when the thread finishes (~192 lock acquisitions total, zero
 // per-case sync). Work stealing prevents tail-end imbalance that static
 // chunking produced.
 int linesLen = lines.Length;
-// Chunk size: want ≥ 4× more chunks than workers for load balance,
-// but chunk size of at least 1 (obviously) and no more than 8 to
-// minimize tail imbalance on high-variance per-case times.
-int rangeChunk = Math.Max(1, Math.Min(8, linesLen / (maxParallel * 4)));
+// Chunk size: per-case runtime varies by ~10× across the Selig set
+// (small/thin foils finish fast; wake-heavy or near-stall cases take
+// much longer). A chunk size of 1 maximises work-stealing granularity
+// and minimises tail-end imbalance, at the cost of slightly more
+// partitioner overhead — still negligible relative to per-case runtime.
+// Override via XFOIL_CHUNK env var for experiments.
+int rangeChunk = 1;
+if (int.TryParse(Environment.GetEnvironmentVariable("XFOIL_CHUNK"), out int envChunk) && envChunk > 0)
+{
+    rangeChunk = envChunk;
+}
 var rangePartitioner = System.Collections.Concurrent.Partitioner.Create(0, linesLen, rangeChunk);
 Console.Error.WriteLine($"Range chunk size: {rangeChunk}, total chunks: {(linesLen + rangeChunk - 1) / rangeChunk}");
 Parallel.ForEach(
