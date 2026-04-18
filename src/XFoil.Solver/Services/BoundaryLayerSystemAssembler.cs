@@ -3618,7 +3618,8 @@ public static class BoundaryLayerSystemAssembler
                 reybl,
                 reybl_re,
                 reybl_ms,
-                useLegacyPrecision);
+                useLegacyPrecision,
+                destination: GetPooledTrdifKinematic1());
         // Classic TRDIF explicitly overwrites COM2 with the accepted XT packet
         // and then calls BLKIN again before BLDIF/BLVAR consume the transition
         // state. Reusing TRCHEK2's cached BLKIN snapshot here keeps the earlier
@@ -3637,7 +3638,8 @@ public static class BoundaryLayerSystemAssembler
             reybl,
             reybl_re,
             reybl_ms,
-            useLegacyPrecision);
+            useLegacyPrecision,
+            destination: GetPooledTrdifTransitionKinematic());
 
         // Trace laminar BLDIF inputs at station 5 side 2
         
@@ -3812,7 +3814,8 @@ public static class BoundaryLayerSystemAssembler
             reybl,
             reybl_re,
             reybl_ms,
-            useLegacyPrecision);
+            useLegacyPrecision,
+            destination: GetPooledTrdifKinematic2());
 
         var turbulentPart = ComputeFiniteDifferences(
             2,
@@ -6007,7 +6010,8 @@ public static class BoundaryLayerSystemAssembler
                 reybl,
                 reybl_re,
                 reybl_ms,
-                useLegacyPrecision);
+                useLegacyPrecision,
+                destination: GetPooledCurrentKinematic());
         KinematicResult kinematic1;
         if (isSimi)
         {
@@ -6043,7 +6047,8 @@ public static class BoundaryLayerSystemAssembler
                 reybl,
                 reybl_re,
                 reybl_ms,
-                useLegacyPrecision);
+                useLegacyPrecision,
+                destination: GetPooledKinematic1());
         }
 
         // Fortran SETBL: BLVAR clamps HK2 at each station, and COM1=COM2
@@ -7024,6 +7029,29 @@ public static class BoundaryLayerSystemAssembler
         => _pooledTrchekKinematic1 ??= new KinematicResult();
     internal static KinematicResult GetPooledTrchekKinematic2()
         => _pooledTrchekKinematic2 ??= new KinematicResult();
+
+    // Pool slot for AssembleStationSystem's `currentKinematic` local when the
+    // override is not provided (standard branch and some legacy sub-paths).
+    // The instance is only live across one station assembly, so a single
+    // ThreadStatic slot suffices.
+    [ThreadStatic] private static KinematicResult? _pooledCurrentKinematic;
+    internal static KinematicResult GetPooledCurrentKinematic()
+        => _pooledCurrentKinematic ??= new KinematicResult();
+
+    // Pool slots for ComputeTransitionIntervalSystem's local kinematic1 and
+    // transitionKinematic. Distinct from the AssembleStationSystem slots —
+    // TRDIF is invoked from inside the per-station assembly path, so both
+    // currentKinematic (outer) and transitionKinematic (inner) stay live on
+    // the same stack.
+    [ThreadStatic] private static KinematicResult? _pooledTrdifKinematic1;
+    [ThreadStatic] private static KinematicResult? _pooledTrdifTransitionKinematic;
+    [ThreadStatic] private static KinematicResult? _pooledTrdifKinematic2;
+    internal static KinematicResult GetPooledTrdifKinematic1()
+        => _pooledTrdifKinematic1 ??= new KinematicResult();
+    internal static KinematicResult GetPooledTrdifTransitionKinematic()
+        => _pooledTrdifTransitionKinematic ??= new KinematicResult();
+    internal static KinematicResult GetPooledTrdifKinematic2()
+        => _pooledTrdifKinematic2 ??= new KinematicResult();
 
     internal static BlsysResult GetPooledBlsysResult()
     {
