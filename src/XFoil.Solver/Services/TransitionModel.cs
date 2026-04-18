@@ -1147,7 +1147,8 @@ public static class TransitionModel
                 reybl,
                 reybl_re,
                 reybl_ms,
-                useLegacyPrecision);
+                useLegacyPrecision,
+                destination: BoundaryLayerSystemAssembler.GetPooledTrchekTransitionKinematic());
 
             var ax = ComputeTransitionSensitivities(
                 kinematic1.HK2,
@@ -1294,7 +1295,8 @@ public static class TransitionModel
                 reybl,
                 reybl_re,
                 reybl_ms,
-                true)
+                true,
+                destination: BoundaryLayerSystemAssembler.GetPooledTrchekFinalUpstreamKinematic())
             : kinematic1;
 
         double finalWf2;
@@ -1486,7 +1488,8 @@ public static class TransitionModel
                 reybl,
                 reybl_re,
                 reybl_ms,
-                useLegacyPrecision);
+                useLegacyPrecision,
+                destination: BoundaryLayerSystemAssembler.GetPooledTrchekFinalTransitionKinematic());
         AxsetResult finalAx = ComputeTransitionSensitivities(
             finalUpstreamKinematic.HK2,
             finalT1,

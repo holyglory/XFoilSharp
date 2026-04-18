@@ -7053,6 +7053,21 @@ public static class BoundaryLayerSystemAssembler
     internal static KinematicResult GetPooledTrdifKinematic2()
         => _pooledTrdifKinematic2 ??= new KinematicResult();
 
+    // Pool slots used by TRCHEK2 (TransitionModel.ComputeTransitionPoint)
+    // for the per-Newton-iter transitionKinematic, and for the post-loop
+    // finalUpstreamKinematic + finalTransitionKinematic snapshots. All three
+    // are live at overlapping points during ComputeTransitionPoint's post-
+    // loop sensitivity assembly.
+    [ThreadStatic] private static KinematicResult? _pooledTrchekTransitionKinematic;
+    [ThreadStatic] private static KinematicResult? _pooledTrchekFinalUpstream;
+    [ThreadStatic] private static KinematicResult? _pooledTrchekFinalTransition;
+    internal static KinematicResult GetPooledTrchekTransitionKinematic()
+        => _pooledTrchekTransitionKinematic ??= new KinematicResult();
+    internal static KinematicResult GetPooledTrchekFinalUpstreamKinematic()
+        => _pooledTrchekFinalUpstream ??= new KinematicResult();
+    internal static KinematicResult GetPooledTrchekFinalTransitionKinematic()
+        => _pooledTrchekFinalTransition ??= new KinematicResult();
+
     internal static BlsysResult GetPooledBlsysResult()
     {
         var b = _pooledBlsys ??= new BlsysResult();
