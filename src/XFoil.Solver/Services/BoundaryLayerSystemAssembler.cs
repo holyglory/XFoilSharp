@@ -574,7 +574,19 @@ public static class BoundaryLayerSystemAssembler
         // Fixed-size arrays are preallocated in BldifResult's default
         // initializer; the pooled path reuses a ThreadStatic instance so
         // the per-station-per-iter call pattern never hits the GC.
-        var result = destinationResult ?? new BldifResult();
+        // When the caller doesn't supply a destination we route through a
+        // dedicated ThreadStatic fallback so the per-station-per-iter code
+        // path never creates a fresh BldifResult (which would otherwise
+        // allocate 2×double[3,5] + 2×double[3] every call).
+        BldifResult result;
+        if (destinationResult is not null)
+        {
+            result = destinationResult;
+        }
+        else
+        {
+            result = GetPooledBldifCFDInner();
+        }
         string canonicalTracePhase = CanonicalizeTracePhase(tracePhase);
         kinematic1 ??= CreateStandaloneKinematicFallback(u1, t1, d1, dw1, reybl, useLegacyPrecision);
         kinematic2 ??= CreateStandaloneKinematicFallback(u2, t2, d2, dw2, reybl, useLegacyPrecision);
@@ -3850,9 +3862,10 @@ public static class BoundaryLayerSystemAssembler
             // combine step below).
             destinationResult: GetPooledBldifTertiary());
 
-        // Reuse caller's destination buffer (or allocate fresh fallback);
-        // arrays are preallocated and zero-cleared by ResetForReuse.
-        var result = destinationResult ?? new BldifResult();
+        // Reuse caller's destination buffer; fall back to the dedicated
+        // ComputeTransitionIntervalSystem pool slot so the TRDIF return
+        // path never allocates on the hot Newton stack.
+        var result = destinationResult ?? GetPooledBldifCTISInner();
         result.SetCarryKinematicSnapshot(transitionKinematic);
         result.SetSecondary2Snapshot(turbulentPart.Secondary2Snapshot);
 
@@ -5765,7 +5778,7 @@ public static class BoundaryLayerSystemAssembler
             dw2 = LegacyPrecisionMath.RoundToSingle(dw2);
         }
 
-        var result = destinationResult ?? new BldifResult();
+        var result = destinationResult ?? GetPooledBldifFallback();
 
         // Initialize to zero (matching Fortran DO 55 loop) — ResetForReuse
         // on the pooled instance already zeros arrays; fresh instances start
@@ -5896,7 +5909,7 @@ public static class BoundaryLayerSystemAssembler
 
         // Fixed-size arrays are preallocated in BlsysResult's default
         // initializer; the pooled path reuses a ThreadStatic instance.
-        var result = destinationResult ?? new BlsysResult();
+        var result = destinationResult ?? GetPooledBlsysFallback();
 
 
         // Determine ITYP (Fortran BLSYS lines 604-614)
@@ -7000,6 +7013,46 @@ public static class BoundaryLayerSystemAssembler
     [ThreadStatic] private static BldifResult? _pooledBldifPrimary;
     [ThreadStatic] private static BldifResult? _pooledBldifSecondary;
     [ThreadStatic] private static BldifResult? _pooledBldifTertiary;
+
+    // Fallback pool slots used by AssembleStationSystem/AssembleTESystem/
+    // ComputeFiniteDifferences/ComputeTransitionIntervalSystem when the
+    // caller doesn't supply a destinationResult. Callers that still want
+    // the three primary/secondary/tertiary pool slots for nested
+    // compositions can pass those explicitly; these slots are only used
+    // for the top-level fallback so they don't collide with internal pool
+    // usage on the same stack.
+    [ThreadStatic] private static BlsysResult? _pooledBlsysFallback;
+    [ThreadStatic] private static BldifResult? _pooledBldifFallback;
+    [ThreadStatic] private static BldifResult? _pooledBldifCFDInner;
+    [ThreadStatic] private static BldifResult? _pooledBldifCTISInner;
+
+    private static BlsysResult GetPooledBlsysFallback()
+    {
+        var b = _pooledBlsysFallback ??= new BlsysResult();
+        b.ResetForReuse();
+        return b;
+    }
+
+    private static BldifResult GetPooledBldifFallback()
+    {
+        var b = _pooledBldifFallback ??= new BldifResult();
+        b.ResetForReuse();
+        return b;
+    }
+
+    private static BldifResult GetPooledBldifCFDInner()
+    {
+        var b = _pooledBldifCFDInner ??= new BldifResult();
+        b.ResetForReuse();
+        return b;
+    }
+
+    private static BldifResult GetPooledBldifCTISInner()
+    {
+        var b = _pooledBldifCTISInner ??= new BldifResult();
+        b.ResetForReuse();
+        return b;
+    }
     // Pool for ComputeTransitionPoint calls made inside AssembleTESystem's
     // transition interval path. Separate from the ViscousSolverEngine seed
     // pools so an outer seed probe and an inner interval assembly can coexist

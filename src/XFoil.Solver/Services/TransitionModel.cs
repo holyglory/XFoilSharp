@@ -1703,6 +1703,8 @@ public static class TransitionModel
             traceSide, traceStation, traceIteration, tracePhase);
     }
 
+    [ThreadStatic] private static TransitionPointResult? s_pooledCheckTransitionExact;
+
     internal static TransitionCheckResult CheckTransitionExact(
         double x1, double x2, double ampl1, double ampl2, double amcrit,
         double ue1, double ue2,
@@ -1722,6 +1724,13 @@ public static class TransitionModel
         int? traceIteration = null,
         string? tracePhase = null)
     {
+        // Route CheckTransitionExact through a dedicated ThreadStatic
+        // TransitionPointResult slot — callers either discard fullPoint or
+        // pass it as transitionPointOverride into a downstream
+        // AssembleStationSystem call whose inner ComputeTransitionPoint
+        // uses a DIFFERENT pool slot (GetPooledTransitionPointInterval),
+        // so the reference stays stable through the downstream consumer.
+        var destination = s_pooledCheckTransitionExact ??= new TransitionPointResult();
         var point = ComputeTransitionPoint(
             x1,
             x2,
@@ -1749,7 +1758,8 @@ public static class TransitionModel
             traceSide,
             traceStation,
             traceIteration,
-            tracePhase);
+            tracePhase,
+            destinationResult: destination);
 
         var result = new TransitionCheckResult(
             point.TransitionOccurred,
