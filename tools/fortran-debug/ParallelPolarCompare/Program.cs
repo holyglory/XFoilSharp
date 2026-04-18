@@ -242,6 +242,9 @@ var g_perThreadActiveTicks = new List<long>();
 var g_perThreadProcessed = new List<int>();
 var g_perThreadMinTicks = new List<long>();
 var g_perThreadMaxTicks = new List<long>();
+// All case spans: (start ticks relative to sweep start, end ticks, thread id).
+// Used to compute actual concurrent-thread count histogram.
+var g_caseSpans = new List<(long Start, long End, int ThreadId)>();
 long g_sweepStartTicks = 0;
 
 // Default parallelism: physical cores only. On x86 with SMT, hyper-threads
@@ -251,6 +254,21 @@ long g_sweepStartTicks = 0;
 // lower per-thread cache / memory efficiency. Detect physical core count
 // from /proc/cpuinfo "cpu cores" × socket count; fall back to Env var or
 // half of logical CPU count.
+//
+// Empirical scaling (naca0015 × 5000 on Threadripper 9995WX, 96 physical /
+// 192 logical, 384 MB L3):
+//    12 threads → 104.9 s, avg concurrent 11.9
+//    24 threads →  56.5 s, avg concurrent 23.6
+//    48 threads →  40.7 s, avg concurrent 47.0
+//    72 threads →  37.4 s, avg concurrent 70.7  ← knee of scaling
+//    96 threads →  37.9 s, avg concurrent 93.7
+//   144 threads →  37.4 s, avg concurrent 140.2
+//   192 threads →  37.2 s, avg concurrent 186.0
+// Peak concurrent threads always equals the requested count — threads are
+// genuinely parallel. The plateau at ~37 s past 72 threads is memory-
+// bandwidth saturation (the DIJ matrix + per-case working set exceeds what
+// shared L3 / memory controllers can feed). Staying at physical-core count
+// wastes the fewest CPU cycles for a given wall-time outcome.
 int defaultParallel;
 try
 {
@@ -449,10 +467,15 @@ Parallel.ForEach(
 
             long caseStart = System.Diagnostics.Stopwatch.GetTimestamp();
             var result = service.AnalyzeViscous(geometry, alpha, settings);
-            long caseElapsed = System.Diagnostics.Stopwatch.GetTimestamp() - caseStart;
+            long caseEnd = System.Diagnostics.Stopwatch.GetTimestamp();
+            long caseElapsed = caseEnd - caseStart;
             local.ActiveTicks += caseElapsed;
             if (caseElapsed < local.MinCaseTicks) local.MinCaseTicks = caseElapsed;
             if (caseElapsed > local.MaxCaseTicks) local.MaxCaseTicks = caseElapsed;
+            local.CaseSpans.Add((
+                caseStart - g_sweepStartTicks,
+                caseEnd - g_sweepStartTicks,
+                System.Environment.CurrentManagedThreadId));
             double cd = result.DragDecomposition.CD;
             double cl = result.LiftCoefficient;
 
@@ -540,6 +563,7 @@ Parallel.ForEach(
                 g_perThreadProcessed.Add(local.Processed);
                 g_perThreadMinTicks.Add(local.MinCaseTicks);
                 g_perThreadMaxTicks.Add(local.MaxCaseTicks);
+                g_caseSpans.AddRange(local.CaseSpans);
             }
         }
     });
@@ -594,6 +618,75 @@ if (g_perThreadActiveTicks.Count > 0)
     double minCaseMs = minCaseTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
     double maxCaseMs = maxCaseTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
     Console.Error.WriteLine($"Per-case runtime: min={minCaseMs,6:F1} ms  max={maxCaseMs,7:F1} ms  (ratio={maxCaseMs / Math.Max(minCaseMs, 1e-6):F1}×)");
+
+    // Actual concurrent-thread count: walk event stream (start/end pairs)
+    // ordered by time, incrementing on start and decrementing on end. Gives
+    // the true "N threads running simultaneously at time t" answer instead
+    // of an average.
+    if (g_caseSpans.Count > 0)
+    {
+        var events = new List<(long Time, int Delta)>(g_caseSpans.Count * 2);
+        foreach (var (start, end, _) in g_caseSpans)
+        {
+            events.Add((start, +1));
+            events.Add((end, -1));
+        }
+        events.Sort((a, b) => a.Time != b.Time ? a.Time.CompareTo(b.Time) : b.Delta.CompareTo(a.Delta));
+        int active = 0;
+        int peak = 0;
+        long lastT = 0;
+        double hzMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        // Histogram over "time spent with exactly N threads active".
+        var histogram = new long[256];
+        foreach (var (t, d) in events)
+        {
+            if (active >= 0 && active < histogram.Length)
+            {
+                histogram[active] += (t - lastT);
+            }
+            active += d;
+            if (active > peak) peak = active;
+            lastT = t;
+        }
+        // Distinct thread IDs.
+        var distinctThreadIds = new HashSet<int>();
+        foreach (var (_, _, tid) in g_caseSpans) distinctThreadIds.Add(tid);
+
+        Console.Error.WriteLine();
+        Console.Error.WriteLine($"=== Actual concurrent-thread histogram ({distinctThreadIds.Count} distinct thread IDs observed) ===");
+        Console.Error.WriteLine($"Peak concurrent threads: {peak}");
+        long totalTicks = g_sweepElapsedTicks;
+        double covered = 0;
+        for (int n = 0; n < histogram.Length; n++)
+        {
+            if (histogram[n] == 0) continue;
+            double frac = (double)histogram[n] / totalTicks;
+            double ms = histogram[n] * hzMs;
+            covered += ms;
+            if (frac >= 0.005 || n == peak)
+                Console.Error.WriteLine($"  {n,3} threads active: {ms,8:F1} ms  ({frac:P1})");
+        }
+        // Weighted average concurrent threads across the whole sweep wall time.
+        double weightedSum = 0;
+        for (int n = 0; n < histogram.Length; n++)
+        {
+            weightedSum += n * (double)histogram[n];
+        }
+        Console.Error.WriteLine($"Time-weighted avg concurrent threads: {weightedSum / totalTicks:F2}");
+
+        // Buckets: how much wall time with ≥ thresholds of concurrent threads.
+        long[] ticksAtLeast = new long[5];
+        int[] thresholds = { 24, 48, 72, 96, 144 };
+        for (int i = 0; i < thresholds.Length; i++)
+        {
+            for (int n = thresholds[i]; n < histogram.Length; n++)
+                ticksAtLeast[i] += histogram[n];
+        }
+        for (int i = 0; i < thresholds.Length; i++)
+        {
+            Console.Error.WriteLine($"  Wall time with ≥ {thresholds[i],3} threads active: {ticksAtLeast[i] * hzMs,8:F1} ms ({(double)ticksAtLeast[i] / totalTicks:P1})");
+        }
+    }
 }
 Console.Error.WriteLine();
 
@@ -723,6 +816,12 @@ sealed class LocalState
     // Track min / max per-case time to see runtime variance.
     public long MinCaseTicks = long.MaxValue;
     public long MaxCaseTicks;
+    // Per-case (start, end) timestamps captured relative to g_sweepStartTicks.
+    // Used to compute *actual* concurrent-thread count over time by sweeping
+    // a 1 ms window across [0, sweepWall] and counting how many cases overlap
+    // each window. Exposes whether 48 threads are really running in parallel
+    // or if the scheduler is pinning work to a subset.
+    public List<(long Start, long End, int ThreadId)> CaseSpans = new(capacity: 128);
     public List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)> Results = new(capacity: 1024);
     public List<string> Fails = new();
 }
