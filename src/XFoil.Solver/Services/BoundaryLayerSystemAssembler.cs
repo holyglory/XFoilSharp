@@ -127,7 +127,8 @@ public static class BoundaryLayerSystemAssembler
         double hstinv, double hstinv_ms,
         double gm1bl, double rstbl, double rstbl_ms,
         double hvrat, double reybl, double reybl_re, double reybl_ms,
-        bool useLegacyPrecision = false)
+        bool useLegacyPrecision = false,
+        KinematicResult? destination = null)
     {
         if (useLegacyPrecision)
         {
@@ -147,7 +148,7 @@ public static class BoundaryLayerSystemAssembler
 
 
 
-            var legacy = new KinematicResult();
+            var legacy = destination ?? new KinematicResult();
 
             float u2sqHstinv = u2f * u2f * hstinvf;
             float legacyM2Den = gm1blf * (1.0f - (0.5f * u2sqHstinv));
@@ -202,7 +203,7 @@ public static class BoundaryLayerSystemAssembler
             return legacy;
         }
 
-        var r = new KinematicResult();
+        var r = destination ?? new KinematicResult();
 
         // Edge Mach^2
         double u2sq_hstinv = u2 * u2 * hstinv;
@@ -7011,6 +7012,18 @@ public static class BoundaryLayerSystemAssembler
 
     internal static KinematicResult GetPooledKinematic1()
         => _pooledKinematic1 ??= new KinematicResult();
+
+    // Pool slots for ComputeKinematicParameters destinations used from hot
+    // call sites in TransitionModel where the result is consumed locally
+    // and discarded. Two slots because TRCHEK2 holds kinematic1 and
+    // kinematic2 live simultaneously.
+    [ThreadStatic] private static KinematicResult? _pooledTrchekKinematic1;
+    [ThreadStatic] private static KinematicResult? _pooledTrchekKinematic2;
+
+    internal static KinematicResult GetPooledTrchekKinematic1()
+        => _pooledTrchekKinematic1 ??= new KinematicResult();
+    internal static KinematicResult GetPooledTrchekKinematic2()
+        => _pooledTrchekKinematic2 ??= new KinematicResult();
 
     internal static BlsysResult GetPooledBlsysResult()
     {

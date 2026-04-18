@@ -967,8 +967,10 @@ public static class TransitionModel
         // Legacy MRCHUE/TRDIF carries COM1/COM2 into TRCHEK2. kinematic1 and
         // kinematic2 are read-only inside this method, so aliasing directly
         // to the caller-provided overrides is safe and avoids per-call Clones
-        // of the BL kinematic snapshot. Non-legacy callers still build a fresh
-        // snapshot via ComputeKinematicParameters.
+        // of the BL kinematic snapshot. Non-legacy callers route the
+        // ComputeKinematicParameters output through a ThreadStatic scratch
+        // so the standard branch doesn't allocate a KinematicResult per
+        // TRCHEK2 invocation either.
         var kinematic1 = (useLegacyPrecision && station1KinematicOverride is not null)
             ? station1KinematicOverride
             : BoundaryLayerSystemAssembler.ComputeKinematicParameters(
@@ -985,7 +987,8 @@ public static class TransitionModel
                 reybl,
                 reybl_re,
                 reybl_ms,
-                useLegacyPrecision);
+                useLegacyPrecision,
+                destination: BoundaryLayerSystemAssembler.GetPooledTrchekKinematic1());
         var kinematic2 = (useLegacyPrecision && station2KinematicOverride is not null)
             ? station2KinematicOverride
             : BoundaryLayerSystemAssembler.ComputeKinematicParameters(
@@ -1002,7 +1005,8 @@ public static class TransitionModel
                 reybl,
                 reybl_re,
                 reybl_ms,
-                useLegacyPrecision);
+                useLegacyPrecision,
+                destination: BoundaryLayerSystemAssembler.GetPooledTrchekKinematic2());
         point.SetDownstreamKinematic(kinematic2);
 
         var ax0 = ComputeTransitionSensitivities(
