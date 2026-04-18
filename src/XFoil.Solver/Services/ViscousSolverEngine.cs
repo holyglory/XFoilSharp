@@ -281,6 +281,47 @@ public static class ViscousSolverEngine
         return slot;
     }
 
+    // Shared ThreadStatic scratches for per-site ComputeKinematicParameters
+    // calls where the result is consumed immediately (HK / RT extraction,
+    // snapshot CopyFrom) without surviving another kinematic computation
+    // on the same stack. Three slots cover call sites that can be live
+    // simultaneously: "A" is the typical use; "B" pairs with A when a
+    // function computes two kinematics in sequence (upstream + current);
+    // "C" covers deeper nested cases (e.g. seed probes inside MRCHUE).
+    [ThreadStatic] private static BoundaryLayerSystemAssembler.KinematicResult? s_engineKinematicA;
+    [ThreadStatic] private static BoundaryLayerSystemAssembler.KinematicResult? s_engineKinematicB;
+    [ThreadStatic] private static BoundaryLayerSystemAssembler.KinematicResult? s_engineKinematicC;
+
+    private static BoundaryLayerSystemAssembler.KinematicResult GetEngineKinematicScratchA()
+        => s_engineKinematicA ??= new BoundaryLayerSystemAssembler.KinematicResult();
+    private static BoundaryLayerSystemAssembler.KinematicResult GetEngineKinematicScratchB()
+        => s_engineKinematicB ??= new BoundaryLayerSystemAssembler.KinematicResult();
+    private static BoundaryLayerSystemAssembler.KinematicResult GetEngineKinematicScratchC()
+        => s_engineKinematicC ??= new BoundaryLayerSystemAssembler.KinematicResult();
+
+    // Shared SecondaryStationResult scratch for the engine's
+    // `new SecondaryStationResult { ... }` snapshot sites that feed
+    // StoreLegacyCarrySnapshots. The snapshot is CopyFromed into blState's
+    // per-slot pool and then discarded by the caller.
+    [ThreadStatic] private static BoundaryLayerSystemAssembler.SecondaryStationResult? s_engineSecondaryA;
+
+    private static BoundaryLayerSystemAssembler.SecondaryStationResult GetEngineSecondaryScratchA()
+        => s_engineSecondaryA ??= new BoundaryLayerSystemAssembler.SecondaryStationResult();
+
+    /// <summary>Clear every field on a scratch SecondaryStationResult so
+    /// callers can fill only the fields they care about without leaking
+    /// stale data from a prior use of the same pool slot.</summary>
+    private static void ResetEngineSecondaryScratch(BoundaryLayerSystemAssembler.SecondaryStationResult s)
+    {
+        s.Hc = 0; s.Hc_T = 0; s.Hc_D = 0; s.Hc_U = 0; s.Hc_MS = 0;
+        s.Hs = 0; s.Hs_T = 0; s.Hs_D = 0; s.Hs_U = 0; s.Hs_MS = 0;
+        s.Us = 0; s.Us_T = 0; s.Us_D = 0; s.Us_U = 0; s.Us_MS = 0;
+        s.Cq = 0; s.Cq_T = 0; s.Cq_D = 0; s.Cq_U = 0; s.Cq_MS = 0;
+        s.Cf = 0; s.Cf_T = 0; s.Cf_D = 0; s.Cf_U = 0; s.Cf_MS = 0; s.Cf_RE = 0;
+        s.Di = 0; s.Di_S = 0; s.Di_T = 0; s.Di_D = 0; s.Di_U = 0; s.Di_MS = 0;
+        s.De = 0; s.De_T = 0; s.De_D = 0; s.De_U = 0; s.De_MS = 0;
+    }
+
     private static TransitionModel.TransitionPointResult GetPooledTransitionPointPostLoop()
         => s_pooledTransitionPointPostLoop ??= new TransitionModel.TransitionPointResult();
 
@@ -3378,7 +3419,8 @@ public static class ViscousSolverEngine
                         reybl,
                         reybl_re,
                         reybl_ms,
-                        settings.UseLegacyBoundaryLayerInitialization);
+                        settings.UseLegacyBoundaryLayerInitialization,
+                        destination: GetEngineKinematicScratchA());
                     hk2 = currentKinematic.HK2;
                     hk2T2 = currentKinematic.HK2_T2;
                     hk2D2 = currentKinematic.HK2_D2;
@@ -3396,12 +3438,11 @@ public static class ViscousSolverEngine
                         var wakeSec = BoundaryLayerSystemAssembler.ComputeStationVariables(
                             3, currentKinematic.HK2, currentKinematic.RT2, currentKinematic.M2,
                             currentKinematic.H2, ctau, wakeGap, theta, wakeStrippedDstar);
-                        var secSnapshot = new BoundaryLayerSystemAssembler.SecondaryStationResult
-                        {
-                            Hs = wakeSec.Hs, Us = wakeSec.Us, Cf = wakeSec.Cf,
-                            Di = wakeSec.Di, Cq = wakeSec.Cteq, De = wakeSec.De,
-                            Hc = wakeSec.Hc
-                        };
+                        var secSnapshot = GetEngineSecondaryScratchA();
+                        ResetEngineSecondaryScratch(secSnapshot);
+                        secSnapshot.Hs = wakeSec.Hs; secSnapshot.Us = wakeSec.Us; secSnapshot.Cf = wakeSec.Cf;
+                        secSnapshot.Di = wakeSec.Di; secSnapshot.Cq = wakeSec.Cteq; secSnapshot.De = wakeSec.De;
+                        secSnapshot.Hc = wakeSec.Hc;
                         StoreLegacyCarrySnapshots(
                             blState,
                             ibl,
@@ -5949,7 +5990,8 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            destination: GetEngineKinematicScratchA());
                         double rt1 = transitionKinematic1.RT2;
                         double hk1 = Math.Max(transitionKinematic1.HK2, 1.05);
 
@@ -5967,13 +6009,14 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            destination: GetEngineKinematicScratchB());
                         double rt2 = transitionKinematic2.RT2;
                         double hk2 = Math.Max(transitionKinematic2.HK2, 1.05);
 
                         // Use CheckTransitionExact for legacy mode to match
                         // Fortran TRCHEK which recomputes HKT/RTT from BLKIN.
-                        
+
                         var transition = settings.UseLegacyBoundaryLayerInitialization
                             ? TransitionModel.CheckTransitionExact(
                                 x1, xsi,
@@ -6914,7 +6957,8 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            destination: GetEngineKinematicScratchA());
                         double rt1 = transitionKinematic1.RT2;
                         double hk1 = Math.Max(transitionKinematic1.HK2, 1.05);
 
@@ -6932,7 +6976,8 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            destination: GetEngineKinematicScratchB());
                         double rt2 = transitionKinematic2.RT2;
                         double hk2 = Math.Max(transitionKinematic2.HK2, 1.05);
 
