@@ -237,6 +237,13 @@ bool standardBranch = args.Contains("--standard");
 if (standardBranch) Console.Error.WriteLine("STANDARD BRANCH (modern solver, no legacy precision)");
 int firstUnparityFound = 0; // 0 = not found, 1 = found
 
+// Per-thread runtime trackers (merged at sweep finalize).
+var g_perThreadActiveTicks = new List<long>();
+var g_perThreadProcessed = new List<int>();
+var g_perThreadMinTicks = new List<long>();
+var g_perThreadMaxTicks = new List<long>();
+long g_sweepStartTicks = 0;
+
 // Default parallelism: physical cores only. On x86 with SMT, hyper-threads
 // share one physical core's FPU / AVX units. Viscous CFD is FPU-bound, so
 // running 192 threads on 96 physical cores delivers essentially the same
@@ -319,6 +326,7 @@ if (int.TryParse(Environment.GetEnvironmentVariable("XFOIL_CHUNK"), out int envC
 }
 var rangePartitioner = System.Collections.Concurrent.Partitioner.Create(0, linesLen, rangeChunk);
 Console.Error.WriteLine($"Range chunk size: {rangeChunk}, total chunks: {(linesLen + rangeChunk - 1) / rangeChunk}");
+g_sweepStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
 Parallel.ForEach(
     rangePartitioner,
     new ParallelOptions { MaxDegreeOfParallelism = maxParallel },
@@ -439,7 +447,12 @@ Parallel.ForEach(
                     viscousConvergenceTolerance: 1e-4,
                     viscousSolverMode: XFoil.Solver.Models.ViscousSolverMode.XFoilRelaxation);
 
+            long caseStart = System.Diagnostics.Stopwatch.GetTimestamp();
             var result = service.AnalyzeViscous(geometry, alpha, settings);
+            long caseElapsed = System.Diagnostics.Stopwatch.GetTimestamp() - caseStart;
+            local.ActiveTicks += caseElapsed;
+            if (caseElapsed < local.MinCaseTicks) local.MinCaseTicks = caseElapsed;
+            if (caseElapsed > local.MaxCaseTicks) local.MaxCaseTicks = caseElapsed;
             double cd = result.DragDecomposition.CD;
             double cl = result.LiftCoefficient;
 
@@ -521,6 +534,13 @@ Parallel.ForEach(
             if (local.MaxCdRelErr > maxCdRelError) maxCdRelError = local.MaxCdRelErr;
             results.AddRange(local.Results);
             failDetails.AddRange(local.Fails);
+            if (local.Processed > 0)
+            {
+                g_perThreadActiveTicks.Add(local.ActiveTicks);
+                g_perThreadProcessed.Add(local.Processed);
+                g_perThreadMinTicks.Add(local.MinCaseTicks);
+                g_perThreadMaxTicks.Add(local.MaxCaseTicks);
+            }
         }
     });
 // NOTE: with 192 threads and effective parallelism of ~68 cores, the gap is
@@ -534,7 +554,47 @@ if (breakAtFirstUnparity && firstUnparityFound == 1)
     return 1;
 }
 
+long g_sweepElapsedTicks = System.Diagnostics.Stopwatch.GetTimestamp() - g_sweepStartTicks;
+double sweepWallMs = g_sweepElapsedTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 Console.Error.WriteLine($"\r{processed}/{lines.Length} done");
+
+// Per-thread utilization breakdown: each worker accumulates the total active
+// ticks it spent inside AnalyzeViscous. Dividing by sweep wall ticks gives
+// utilization per worker. Workers that finished early (work stealing ran dry)
+// have lower ratios — that's tail-end imbalance.
+if (g_perThreadActiveTicks.Count > 0)
+{
+    Console.Error.WriteLine();
+    Console.Error.WriteLine($"=== Per-worker active-time breakdown ({g_perThreadActiveTicks.Count} workers) ===");
+    double totalActiveMs = 0;
+    double minUtil = 1.0, maxUtil = 0;
+    for (int i = 0; i < g_perThreadActiveTicks.Count; i++)
+    {
+        double activeMs = g_perThreadActiveTicks[i] * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        totalActiveMs += activeMs;
+        double util = activeMs / sweepWallMs;
+        if (util < minUtil) minUtil = util;
+        if (util > maxUtil) maxUtil = util;
+    }
+    double avgUtil = totalActiveMs / (sweepWallMs * g_perThreadActiveTicks.Count);
+    Console.Error.WriteLine($"Sweep wall time:  {sweepWallMs,10:F1} ms");
+    Console.Error.WriteLine($"Total active time: {totalActiveMs,10:F1} ms ({totalActiveMs / sweepWallMs,6:F2} concurrent workers)");
+    Console.Error.WriteLine($"Avg worker util:  {avgUtil:P1}   Min worker util: {minUtil:P1}   Max worker util: {maxUtil:P1}");
+    Console.Error.WriteLine($"Idle time: {(1 - avgUtil):P1} of wall — tail-end imbalance / work-stealing latency.");
+
+    // Per-case runtime spread: min / max across all workers. A 100× spread
+    // indicates highly variable per-case work that challenges the load balancer.
+    long minCaseTicks = long.MaxValue;
+    long maxCaseTicks = 0;
+    for (int i = 0; i < g_perThreadMinTicks.Count; i++)
+    {
+        if (g_perThreadMinTicks[i] < minCaseTicks) minCaseTicks = g_perThreadMinTicks[i];
+        if (g_perThreadMaxTicks[i] > maxCaseTicks) maxCaseTicks = g_perThreadMaxTicks[i];
+    }
+    double minCaseMs = minCaseTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+    double maxCaseMs = maxCaseTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+    Console.Error.WriteLine($"Per-case runtime: min={minCaseMs,6:F1} ms  max={maxCaseMs,7:F1} ms  (ratio={maxCaseMs / Math.Max(minCaseMs, 1e-6):F1}×)");
+}
 Console.Error.WriteLine();
 
 // Summary
@@ -656,6 +716,13 @@ sealed class LocalState
     public int Finite;
     public int Processed;
     public double MaxCdRelErr;
+    // Per-thread elapsed ticks across all cases; after join these tell us
+    // how much wall time each worker spent actively processing vs waiting
+    // (compare sum-of-thread-ticks vs elapsed-ticks × thread-count).
+    public long ActiveTicks;
+    // Track min / max per-case time to see runtime variance.
+    public long MinCaseTicks = long.MaxValue;
+    public long MaxCaseTicks;
     public List<(string naca, double re, double alpha, double ncrit, double fortCl, double fortCd, double csharpCl, double csharpCd, double cdRelErr, int cdUlp, int clUlp)> Results = new(capacity: 1024);
     public List<string> Fails = new();
 }
