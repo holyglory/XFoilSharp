@@ -93,11 +93,11 @@ public static class CosineClusteringPanelDistributor
         T ten = T.CreateChecked(10.0);
         T twenty = T.CreateChecked(20.0);
 
-        var sb = new T[nb];
-        var xb = new T[nb];
-        var yb = new T[nb];
-        var xbp = new T[nb];
-        var ybp = new T[nb];
+        var sb = PoolSb<T>(nb);
+        var xb = PoolXb<T>(nb);
+        var yb = PoolYb<T>(nb);
+        var xbp = PoolXbp<T>(nb);
+        var ybp = PoolYbp<T>(nb);
 
         for (int i = 0; i < nb; i++)
         {
@@ -116,7 +116,7 @@ public static class CosineClusteringPanelDistributor
 
         T sbref = half * (sb[nb - 1] - sb[0]);
 
-        var w5 = new T[nb];
+        var w5 = PoolW5<T>(nb);
         for (int i = 0; i < nb; i++)
         {
             w5[i] = T.Abs(ComputeCurvature(sb[i], xb, xbp, yb, ybp, sb, nb)) * sbref;
@@ -172,9 +172,9 @@ public static class CosineClusteringPanelDistributor
         T smool = Max(one / Max(cvavg, twenty), quarter / T.CreateChecked(n / 2));
         T smoosq = (smool * sbref) * (smool * sbref);
 
-        var w1 = new T[nb];
-        var w2 = new T[nb];
-        var w3 = new T[nb];
+        var w1 = PoolW1<T>(nb);
+        var w2 = PoolW2<T>(nb);
+        var w3 = PoolW3<T>(nb);
 
         w2[0] = one;
         w3[0] = zero;
@@ -263,11 +263,11 @@ public static class CosineClusteringPanelDistributor
             }
         }
 
-        var w6 = new T[nb];
+        var w6 = PoolW6<T>(nb);
         ParametricSpline.FitSegmented(w5, w6, sb, nb);
 
         int nn = Ipfac * (n - 1) + 1;
-        var snew = new T[nn];
+        var snew = PoolSnew<T>(nn);
 
         T rdste = T.CreateChecked(0.667);
         T rtf = ((rdste - one) * two) + one;
@@ -309,10 +309,10 @@ public static class CosineClusteringPanelDistributor
             TracePangenSnewNode(traceScope, "initial", 0, i + 1, snew[i]);
         }
 
-        var ww1 = new T[nn];
-        var ww2 = new T[nn];
-        var ww3 = new T[nn];
-        var ww4 = new T[nn];
+        var ww1 = PoolWw1<T>(nn);
+        var ww2 = PoolWw2<T>(nn);
+        var ww3 = PoolWw3<T>(nn);
+        var ww4 = PoolWw4<T>(nn);
 
         int legacyCarryCount = Math.Min(nn, nb);
         if (legacyCarryCount > 0)
@@ -526,9 +526,9 @@ public static class CosineClusteringPanelDistributor
             }
         }
 
-        var sOut = new T[n];
-        var xOut = new T[n];
-        var yOut = new T[n];
+        var sOut = PoolSOut<T>(n);
+        var xOut = PoolXOut<T>(n);
+        var yOut = PoolYOut<T>(n);
 
         
         for (int i = 0; i < n; i++)
@@ -559,9 +559,9 @@ public static class CosineClusteringPanelDistributor
                         continue;
                     }
 
-                    var newX = new T[finalN + 1];
-                    var newY = new T[finalN + 1];
-                    var newS = new T[finalN + 1];
+                    var newX = PoolNewX<T>(finalN + 1);
+                    var newY = PoolNewY<T>(finalN + 1);
+                    var newS = PoolNewS<T>(finalN + 1);
 
                     Array.Copy(xOut, 0, newX, 0, i);
                     Array.Copy(yOut, 0, newY, 0, i);
@@ -599,11 +599,11 @@ public static class CosineClusteringPanelDistributor
             }
         }
 
-        var finalArc = new T[finalN];
+        var finalArc = PoolFinalArc<T>(finalN);
         ParametricSpline.ComputeArcLength(xOut, yOut, finalArc, finalN);
 
-        var finalXp = new T[finalN];
-        var finalYp = new T[finalN];
+        var finalXp = PoolFinalXp<T>(finalN);
+        var finalYp = PoolFinalYp<T>(finalN);
         ParametricSpline.FitSegmented(xOut, finalXp, finalArc, finalN);
         ParametricSpline.FitSegmented(yOut, finalYp, finalArc, finalN);
         for (int i = 0; i < finalN; i++)
@@ -915,10 +915,10 @@ public static class CosineClusteringPanelDistributor
             return;
         }
 
-        var segLower = new T[count];
-        var segDiag = new T[count];
-        var segUpper = new T[count];
-        var segRhs = new T[count];
+        var segLower = PoolSegLower<T>(count);
+        var segDiag = PoolSegDiag<T>(count);
+        var segUpper = PoolSegUpper<T>(count);
+        var segRhs = PoolSegRhs<T>(count);
 
         Array.Copy(lower, offset, segLower, 0, count);
         Array.Copy(diagonal, offset, segDiag, 0, count);
@@ -1100,4 +1100,88 @@ public static class CosineClusteringPanelDistributor
     private static T Max<T>(T a, T b)
         where T : struct, IFloatingPointIeee754<T>
         => a > b ? a : b;
+
+    // -----------------------------------------------------------------
+    // ThreadStatic working-buffer pool for DistributeCore. Distribute is
+    // called once per AnalyzeViscous — ~30 generic scratch arrays per
+    // call used to allocate fresh every time. These slots keep them
+    // sized-to-max across cases. Pairs of double/float fields plus a
+    // typed dispatcher mirror the PanelGeometryBuilder pattern.
+    // -----------------------------------------------------------------
+    [ThreadStatic] private static double[]? _sbD;   [ThreadStatic] private static float[]? _sbF;
+    [ThreadStatic] private static double[]? _xbD;   [ThreadStatic] private static float[]? _xbF;
+    [ThreadStatic] private static double[]? _ybD;   [ThreadStatic] private static float[]? _ybF;
+    [ThreadStatic] private static double[]? _xbpD;  [ThreadStatic] private static float[]? _xbpF;
+    [ThreadStatic] private static double[]? _ybpD;  [ThreadStatic] private static float[]? _ybpF;
+    [ThreadStatic] private static double[]? _w5D;   [ThreadStatic] private static float[]? _w5F;
+    [ThreadStatic] private static double[]? _w1D;   [ThreadStatic] private static float[]? _w1F;
+    [ThreadStatic] private static double[]? _w2D;   [ThreadStatic] private static float[]? _w2F;
+    [ThreadStatic] private static double[]? _w3D;   [ThreadStatic] private static float[]? _w3F;
+    [ThreadStatic] private static double[]? _w6D;   [ThreadStatic] private static float[]? _w6F;
+    [ThreadStatic] private static double[]? _snewD; [ThreadStatic] private static float[]? _snewF;
+    [ThreadStatic] private static double[]? _ww1D;  [ThreadStatic] private static float[]? _ww1F;
+    [ThreadStatic] private static double[]? _ww2D;  [ThreadStatic] private static float[]? _ww2F;
+    [ThreadStatic] private static double[]? _ww3D;  [ThreadStatic] private static float[]? _ww3F;
+    [ThreadStatic] private static double[]? _ww4D;  [ThreadStatic] private static float[]? _ww4F;
+    [ThreadStatic] private static double[]? _sOutD; [ThreadStatic] private static float[]? _sOutF;
+    [ThreadStatic] private static double[]? _xOutD; [ThreadStatic] private static float[]? _xOutF;
+    [ThreadStatic] private static double[]? _yOutD; [ThreadStatic] private static float[]? _yOutF;
+    [ThreadStatic] private static double[]? _newXD; [ThreadStatic] private static float[]? _newXF;
+    [ThreadStatic] private static double[]? _newYD; [ThreadStatic] private static float[]? _newYF;
+    [ThreadStatic] private static double[]? _newSD; [ThreadStatic] private static float[]? _newSF;
+    [ThreadStatic] private static double[]? _finalArcD;  [ThreadStatic] private static float[]? _finalArcF;
+    [ThreadStatic] private static double[]? _finalXpD;   [ThreadStatic] private static float[]? _finalXpF;
+    [ThreadStatic] private static double[]? _finalYpD;   [ThreadStatic] private static float[]? _finalYpF;
+    [ThreadStatic] private static double[]? _segLowerD;  [ThreadStatic] private static float[]? _segLowerF;
+    [ThreadStatic] private static double[]? _segDiagD;   [ThreadStatic] private static float[]? _segDiagF;
+    [ThreadStatic] private static double[]? _segUpperD;  [ThreadStatic] private static float[]? _segUpperF;
+    [ThreadStatic] private static double[]? _segRhsD;    [ThreadStatic] private static float[]? _segRhsF;
+
+    private static T[] Pool<T>(int n, ref double[]? dSlot, ref float[]? fSlot)
+        where T : struct, IFloatingPointIeee754<T>
+    {
+        if (typeof(T) == typeof(double))
+        {
+            var a = dSlot;
+            if (a is null || a.Length < n) { a = new double[n]; dSlot = a; }
+            else { Array.Clear(a, 0, n); }
+            return (T[])(object)a;
+        }
+        else
+        {
+            var a = fSlot;
+            if (a is null || a.Length < n) { a = new float[n]; fSlot = a; }
+            else { Array.Clear(a, 0, n); }
+            return (T[])(object)a;
+        }
+    }
+
+    private static T[] PoolSb<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _sbD, ref _sbF);
+    private static T[] PoolXb<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _xbD, ref _xbF);
+    private static T[] PoolYb<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _ybD, ref _ybF);
+    private static T[] PoolXbp<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _xbpD, ref _xbpF);
+    private static T[] PoolYbp<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _ybpD, ref _ybpF);
+    private static T[] PoolW5<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _w5D, ref _w5F);
+    private static T[] PoolW1<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _w1D, ref _w1F);
+    private static T[] PoolW2<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _w2D, ref _w2F);
+    private static T[] PoolW3<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _w3D, ref _w3F);
+    private static T[] PoolW6<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _w6D, ref _w6F);
+    private static T[] PoolSnew<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _snewD, ref _snewF);
+    private static T[] PoolWw1<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _ww1D, ref _ww1F);
+    private static T[] PoolWw2<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _ww2D, ref _ww2F);
+    private static T[] PoolWw3<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _ww3D, ref _ww3F);
+    private static T[] PoolWw4<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _ww4D, ref _ww4F);
+    private static T[] PoolSOut<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _sOutD, ref _sOutF);
+    private static T[] PoolXOut<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _xOutD, ref _xOutF);
+    private static T[] PoolYOut<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _yOutD, ref _yOutF);
+    private static T[] PoolNewX<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _newXD, ref _newXF);
+    private static T[] PoolNewY<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _newYD, ref _newYF);
+    private static T[] PoolNewS<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _newSD, ref _newSF);
+    private static T[] PoolFinalArc<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _finalArcD, ref _finalArcF);
+    private static T[] PoolFinalXp<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _finalXpD, ref _finalXpF);
+    private static T[] PoolFinalYp<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _finalYpD, ref _finalYpF);
+    private static T[] PoolSegLower<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _segLowerD, ref _segLowerF);
+    private static T[] PoolSegDiag<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _segDiagD, ref _segDiagF);
+    private static T[] PoolSegUpper<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _segUpperD, ref _segUpperF);
+    private static T[] PoolSegRhs<T>(int n) where T : struct, IFloatingPointIeee754<T> => Pool<T>(n, ref _segRhsD, ref _segRhsF);
 }
