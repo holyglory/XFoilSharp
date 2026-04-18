@@ -94,6 +94,26 @@ public static class TransitionModel
         public BoundaryLayerSystemAssembler.KinematicResult? FinalTransitionKinematic;
         public AxsetResult? FinalAx;
 
+        // Pre-allocated snapshot storage for DownstreamKinematic and
+        // FinalTransitionKinematic. The publishing setters below copy
+        // fields into these slots instead of cloning a fresh instance
+        // per TRCHEK2 call; the public nullable properties alias back
+        // to the slot when live and to null when cleared.
+        private readonly BoundaryLayerSystemAssembler.KinematicResult _downstreamStorage = new();
+        private readonly BoundaryLayerSystemAssembler.KinematicResult _finalTransitionStorage = new();
+
+        internal void SetDownstreamKinematic(BoundaryLayerSystemAssembler.KinematicResult source)
+        {
+            _downstreamStorage.CopyFrom(source);
+            DownstreamKinematic = _downstreamStorage;
+        }
+
+        internal void SetFinalTransitionKinematic(BoundaryLayerSystemAssembler.KinematicResult source)
+        {
+            _finalTransitionStorage.CopyFrom(source);
+            FinalTransitionKinematic = _finalTransitionStorage;
+        }
+
         /// <summary>
         /// Reset all scalar fields and inner sensitivity arrays to defaults so the
         /// pooled instance can be reused by another ComputeTransitionPoint call
@@ -944,11 +964,13 @@ public static class TransitionModel
         // no-transition branch still solves the implicit downstream N2 update,
         // and parity depends on seeing those intermediate iterates in the trace.
 
+        // Legacy MRCHUE/TRDIF carries COM1/COM2 into TRCHEK2. kinematic1 and
+        // kinematic2 are read-only inside this method, so aliasing directly
+        // to the caller-provided overrides is safe and avoids per-call Clones
+        // of the BL kinematic snapshot. Non-legacy callers still build a fresh
+        // snapshot via ComputeKinematicParameters.
         var kinematic1 = (useLegacyPrecision && station1KinematicOverride is not null)
-            // Legacy MRCHUE/TRDIF carries COM1 into TRCHEK2. Rebuilding the
-            // upstream BLKIN snapshot on every managed transition solve adds a
-            // fake parity event after the first seed iteration.
-            ? station1KinematicOverride.Clone()
+            ? station1KinematicOverride
             : BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                 u1,
                 t1,
@@ -965,10 +987,7 @@ public static class TransitionModel
                 reybl_ms,
                 useLegacyPrecision);
         var kinematic2 = (useLegacyPrecision && station2KinematicOverride is not null)
-            // Legacy MRCHUE/TRDIF also carries the live COM2 BLKIN snapshot into
-            // TRCHEK2. Recomputing station 2 from the raw interval packet can pick
-            // up a different downstream state than the one AXSET actually sees.
-            ? station2KinematicOverride.Clone()
+            ? station2KinematicOverride
             : BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                 u2,
                 t2,
@@ -984,7 +1003,7 @@ public static class TransitionModel
                 reybl_re,
                 reybl_ms,
                 useLegacyPrecision);
-        point.DownstreamKinematic = kinematic2.Clone();
+        point.SetDownstreamKinematic(kinematic2);
 
         var ax0 = ComputeTransitionSensitivities(
             kinematic1.HK2,
@@ -1496,7 +1515,7 @@ public static class TransitionModel
                 false);
         double finalDtCombo = LegacyPrecisionMath.Multiply(finalAx.Ax_Hk2, finalTransitionKinematic.HK2_D2, useLegacyPrecision);
         double finalUtCombo = LegacyPrecisionMath.SourceOrderedProductSum(finalAx.Ax_Hk2, finalTransitionKinematic.HK2_U2, finalAx.Ax_Rt2, finalTransitionKinematic.RT2_U2, useLegacyPrecision);
-        point.FinalTransitionKinematic = finalTransitionKinematic.Clone();
+        point.SetFinalTransitionKinematic(finalTransitionKinematic);
         point.FinalAx = finalAx;
         
 

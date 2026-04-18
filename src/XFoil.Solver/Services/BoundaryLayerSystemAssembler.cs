@@ -1180,46 +1180,17 @@ public static class BoundaryLayerSystemAssembler
         // Trace station 2 secondary at station 16 side 2
         
 
-        result.Secondary2Snapshot = new SecondaryStationResult
-        {
-            Hc = hc2,
-            Hc_T = hc2_t2,
-            Hc_D = hc2_d2,
-            Hc_U = hc2_u2,
-            Hc_MS = hc2_ms,
-            Hs = hs2,
-            Hs_T = hs2_t2,
-            Hs_D = hs2_d2,
-            Hs_U = hs2_u2,
-            Hs_MS = hs2_ms,
-            Us = us2,
-            Us_T = us2_t2,
-            Us_D = us2_d2,
-            Us_U = us2_u2,
-            Us_MS = us2_ms,
-            Cq = cq2,
-            Cq_T = cq2_t2,
-            Cq_D = cq2_d2,
-            Cq_U = cq2_u2,
-            Cq_MS = cq2_ms,
-            Cf = cf2,
-            Cf_T = cf2_t2,
-            Cf_D = cf2_d2,
-            Cf_U = cf2_u2,
-            Cf_MS = cf2_ms,
-            Cf_RE = cf2_re,
-            Di = di2,
-            Di_S = di2_s2,
-            Di_T = di2_t2,
-            Di_D = di2_d2,
-            Di_U = di2_u2,
-            Di_MS = di2_ms,
-            De = de2,
-            De_T = de2_t2,
-            De_D = de2_d2,
-            De_U = de2_u2,
-            De_MS = de2_ms
-        };
+        // Populate the secondary snapshot directly into BldifResult's pooled
+        // storage slot instead of allocating a fresh SecondaryStationResult
+        // per call.
+        var secondaryScratch = result.PrepareSecondary2Snapshot();
+        secondaryScratch.Hc = hc2; secondaryScratch.Hc_T = hc2_t2; secondaryScratch.Hc_D = hc2_d2; secondaryScratch.Hc_U = hc2_u2; secondaryScratch.Hc_MS = hc2_ms;
+        secondaryScratch.Hs = hs2; secondaryScratch.Hs_T = hs2_t2; secondaryScratch.Hs_D = hs2_d2; secondaryScratch.Hs_U = hs2_u2; secondaryScratch.Hs_MS = hs2_ms;
+        secondaryScratch.Us = us2; secondaryScratch.Us_T = us2_t2; secondaryScratch.Us_D = us2_d2; secondaryScratch.Us_U = us2_u2; secondaryScratch.Us_MS = us2_ms;
+        secondaryScratch.Cq = cq2; secondaryScratch.Cq_T = cq2_t2; secondaryScratch.Cq_D = cq2_d2; secondaryScratch.Cq_U = cq2_u2; secondaryScratch.Cq_MS = cq2_ms;
+        secondaryScratch.Cf = cf2; secondaryScratch.Cf_T = cf2_t2; secondaryScratch.Cf_D = cf2_d2; secondaryScratch.Cf_U = cf2_u2; secondaryScratch.Cf_MS = cf2_ms; secondaryScratch.Cf_RE = cf2_re;
+        secondaryScratch.Di = di2; secondaryScratch.Di_S = di2_s2; secondaryScratch.Di_T = di2_t2; secondaryScratch.Di_D = di2_d2; secondaryScratch.Di_U = di2_u2; secondaryScratch.Di_MS = di2_ms;
+        secondaryScratch.De = de2; secondaryScratch.De_T = de2_t2; secondaryScratch.De_D = de2_d2; secondaryScratch.De_U = de2_u2; secondaryScratch.De_MS = de2_ms;
 
         // ================================================================
         // Logarithmic differences (Fortran BLDIF lines 1573-1584)
@@ -3878,8 +3849,8 @@ public static class BoundaryLayerSystemAssembler
         // Reuse caller's destination buffer (or allocate fresh fallback);
         // arrays are preallocated and zero-cleared by ResetForReuse.
         var result = destinationResult ?? new BldifResult();
-        result.CarryKinematicSnapshot = transitionKinematic.Clone();
-        result.Secondary2Snapshot = turbulentPart.Secondary2Snapshot?.Clone();
+        result.SetCarryKinematicSnapshot(transitionKinematic);
+        result.SetSecondary2Snapshot(turbulentPart.Secondary2Snapshot);
 
         double bl31 = 0.0, bl32 = 0.0, bl33 = 0.0, bl34 = 0.0, bl35 = 0.0;
         double bl41 = 0.0, bl42 = 0.0, bl43 = 0.0, bl44 = 0.0, bl45 = 0.0;
@@ -6170,14 +6141,20 @@ public static class BoundaryLayerSystemAssembler
         // ~300 bytes × 3 per station per Newton iter was the dominant remaining
         // small-object allocation source during sweeps. Pass raw references;
         // downstream Clone gives blState its per-station independent copy.
-        result.Primary2Snapshot = (useLegacyPrecision && station2PrimaryOverride is not null)
-            ? station2PrimaryOverride
-            : new PrimaryStationState
-            {
-                U = u2,
-                T = t2,
-                D = d2ForSystem
-            };
+        if (useLegacyPrecision && station2PrimaryOverride is not null)
+        {
+            result.Primary2Snapshot = station2PrimaryOverride;
+        }
+        else
+        {
+            var primaryScratch = result.PreparePrimary2Snapshot();
+            primaryScratch.U = u2;
+            primaryScratch.T = t2;
+            primaryScratch.D = d2ForSystem;
+            primaryScratch.PreUpdateT = null;
+            primaryScratch.PreUpdateD = null;
+            primaryScratch.PreUpdateDFull = null;
+        }
         result.Kinematic2Snapshot = currentKinematic;
         result.Secondary2Snapshot = bldif.Secondary2Snapshot;
 
@@ -6910,6 +6887,44 @@ public static class BoundaryLayerSystemAssembler
         public KinematicResult? CarryKinematicSnapshot;
         public SecondaryStationResult? Secondary2Snapshot;
 
+        // Pre-allocated storage for the two snapshot refs above. The public
+        // nullable fields alias these slots when live and are set to null
+        // on ResetForReuse, matching the Clone-based semantics without the
+        // per-call heap allocation.
+        private readonly KinematicResult _carryKinematicStorage = new();
+        private readonly SecondaryStationResult _secondaryStorage = new();
+
+        internal void SetCarryKinematicSnapshot(KinematicResult source)
+        {
+            _carryKinematicStorage.CopyFrom(source);
+            CarryKinematicSnapshot = _carryKinematicStorage;
+        }
+
+        internal void SetSecondary2Snapshot(SecondaryStationResult? source)
+        {
+            if (source is null)
+            {
+                Secondary2Snapshot = null;
+                return;
+            }
+            if (!ReferenceEquals(source, _secondaryStorage))
+            {
+                _secondaryStorage.CopyFrom(source);
+            }
+            Secondary2Snapshot = _secondaryStorage;
+        }
+
+        /// <summary>
+        /// Publishes the pooled secondary storage slot as the live
+        /// <see cref="Secondary2Snapshot"/> and returns it so the caller can
+        /// write fields directly, avoiding an intermediate copy.
+        /// </summary>
+        internal SecondaryStationResult PrepareSecondary2Snapshot()
+        {
+            Secondary2Snapshot = _secondaryStorage;
+            return _secondaryStorage;
+        }
+
         internal void ResetForReuse()
         {
             Array.Clear(Residual, 0, Residual.Length);
@@ -6941,6 +6956,22 @@ public static class BoundaryLayerSystemAssembler
         public KinematicResult? Kinematic2Snapshot;
         public SecondaryStationResult? Secondary2Snapshot;
         public double StaleVs121;
+
+        // Pooled storage for Primary2Snapshot when a caller-provided override
+        // is not available — replaces `new PrimaryStationState { ... }` per
+        // station per Newton iter.
+        private readonly PrimaryStationState _primaryScratch = new();
+
+        /// <summary>
+        /// Publishes the pooled primary scratch slot as
+        /// <see cref="Primary2Snapshot"/> and returns it so the caller can
+        /// assign U/T/D directly without allocating.
+        /// </summary>
+        internal PrimaryStationState PreparePrimary2Snapshot()
+        {
+            Primary2Snapshot = _primaryScratch;
+            return _primaryScratch;
+        }
 
         internal void ResetForReuse()
         {
