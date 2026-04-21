@@ -25,6 +25,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     private readonly IAirfoilAnalysisService _inner;
     private readonly int _viscousCouplingIterations;
     private readonly double _viscousCouplingRelaxation;
+    private readonly bool _useThesisExactTurbulent;
 
     /// <summary>
     /// Constructs the MSES analyzer with an injected inviscid
@@ -39,15 +40,21 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     /// Phase-5-lite path.</param>
     /// <param name="viscousCouplingRelaxation">Under-relaxation
     /// factor on δ* updates (0..1). Default 0.3 for damping.</param>
+    /// <param name="useThesisExactTurbulent">If true, run the
+    /// Phase-2e implicit-Newton turbulent marcher (thesis eq. 6.10)
+    /// instead of the Clauser-placeholder lag marcher. Default
+    /// false (keeps the existing uncoupled baseline bit-exact).</param>
     public MsesAnalysisService(
         IAirfoilAnalysisService? inviscidProvider = null,
         int viscousCouplingIterations = 0,
-        double viscousCouplingRelaxation = 0.3)
+        double viscousCouplingRelaxation = 0.3,
+        bool useThesisExactTurbulent = false)
     {
         _inner = inviscidProvider
             ?? new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
         _viscousCouplingIterations = System.Math.Max(0, viscousCouplingIterations);
         _viscousCouplingRelaxation = System.Math.Clamp(viscousCouplingRelaxation, 0.0, 1.0);
+        _useThesisExactTurbulent = useThesisExactTurbulent;
     }
 
     /// <inheritdoc />
@@ -403,7 +410,10 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             prev = k;
         }
 
-        return CompositeTransitionMarcher.March(s, ue, nu, nCrit);
+        return CompositeTransitionMarcher.March(
+            s, ue, nu, nCrit,
+            cTauInitialFactor: 0.3, machNumberEdge: 0.0,
+            useThesisExactTurbulent: _useThesisExactTurbulent);
     }
 
     private static double ComputeSquireYoungCd(
