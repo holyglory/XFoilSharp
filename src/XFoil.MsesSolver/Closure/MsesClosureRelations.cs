@@ -85,21 +85,26 @@ public static class MsesClosureRelations
         // heading toward separation.
         double H0 = 3.0 + 400.0 / reT;
 
+        // Drela 1986 thesis eq. 6.20 (OCR'd from Publications/15002356-MIT.pdf):
+        //   Hk < H0:  H* = 1.505 + 4/Reθ + (0.165 - 1.6/√Reθ) · (H0-Hk)² / Hk
+        //   Hk > H0:  H* = 1.505 + 4/Reθ + (Hk-H0)² · [0.04/Hk
+        //                   + 0.007·ln(Reθ) / (Hk - H0 + 4/ln(Reθ))²]
         double baseValue;
         if (Hk < H0)
         {
-            // Attached-turbulent branch.
-            double term = (H0 - Hk) / H0;
+            // Attached-turbulent branch (thesis eq. 6.20a).
+            double gap = H0 - Hk;
             baseValue = 1.505 + 4.0 / reT
-                + (0.165 - 1.6 / System.Math.Sqrt(reT)) * term * term * term
-                  / (Hk + 0.5);
+                + (0.165 - 1.6 / System.Math.Sqrt(reT)) * gap * gap / Hk;
         }
         else
         {
-            // Separated-turbulent branch (post-attached, pre-stall).
-            double term = (Hk - H0) / (Hk - H0 + 4.0);
+            // Separated-turbulent branch (thesis eq. 6.20b).
+            double gap = Hk - H0;
+            double denom = gap + 4.0 / System.Math.Max(logReT, 1e-6);
             baseValue = 1.505 + 4.0 / reT
-                + (Hk - H0) * (Hk - H0) * (0.007 * logReT / term - 0.15 / Hk);
+                + gap * gap * (0.04 / Hk
+                    + 0.007 * logReT / (denom * denom));
         }
 
         // Me compressibility wrapper (Drela §4.2).

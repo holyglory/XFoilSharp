@@ -60,17 +60,16 @@ public class MsesClosureRelationsTests
     }
 
     [Fact]
-    public void ComputeHStarTurbulent_AttachedBranch_ProducesReasonableValue()
+    public void ComputeHStarTurbulent_AttachedBranch_MatchesThesisFormula()
     {
-        // Hk=1.5, Reθ=1000, Me=0 (typical flat-plate turbulent):
-        // H0 = 3 + 400/1000 = 3.4, Hk=1.5 < H0 so attached branch.
-        // term = (3.4-1.5)/3.4 = 0.5588
-        // factor = 0.165 - 1.6/sqrt(1000) = 0.165 - 0.0506 = 0.1144
-        // H* = 1.505 + 4/1000 + 0.1144 * 0.5588³ / (1.5+0.5)
-        //    = 1.509 + 0.00997 = 1.519
-        // Then Me=0 wrapper: no change.
+        // Drela 1986 thesis eq. 6.20a, Hk=1.5, Reθ=1000, Me=0:
+        // H0 = 3 + 400/1000 = 3.4, Hk=1.5 < H0 → attached branch.
+        // gap = 1.9, factor = 0.165 - 1.6/√1000 = 0.1144.
+        // H* = 1.505 + 4/1000 + 0.1144·1.9²/1.5
+        //    = 1.509 + 0.2754 = 1.784.
+        // Me=0 wrapper: no change.
         double actual = MsesClosureRelations.ComputeHStarTurbulent(1.5, 1000.0, 0.0);
-        Assert.InRange(actual, 1.50, 1.55);
+        Assert.Equal(1.7843, actual, 3);
     }
 
     [Fact]
