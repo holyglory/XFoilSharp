@@ -183,19 +183,21 @@ public static class MsesClosureRelations
     public static double ComputeCDLaminar(double Hk, double ReTheta)
     {
         double reT = System.Math.Max(ReTheta, 1.0);
-        // 2·CD/H* = correlation(Hk). Drela:
-        //   Hk < 4:   g = 0.00205·(4 − Hk)^5.5 + 0.207
-        //   Hk ≥ 4:   g = 0.207 + 0.0016·(Hk − 4)² / (1 + 0.02·(Hk − 4)²)
+        // Drela thesis eq. 6.15 (OCR'd from Publications/15002356-MIT.pdf):
+        //   2·CD·Reθ/H* = 0.207 + 0.00205·(4 − Hk)^5.5    for Hk < 4
+        //              = 0.207 − 0.003·(Hk − 4)²           for Hk ≥ 4
+        // Previous implementation had wrong sign (+ instead of −) and
+        // wrong coefficient (0.0016 vs 0.003) on the separated branch.
         double g;
         if (Hk < 4.0)
         {
             double term = 4.0 - Hk;
-            g = 0.00205 * System.Math.Pow(term, 5.5) + 0.207;
+            g = 0.207 + 0.00205 * System.Math.Pow(term, 5.5);
         }
         else
         {
             double term = Hk - 4.0;
-            g = 0.207 + 0.0016 * term * term / (1.0 + 0.02 * term * term);
+            g = 0.207 - 0.003 * term * term;
         }
         double hStar = ComputeHStarLaminar(Hk, ReTheta);
         // CD = (H*/2) · g / Reθ.
@@ -224,14 +226,13 @@ public static class MsesClosureRelations
     /// <returns>Dissipation coefficient CD.</returns>
     public static double ComputeCDTurbulent(double Hk, double ReTheta, double Me, double cTau)
     {
-        double Me2 = Me * Me;
-        // Us per the Drela canonical form Us = (H*/2)/Hk, bounded < 1
-        // naturally because H* < 2·Hk for physical turbulent BL.
-        // The 1 + 0.014·Me² wrapper mirrors H*'s own compressibility
-        // correction so the dissipation budget stays consistent with
-        // the energy-shape-factor definition.
+        // Us from Drela thesis eq. 6.38:
+        //   Us = (H*/2) · [1 − 4·(Hk − 1)/(3·H)]
+        // At this closure level the thesis uses H = Hk (incompressible
+        // approximation in the slip-velocity derivation); for non-zero
+        // Me the compressibility wrapper folds into H*.
         double hStar = ComputeHStarTurbulent(Hk, ReTheta, Me);
-        double Us = 0.5 * hStar / Hk * (1.0 + 0.014 * Me2);
+        double Us = 0.5 * hStar * (1.0 - 4.0 * (Hk - 1.0) / (3.0 * Hk));
         Us = System.Math.Clamp(Us, 0.0, 0.99);
 
         double cf = ComputeCfTurbulent(Hk, ReTheta, Me);
@@ -258,20 +259,17 @@ public static class MsesClosureRelations
     /// <returns>Equilibrium shear-stress coefficient Cτ_eq.</returns>
     public static double ComputeCTauEquilibrium(double Hk, double ReTheta, double Me)
     {
-        // Drela eq. 4.25: Cτ_eq = H*·0.015·(Hk − 1)³/(Hk²·(1 − Us))·(1 + 0.014·Me²)
-        // where H* and Us = (H*/2)/Hk·(1+0.014·Me²) are as defined
-        // above. The core driver is (Hk − 1)³ which ramps Cτ_eq rapidly
-        // past attached conditions; the (1 − Us) denominator is what
-        // amplifies Cτ_eq near incipient separation where Us → 1.
-        double Me2 = Me * Me;
+        // Drela thesis eq. 6.39 (OCR'd from Publications/15002356-MIT.pdf):
+        //   Cτ_eq = H* · 0.03 · (Hk − 1)³ / (Hk² · (1 − Us))
+        // where Us is from eq. 6.38 (see ComputeCDTurbulent above).
         double HkM1 = Hk - 1.0;
         double hStar = ComputeHStarTurbulent(Hk, ReTheta, Me);
-        double Us = 0.5 * hStar / Hk * (1.0 + 0.014 * Me2);
+        double Us = 0.5 * hStar * (1.0 - 4.0 * HkM1 / (3.0 * Hk));
         Us = System.Math.Clamp(Us, 0.0, 0.99);
         double oneMinusUs = 1.0 - Us;
         if (oneMinusUs < 1e-6) oneMinusUs = 1e-6;
         double HkM1Cubed = HkM1 * HkM1 * HkM1;
-        return hStar * 0.015 * HkM1Cubed / (Hk * Hk * oneMinusUs) * (1.0 + 0.014 * Me2);
+        return hStar * 0.03 * HkM1Cubed / (Hk * Hk * oneMinusUs);
     }
 
     /// <summary>
@@ -305,11 +303,20 @@ public static class MsesClosureRelations
         if (theta < 1e-18) return 0.0;
         if (Hk <= 1.0) return 0.0;
 
-        // K2 calibrated per Drela's MSES 3.05 documentation.
-        const double K2 = 5.6;
+        // Drela thesis §6.4 eq. 6.35 with K2 = 4.2 (thesis value;
+        // Green's original 5.6 was explicitly replaced per
+        // "In the present formulation, the value K2 = 4.2 was adopted
+        //  in equation (6.35) since it seemed to produce the best
+        //  results").
+        const double K2 = 4.2;
 
-        // δ ≈ θ·(3.15 + 1.72/(Hk − 1)).
-        double delta = theta * (3.15 + 1.72 / (Hk - 1.0));
+        // Drela thesis eq. 6.36:
+        //   δ = δ* · (3.15 + 1.72/(Hk − 1))
+        //     = H · θ · (3.15 + 1.72/(Hk − 1))
+        // Previous implementation used θ instead of δ* — that's a
+        // factor-of-H error at Hk≈2.5 (underestimates δ by 2.5×
+        // → overshoots relaxation rate by 2.5×).
+        double delta = Hk * theta * (3.15 + 1.72 / (Hk - 1.0));
         if (delta < 1e-18) return 0.0;
 
         // First-order relaxation toward equilibrium.

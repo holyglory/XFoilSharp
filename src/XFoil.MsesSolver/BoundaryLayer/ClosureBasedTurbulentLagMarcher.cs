@@ -116,8 +116,11 @@ public static class ClosureBasedTurbulentLagMarcher
             double cTauEqMid = MsesClosureRelations.ComputeCTauEquilibrium(HkMid, ReThetaMid, machNumberEdge);
             if (HkMid > 1.0)
             {
-                double deltaMid = thetaMid * (3.15 + 1.72 / (HkMid - 1.0));
-                const double K2 = 5.6;
+                // Thesis eq. 6.36: δ = (3.15 + 1.72/(Hk-1))·δ*,
+                // with δ* = H·θ ≈ Hk·θ for Me=0.
+                double deltaMid = HkMid * thetaMid * (3.15 + 1.72 / (HkMid - 1.0));
+                // Thesis §6.4: K2 = 4.2 (not Green's 5.6).
+                const double K2 = 4.2;
                 double decay = System.Math.Exp(-K2 * dx / System.Math.Max(deltaMid, 1e-18));
                 cTau[i] = System.Math.Max(cTauEqMid + (cTau[i - 1] - cTauEqMid) * decay, 0.0);
             }

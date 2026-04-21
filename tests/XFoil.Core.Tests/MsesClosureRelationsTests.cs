@@ -166,15 +166,21 @@ public class MsesClosureRelationsTests
     }
 
     [Fact]
-    public void ComputeCDLaminar_IncreasesWithHk_BeyondSeparation()
+    public void ComputeCDLaminar_ThesisEq6_15_Formula()
     {
-        // For Hk ∈ [4, 7] dissipation rises monotonically (BL in
-        // separation region dissipates more energy per unit Reθ).
+        // Thesis eq. 6.15 (verified from OCR):
+        //   2·CD·Reθ/H* = 0.207 + 0.00205·(4-Hk)^5.5 for Hk<4
+        //               = 0.207 - 0.003·(Hk-4)²      for Hk≥4
+        // At Hk=4 (transition point): g = 0.207 exactly on both sides.
+        // In the separated branch g DECREASES with Hk — counter-intuitive
+        // but matches the thesis formula (physically: laminar BL
+        // dissipation is bounded, and H* growth with Hk offsets the g
+        // decrease, keeping CD nearly constant).
         double cd4 = MsesClosureRelations.ComputeCDLaminar(4.0, 1000.0);
-        double cd5 = MsesClosureRelations.ComputeCDLaminar(5.0, 1000.0);
         double cd6 = MsesClosureRelations.ComputeCDLaminar(6.0, 1000.0);
-        Assert.True(cd5 > cd4, $"Expected CD_5 ({cd5}) > CD_4 ({cd4})");
-        Assert.True(cd6 > cd5, $"Expected CD_6 ({cd6}) > CD_5 ({cd5})");
+        // CD stays within 10% across Hk ∈ [4, 6].
+        double ratio = cd6 / cd4;
+        Assert.InRange(ratio, 0.85, 1.05);
     }
 
     [Fact]
