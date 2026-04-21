@@ -88,26 +88,64 @@ deliverable.
 
 **Acceptance:** parity gate passes; unit tests green.
 
-### Phase 1 — Closure scaffolding
+### Phase 1 — Closure scaffolding ✅ STARTED (2026-04-21, commits 14ca1ee → de49ee6)
 
-- Port the closure relations from thesis §4 as standalone pure functions:
+- ✅ Port the closure relations from thesis §4 as standalone pure functions:
   `H*(H, Reθ)`, `Cf(H, Reθ, Me)`, `CD(H, H*, Reθ, Me)`, `Cτ_eq(H, Us, M)`,
   `Hk(H, M)`, etc.
-- Each relation gets a unit test against Drela's Appendix A tabulated values
+- ✅ Each relation gets a unit test against Drela's Appendix A tabulated values
   or sample curves. No solver wiring yet.
+
+**Landed in `src/XFoil.MsesSolver/Closure/MsesClosureRelations.cs`:**
+
+| Relation | Status | Thesis ref | Tests |
+|----------|--------|-----------|-------|
+| ComputeHk | ✅ | §4.1 eq. 4.15 | 2 |
+| ComputeHStarLaminar | ✅ | Appendix A | 3 |
+| ComputeHStarTurbulent | ✅ | §4.2 eq. 4.21 | 3 |
+| ComputeCfLaminar | ✅ | §4.1 eq. 4.17 | 3 |
+| ComputeCfTurbulent | ✅ | §4.2 eq. 4.24 | 2 |
+| ComputeCDLaminar | ✅ | §4.1 eq. 4.19 | 3 |
+| ComputeCDTurbulent | ✅ | §4.2 | 3 |
+| ComputeCTauEquilibrium | ✅ | §4.2 eq. 4.25 | 3 |
+
+22 unit tests, all passing. Pins positivity, continuity across
+piecewise-junction Hk values, monotonicity in the separated
+regime, and Me-compressibility response.
+
+**Still to land (when a BL marcher needs them):**
+- `Cτ` lag-ODE integrator (Phase 2+ scope)
+- Hk-vs-H inverse mapping helpers
+- Transition-related shape-factor adjustments
 
 **Acceptance:** each closure relation reproduces Drela's reference curves
 within 1e-6 at a sampled grid of (H, Reθ, Me) points.
 
-### Phase 2 — Integral BL march (laminar + turbulent, attached only)
+### Phase 2 — Integral BL march (laminar + turbulent, attached only) — STARTED (2026-04-21, commit d5374bf)
 
-- Momentum and energy integral equations from thesis §5.1.
-- Thwaites-style laminar march, Squire-Young-style turbulent march with
-  Drela's closure. No transition yet — fix it manually for development.
-- Validate against canonical test cases (flat plate, Howarth flow, Blasius).
+- ✅ Thwaites-style laminar march (reference). Classical 1949 correlation,
+  `θ²·Ue⁶ = 0.45·ν·∫Ue⁵ dx`, validated against flat-plate Blasius within
+  2 % (the known Thwaites tolerance — the 0.45 constant is deliberately
+  offset from exact-Blasius 0.441 for better adverse-gradient fit).
+- ⏳ Closure-based laminar march (Phase 2b). Same momentum/energy integral
+  structure, but evaluates Cf/CD/H* via the closure library above rather
+  than Thwaites' tabulated λ correlations. This is the marcher the 0.5 %
+  bound applies to.
+- ⏳ Squire-Young-style turbulent march with Drela's closure (Phase 2c).
+- ⏳ No transition yet — fix it manually for development.
+
+**Landed in `src/XFoil.MsesSolver/BoundaryLayer/ThwaitesLaminarMarcher.cs`:**
+
+- `March(stations, edgeVelocity, ν) → (θ, H)` — Thwaites integrator with
+  Cebeci-Bradshaw H(λ) correlation. Handles favorable / flat-plate /
+  adverse gradients.
+- 5 acceptance tests: Blasius within 2 %, favorable → low-H, adverse →
+  high-H, monotonicity, zero-IC at LE. All pass.
 
 **Acceptance:** flat-plate momentum-thickness growth within 0.5 % of the
-Blasius reference over x/L ∈ [0.01, 1].
+Blasius reference over x/L ∈ [0.01, 1]. Thwaites reference marcher
+(Phase 2a) hits 2 % by construction; Phase 2b closure marcher targets
+the 0.5 % gate.
 
 ### Phase 3 — Transition
 
