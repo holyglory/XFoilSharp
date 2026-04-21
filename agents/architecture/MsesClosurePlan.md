@@ -79,14 +79,21 @@ deliverable.
 
 ## Implementation phases
 
-### Phase 0 — Interface extraction (prep)
+### Phase 0 — Interface extraction (prep) ✅ LANDED (2026-04-21 commit 34befcb)
 
-- Extract `IAirfoilAnalysisService` covering the public methods of the
-  existing facade.
-- Shift CLI/reporting to the interface.
-- No behavioural change; parity must still be 4455/4455.
+- ✅ Extract `IAirfoilAnalysisService` covering AnalyzeInviscid and
+  AnalyzeViscous (the two primary analysis entry points).
+- ✅ Float (base), Doubled, and Modern trees all implement it.
+- ✅ Purely additive — no concrete method signatures changed, so
+  the parity path is untouched.
 
-**Acceptance:** parity gate passes; unit tests green.
+**Not yet landed:**
+- CLI/reporting shift to interface — the concrete types are still
+  used directly in `src/XFoil.Cli` and reporting. Low priority;
+  only needed when a second implementation (MSES analyzer) is
+  ready to be selected at runtime.
+
+**Acceptance:** parity gate passes; unit tests green. ✓
 
 ### Phase 1 — Closure scaffolding ✅ STARTED (2026-04-21, commits 14ca1ee → de49ee6)
 
