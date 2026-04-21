@@ -1607,6 +1607,23 @@ try
                 outputCsvPath: null);
             return 0;
 
+        case "export-profile-mses":
+            // MSES per-station BL profile dump to CSV.
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The export-profile-mses command requires a 4-digit designation, alpha, and CSV path.");
+            }
+            var profileMsesAirfoil = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
+            WriteMsesProfileDump(
+                profileMsesAirfoil,
+                ParseDouble(args[2], "alpha"),
+                args[3],
+                args.Length >= 5 ? ParseInteger(args[4], "panel count") : 160,
+                args.Length >= 6 ? ParseDouble(args[5], "Mach number") : 0d,
+                args.Length >= 7 ? ParseDouble(args[6], "Reynolds number") : 1_000_000d,
+                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d);
+            return 0;
+
         case "export-polar-mses":
             // MSES polar sweep → CSV.
             if (args.Length < 6)
@@ -2019,6 +2036,7 @@ static void PrintUsage()
     Console.WriteLine("  viscous-point-mses-file <path> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES single-point from arbitrary airfoil .dat)");
     Console.WriteLine("  viscous-polar-mses <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep)");
     Console.WriteLine("  export-polar-mses <####> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep → CSV)");
+    Console.WriteLine("  export-profile-mses <####> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]   (MSES per-station BL profile → CSV)");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2252,6 +2270,45 @@ static void WriteViscousPolarSummaryDouble(
             $"Xtr_L={r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
             $"Quality={plausibleTag}");
     }
+}
+
+static void WriteMsesProfileDump(
+    AirfoilGeometry geometry,
+    double alphaDegrees,
+    string csvPath,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double criticalAmplificationFactor)
+{
+    var settings = new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        nCritUpper: criticalAmplificationFactor,
+        nCritLower: criticalAmplificationFactor);
+    var mses = new XFoil.MsesSolver.Services.MsesAnalysisService();
+    var r = mses.AnalyzeViscous(geometry, alphaDegrees, settings);
+
+    using var writer = new System.IO.StreamWriter(csvPath);
+    writer.WriteLine("# MSES BL profile dump");
+    writer.WriteLine($"# airfoil={geometry.Name}, alpha={alphaDegrees}, panels={panelCount}, mach={machNumber}, re={reynoldsNumber}, nCrit={criticalAmplificationFactor}");
+    writer.WriteLine($"# CL={r.LiftCoefficient:F6}, CD={r.DragDecomposition.CD:F6}, CM={r.MomentCoefficient:F6}, converged={r.Converged}");
+    writer.WriteLine($"# Xtr_U={r.UpperTransition.XTransition:F6}, Xtr_L={r.LowerTransition.XTransition:F6}");
+    writer.WriteLine("surface,station,theta,DStar,H,Cf,Ctau,Ue,Namp");
+    for (int i = 0; i < r.UpperProfiles.Length; i++)
+    {
+        var p = r.UpperProfiles[i];
+        writer.WriteLine($"upper,{i},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
+    }
+    for (int i = 0; i < r.LowerProfiles.Length; i++)
+    {
+        var p = r.LowerProfiles[i];
+        writer.WriteLine($"lower,{i},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
+    }
+    Console.WriteLine($"Wrote MSES profile to {csvPath}");
+    Console.WriteLine($"Upper stations: {r.UpperProfiles.Length}  Lower stations: {r.LowerProfiles.Length}");
+    Console.WriteLine($"CL={r.LiftCoefficient:F4} CD={r.DragDecomposition.CD:F6} Xtr_U={r.UpperTransition.XTransition:F4} Xtr_L={r.LowerTransition.XTransition:F4}");
 }
 
 static void WriteViscousPolarMses(

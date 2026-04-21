@@ -1,5 +1,6 @@
 using XFoil.Core.Models;
 using XFoil.MsesSolver.BoundaryLayer;
+using XFoil.MsesSolver.Closure;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
@@ -151,17 +152,34 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     {
         int n = r.Theta.Length;
         var profiles = new BoundaryLayerProfile[n];
+        int transitionIdx = r.TransitionIndex;
         for (int i = 0; i < n; i++)
         {
             double h = r.H[i];
             double theta = r.Theta[i];
+            double ue = r.EdgeVelocity[i];
+            double reTheta = theta > 0 && ue > 0 ? ue * theta / 1e-6 : 0.0;
+            // Station 0 has θ=0, no meaningful Cf. Use 0.
+            // Pre-transition: laminar Cf from closure.
+            // Post-transition: turbulent Cf from closure.
+            double cf = 0.0;
+            if (i > 0 && theta > 0)
+            {
+                double hk = MsesClosureRelations.ComputeHk(h, 0.0);
+                double reT = ue * theta / System.Math.Max(1e-18, 1e-6); // ν ≈ 1e-6 default; caller doesn't propagate
+                cf = (transitionIdx < 0 || i < transitionIdx)
+                    ? MsesClosureRelations.ComputeCfLaminar(hk, reT)
+                    : MsesClosureRelations.ComputeCfTurbulent(hk, reT, 0.0);
+            }
             profiles[i] = new BoundaryLayerProfile
             {
                 Theta = theta,
-                DStar = h * theta, // δ* = H·θ (incompressible)
+                DStar = h * theta,
                 Ctau = r.CTau[i],
-                EdgeVelocity = r.EdgeVelocity[i],
-                Hk = h, // Me=0 → Hk = H
+                EdgeVelocity = ue,
+                Hk = h,
+                Cf = cf,
+                ReTheta = reTheta,
                 AmplificationFactor = r.N[i],
             };
         }
