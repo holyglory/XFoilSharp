@@ -147,9 +147,23 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             catch { break; }
         }
 
-        double cd = _useWakeMarcher
-            ? ComputeSquireYoungCdWithWake(upperMarch, lowerMarch, Uinf, nu)
-            : ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
+        WakeTurbulentMarcher.MarchResult? wakeMarch = null;
+        double[]? wakeStationX = null;
+        double[]? wakeUe = null;
+        double cd;
+        if (_useWakeMarcher)
+        {
+            var (cdW, wR, wX, wU) = ComputeSquireYoungCdWithWake(
+                upperMarch, lowerMarch, Uinf, nu);
+            cd = cdW;
+            wakeMarch = wR;
+            wakeStationX = wX;
+            wakeUe = wU;
+        }
+        else
+        {
+            cd = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
+        }
 
         // Sanity clamp. Airfoil CD past stall tops out around 0.3.
         // Anything larger indicates the BL marcher blew up (θ
@@ -165,6 +179,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
 
         var upperProfiles = BuildProfiles(upperMarch, nu);
         var lowerProfiles = BuildProfiles(lowerMarch, nu);
+        var wakeProfiles = wakeMarch.HasValue && wakeUe is not null
+            ? BuildWakeProfiles(wakeMarch.Value, wakeUe, nu)
+            : System.Array.Empty<BoundaryLayerProfile>();
 
         return new ViscousAnalysisResult
         {
@@ -186,10 +203,39 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             ConvergenceHistory = new System.Collections.Generic.List<ViscousConvergenceInfo>(),
             UpperProfiles = upperProfiles,
             LowerProfiles = lowerProfiles,
-            WakeProfiles = System.Array.Empty<BoundaryLayerProfile>(),
+            WakeProfiles = wakeProfiles,
             UpperTransition = BuildTransition(upperMarch),
             LowerTransition = BuildTransition(lowerMarch),
         };
+    }
+
+    private static BoundaryLayerProfile[] BuildWakeProfiles(
+        WakeTurbulentMarcher.MarchResult w, double[] ue, double nu)
+    {
+        int n = w.Theta.Length;
+        var profiles = new BoundaryLayerProfile[n];
+        double nuSafe = System.Math.Max(nu, 1e-18);
+        for (int i = 0; i < n; i++)
+        {
+            double theta = w.Theta[i];
+            double h = w.H[i];
+            double uei = ue[i];
+            double reTheta = theta > 0 && uei > 0 ? uei * theta / nuSafe : 0.0;
+            double hk = MsesClosureRelations.ComputeHk(h, 0.0);
+            // Wake has Cf = 0 by construction (free-shear layer).
+            profiles[i] = new BoundaryLayerProfile
+            {
+                Theta = theta,
+                DStar = h * theta,
+                Ctau = w.CTau[i],
+                EdgeVelocity = uei,
+                Hk = h,
+                Cf = 0.0,
+                ReTheta = reTheta,
+                AmplificationFactor = 0.0,
+            };
+        }
+        return profiles;
     }
 
     private static BoundaryLayerProfile[] BuildProfiles(
@@ -431,7 +477,10 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     // have dUe/dx from the inviscid solve). Applies Squire-Young at
     // the wake far-field, which gives a tighter CD estimate than at
     // the TE because H_wake relaxes toward 1.4 as the wake equilibrates.
-    private static double ComputeSquireYoungCdWithWake(
+    private static (double Cd,
+        WakeTurbulentMarcher.MarchResult Result,
+        double[] Stations,
+        double[] Ue) ComputeSquireYoungCdWithWake(
         CompositeTransitionMarcher.CompositeResult upper,
         CompositeTransitionMarcher.CompositeResult lower,
         double Uinf,
@@ -439,7 +488,12 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     {
         int nU = upper.Theta.Length;
         int nL = lower.Theta.Length;
-        if (nU < 2 || nL < 2) return 0.0;
+        if (nU < 2 || nL < 2)
+            return (0.0,
+                new WakeTurbulentMarcher.MarchResult(
+                    System.Array.Empty<double>(), System.Array.Empty<double>(),
+                    System.Array.Empty<double>(), System.Array.Empty<double>()),
+                System.Array.Empty<double>(), System.Array.Empty<double>());
 
         // TE state per side.
         double θU = upper.Theta[nU - 1];
@@ -456,7 +510,12 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         //   δ*_wake = H_u·θ_u + H_l·θ_l
         //   H_wake = δ*_wake / θ_wake
         double θWake = θU + θL;
-        if (θWake < 1e-18) return 0.0;
+        if (θWake < 1e-18)
+            return (0.0,
+                new WakeTurbulentMarcher.MarchResult(
+                    System.Array.Empty<double>(), System.Array.Empty<double>(),
+                    System.Array.Empty<double>(), System.Array.Empty<double>()),
+                System.Array.Empty<double>(), System.Array.Empty<double>());
         double dStarWake = HU * θU + HL * θL;
         double HWake = dStarWake / θWake;
         // Dominant-stress side seeds Cτ (the more-separated surface).
@@ -490,7 +549,8 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         // Squire-Young: CD = 2·θ·(Ue/U∞)^((H+5)/2). Single wake station
         // rather than per-surface because the wake merge replaces the
         // surface sum.
-        return 2.0 * θFar * System.Math.Pow(ueFarOverUinf, (HFar + 5.0) * 0.5);
+        double cd = 2.0 * θFar * System.Math.Pow(ueFarOverUinf, (HFar + 5.0) * 0.5);
+        return (cd, wake, s, ue);
     }
 
     private static double ComputeSquireYoungCd(

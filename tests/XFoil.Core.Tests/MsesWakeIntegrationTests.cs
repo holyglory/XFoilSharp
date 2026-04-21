@@ -54,6 +54,32 @@ public class MsesWakeIntegrationTests
     }
 
     [Fact]
+    public void WakePath_PopulatesWakeProfilesWithFiniteValues()
+    {
+        // Opt-in wake should populate ViscousAnalysisResult.WakeProfiles
+        // with per-station (θ, H, Cτ, Ue) — non-empty, all finite.
+        var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
+        var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
+        var settings = new AnalysisSettings(
+            panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
+            reynoldsNumber: 3_000_000);
+
+        var svc = new MsesAnalysisService(
+            useThesisExactTurbulent: true, useWakeMarcher: true);
+        var r = svc.AnalyzeViscous(geom, 2.0, settings);
+
+        Assert.NotEmpty(r.WakeProfiles);
+        foreach (var p in r.WakeProfiles)
+        {
+            Assert.True(double.IsFinite(p.Theta));
+            Assert.True(double.IsFinite(p.Hk));
+            Assert.True(double.IsFinite(p.EdgeVelocity));
+            Assert.Equal(0.0, p.Cf); // wake = free-shear layer
+            Assert.True(p.Theta > 0);
+        }
+    }
+
+    [Fact]
     public void Naca4412_StallCase_WakePathStaysFinite()
     {
         // NACA 4412 α=14° is past the stall shoulder — the upper
