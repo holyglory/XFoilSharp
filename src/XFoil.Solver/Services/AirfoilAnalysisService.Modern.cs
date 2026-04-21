@@ -487,6 +487,19 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                     }
                 }
             }
+
+            // Iter 53 probe: explored an under-predict detector that
+            // falls through to a seeded α=0→target ramp when primary
+            // CL/invCL < 0.3 at |α| ≥ 4°. Target case was NACA 0012
+            // α=8.1° M=0.15 Re=6e6 where primary converges to CL=0.134
+            // (vs WT=0.87) — a Newton attractor landing driven by the
+            // compressibility-coupled BL tracking failure documented
+            // in project_b3_compressibility_newton_divergence.md.
+            // Result: ramp lands in the same attractor (each α step's
+            // Newton finds the same drag-inflated fixed point). Zero
+            // aggregate effect on `--b3-score`; probe reverted.
+            // Fixing this class requires solver-level work (MSES
+            // closure per MsesClosurePlan.md).
             return primary;
         }
 
