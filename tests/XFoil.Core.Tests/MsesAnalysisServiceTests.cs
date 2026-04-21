@@ -24,13 +24,22 @@ public class MsesAnalysisServiceTests
     }
 
     [Fact]
-    public void ViscousStub_ThrowsNotImplemented()
+    public void Viscous_ProducesFiniteCdAndCl()
     {
+        // First-iteration (uncoupled) viscous: CL from inviscid,
+        // CD from Squire-Young far-field formula over the composite
+        // laminar→turbulent march. Phase 5 will add Newton coupling
+        // that shifts CL too.
         IAirfoilAnalysisService svc = new MsesAnalysisService();
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var naca = gen.Generate4DigitClassic("0012", pointCount: 161);
-        Assert.Throws<System.NotImplementedException>(() =>
-            svc.AnalyzeViscous(naca, angleOfAttackDegrees: 0.0, settings: null));
+        var r = svc.AnalyzeViscous(naca, angleOfAttackDegrees: 2.0, settings: null);
+        Assert.True(double.IsFinite(r.LiftCoefficient));
+        Assert.True(double.IsFinite(r.DragDecomposition.CD));
+        // CD should be small but positive (NACA 0012 α=2° Re=1e6 WT
+        // ≈ 0.006). Our Squire-Young stub is approximate so accept
+        // any reasonable magnitude.
+        Assert.InRange(r.DragDecomposition.CD, 1e-5, 0.1);
     }
 
     [Fact]
