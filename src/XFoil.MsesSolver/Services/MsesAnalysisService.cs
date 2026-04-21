@@ -26,6 +26,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     private readonly int _viscousCouplingIterations;
     private readonly double _viscousCouplingRelaxation;
     private readonly bool _useThesisExactTurbulent;
+    private readonly bool _useWakeMarcher;
 
     /// <summary>
     /// Constructs the MSES analyzer with an injected inviscid
@@ -44,17 +45,24 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     /// Phase-2e implicit-Newton turbulent marcher (thesis eq. 6.10)
     /// instead of the Clauser-placeholder lag marcher. Default
     /// false (keeps the existing uncoupled baseline bit-exact).</param>
+    /// <param name="useWakeMarcher">If true, march the turbulent
+    /// wake downstream from the TE (Drela §6.5) and apply Squire-
+    /// Young at the wake far-field rather than at the TE. Default
+    /// false. Produces a tighter CD estimate when the wake's H has
+    /// relaxed by the integration point.</param>
     public MsesAnalysisService(
         IAirfoilAnalysisService? inviscidProvider = null,
         int viscousCouplingIterations = 0,
         double viscousCouplingRelaxation = 0.3,
-        bool useThesisExactTurbulent = false)
+        bool useThesisExactTurbulent = false,
+        bool useWakeMarcher = false)
     {
         _inner = inviscidProvider
             ?? new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
         _viscousCouplingIterations = System.Math.Max(0, viscousCouplingIterations);
         _viscousCouplingRelaxation = System.Math.Clamp(viscousCouplingRelaxation, 0.0, 1.0);
         _useThesisExactTurbulent = useThesisExactTurbulent;
+        _useWakeMarcher = useWakeMarcher;
     }
 
     /// <inheritdoc />
@@ -139,7 +147,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             catch { break; }
         }
 
-        double cd = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
+        double cd = _useWakeMarcher
+            ? ComputeSquireYoungCdWithWake(upperMarch, lowerMarch, Uinf, nu)
+            : ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
 
         // Sanity clamp. Airfoil CD past stall tops out around 0.3.
         // Anything larger indicates the BL marcher blew up (θ
@@ -414,6 +424,73 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             s, ue, nu, nCrit,
             cTauInitialFactor: 0.3, machNumberEdge: 0.0,
             useThesisExactTurbulent: _useThesisExactTurbulent);
+    }
+
+    // Phase-2f: marches the merged wake behind the TE for half a chord
+    // length at constant Ue (uncoupled approximation — real MSES would
+    // have dUe/dx from the inviscid solve). Applies Squire-Young at
+    // the wake far-field, which gives a tighter CD estimate than at
+    // the TE because H_wake relaxes toward 1.4 as the wake equilibrates.
+    private static double ComputeSquireYoungCdWithWake(
+        CompositeTransitionMarcher.CompositeResult upper,
+        CompositeTransitionMarcher.CompositeResult lower,
+        double Uinf,
+        double nu)
+    {
+        int nU = upper.Theta.Length;
+        int nL = lower.Theta.Length;
+        if (nU < 2 || nL < 2) return 0.0;
+
+        // TE state per side.
+        double θU = upper.Theta[nU - 1];
+        double θL = lower.Theta[nL - 1];
+        double HU = upper.H[nU - 1];
+        double HL = lower.H[nL - 1];
+        double cTU = upper.CTau[nU - 1];
+        double cTL = lower.CTau[nL - 1];
+        double ueU = upper.EdgeVelocity[nU - 1];
+        double ueL = lower.EdgeVelocity[nL - 1];
+
+        // Drela TE-merge (eq. 6.63 sharp-TE form):
+        //   θ_wake = θ_u + θ_l
+        //   δ*_wake = H_u·θ_u + H_l·θ_l
+        //   H_wake = δ*_wake / θ_wake
+        double θWake = θU + θL;
+        if (θWake < 1e-18) return 0.0;
+        double dStarWake = HU * θU + HL * θL;
+        double HWake = dStarWake / θWake;
+        // Dominant-stress side seeds Cτ (the more-separated surface).
+        double cTWake = System.Math.Max(cTU, cTL);
+        double ueWake = 0.5 * (ueU + ueL);
+
+        // Wake stations: march half a chord downstream at nearly-
+        // constant Ue (linear recovery toward freestream U∞, reaching
+        // 95 % of U∞ at the integration point).
+        const int WakeStations = 41;
+        const double WakeLengthChords = 0.5;
+        var s = new double[WakeStations];
+        var ue = new double[WakeStations];
+        for (int i = 0; i < WakeStations; i++)
+        {
+            double t = i / (double)(WakeStations - 1);
+            s[i] = 0.0 + WakeLengthChords * t;
+            // Blend 90% → 100% of U∞ across the wake length.
+            ue[i] = ueWake + (Uinf - ueWake) * 0.9 * t;
+        }
+
+        var wake = WakeTurbulentMarcher.March(
+            s, ue, nu, θWake, HWake, cTWake);
+
+        // Apply Squire-Young at the wake far-field.
+        int nW = wake.Theta.Length;
+        double θFar = wake.Theta[nW - 1];
+        double HFar = wake.H[nW - 1];
+        double ueFar = ue[nW - 1];
+        double ueFarOverUinf = ueFar / System.Math.Max(Uinf, 1e-12);
+        // Squire-Young: CD = 2·θ·(Ue/U∞)^((H+5)/2). Single wake station
+        // rather than per-surface because the wake merge replaces the
+        // surface sum.
+        return 2.0 * θFar * System.Math.Pow(ueFarOverUinf, (HFar + 5.0) * 0.5);
     }
 
     private static double ComputeSquireYoungCd(

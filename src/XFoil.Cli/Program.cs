@@ -2038,6 +2038,7 @@ static void PrintUsage()
     Console.WriteLine("  export-polar-mses <####> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep → CSV)");
     Console.WriteLine("  export-profile-mses <####> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]   (MSES per-station BL profile → CSV)");
     Console.WriteLine("    (set XFOIL_MSES_THESIS_EXACT=1 to use the Phase-2e implicit-Newton turbulent marcher instead of the Clauser-placeholder)");
+    Console.WriteLine("    (set XFOIL_MSES_WAKE=1 to integrate Squire-Young at the wake far-field via the Phase-2f wake marcher)");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2283,6 +2284,17 @@ static bool UseThesisExactTurbulentFromEnv()
     return v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
 }
 
+// MSES Phase-2f opt-in: setting XFOIL_MSES_WAKE=1 switches the
+// Squire-Young CD integration from the airfoil TE to the wake
+// far-field (half-chord downstream), using the wake marcher to
+// relax the merged-TE state.
+static bool UseWakeMarcherFromEnv()
+{
+    string? v = Environment.GetEnvironmentVariable("XFOIL_MSES_WAKE");
+    if (string.IsNullOrEmpty(v)) return false;
+    return v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
+}
+
 static void WriteMsesProfileDump(
     AirfoilGeometry geometry,
     double alphaDegrees,
@@ -2299,7 +2311,8 @@ static void WriteMsesProfileDump(
         nCritUpper: criticalAmplificationFactor,
         nCritLower: criticalAmplificationFactor);
     var mses = new XFoil.MsesSolver.Services.MsesAnalysisService(
-        useThesisExactTurbulent: UseThesisExactTurbulentFromEnv());
+        useThesisExactTurbulent: UseThesisExactTurbulentFromEnv(),
+        useWakeMarcher: UseWakeMarcherFromEnv());
     var r = mses.AnalyzeViscous(geometry, alphaDegrees, settings);
 
     using var writer = new System.IO.StreamWriter(csvPath);
@@ -2341,7 +2354,8 @@ static void WriteViscousPolarMses(
         nCritUpper: criticalAmplificationFactor,
         nCritLower: criticalAmplificationFactor);
     var mses = new XFoil.MsesSolver.Services.MsesAnalysisService(
-        useThesisExactTurbulent: UseThesisExactTurbulentFromEnv());
+        useThesisExactTurbulent: UseThesisExactTurbulentFromEnv(),
+        useWakeMarcher: UseWakeMarcherFromEnv());
     using var writer = outputCsvPath is null ? null : new System.IO.StreamWriter(outputCsvPath);
 
     Action<string> emit = line =>
@@ -2404,7 +2418,8 @@ static void WriteViscousSinglePointMses(
         nCritUpper: criticalAmplificationFactor,
         nCritLower: criticalAmplificationFactor);
     var mses = new XFoil.MsesSolver.Services.MsesAnalysisService(
-        useThesisExactTurbulent: UseThesisExactTurbulentFromEnv());
+        useThesisExactTurbulent: UseThesisExactTurbulentFromEnv(),
+        useWakeMarcher: UseWakeMarcherFromEnv());
     var r = mses.AnalyzeViscous(geometry, alphaDegrees, settings);
     Console.WriteLine($"Name: {geometry.Name} (MSES single-point — Phase 5 stub)");
     Console.WriteLine($"Panels: {settings.PanelCount}");
