@@ -1603,7 +1603,27 @@ try
                 args.Length >= 6 ? ParseInteger(args[5], "panel count") : 160,
                 args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
                 args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
-                args.Length >= 9 ? ParseDouble(args[8], "critical amplification factor") : 9d);
+                args.Length >= 9 ? ParseDouble(args[8], "critical amplification factor") : 9d,
+                outputCsvPath: null);
+            return 0;
+
+        case "export-polar-mses":
+            // MSES polar sweep → CSV.
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-polar-mses command requires a 4-digit designation, CSV path, alpha start, alpha end, alpha step.");
+            }
+            var exportMsesNaca = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
+            WriteViscousPolarMses(
+                exportMsesNaca,
+                ParseDouble(args[3], "alpha start"),
+                ParseDouble(args[4], "alpha end"),
+                ParseDouble(args[5], "alpha step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 160,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseDouble(args[8], "Reynolds number") : 1_000_000d,
+                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d,
+                outputCsvPath: args[2]);
             return 0;
 
         case "viscous-point-mses-file":
@@ -1998,6 +2018,7 @@ static void PrintUsage()
     Console.WriteLine("  viscous-point-mses <####> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES-thesis closure, Phase-5 stub — inviscid CL + Squire-Young CD)");
     Console.WriteLine("  viscous-point-mses-file <path> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES single-point from arbitrary airfoil .dat)");
     Console.WriteLine("  viscous-polar-mses <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep)");
+    Console.WriteLine("  export-polar-mses <####> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep → CSV)");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2241,7 +2262,8 @@ static void WriteViscousPolarMses(
     int panelCount,
     double machNumber,
     double reynoldsNumber,
-    double criticalAmplificationFactor)
+    double criticalAmplificationFactor,
+    string? outputCsvPath)
 {
     var settings = new AnalysisSettings(
         panelCount,
@@ -2250,22 +2272,50 @@ static void WriteViscousPolarMses(
         nCritUpper: criticalAmplificationFactor,
         nCritLower: criticalAmplificationFactor);
     var mses = new XFoil.MsesSolver.Services.MsesAnalysisService();
-    Console.WriteLine($"Name: {geometry.Name} (MSES polar — Phase 5 stub)");
-    Console.WriteLine($"Panels: {panelCount}  Mach: {machNumber:F4}  Re: {reynoldsNumber:F0}  nCrit: {criticalAmplificationFactor:F3}");
-    Console.WriteLine();
-    Console.WriteLine("AlphaDeg\tCL\t\tCD\t\tCM\t\tConverged");
-    // Use > alphaEnd+tiny to include the endpoint.
+    using var writer = outputCsvPath is null ? null : new System.IO.StreamWriter(outputCsvPath);
+
+    Action<string> emit = line =>
+    {
+        if (writer is null) Console.WriteLine(line);
+        else writer.WriteLine(line);
+    };
+
+    if (writer is null)
+    {
+        Console.WriteLine($"Name: {geometry.Name} (MSES polar — Phase 5 stub)");
+        Console.WriteLine($"Panels: {panelCount}  Mach: {machNumber:F4}  Re: {reynoldsNumber:F0}  nCrit: {criticalAmplificationFactor:F3}");
+        Console.WriteLine();
+        Console.WriteLine("AlphaDeg\tCL\t\tCD\t\tCM\t\tConverged");
+    }
+    else
+    {
+        writer.WriteLine("# MSES polar export");
+        writer.WriteLine($"# airfoil={geometry.Name}, panels={panelCount}, mach={machNumber}, re={reynoldsNumber}, nCrit={criticalAmplificationFactor}");
+        writer.WriteLine("alpha_deg,CL,CD,CM,converged");
+    }
+
     double eps = 1e-9;
     if (alphaStep <= 0) alphaStep = 0.5;
     for (double a = alphaStart; a <= alphaEnd + eps; a += alphaStep)
     {
         var r = mses.AnalyzeViscous(geometry, a, settings);
-        Console.WriteLine(
-            $"{a.ToString("F4", CultureInfo.InvariantCulture)}\t"
-            + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
-            + $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t"
-            + $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
-            + (r.Converged ? "Y" : "N"));
+        string line = writer is null
+            ? $"{a.ToString("F4", CultureInfo.InvariantCulture)}\t"
+              + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
+              + $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t"
+              + $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
+              + (r.Converged ? "Y" : "N")
+            : $"{a.ToString("F4", CultureInfo.InvariantCulture)},"
+              + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)},"
+              + $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)},"
+              + $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)},"
+              + (r.Converged ? "True" : "False");
+        emit(line);
+    }
+
+    if (writer is not null)
+    {
+        Console.WriteLine($"Wrote MSES polar to {outputCsvPath}");
     }
 }
 
