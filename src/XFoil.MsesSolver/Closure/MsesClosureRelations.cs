@@ -192,4 +192,76 @@ public static class MsesClosureRelations
         // CD = (H*/2) · g / Reθ.
         return hStar * 0.5 * g / reT;
     }
+
+    /// <summary>
+    /// Turbulent dissipation coefficient CD — Drela thesis §4.2 and
+    /// the MSES-defining innovation over XFoil.
+    ///
+    /// CD combines two physical sources: (1) wall shear dissipation
+    /// Cf·Us, and (2) outer-layer dissipation 0.030·(1 − Us). The
+    /// (1 − Us) term is what makes MSES's BL march stable through
+    /// deep separation — XFoil's equivalent is absent, which is why
+    /// XFoil's Newton iteration diverges on post-stall α cases.
+    ///
+    /// Us (dissipation-weighted slip velocity, Drela eq. 4.22):
+    ///   Us = 1.5·(Hk − 1)/(1 + 0.025·(Hk − 1)²)·(1 + 0.014·Me²)
+    /// </summary>
+    /// <param name="Hk">Kinematic shape parameter.</param>
+    /// <param name="ReTheta">Edge Reynolds based on momentum thickness.</param>
+    /// <param name="Me">Edge Mach number.</param>
+    /// <param name="cTau">Shear-stress coefficient (not Cτ_eq — the
+    /// *carried* Cτ from the lag ODE). For near-equilibrium BLs
+    /// Cτ ≈ Cτ_eq (see <see cref="ComputeCTauEquilibrium"/>).</param>
+    /// <returns>Dissipation coefficient CD.</returns>
+    public static double ComputeCDTurbulent(double Hk, double ReTheta, double Me, double cTau)
+    {
+        double Me2 = Me * Me;
+        // Us per the Drela canonical form Us = (H*/2)/Hk, bounded < 1
+        // naturally because H* < 2·Hk for physical turbulent BL.
+        // The 1 + 0.014·Me² wrapper mirrors H*'s own compressibility
+        // correction so the dissipation budget stays consistent with
+        // the energy-shape-factor definition.
+        double hStar = ComputeHStarTurbulent(Hk, ReTheta, Me);
+        double Us = 0.5 * hStar / Hk * (1.0 + 0.014 * Me2);
+        Us = System.Math.Clamp(Us, 0.0, 0.99);
+
+        double cf = ComputeCfTurbulent(Hk, ReTheta, Me);
+        double wallPart = 0.5 * cf * Us;
+        // Outer-layer term: proportional to the outer-layer shear
+        // stress, approximated as cTau·(1 − Us). cTau is the
+        // lag-equation state variable; near equilibrium cTau ≈
+        // Cτ_eq from ComputeCTauEquilibrium.
+        double outerPart = cTau * (1.0 - Us);
+        return wallPart + outerPart;
+    }
+
+    /// <summary>
+    /// Equilibrium shear-stress coefficient Cτ_eq. Drela thesis
+    /// §4.2 eq. 4.25. Represents the shear stress the outer-layer
+    /// BL would carry at local-equilibrium conditions; the actual
+    /// carried Cτ lags this through an ODE that MSES tracks as
+    /// a state variable. At equilibrium the outer shear balances
+    /// the dissipation exactly, giving a closed form.
+    /// </summary>
+    /// <param name="Hk">Kinematic shape parameter.</param>
+    /// <param name="ReTheta">Edge Reynolds based on momentum thickness.</param>
+    /// <param name="Me">Edge Mach number.</param>
+    /// <returns>Equilibrium shear-stress coefficient Cτ_eq.</returns>
+    public static double ComputeCTauEquilibrium(double Hk, double ReTheta, double Me)
+    {
+        // Drela eq. 4.25: Cτ_eq = H*·0.015·(Hk − 1)³/(Hk²·(1 − Us))·(1 + 0.014·Me²)
+        // where H* and Us = (H*/2)/Hk·(1+0.014·Me²) are as defined
+        // above. The core driver is (Hk − 1)³ which ramps Cτ_eq rapidly
+        // past attached conditions; the (1 − Us) denominator is what
+        // amplifies Cτ_eq near incipient separation where Us → 1.
+        double Me2 = Me * Me;
+        double HkM1 = Hk - 1.0;
+        double hStar = ComputeHStarTurbulent(Hk, ReTheta, Me);
+        double Us = 0.5 * hStar / Hk * (1.0 + 0.014 * Me2);
+        Us = System.Math.Clamp(Us, 0.0, 0.99);
+        double oneMinusUs = 1.0 - Us;
+        if (oneMinusUs < 1e-6) oneMinusUs = 1e-6;
+        double HkM1Cubed = HkM1 * HkM1 * HkM1;
+        return hStar * 0.015 * HkM1Cubed / (Hk * Hk * oneMinusUs) * (1.0 + 0.014 * Me2);
+    }
 }

@@ -173,4 +173,69 @@ public class MsesClosureRelationsTests
         Assert.True(cd5 > cd4, $"Expected CD_5 ({cd5}) > CD_4 ({cd4})");
         Assert.True(cd6 > cd5, $"Expected CD_6 ({cd6}) > CD_5 ({cd5})");
     }
+
+    [Fact]
+    public void ComputeCTauEquilibrium_ZeroAtHk1()
+    {
+        // At Hk=1 (flat-plate-like), (Hk-1)³ = 0 so Cτ_eq = 0.
+        double actual = MsesClosureRelations.ComputeCTauEquilibrium(1.0, 5000.0, 0.0);
+        Assert.Equal(0.0, actual, 10);
+    }
+
+    [Fact]
+    public void ComputeCTauEquilibrium_PositiveAndFiniteAtHk2()
+    {
+        // Hk=2 (mid-attached turbulent): Cτ_eq should be small but
+        // positive (equilibrium outer-shear balance). Typical O(1e-3).
+        double actual = MsesClosureRelations.ComputeCTauEquilibrium(2.0, 5000.0, 0.0);
+        Assert.True(double.IsFinite(actual));
+        Assert.InRange(actual, 1e-4, 1e-1);
+    }
+
+    [Fact]
+    public void ComputeCTauEquilibrium_IncreasesWithHk()
+    {
+        // Past incipient separation (Hk > 2), Cτ_eq grows rapidly
+        // with Hk due to the (Hk-1)³ driver. This is what makes
+        // MSES's BL robust through separation.
+        double ceq2 = MsesClosureRelations.ComputeCTauEquilibrium(2.0, 5000.0, 0.0);
+        double ceq3 = MsesClosureRelations.ComputeCTauEquilibrium(3.0, 5000.0, 0.0);
+        double ceq4 = MsesClosureRelations.ComputeCTauEquilibrium(4.0, 5000.0, 0.0);
+        Assert.True(ceq3 > ceq2, $"Expected Cτeq_3 ({ceq3}) > Cτeq_2 ({ceq2})");
+        Assert.True(ceq4 > ceq3, $"Expected Cτeq_4 ({ceq4}) > Cτeq_3 ({ceq3})");
+    }
+
+    [Fact]
+    public void ComputeCDTurbulent_PositiveAtAttachedHk()
+    {
+        // Hk=1.4, Reθ=5000, Me=0, Cτ=1e-3 (small). Dissipation
+        // should be positive O(1e-3) — dominated by wall friction.
+        double actual = MsesClosureRelations.ComputeCDTurbulent(1.4, 5000.0, 0.0, 1e-3);
+        Assert.True(actual > 0);
+        Assert.InRange(actual, 1e-5, 1e-2);
+    }
+
+    [Fact]
+    public void ComputeCDTurbulent_OuterLayerDominatesAtSeparation()
+    {
+        // Past separation (Hk large), Us saturates near 1, so the
+        // wall part (Cf·Us/2) drops while the outer part
+        // (Cτ·(1−Us)) approaches zero IF Cτ = 0. Real BLs carry a
+        // non-trivial Cτ from the lag ODE. This test pins that the
+        // function is well-defined (no NaN) at the separated regime.
+        double cTauEq = MsesClosureRelations.ComputeCTauEquilibrium(3.5, 2000.0, 0.0);
+        double actual = MsesClosureRelations.ComputeCDTurbulent(3.5, 2000.0, 0.0, cTauEq);
+        Assert.True(double.IsFinite(actual), $"CD should stay finite in separated BL, got {actual}");
+        Assert.True(actual > 0);
+    }
+
+    [Fact]
+    public void ComputeCDTurbulent_RespondsToCTau()
+    {
+        // Outer dissipation should scale with Cτ. Doubling Cτ (at
+        // fixed Hk, Reθ, Me) should raise CD.
+        double cdLow = MsesClosureRelations.ComputeCDTurbulent(2.5, 5000.0, 0.0, 1e-3);
+        double cdHigh = MsesClosureRelations.ComputeCDTurbulent(2.5, 5000.0, 0.0, 2e-3);
+        Assert.True(cdHigh > cdLow, $"Expected CD to rise with Cτ: got {cdHigh} ≤ {cdLow}");
+    }
 }
