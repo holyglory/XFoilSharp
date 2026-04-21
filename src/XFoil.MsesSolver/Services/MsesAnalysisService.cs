@@ -23,16 +23,31 @@ namespace XFoil.MsesSolver.Services;
 public class MsesAnalysisService : IAirfoilAnalysisService
 {
     private readonly IAirfoilAnalysisService _inner;
+    private readonly int _viscousCouplingIterations;
+    private readonly double _viscousCouplingRelaxation;
 
     /// <summary>
     /// Constructs the MSES analyzer with an injected inviscid
     /// provider. Defaults to the Modern tree (linear-vortex +
     /// solution-adaptive paneling) when no dependency is passed.
     /// </summary>
-    public MsesAnalysisService(IAirfoilAnalysisService? inviscidProvider = null)
+    /// <param name="inviscidProvider">Inviscid analyzer to wrap.</param>
+    /// <param name="viscousCouplingIterations">Number of viscous-
+    /// inviscid displacement-body iterations to perform. Default
+    /// 0 = fully uncoupled (inviscid-only CL, uncoupled Squire-Young
+    /// CD). Opt-in; raising this beyond 0 enables the experimental
+    /// Phase-5-lite path.</param>
+    /// <param name="viscousCouplingRelaxation">Under-relaxation
+    /// factor on δ* updates (0..1). Default 0.3 for damping.</param>
+    public MsesAnalysisService(
+        IAirfoilAnalysisService? inviscidProvider = null,
+        int viscousCouplingIterations = 0,
+        double viscousCouplingRelaxation = 0.3)
     {
         _inner = inviscidProvider
             ?? new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
+        _viscousCouplingIterations = System.Math.Max(0, viscousCouplingIterations);
+        _viscousCouplingRelaxation = System.Math.Clamp(viscousCouplingRelaxation, 0.0, 1.0);
     }
 
     /// <inheritdoc />
@@ -92,17 +107,30 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         var upperMarch = RunSurfaceMarch(inv, upper: true, nu, nCrit);
         var lowerMarch = RunSurfaceMarch(inv, upper: false, nu, nCrit);
 
-        // Phase-5-lite coupling v2 (2026-04-21): even with proper
-        // arc-length interpolation and 0.5 under-relaxation, the
-        // displacement-body iteration regresses 3 MSES tests. The
-        // new Ue(x) after thickening produces different transition
-        // positions and θ profiles that break monotonicity
-        // assumptions in the tests. Next attempt needs: (a) multi-
-        // iteration loop with convergence check; (b) limit δ*
-        // magnitude (cap at 0.02·c) to prevent large first-iteration
-        // jumps; (c) potentially a secant / interval-halving on
-        // δ* rather than direct substitution.
-        // Helpers remain as dead code.
+        // Phase-5-lite opt-in coupling. Only runs if the caller
+        // constructed the service with viscousCouplingIterations > 0.
+        for (int k = 0; k < _viscousCouplingIterations; k++)
+        {
+            if (!TryBuildThickenedGeometry(geometry, upperMarch, lowerMarch,
+                    relaxation: _viscousCouplingRelaxation, out var thickened))
+                break;
+            try
+            {
+                var invK = AnalyzeInviscid(thickened, angleOfAttackDegrees, settings);
+                if (!double.IsFinite(invK.LiftCoefficient)) break;
+                var upperK = RunSurfaceMarch(invK, upper: true, nu, nCrit);
+                var lowerK = RunSurfaceMarch(invK, upper: false, nu, nCrit);
+                double cdTry = ComputeSquireYoungCd(upperK, lowerK, Uinf);
+                if (cdTry > 0 && cdTry < 0.3)
+                {
+                    inv = invK;
+                    upperMarch = upperK;
+                    lowerMarch = lowerK;
+                }
+                else break;
+            }
+            catch { break; }
+        }
 
         double cd = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
 
