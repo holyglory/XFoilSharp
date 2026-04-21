@@ -1568,6 +1568,25 @@ try
                 args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d);
             return 0;
 
+        case "viscous-point-mses":
+            // MSES-thesis single-point viscous (Phase-5 stub).
+            // Inviscid CL + Squire-Young CD from composite lam→turb
+            // marcher. No viscous Ue feedback yet; outputs finite
+            // CL/CD suitable for benchmarking against Modern.
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-point-mses command requires a 4-digit designation and alpha (degrees).");
+            }
+            var msesAirfoil = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
+            WriteViscousSinglePointMses(
+                msesAirfoil,
+                ParseDouble(args[2], "alpha"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 160,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseDouble(args[6], "critical amplification factor") : 9d);
+            return 0;
+
         case "viscous-point-modern":
             // Phase 3: single-alpha viscous analysis on Modern (#3) tree.
             // Unlike viscous-polar-naca-modern which uses SweepViscousAlpha
@@ -1940,6 +1959,7 @@ static void PrintUsage()
     Console.WriteLine("  viscous-polar-naca-double <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: native double-precision tree)");
     Console.WriteLine("  viscous-polar-naca-modern <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree, multi-start retry on non-physical results)");
     Console.WriteLine("  viscous-point-modern <####> <alpha> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: single-alpha modern analysis — A1 multi-start for non-physical results)");
+    Console.WriteLine("  viscous-point-mses <####> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES-thesis closure, Phase-5 stub — inviscid CL + Squire-Young CD)");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2173,6 +2193,36 @@ static void WriteViscousPolarSummaryDouble(
             $"Xtr_L={r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
             $"Quality={plausibleTag}");
     }
+}
+
+static void WriteViscousSinglePointMses(
+    AirfoilGeometry geometry,
+    double alphaDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double criticalAmplificationFactor)
+{
+    var settings = new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        nCritUpper: criticalAmplificationFactor,
+        nCritLower: criticalAmplificationFactor);
+    var mses = new XFoil.MsesSolver.Services.MsesAnalysisService();
+    var r = mses.AnalyzeViscous(geometry, alphaDegrees, settings);
+    Console.WriteLine($"Name: {geometry.Name} (MSES single-point — Phase 5 stub)");
+    Console.WriteLine($"Panels: {settings.PanelCount}");
+    Console.WriteLine($"Mach: {settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Alpha: {alphaDegrees.ToString("F4", CultureInfo.InvariantCulture)}°");
+    Console.WriteLine("Pipeline: inviscid (Modern) → composite laminar→transition→turbulent marcher");
+    Console.WriteLine("          → Squire-Young far-field CD. No viscous Ue feedback (Phase 5 TODO).");
+    Console.WriteLine();
+    Console.WriteLine($"CL:        {r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CD:        {r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CM:        {r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
 }
 
 static void WriteViscousSinglePointModern(
