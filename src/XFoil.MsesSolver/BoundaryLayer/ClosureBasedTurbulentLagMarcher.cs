@@ -107,7 +107,20 @@ public static class ClosureBasedTurbulentLagMarcher
                 thetaMid, HMid, cTau[i - 1],
                 ueMid, dUeDx, kinematicViscosity, machNumberEdge);
 
-            theta[i] = System.Math.Max(theta[i - 1] + dx * dThetaDxMid, 1e-12);
+            double thetaCandidate = System.Math.Max(theta[i - 1] + dx * dThetaDxMid, 1e-12);
+            // Runaway guard: θ shouldn't grow more than 3× in one
+            // step for a well-resolved BL march. If it does, the
+            // Clauser H-ODE + closure's combined (θ, H) dynamics
+            // are in a numerically unstable regime. Cap θ growth
+            // per-step and freeze H; downstream stations will
+            // inherit the cap, signaling "hit the ceiling" to the
+            // caller without propagating ∞ into CD integration.
+            double maxGrowth = 3.0;
+            if (thetaCandidate > theta[i - 1] * maxGrowth)
+            {
+                thetaCandidate = theta[i - 1] * maxGrowth;
+            }
+            theta[i] = thetaCandidate;
             H[i] = System.Math.Clamp(H[i - 1] + dx * dHDxMid, 1.05, 4.0);
 
             // Cτ: analytical step using midpoint Cτ_eq/δ.
