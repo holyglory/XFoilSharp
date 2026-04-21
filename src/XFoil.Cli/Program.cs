@@ -2331,8 +2331,13 @@ static void WriteMsesProfileDump(
         var p = r.LowerProfiles[i];
         writer.WriteLine($"lower,{i},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
     }
+    for (int i = 0; i < r.WakeProfiles.Length; i++)
+    {
+        var p = r.WakeProfiles[i];
+        writer.WriteLine($"wake,{i},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
+    }
     Console.WriteLine($"Wrote MSES profile to {csvPath}");
-    Console.WriteLine($"Upper stations: {r.UpperProfiles.Length}  Lower stations: {r.LowerProfiles.Length}");
+    Console.WriteLine($"Upper stations: {r.UpperProfiles.Length}  Lower stations: {r.LowerProfiles.Length}  Wake stations: {r.WakeProfiles.Length}");
     Console.WriteLine($"CL={r.LiftCoefficient:F4} CD={r.DragDecomposition.CD:F6} Xtr_U={r.UpperTransition.XTransition:F4} Xtr_L={r.LowerTransition.XTransition:F4}");
 }
 
