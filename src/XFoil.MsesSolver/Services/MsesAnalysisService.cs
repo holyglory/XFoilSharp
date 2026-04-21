@@ -65,7 +65,8 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         if (geometry is null) throw new System.ArgumentNullException(nameof(geometry));
         settings ??= new AnalysisSettings();
 
-        var inv = AnalyzeInviscid(geometry, angleOfAttackDegrees, settings);
+        var invBase = AnalyzeInviscid(geometry, angleOfAttackDegrees, settings);
+        var inv = invBase;
 
         // Derive chord from geometry x-extent (unit-chord assumed
         // in most callers but we don't rely on it).
@@ -89,6 +90,18 @@ public class MsesAnalysisService : IAirfoilAnalysisService
 
         var upperMarch = RunSurfaceMarch(inv, upper: true, nu, nCrit);
         var lowerMarch = RunSurfaceMarch(inv, upper: false, nu, nCrit);
+
+        // Phase-5-lite coupling probe (2026-04-21): attempted a single
+        // viscous-inviscid iteration via displacement-body geometry
+        // offset. Regressed 5 MSES tests (monotonicity, convergence)
+        // because the δ*(s) interpolation in geometry arc-length
+        // doesn't match the marcher's station arc-length closely
+        // enough, and the re-solved Ue(x) caused spurious θ
+        // oscillation. Disabled until a proper arc-length-aware
+        // coupling is implemented (Phase 5 main). Helpers
+        // TryBuildThickenedGeometry / InterpolateDStar /
+        // ComputeSurfaceNormal are preserved below for the real
+        // Phase-5 iteration.
 
         double cd = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
 
@@ -153,6 +166,130 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             };
         }
         return profiles;
+    }
+
+    // Phase-5-lite helper: build an airfoil shape offset outward
+    // by δ*(s) on each surface. Returns false when the offset would
+    // create geometry problems (negative chord, self-intersection,
+    // NaN δ*) — caller falls back to the un-coupled result.
+    private static bool TryBuildThickenedGeometry(
+        AirfoilGeometry original,
+        CompositeTransitionMarcher.CompositeResult upperMarch,
+        CompositeTransitionMarcher.CompositeResult lowerMarch,
+        out AirfoilGeometry thickened)
+    {
+        thickened = original;
+        var pts = original.Points;
+        int n = pts.Count;
+        if (n < 10) return false;
+
+        // Find LE (min-x point) to split upper/lower.
+        int iLE = 0;
+        double minX = pts[0].X;
+        for (int i = 1; i < n; i++)
+        {
+            if (pts[i].X < minX) { minX = pts[i].X; iLE = i; }
+        }
+
+        // Upper: pts[iLE] → pts[0], arc length from LE outward.
+        // Lower: pts[iLE] → pts[n-1], arc length from LE outward.
+        var newPts = new AirfoilPoint[n];
+
+        // Upper surface: walk LE→TE in reverse index order.
+        double sAcc = 0;
+        for (int k = 0; k <= iLE; k++)
+        {
+            int idx = iLE - k;
+            if (k > 0)
+            {
+                double dx = pts[idx].X - pts[idx + 1].X;
+                double dy = pts[idx].Y - pts[idx + 1].Y;
+                sAcc += System.Math.Sqrt(dx * dx + dy * dy);
+            }
+            double dStar = InterpolateDStar(sAcc, upperMarch);
+            var (nx, ny) = ComputeSurfaceNormal(pts, idx, upper: true);
+            newPts[idx] = new AirfoilPoint(
+                pts[idx].X + dStar * nx,
+                pts[idx].Y + dStar * ny);
+        }
+
+        // Lower surface: walk LE→TE in forward index order.
+        sAcc = 0;
+        for (int k = 0; k < n - iLE; k++)
+        {
+            int idx = iLE + k;
+            if (k > 0)
+            {
+                double dx = pts[idx].X - pts[idx - 1].X;
+                double dy = pts[idx].Y - pts[idx - 1].Y;
+                sAcc += System.Math.Sqrt(dx * dx + dy * dy);
+            }
+            if (idx == iLE) continue; // already set by upper pass
+            double dStar = InterpolateDStar(sAcc, lowerMarch);
+            var (nx, ny) = ComputeSurfaceNormal(pts, idx, upper: false);
+            newPts[idx] = new AirfoilPoint(
+                pts[idx].X + dStar * nx,
+                pts[idx].Y + dStar * ny);
+        }
+
+        // Sanity: no NaN, no tangles (x-extent must still be positive).
+        double newMinX = double.PositiveInfinity, newMaxX = double.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            if (!double.IsFinite(newPts[i].X) || !double.IsFinite(newPts[i].Y)) return false;
+            if (newPts[i].X < newMinX) newMinX = newPts[i].X;
+            if (newPts[i].X > newMaxX) newMaxX = newPts[i].X;
+        }
+        if (newMaxX - newMinX < 0.5) return false;
+
+        thickened = new AirfoilGeometry(
+            $"{original.Name} (viscous-thickened)",
+            newPts,
+            original.Format);
+        return true;
+    }
+
+    private static double InterpolateDStar(
+        double s, CompositeTransitionMarcher.CompositeResult march)
+    {
+        // Piecewise-linear interpolation of H·θ on the marcher's
+        // station grid. Clamp to endpoints if s is out of range.
+        int n = march.Theta.Length;
+        if (n < 2) return 0.0;
+        // We don't have station s-values in CompositeResult; the
+        // marcher assumes stations are the ones the caller passed.
+        // Approximate: s index via linear scan vs. chord fraction.
+        // Since the caller's station arc-length matches the geometry
+        // surface, this is the same arc length.
+        // Fallback: linearly distribute stations over [0, chord-length]
+        // of the surface — close enough for Phase-5-lite.
+        // A cleaner version would thread the station array through
+        // CompositeResult; deferred.
+        if (s <= 0) return march.H[0] * march.Theta[0];
+        if (s >= 1.0) return march.H[n - 1] * march.Theta[n - 1]; // assumes unit chord
+        double frac = s / 1.0;
+        int iLo = System.Math.Clamp((int)(frac * (n - 1)), 0, n - 2);
+        double t = frac * (n - 1) - iLo;
+        double dStarLo = march.H[iLo] * march.Theta[iLo];
+        double dStarHi = march.H[iLo + 1] * march.Theta[iLo + 1];
+        return (1 - t) * dStarLo + t * dStarHi;
+    }
+
+    private static (double nx, double ny) ComputeSurfaceNormal(
+        System.Collections.Generic.IReadOnlyList<AirfoilPoint> pts, int i, bool upper)
+    {
+        // Tangent from adjacent points; normal is perpendicular.
+        // Outward normal: upper surface points up, lower points down.
+        int n = pts.Count;
+        AirfoilPoint a = pts[System.Math.Max(i - 1, 0)];
+        AirfoilPoint b = pts[System.Math.Min(i + 1, n - 1)];
+        double tx = b.X - a.X;
+        double ty = b.Y - a.Y;
+        double mag = System.Math.Sqrt(tx * tx + ty * ty);
+        if (mag < 1e-12) return (0, upper ? 1 : -1);
+        tx /= mag; ty /= mag;
+        // Rotate 90° left for upper, right for lower.
+        return upper ? (-ty, tx) : (ty, -tx);
     }
 
     private static TransitionInfo BuildTransition(
