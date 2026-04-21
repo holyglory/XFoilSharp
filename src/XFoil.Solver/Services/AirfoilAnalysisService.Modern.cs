@@ -417,6 +417,31 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                             return ApplySeparationAwareCdBoost(ramped);
                         }
                     }
+
+                    // B3 iter 45 — stall-blindness detector.
+                    //
+                    // Ramp rescue failed (ramped is null, non-physical, or
+                    // ratio outside [0.5, 1.0]). The primary is "physical"
+                    // per envelope but CL/invCL ≥ 0.98 at |α| ≥ 14° is a
+                    // strong signature of the viscous solver failing to
+                    // pull lift back from inviscid tangent — i.e. stall
+                    // blindness (documented in
+                    // project_b3_cl_gap_root_cause.md).
+                    //
+                    // For these cases, Viterna extrapolation from a
+                    // pre-stall converged anchor gives a far better CL
+                    // than the inflated primary. Only fires at |α| ≥ 14°
+                    // to avoid false positives on mild-stall airfoils
+                    // where CL ≈ invCL is still physical.
+                    if (System.Math.Abs(angleOfAttackDegrees) >= 14.0)
+                    {
+                        var viterna = TryStallBlindnessViterna(
+                            geometry, angleOfAttackDegrees, settings, primaryCl);
+                        if (viterna is not null)
+                        {
+                            return viterna;
+                        }
+                    }
                 }
             }
             return primary;
@@ -892,6 +917,68 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
             UpperTransition = r.UpperTransition,
             LowerTransition = r.LowerTransition,
             AngleOfAttackDegrees = r.AngleOfAttackDegrees,
+        };
+    }
+
+    // B3 iter 45 — stall-blindness Viterna fallback.
+    //
+    // When the primary solve converges to a CL that tracks inviscid at
+    // high α (viscous model failing to stall), replace it with a Viterna
+    // extrapolation from a pre-stall converged anchor. Only returns
+    // non-null when both (a) a valid anchor exists within 2° below
+    // target α and (b) the Viterna CL is meaningfully lower than the
+    // inflated primary — otherwise there's no improvement and we let
+    // the caller keep the primary (prevents gratuitous value swapping).
+    private ViscousAnalysisResult? TryStallBlindnessViterna(
+        AirfoilGeometry geometry,
+        double targetAlphaDeg,
+        AnalysisSettings? settings,
+        double inflatedPrimaryCl)
+    {
+        var anchor = FindPostStallAnchor(geometry, targetAlphaDeg, settings);
+        if (!anchor.HasValue) return null;
+
+        double alphaRad = targetAlphaDeg * System.Math.PI / 180.0;
+        double anchorAlphaRad = anchor.Value.AlphaDeg * System.Math.PI / 180.0;
+        var (extrapCL, extrapCD) = PostStallExtrapolator.ExtrapolatePostStall(
+            alphaRad, anchorAlphaRad, anchor.Value.CL, anchor.Value.CD,
+            aspectRatio: 2.0 * System.Math.PI,
+            cdMaxOverride: 1.9);
+
+        if (!double.IsFinite(extrapCL) || !double.IsFinite(extrapCD)) return null;
+        if (System.Math.Sign(extrapCL) != System.Math.Sign(targetAlphaDeg)) return null;
+        if (System.Math.Abs(extrapCL) > PhysicalEnvelope.MaxAbsoluteLiftCoefficient) return null;
+        if (extrapCD < 0d || extrapCD > PhysicalEnvelope.MaxDragCoefficient) return null;
+
+        // Only replace if Viterna CL is materially below the inflated
+        // primary — if primary is only 5% above a reasonable value, the
+        // cost of replacing it with a synthetic estimate outweighs the
+        // benefit (we'd lose the real BL state data in the process).
+        if (System.Math.Abs(extrapCL) >= System.Math.Abs(inflatedPrimaryCl) * 0.95) return null;
+
+        return new ViscousAnalysisResult
+        {
+            LiftCoefficient = extrapCL,
+            MomentCoefficient = 0d,
+            DragDecomposition = new DragDecomposition
+            {
+                CD = extrapCD,
+                CDF = 0d,
+                CDP = extrapCD,
+                CDSurfaceCrossCheck = 0d,
+                DiscrepancyMetric = 0d,
+                TEBaseDrag = 0d,
+                WaveDrag = null,
+            },
+            Converged = false,
+            Iterations = 0,
+            ConvergenceHistory = new List<ViscousConvergenceInfo>(),
+            UpperProfiles = System.Array.Empty<BoundaryLayerProfile>(),
+            LowerProfiles = System.Array.Empty<BoundaryLayerProfile>(),
+            WakeProfiles = System.Array.Empty<BoundaryLayerProfile>(),
+            UpperTransition = default,
+            LowerTransition = default,
+            AngleOfAttackDegrees = targetAlphaDeg,
         };
     }
 
