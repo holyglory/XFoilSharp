@@ -1587,6 +1587,23 @@ try
                 args.Length >= 7 ? ParseDouble(args[6], "critical amplification factor") : 9d);
             return 0;
 
+        case "viscous-point-mses-file":
+            // MSES-thesis single-point viscous from an airfoil file.
+            // Accepts Selig/XFoil .dat format via AirfoilParser.
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-point-mses-file command requires a file path and alpha (degrees).");
+            }
+            var msesFileAirfoil = parser.ParseFile(args[1]);
+            WriteViscousSinglePointMses(
+                msesFileAirfoil,
+                ParseDouble(args[2], "alpha"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 160,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseDouble(args[6], "critical amplification factor") : 9d);
+            return 0;
+
         case "viscous-point-modern":
             // Phase 3: single-alpha viscous analysis on Modern (#3) tree.
             // Unlike viscous-polar-naca-modern which uses SweepViscousAlpha
@@ -1960,6 +1977,7 @@ static void PrintUsage()
     Console.WriteLine("  viscous-polar-naca-modern <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree, multi-start retry on non-physical results)");
     Console.WriteLine("  viscous-point-modern <####> <alpha> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: single-alpha modern analysis — A1 multi-start for non-physical results)");
     Console.WriteLine("  viscous-point-mses <####> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES-thesis closure, Phase-5 stub — inviscid CL + Squire-Young CD)");
+    Console.WriteLine("  viscous-point-mses-file <path> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES single-point from arbitrary airfoil .dat)");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");

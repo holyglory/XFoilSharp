@@ -92,6 +92,18 @@ public class MsesAnalysisService : IAirfoilAnalysisService
 
         double cd = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
 
+        // Sanity clamp. Airfoil CD past stall tops out around 0.3.
+        // Anything larger indicates the BL marcher blew up (θ
+        // diverged under severe adverse gradient — common on
+        // high-camber Selig airfoils with coarse panel distributions).
+        // Signal the non-physical output via non-Converged + an
+        // explicit CD cap, rather than propagate nonsense downstream.
+        bool converged = cd >= 0.0 && cd <= 0.5;
+        if (!converged)
+        {
+            cd = System.Math.Clamp(cd, 0.0, 0.5);
+        }
+
         return new ViscousAnalysisResult
         {
             LiftCoefficient = inv.LiftCoefficient,
@@ -106,7 +118,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 TEBaseDrag = 0.0,
                 WaveDrag = null,
             },
-            Converged = true,
+            Converged = converged,
             Iterations = 1,
             AngleOfAttackDegrees = angleOfAttackDegrees,
             ConvergenceHistory = new System.Collections.Generic.List<ViscousConvergenceInfo>(),
