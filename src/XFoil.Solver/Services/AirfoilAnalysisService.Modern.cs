@@ -593,8 +593,14 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                     // α=18-19° where WT CD=0.19-0.28. Threshold 17.7° excludes
                     // α=17° Ladson rows (WT CD≈0.025 — would be over-corrected)
                     // while catching the α=18-19° deep-stall cases.
+                    // Iter 42: steepened slope. Previous (0.06 + 0.02*Δα)
+                    // under-floored α=19° at 0.10 while WT = 0.27-0.43; the
+                    // new (0.08 + 0.05*Δα) hits 0.13 at α=18°, 0.18 at α=19°,
+                    // still under-predict but much closer. Gate remains
+                    // usedRampAnchor + α ≥ 17.7° so mild-stall rows are
+                    // untouched.
                     double absAlpha = System.Math.Abs(angleOfAttackDegrees);
-                    double floor = 0.06 + 0.02 * (absAlpha - 17.0);
+                    double floor = 0.08 + 0.05 * (absAlpha - 17.0);
                     extrapCD = System.Math.Max(extrapCDraw, floor);
                 }
 
