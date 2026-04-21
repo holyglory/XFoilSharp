@@ -1006,13 +1006,14 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
         if (System.Math.Abs(extrapCL) > PhysicalEnvelope.MaxAbsoluteLiftCoefficient) return null;
         if (extrapCD < 0d || extrapCD > PhysicalEnvelope.MaxDragCoefficient) return null;
 
-        // Iter 49: additional shape-aware CL cap.
-        // Viterna can still return CL > CL_max_est when its anchor is
-        // itself inflated (permissive-anchor case on thick airfoils).
-        // Cap the extrapolation at 1.05·CL_max_est so the synthesis
-        // stays physically plausible regardless of anchor quality.
+        // Iter 49-50: shape-aware CL cap. Iter 49 used 1.05 cushion;
+        // iter 50 tightens to 1.00 — the anchor-derived acceptance
+        // filter below may reject mildly-inflated-primary cases where
+        // the 5% cushion leaves cap above the 0.95·primary threshold.
+        // Tightening the cap lets more borderline cases enter the
+        // rescue while still clamping truly inflated extrapolations.
         var (tMax, cMaxAbs) = EstimateThicknessCamber(geometry);
-        double clMaxCap = (1.3 + 1.5 * tMax + 6.0 * cMaxAbs) * 1.05;
+        double clMaxCap = 1.3 + 1.5 * tMax + 6.0 * cMaxAbs;
         if (System.Math.Abs(extrapCL) > clMaxCap)
         {
             extrapCL = clMaxCap * System.Math.Sign(extrapCL);
