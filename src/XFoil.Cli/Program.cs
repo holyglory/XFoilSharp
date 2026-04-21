@@ -1587,6 +1587,25 @@ try
                 args.Length >= 7 ? ParseDouble(args[6], "critical amplification factor") : 9d);
             return 0;
 
+        case "viscous-polar-mses":
+            // MSES polar sweep. Runs viscous-point-mses at each α in
+            // [start, end] with given step.
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-mses command requires a 4-digit designation, alpha start, alpha end, alpha step.");
+            }
+            var polarMsesNaca = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
+            WriteViscousPolarMses(
+                polarMsesNaca,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 160,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseDouble(args[8], "critical amplification factor") : 9d);
+            return 0;
+
         case "viscous-point-mses-file":
             // MSES-thesis single-point viscous from an airfoil file.
             // Accepts Selig/XFoil .dat format via AirfoilParser.
@@ -1978,6 +1997,7 @@ static void PrintUsage()
     Console.WriteLine("  viscous-point-modern <####> <alpha> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: single-alpha modern analysis — A1 multi-start for non-physical results)");
     Console.WriteLine("  viscous-point-mses <####> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES-thesis closure, Phase-5 stub — inviscid CL + Squire-Young CD)");
     Console.WriteLine("  viscous-point-mses-file <path> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES single-point from arbitrary airfoil .dat)");
+    Console.WriteLine("  viscous-polar-mses <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep)");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2210,6 +2230,42 @@ static void WriteViscousPolarSummaryDouble(
             $"Xtr_U={r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
             $"Xtr_L={r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
             $"Quality={plausibleTag}");
+    }
+}
+
+static void WriteViscousPolarMses(
+    AirfoilGeometry geometry,
+    double alphaStart,
+    double alphaEnd,
+    double alphaStep,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double criticalAmplificationFactor)
+{
+    var settings = new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        nCritUpper: criticalAmplificationFactor,
+        nCritLower: criticalAmplificationFactor);
+    var mses = new XFoil.MsesSolver.Services.MsesAnalysisService();
+    Console.WriteLine($"Name: {geometry.Name} (MSES polar — Phase 5 stub)");
+    Console.WriteLine($"Panels: {panelCount}  Mach: {machNumber:F4}  Re: {reynoldsNumber:F0}  nCrit: {criticalAmplificationFactor:F3}");
+    Console.WriteLine();
+    Console.WriteLine("AlphaDeg\tCL\t\tCD\t\tCM\t\tConverged");
+    // Use > alphaEnd+tiny to include the endpoint.
+    double eps = 1e-9;
+    if (alphaStep <= 0) alphaStep = 0.5;
+    for (double a = alphaStart; a <= alphaEnd + eps; a += alphaStep)
+    {
+        var r = mses.AnalyzeViscous(geometry, a, settings);
+        Console.WriteLine(
+            $"{a.ToString("F4", CultureInfo.InvariantCulture)}\t"
+            + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
+            + $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t"
+            + $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
+            + (r.Converged ? "Y" : "N"));
     }
 }
 
