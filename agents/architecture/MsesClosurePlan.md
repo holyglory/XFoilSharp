@@ -81,18 +81,39 @@ deliverable.
 
 ### Session summary — what works end-to-end
 
-As of commit bc7db48, the MSES pipeline can run single-point
-viscous analysis via the CLI:
+As of commit 8e96401, the MSES pipeline can run single-point
+viscous analysis, polar sweeps, and profile dumps via the CLI:
 
 ```
+# single point
 dotnet run --project src/XFoil.Cli -- viscous-point-mses 0012 2 160 0.0 1000000 9
+dotnet run --project src/XFoil.Cli -- viscous-point-mses-file <path> 2 ...
+
+# polar sweep
+dotnet run --project src/XFoil.Cli -- viscous-polar-mses 4412 0 8 2 160 0.0 3000000 9
+
+# polar → CSV
+dotnet run --project src/XFoil.Cli -- export-polar-mses 4412 /tmp/polar.csv 0 8 2 ...
+
+# per-station BL profile → CSV
+dotnet run --project src/XFoil.Cli -- export-profile-mses 4412 4 /tmp/profile.csv ...
 ```
 
-Output:
+Output schema:
 - CL: from inviscid (no viscous feedback yet).
 - CD: Squire-Young far-field from composite laminar→transition→
   turbulent marcher running on Ue(x) = sqrt(1-Cp) of each surface.
 - CM: from inviscid.
+- Xtr_U / Xtr_L: exact-x where Ñ = n_crit, interpolated.
+- Per-station: θ, δ*, H, Cf, Cτ, Ue, Ñ at each station.
+
+Test coverage: 96 MSES-specific unit tests, 100% pass. Includes:
+- Closure library verification (20+ tests, thesis-calibrated)
+- 6 BL marcher implementations (Thwaites, closure-laminar,
+  closure-turbulent, Cτ-lag, thesis-exact-implicit, composite)
+- Integration tests on NACA 0012/2412/4412 polar sweeps
+- Flat-plate and transition-position reference comparisons
+- Infrastructure tests (arc-length, edge velocity, δ* interpolation)
 
 Working benchmarks on NACA 0012/2412/4412 at α ∈ {0, 4}°,
 Re ∈ {1e6, 3e6}: MSES CD within 10× of Modern Newton-coupled CD.
@@ -100,6 +121,16 @@ Typical overshoot is 2-3× on thin airfoils, driven by ~13 %
 Cf_turbulent high vs 1/5-power-law reference plus absence of
 viscous Ue feedback. Phase 5 (Newton coupling) is expected to
 close both of these.
+
+Phase-5-lite coupling probes (two attempts: 2ee6455, 5e79ad5)
+failed on test-suite regressions — the displacement-body Ue
+shifts change transition positions and θ monotonicity enough to
+break the uncoupled-pipeline tests. Proper Phase 5 implementation
+requires: multi-iteration convergence loop, δ* magnitude cap,
+secant / interval-halving on δ* updates. Helpers
+(TryBuildThickenedGeometry, InterpolateDStar, ComputeSurfaceNormal)
+and the Stations field on CompositeResult are all infrastructure
+that Phase-5 main can use directly.
 
 ### Phase 0 — Interface extraction (prep) ✅ LANDED (2026-04-21 commit 34befcb)
 
