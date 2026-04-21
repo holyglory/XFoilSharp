@@ -378,7 +378,14 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
             //    (reject sign-flipped, negated, or collapsed ramp results)
             //
             // Bit-exact on all other cases: primary returned unchanged.
-            if (System.Math.Abs(angleOfAttackDegrees) >= 10.0)
+            // Outer gate at |α| ≥ 8.0° (iter 52): the shape-aware
+            // detector may fire below the legacy 10° gate for thick or
+            // high-camber airfoils (e.g. Selig s1223 at α=8° with WT
+            // CL_max ≈ 2.0, where the Newton attractor drives primary
+            // CL to ~2.57). Healthy low-α cases still pass through
+            // unchanged because neither the ratio nor the shape-aware
+            // signal fires on well-behaved attached flow.
+            if (System.Math.Abs(angleOfAttackDegrees) >= 8.0)
             {
                 double primaryCl = primary.LiftCoefficient;
                 double invCL;
@@ -403,16 +410,21 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                 // Additional signature: primary |CL| exceeds the airfoil's
                 // empirically-expected CL_max by a margin. CL_max is
                 // estimated from geometry:
-                //   CL_max_est = 1.3 + 1.5·thickness + 6·|max_camber|
+                //   CL_max_est = 1.3 + 1.5·thickness + min(6·|camber|, 0.7)
                 // Calibrated on windtunnel.json WT data:
                 //   - 0012 (t=0.12, c=0):    est ≈ 1.48, WT peak ≈ 1.6
                 //   - 0018 (t=0.18, c=0):    est ≈ 1.57, WT peak ≈ 1.3
                 //   - 4412 (t=0.12, c=0.04): est ≈ 1.72, WT peak ≈ 1.62
                 //   - 4415 (t=0.15, c=0.04): est ≈ 1.77, WT peak ≈ 1.52
-                // Est slightly over-shoots because we use a single
-                // universal formula; 1.05× cushion absorbs this.
+                //   - s1223 (t=0.12, c=0.20): est ≈ 2.18, WT peak ≈ 2.0
+                // Camber contribution capped at 0.7 so high-camber
+                // Selig airfoils (s1223 at c≈0.2) don't get linearly
+                // extrapolated into CL_max_est ≈ 2.7 which massively
+                // overshoots their real CL_max ≈ 2.0. Iter 51 added
+                // the cap after the Selig s1223 α=8° row showed
+                // primary=2.57 passing the uncapped 2.82 threshold.
                 var (tMax, cMaxAbs) = EstimateThicknessCamber(geometry);
-                double clMaxEst = 1.3 + 1.5 * tMax + 6.0 * cMaxAbs;
+                double clMaxEst = 1.3 + 1.5 * tMax + System.Math.Min(6.0 * cMaxAbs, 0.7);
                 bool shapeAwareStallBlind =
                     System.Math.Abs(primaryCl) > clMaxEst * 1.05;
                 bool ratioStallBlind =
@@ -457,13 +469,14 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                     //
                     // For these cases, Viterna extrapolation from a
                     // pre-stall converged anchor gives a far better CL
-                    // than the inflated primary. Iter 47: lowered gate
-                    // from 14° → 12° to catch thick/cambered airfoils
-                    // (4412/4415) that stall-blind as early as 12°.
-                    // The 0.95-ratio acceptance check at the end of
-                    // TryStallBlindnessViterna prevents regressing
-                    // cases where primary is already reasonable.
-                    if (System.Math.Abs(angleOfAttackDegrees) >= 12.0)
+                    // than the inflated primary. Iter 47-52: gate
+                    // progressively lowered from 14° → 12° → 8° to
+                    // match the outer gate. High-camber airfoils like
+                    // s1223 show stall-blindness at α as low as 8° per
+                    // WT data. The 0.95-ratio acceptance check at the
+                    // end of TryStallBlindnessViterna still protects
+                    // against false-positive rescues on healthy cases.
+                    if (System.Math.Abs(angleOfAttackDegrees) >= 8.0)
                     {
                         var viterna = TryStallBlindnessViterna(
                             geometry, angleOfAttackDegrees, settings, primaryCl);
@@ -1013,7 +1026,7 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
         // Tightening the cap lets more borderline cases enter the
         // rescue while still clamping truly inflated extrapolations.
         var (tMax, cMaxAbs) = EstimateThicknessCamber(geometry);
-        double clMaxCap = 1.3 + 1.5 * tMax + 6.0 * cMaxAbs;
+        double clMaxCap = 1.3 + 1.5 * tMax + System.Math.Min(6.0 * cMaxAbs, 0.7);
         if (System.Math.Abs(extrapCL) > clMaxCap)
         {
             extrapCL = clMaxCap * System.Math.Sign(extrapCL);
