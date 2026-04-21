@@ -118,8 +118,8 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             cd = System.Math.Clamp(cd, 0.0, 0.5);
         }
 
-        var upperProfiles = BuildProfiles(upperMarch);
-        var lowerProfiles = BuildProfiles(lowerMarch);
+        var upperProfiles = BuildProfiles(upperMarch, nu);
+        var lowerProfiles = BuildProfiles(lowerMarch, nu);
 
         return new ViscousAnalysisResult
         {
@@ -148,17 +148,18 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     }
 
     private static BoundaryLayerProfile[] BuildProfiles(
-        CompositeTransitionMarcher.CompositeResult r)
+        CompositeTransitionMarcher.CompositeResult r, double nu)
     {
         int n = r.Theta.Length;
         var profiles = new BoundaryLayerProfile[n];
         int transitionIdx = r.TransitionIndex;
+        double nuSafe = System.Math.Max(nu, 1e-18);
         for (int i = 0; i < n; i++)
         {
             double h = r.H[i];
             double theta = r.Theta[i];
             double ue = r.EdgeVelocity[i];
-            double reTheta = theta > 0 && ue > 0 ? ue * theta / 1e-6 : 0.0;
+            double reTheta = theta > 0 && ue > 0 ? ue * theta / nuSafe : 0.0;
             // Station 0 has θ=0, no meaningful Cf. Use 0.
             // Pre-transition: laminar Cf from closure.
             // Post-transition: turbulent Cf from closure.
@@ -166,10 +167,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             if (i > 0 && theta > 0)
             {
                 double hk = MsesClosureRelations.ComputeHk(h, 0.0);
-                double reT = ue * theta / System.Math.Max(1e-18, 1e-6); // ν ≈ 1e-6 default; caller doesn't propagate
                 cf = (transitionIdx < 0 || i < transitionIdx)
-                    ? MsesClosureRelations.ComputeCfLaminar(hk, reT)
-                    : MsesClosureRelations.ComputeCfTurbulent(hk, reT, 0.0);
+                    ? MsesClosureRelations.ComputeCfLaminar(hk, reTheta)
+                    : MsesClosureRelations.ComputeCfTurbulent(hk, reTheta, 0.0);
             }
             profiles[i] = new BoundaryLayerProfile
             {
