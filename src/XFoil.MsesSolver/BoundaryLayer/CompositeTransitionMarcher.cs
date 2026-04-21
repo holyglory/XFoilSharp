@@ -23,6 +23,7 @@ public static class CompositeTransitionMarcher
         double[] H,
         double[] N,
         double[] CTau,
+        double[] EdgeVelocity,
         int TransitionIndex,
         double TransitionX,
         bool IsTurbulentAtEnd);
@@ -61,10 +62,12 @@ public static class CompositeTransitionMarcher
         System.Array.Copy(lam.H, H, n);
         System.Array.Copy(lam.N, NAmp, n);
 
+        // Expose the caller's Ue array directly (same reference, same length).
         if (lam.TransitionIndex < 0)
         {
             // Stayed laminar to the end.
             return new CompositeResult(theta, H, NAmp, cTau,
+                EdgeVelocity: edgeVelocity,
                 TransitionIndex: -1,
                 TransitionX: double.NaN,
                 IsTurbulentAtEnd: false);
@@ -111,6 +114,7 @@ public static class CompositeTransitionMarcher
         }
 
         return new CompositeResult(theta, H, NAmp, cTau,
+            EdgeVelocity: edgeVelocity,
             TransitionIndex: tIdx,
             TransitionX: lam.TransitionX,
             IsTurbulentAtEnd: true);

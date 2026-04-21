@@ -175,9 +175,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         CompositeTransitionMarcher.CompositeResult lower,
         double Uinf)
     {
-        // CD = 2·(θ_u_TE + θ_l_TE)·(Ue_TE/U∞)^((H_TE+5)/2)
-        // Using average H for the exponent; individual surfaces
-        // for the θ contributions.
+        // CD = 2·(θ_u_TE · (Ue_u/U∞)^((H_u+5)/2) + θ_l_TE · (Ue_l/U∞)^((H_l+5)/2))
+        // Surface-wise. Ue at TE is retrieved from the composite
+        // marcher output (stored since the last commit).
         int nU = upper.Theta.Length;
         int nL = lower.Theta.Length;
         if (nU < 2 || nL < 2) return 0.0;
@@ -185,16 +185,15 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         double θL = lower.Theta[nL - 1];
         double HU = upper.H[nU - 1];
         double HL = lower.H[nL - 1];
-        // Use surface Ue at TE (not freestream) as the "edge" speed.
-        // For the Squire-Young form we need (Ue_TE/U∞)^((H+5)/2).
-        // Since our Ue is already normalized by U∞ in RunSurfaceMarch
-        // (via sqrt(1-Cp)), Ue here is effectively Ue/U∞.
-        // We don't store Ue in the composite result; approximate with
-        // 1 for this Phase-5-stub implementation. A proper Phase-5
-        // impl would thread Ue through the marcher output.
-        _ = Uinf;
-        double squireU = 2.0 * θU * System.Math.Pow(1.0, (HU + 5.0) / 2.0);
-        double squireL = 2.0 * θL * System.Math.Pow(1.0, (HL + 5.0) / 2.0);
+        double ueU = upper.EdgeVelocity[nU - 1];
+        double ueL = lower.EdgeVelocity[nL - 1];
+        // Normalize Ue to U∞. In RunSurfaceMarch we computed Ue from
+        // sqrt(1 - Cp), which is already Ue/U∞ numerically (we passed
+        // U∞ = 1 as the reference). Keep the division to stay explicit.
+        double ueU_over_Uinf = ueU / System.Math.Max(Uinf, 1e-12);
+        double ueL_over_Uinf = ueL / System.Math.Max(Uinf, 1e-12);
+        double squireU = 2.0 * θU * System.Math.Pow(ueU_over_Uinf, (HU + 5.0) * 0.5);
+        double squireL = 2.0 * θL * System.Math.Pow(ueL_over_Uinf, (HL + 5.0) * 0.5);
         return squireU + squireL;
     }
 }
