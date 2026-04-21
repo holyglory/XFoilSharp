@@ -224,10 +224,35 @@ within 1e-6 at a sampled grid of (H, Reθ, Me) points.
   5 + 5 pin tests confirm no-oscillation on flat plate and bounded
   response under favorable/adverse gradients.
 
-  **Still to wire:** CompositeTransitionMarcher currently uses the
-  Clauser-placeholder `ClosureBasedTurbulentLagMarcher`. Swap-in
-  planned once adverse-gradient validation at real-airfoil scale
-  confirms no regression against the current uncoupled baseline.
+  **Wired via opt-in:** CompositeTransitionMarcher takes
+  `useThesisExactTurbulent` (default false). MsesAnalysisService
+  surfaces it as a ctor flag. CLI env var
+  `XFOIL_MSES_THESIS_EXACT=1` enables it on all five MSES commands.
+
+### Phase 2f — Wake marcher ✅ LANDED (2026-04-21)
+
+- ✅ `WakeTurbulentMarcher` — Drela §6.5 turbulent wake (free-shear
+  layer, Cf=0 in momentum + energy eqs., Cτ-lag unchanged). Same
+  implicit-Newton backward-Euler H treatment as the airfoil
+  marcher; Cτ per-step exponential.
+- ✅ TE-merge via Drela eq. 6.63 sharp-TE form:
+  θ_wake = θ_u + θ_l, δ*_wake = H_u·θ_u + H_l·θ_l,
+  H_wake = δ*_wake/θ_wake, Cτ_wake = max(Cτ_u, Cτ_l).
+- ✅ MsesAnalysisService `useWakeMarcher` ctor flag marches the
+  wake half a chord downstream at a linear-recovery Ue profile
+  (90% recovery toward U∞), then integrates Squire-Young at the
+  wake far-field.
+- ✅ CLI env var `XFOIL_MSES_WAKE=1`, composable with
+  `XFOIL_MSES_THESIS_EXACT=1`.
+
+Validation: 4 standalone marcher tests (constant-Ue θ conservation,
+H relaxation under recovery, θ shrinkage under favorable wake,
+Squire-Young ratio sanity) + 3 end-to-end integration tests on
+NACA 0012/4412 at attached/stall conditions.
+
+Quick benchmark NACA 4412 α=12° Re=3e6: CD goes from 0.0138
+(thesis-exact-TE) to 0.0159 (thesis-exact-wake), reflecting the
+wake-state H being closer to BL equilibrium than the airfoil TE.
 
 **Landed in `src/XFoil.MsesSolver/BoundaryLayer/`:**
 
