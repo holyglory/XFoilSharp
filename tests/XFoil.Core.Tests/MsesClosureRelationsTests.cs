@@ -242,4 +242,51 @@ public class MsesClosureRelationsTests
         double cdHigh = MsesClosureRelations.ComputeCDTurbulent(2.5, 5000.0, 0.0, 2e-3);
         Assert.True(cdHigh > cdLow, $"Expected CD to rise with Cτ: got {cdHigh} ≤ {cdLow}");
     }
+
+    [Fact]
+    public void ComputeCTauLagRhs_AtEquilibrium_ReturnsZero()
+    {
+        // When Cτ = Cτ_eq, the lag equation RHS must vanish —
+        // equilibrium is a fixed point of the ODE.
+        double rhs = MsesClosureRelations.ComputeCTauLagRhs(
+            cTau: 0.01, cTauEq: 0.01, theta: 0.001, Hk: 2.0);
+        Assert.Equal(0.0, rhs, 12);
+    }
+
+    [Fact]
+    public void ComputeCTauLagRhs_PullsTowardEquilibrium()
+    {
+        // Cτ < Cτ_eq: RHS positive (Cτ growing toward equilibrium).
+        double rhsBelow = MsesClosureRelations.ComputeCTauLagRhs(
+            cTau: 0.005, cTauEq: 0.015, theta: 0.001, Hk: 2.0);
+        Assert.True(rhsBelow > 0);
+
+        // Cτ > Cτ_eq: RHS negative (Cτ decaying toward equilibrium).
+        double rhsAbove = MsesClosureRelations.ComputeCTauLagRhs(
+            cTau: 0.015, cTauEq: 0.005, theta: 0.001, Hk: 2.0);
+        Assert.True(rhsAbove < 0);
+    }
+
+    [Fact]
+    public void ComputeCTauLagRhs_RateScalesInverselyWithTheta()
+    {
+        // Same gap (Cτ_eq - Cτ), smaller θ → tighter BL → faster
+        // relaxation (larger magnitude RHS).
+        double rhsThick = MsesClosureRelations.ComputeCTauLagRhs(
+            cTau: 0.005, cTauEq: 0.015, theta: 0.01, Hk: 2.0);
+        double rhsThin = MsesClosureRelations.ComputeCTauLagRhs(
+            cTau: 0.005, cTauEq: 0.015, theta: 0.001, Hk: 2.0);
+        Assert.True(rhsThin > rhsThick,
+            $"Expected thinner θ → faster relaxation: {rhsThin} vs {rhsThick}");
+    }
+
+    [Fact]
+    public void ComputeCTauLagRhs_DegenerateHk_ReturnsZero()
+    {
+        // Hk ≤ 1 is outside the correlation's validity (laminar
+        // limit). The function should return 0 instead of NaN.
+        double rhs = MsesClosureRelations.ComputeCTauLagRhs(
+            cTau: 0.01, cTauEq: 0.015, theta: 0.001, Hk: 1.0);
+        Assert.Equal(0.0, rhs);
+    }
 }

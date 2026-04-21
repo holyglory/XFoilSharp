@@ -268,4 +268,46 @@ public static class MsesClosureRelations
         double HkM1Cubed = HkM1 * HkM1 * HkM1;
         return hStar * 0.015 * HkM1Cubed / (Hk * Hk * oneMinusUs) * (1.0 + 0.014 * Me2);
     }
+
+    /// <summary>
+    /// Cτ lag-equation right-hand side. Drela thesis §4.2 eq. 4.26
+    /// (with K2 = 5.6 per the MSES 3.x calibration).
+    ///
+    /// dCτ/dξ = (K2 / δ)·(Cτ_eq − Cτ)
+    ///
+    /// where δ is the 0.99-BL thickness, approximated as
+    /// δ ≈ θ·(3.15 + 1.72/(Hk − 1)) per Drela's integral form. At
+    /// equilibrium (Cτ → Cτ_eq) the right-hand side is zero, which
+    /// is the physical constraint that MSES tracks through the lag
+    /// variable — this is what keeps the Newton march stable
+    /// through separation.
+    ///
+    /// Returns the rate dCτ/dξ given the current Cτ and the local
+    /// Cτ_eq from <see cref="ComputeCTauEquilibrium"/>.
+    /// </summary>
+    /// <param name="cTau">Current (carried) shear-stress coefficient.</param>
+    /// <param name="cTauEq">Equilibrium shear-stress coefficient at the
+    /// local (Hk, Reθ, Me).</param>
+    /// <param name="theta">Momentum thickness at the local station.</param>
+    /// <param name="Hk">Local kinematic shape parameter.</param>
+    /// <returns>dCτ/dξ.</returns>
+    public static double ComputeCTauLagRhs(
+        double cTau,
+        double cTauEq,
+        double theta,
+        double Hk)
+    {
+        if (theta < 1e-18) return 0.0;
+        if (Hk <= 1.0) return 0.0;
+
+        // K2 calibrated per Drela's MSES 3.05 documentation.
+        const double K2 = 5.6;
+
+        // δ ≈ θ·(3.15 + 1.72/(Hk − 1)).
+        double delta = theta * (3.15 + 1.72 / (Hk - 1.0));
+        if (delta < 1e-18) return 0.0;
+
+        // First-order relaxation toward equilibrium.
+        return (K2 / delta) * (cTauEq - cTau);
+    }
 }
