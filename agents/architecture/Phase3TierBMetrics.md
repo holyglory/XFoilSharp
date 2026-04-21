@@ -325,6 +325,27 @@ closer to WT than the "clean" geometric transform attempt. B4 at
 this depth of scope is deferred; the clMach2 fix (iter 1) still
 stands as a parity-safe quality improvement.
 
+### B4 iter 3 (2026-04-21 — panel density null finding)
+
+Hypothesis: the near-LE Cp discrepancy on transonic NACA 0012 cases
+(e.g. α=2° M=0.3, our Cp=-0.85 vs WT=-1.21 at x/c=0.025) could be a
+panel-resolution issue — 160 panels may under-resolve the LE suction
+peak.
+
+Probe: bumped B4 scorer's `panelCount` from 160 to 240 and re-ran.
+
+**Result: aggregate mean RMS Cp 0.0886 → 0.0873, a ~1.5% improvement**
+— in the noise. The Cp gap near LE is not primarily a discretization
+issue; it's compressibility-model-induced. Confirmed by spot-check on
+α=2 M=0.3: Cp at x=0.025 changed from -0.845 (160) to a similar value
+at 240, whereas WT is -1.21. Panel density alone won't close the gap.
+
+Reverted the probe. Deeper B4 work would need a non-XFoil
+compressibility formulation (Euler inviscid core, or a proper
+geometric Karman-Tsien with a reworked speed field per iter-2) —
+both defer to the MSES-class rebuild in `MsesClosurePlan.md` and
+a transonic-Euler follow-up.
+
 ### B3 iter 1+2 (2026-04-20 — Viterna-Corrigan post-stall fallback)
 
 Added a post-stall Viterna-Corrigan extrapolation path to
