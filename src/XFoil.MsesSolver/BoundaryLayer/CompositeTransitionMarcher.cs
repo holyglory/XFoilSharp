@@ -43,13 +43,19 @@ public static class CompositeTransitionMarcher
     /// attachment; higher values approximate a pre-equilibrated
     /// BL (unphysical at transition).</param>
     /// <param name="machNumberEdge">Edge Mach. Default 0.</param>
+    /// <param name="useThesisExactTurbulent">If true, run the Phase-2e
+    /// <see cref="ThesisExactTurbulentMarcher"/> (implicit Newton on H
+    /// via eq. 6.10) for the turbulent leg instead of the Clauser-
+    /// placeholder <see cref="ClosureBasedTurbulentLagMarcher"/>.
+    /// Default false (keeps the existing uncoupled baseline).</param>
     public static CompositeResult March(
         double[] stations,
         double[] edgeVelocity,
         double kinematicViscosity,
         double nCrit = 9.0,
         double cTauInitialFactor = 0.3,
-        double machNumberEdge = 0.0)
+        double machNumberEdge = 0.0,
+        bool useThesisExactTurbulent = false)
     {
         var lam = LaminarTransitionMarcher.March(
             stations, edgeVelocity, kinematicViscosity, nCrit, machNumberEdge);
@@ -102,17 +108,29 @@ public static class CompositeTransitionMarcher
             HkTrans, ReThetaTrans, machNumberEdge);
         double cTau0 = cTauInitialFactor * cTauEqTrans;
 
-        var turb = ClosureBasedTurbulentLagMarcher.March(
-            tailStations, tailUe, kinematicViscosity,
-            thetaAtTrans, HTransInit, cTau0, machNumberEdge);
-
-        // Overwrite the tail of the full-length arrays with the
-        // turbulent-march results.
-        for (int k = 0; k < tailLen; k++)
+        if (useThesisExactTurbulent)
         {
-            theta[tIdx + k] = turb.Theta[k];
-            H[tIdx + k] = turb.H[k];
-            cTau[tIdx + k] = turb.CTau[k];
+            var turb = ThesisExactTurbulentMarcher.March(
+                tailStations, tailUe, kinematicViscosity,
+                thetaAtTrans, HTransInit, cTau0, machNumberEdge);
+            for (int k = 0; k < tailLen; k++)
+            {
+                theta[tIdx + k] = turb.Theta[k];
+                H[tIdx + k] = turb.H[k];
+                cTau[tIdx + k] = turb.CTau[k];
+            }
+        }
+        else
+        {
+            var turb = ClosureBasedTurbulentLagMarcher.March(
+                tailStations, tailUe, kinematicViscosity,
+                thetaAtTrans, HTransInit, cTau0, machNumberEdge);
+            for (int k = 0; k < tailLen; k++)
+            {
+                theta[tIdx + k] = turb.Theta[k];
+                H[tIdx + k] = turb.H[k];
+                cTau[tIdx + k] = turb.CTau[k];
+            }
         }
 
         return new CompositeResult(theta, H, NAmp, cTau,

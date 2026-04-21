@@ -204,21 +204,25 @@ within 1e-6 at a sampled grid of (H, Reθ, Me) points.
   unconditionally stable. CD computed via `ComputeCDTurbulent` using
   the carried Cτ (not Cτ_eq), which is the MSES-specific physics that
   enables stable separation.
-- ⏳ **Phase 2e:** Full Drela §6.1 shape-parameter equation for
-  dH*/dξ (replaces Clauser-relaxation placeholder). Thesis OCR
-  (Publications/drela_thesis_ocr.md) confirmed the form:
-  `θ·dH*/dξ = 2·CD − H*·Cf/2 − [2·H**/H* + (1−H)]·θ·(dUe/dξ)/Ue`
-  at Me=0 (see §6.1.3 eq. 6.10).
+- ✅ **Phase 2e:** Full Drela §6.1 shape-parameter equation for
+  dH*/dξ (replaces Clauser-relaxation placeholder). Landed as two
+  implicit-Newton marchers:
+  - `ThesisExactLaminarMarcher` — implicit H-solve using laminar
+    closure (Cf_lam, CD_lam, H*_lam).
+  - `ThesisExactTurbulentMarcher` — implicit H-solve using the full
+    turbulent closure (Cf_turb, CD_turb with Cτ coupling, H*_turb),
+    with Cτ carried via closed-form exponential decay per step
+    (K2=4.2, δ from eq. 6.36).
 
-  **Blocker: numerical stiffness.** The equation is
-  near-equilibrium on flat plate (2·CD balances H*·Cf/2), so small
-  H perturbations amplify. Explicit RK2 oscillates (Hk swings
-  2.59 → 2.51 → 2.76 → 2.31 → 2.95 on a favorable-gradient test
-  with dx=0.02). Solution: implicit Newton iteration per step.
-  This is how Drela's own MSES code does it. Scaffolding removed
-  from master (Phase 2e probe 2026-04-21); implicit implementation
-  pending. MSES user manual (Publications/mses_manual.md) confirms
-  the theory is complete — it's purely a numerical-method task.
+  **Previous blocker (stiffness → RK2 oscillation) resolved:**
+  backward-Euler linearization absorbs the near-equilibrium stiffness.
+  5 + 5 pin tests confirm no-oscillation on flat plate and bounded
+  response under favorable/adverse gradients.
+
+  **Still to wire:** CompositeTransitionMarcher currently uses the
+  Clauser-placeholder `ClosureBasedTurbulentLagMarcher`. Swap-in
+  planned once adverse-gradient validation at real-airfoil scale
+  confirms no regression against the current uncoupled baseline.
 
 **Landed in `src/XFoil.MsesSolver/BoundaryLayer/`:**
 
