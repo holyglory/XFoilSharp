@@ -2297,6 +2297,15 @@ static void WriteViscousSinglePointMses(
     Console.WriteLine($"CL:        {r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"CD:        {r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"CM:        {r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    string xtrU = r.UpperTransition.StationIndex > 0
+        ? r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)
+        : "laminar-at-TE";
+    string xtrL = r.LowerTransition.StationIndex > 0
+        ? r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)
+        : "laminar-at-TE";
+    Console.WriteLine($"Xtr_U:     {xtrU}");
+    Console.WriteLine($"Xtr_L:     {xtrL}");
+    Console.WriteLine($"Converged: {r.Converged}");
 }
 
 static void WriteViscousSinglePointModern(
