@@ -81,8 +81,10 @@ deliverable.
 
 ### Session summary — what works end-to-end
 
-As of commit 8e96401, the MSES pipeline can run single-point
-viscous analysis, polar sweeps, and profile dumps via the CLI:
+As of commit de78135, the MSES pipeline can run single-point
+viscous analysis, polar sweeps, and profile dumps via the CLI,
+with the Phase-2e implicit-Newton turbulent marcher available
+as an opt-in via env var:
 
 ```
 # single point
@@ -97,6 +99,9 @@ dotnet run --project src/XFoil.Cli -- export-polar-mses 4412 /tmp/polar.csv 0 8 
 
 # per-station BL profile → CSV
 dotnet run --project src/XFoil.Cli -- export-profile-mses 4412 4 /tmp/profile.csv ...
+
+# Phase-2e implicit-Newton turbulent marcher opt-in (any MSES command)
+XFOIL_MSES_THESIS_EXACT=1 dotnet run --project src/XFoil.Cli -- viscous-point-mses 4412 12 161 0.0 3000000 9
 ```
 
 Output schema:
