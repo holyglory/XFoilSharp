@@ -50,6 +50,25 @@ public static class PostStallExtrapolator
         double lastConvergedCL,
         double lastConvergedCD,
         double aspectRatio)
+        => ExtrapolatePostStall(alpha, lastConvergedAlpha, lastConvergedCL, lastConvergedCD, aspectRatio, CDMaxDefault);
+
+    /// <summary>
+    /// Option C — two-anchor-style refinement. Takes an explicit
+    /// <paramref name="cdMaxOverride"/> so callers can calibrate the deep-
+    /// post-stall asymptote from a second data point (e.g. a ramp-captured
+    /// intermediate CD at a higher α, or an Hk-indicator-driven estimate
+    /// of separation severity). A higher cdMax drops CL faster after
+    /// stall and raises CD more aggressively — matching the observed
+    /// behavior of fully-separated airfoils where the flat-plate limit
+    /// is reached earlier than Viterna's default 1.8.
+    /// </summary>
+    public static (double CL, double CD) ExtrapolatePostStall(
+        double alpha,
+        double lastConvergedAlpha,
+        double lastConvergedCL,
+        double lastConvergedCD,
+        double aspectRatio,
+        double cdMaxOverride)
     {
         // Protect against invalid inputs — the engine's self-anchor can
         // hand us NaN/Inf CL/CD from a divergent Newton trajectory
@@ -78,7 +97,9 @@ public static class PostStallExtrapolator
             sinA = (alpha >= 0 ? 1e-10 : -1e-10);
 
         double clMax = lastConvergedCL;
-        double cdMax = CDMaxDefault;
+        double cdMax = double.IsFinite(cdMaxOverride) && cdMaxOverride > 0.1
+            ? Math.Min(cdMaxOverride, 2.2)
+            : CDMaxDefault;
 
         // Viterna-Corrigan lift model (Viterna & Corrigan, 1982):
         // CL = A1 * sin(2*alpha) + A2 * cos^2(alpha) / sin(alpha)

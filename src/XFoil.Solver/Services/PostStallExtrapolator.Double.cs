@@ -51,6 +51,20 @@ public static class PostStallExtrapolator
         double lastConvergedCL,
         double lastConvergedCD,
         double aspectRatio)
+        => ExtrapolatePostStall(alpha, lastConvergedAlpha, lastConvergedCL, lastConvergedCD, aspectRatio, CDMaxDefault);
+
+    /// <summary>
+    /// Option C — two-anchor-style refinement. See <see cref="XFoil.Solver.Services.PostStallExtrapolator"/>
+    /// for the rationale. This double-tree copy is kept in sync so that the
+    /// Modern override can call into either tree consistently.
+    /// </summary>
+    public static (double CL, double CD) ExtrapolatePostStall(
+        double alpha,
+        double lastConvergedAlpha,
+        double lastConvergedCL,
+        double lastConvergedCD,
+        double aspectRatio,
+        double cdMaxOverride)
     {
         // Protect against invalid inputs
         if (double.IsNaN(alpha) || double.IsInfinity(alpha))
@@ -72,7 +86,9 @@ public static class PostStallExtrapolator
             sinA = (alpha >= 0 ? 1e-10 : -1e-10);
 
         double clMax = lastConvergedCL;
-        double cdMax = CDMaxDefault;
+        double cdMax = double.IsFinite(cdMaxOverride) && cdMaxOverride > 0.1
+            ? Math.Min(cdMaxOverride, 2.2)
+            : CDMaxDefault;
 
         // Viterna-Corrigan lift model (Viterna & Corrigan, 1982):
         // CL = A1 * sin(2*alpha) + A2 * cos^2(alpha) / sin(alpha)

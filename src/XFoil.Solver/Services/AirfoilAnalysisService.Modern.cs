@@ -406,7 +406,15 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                             / System.Math.Abs(primaryCl);
                         if (ratioToPrimary >= 0.5 && ratioToPrimary <= 1.0)
                         {
-                            return ramped;
+                            // B3 Option A — separation-aware CD boost.
+                            // Ramped results at post-stall α typically
+                            // carry accurate CL but Viterna-anchor-derived
+                            // CD under-predicts by a wide margin when the
+                            // BL has actually separated. Hk > 4 is a
+                            // strong turbulent-separation indicator; boost
+                            // CD proportionally to the Hk excess (capped
+                            // so mild stall isn't over-corrected).
+                            return ApplySeparationAwareCdBoost(ramped);
                         }
                     }
                 }
@@ -494,7 +502,13 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                     && System.Math.Abs(ramped.LiftCoefficient) <= System.Math.Abs(invCL) * 1.05;
                 if (withinInviscidEnvelope)
                 {
-                    best = ramped;
+                    // B3 Option A — same separation-aware CD boost as the
+                    // early-return ramp path. When cold-start diverges and
+                    // the ramp rescues a physical result, Hk>4 in the BL
+                    // indicates the rescue landed in separated flow — the
+                    // Viterna-like CD under-predicts; boost proportional
+                    // to the Hk excess.
+                    best = ApplySeparationAwareCdBoost(ramped);
                 }
             }
         }
@@ -547,9 +561,19 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
             {
                 double alphaRad = angleOfAttackDegrees * System.Math.PI / 180.0;
                 double anchorAlphaRad = anchor.Value.AlphaDeg * System.Math.PI / 180.0;
+
+                // Option C — two-anchor CD_max calibration. When the anchor
+                // was a ramp intermediate (cold-start diverged — deep-stall
+                // indicator) raise CD_max to 2.0 so the Viterna asymptote
+                // matches observed deep-stall drag. When the anchor came
+                // from a primary-converged scan (mild-stall) keep the
+                // default 1.8 to avoid over-correcting the attached-flow
+                // transition band.
+                double cdMax = usedRampAnchor ? 2.0 : 1.8;
                 var (extrapCL, extrapCDraw) = PostStallExtrapolator.ExtrapolatePostStall(
                     alphaRad, anchorAlphaRad, anchor.Value.CL, anchor.Value.CD,
-                    aspectRatio: 2.0 * System.Math.PI);
+                    aspectRatio: 2.0 * System.Math.PI,
+                    cdMaxOverride: cdMax);
 
                 // Iter 41: targeted CD floor for ramp-anchor-derived cases.
                 // When we're forced to use a rampAnchor (primary-converged
@@ -792,6 +816,70 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
         {
             return null;
         }
+    }
+
+    // B3 Option A — scan BL profiles for the maximum kinematic shape
+    // factor Hk. Hk > 2.5 signals incipient separation; Hk > 4 is
+    // fully-separated turbulent flow. Used as the trigger for
+    // separation-aware CD augmentation on accepted ramp results.
+    private static double ComputeMaxHk(ViscousAnalysisResult r)
+    {
+        double max = 0d;
+        for (int i = 0; i < r.UpperProfiles.Length; i++)
+        {
+            double h = r.UpperProfiles[i].Hk;
+            if (double.IsFinite(h) && h > max) max = h;
+        }
+        for (int i = 0; i < r.LowerProfiles.Length; i++)
+        {
+            double h = r.LowerProfiles[i].Hk;
+            if (double.IsFinite(h) && h > max) max = h;
+        }
+        // Wake profiles intentionally excluded — Hk there isn't a clean
+        // separation indicator (wake is always "separated" in a sense).
+        return max;
+    }
+
+    // B3 Option A — apply an Hk-gated CD boost to an accepted ramp
+    // result. The CD of a Viterna-anchored extrapolation systematically
+    // under-predicts fully-separated flow (anchor CD ≈ 0.01 pre-stall,
+    // but WT deep-stall CD = 0.15-0.30). Boost CD in proportion to the
+    // BL's excess Hk above 4.0, capped at 0.15 to avoid over-correcting
+    // moderate stall where WT CD stays near 0.02-0.04.
+    //
+    // Only the CD fields change; CL is preserved because the ramp's
+    // CL is physically reasonable (the whole point of the rescue is
+    // to escape the inviscid-tracking attractor).
+    private static ViscousAnalysisResult ApplySeparationAwareCdBoost(ViscousAnalysisResult r)
+    {
+        double maxHk = ComputeMaxHk(r);
+        if (maxHk <= 4.0) return r;
+        double boost = System.Math.Min(0.15, 0.08 * (maxHk - 4.0));
+        var drag = new DragDecomposition
+        {
+            CD = r.DragDecomposition.CD + boost,
+            CDF = r.DragDecomposition.CDF,
+            CDP = r.DragDecomposition.CDP + boost,
+            CDSurfaceCrossCheck = r.DragDecomposition.CDSurfaceCrossCheck,
+            DiscrepancyMetric = r.DragDecomposition.DiscrepancyMetric,
+            TEBaseDrag = r.DragDecomposition.TEBaseDrag,
+            WaveDrag = r.DragDecomposition.WaveDrag,
+        };
+        return new ViscousAnalysisResult
+        {
+            LiftCoefficient = r.LiftCoefficient,
+            MomentCoefficient = r.MomentCoefficient,
+            DragDecomposition = drag,
+            Converged = r.Converged,
+            Iterations = r.Iterations,
+            ConvergenceHistory = r.ConvergenceHistory,
+            UpperProfiles = r.UpperProfiles,
+            LowerProfiles = r.LowerProfiles,
+            WakeProfiles = r.WakeProfiles,
+            UpperTransition = r.UpperTransition,
+            LowerTransition = r.LowerTransition,
+            AngleOfAttackDegrees = r.AngleOfAttackDegrees,
+        };
     }
 
     // Scans downward from the target α in 0.5° steps looking for a

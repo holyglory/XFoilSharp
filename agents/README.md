@@ -23,6 +23,8 @@ This directory maps the managed C# implementation from system architecture down 
   - Repo-local Codex/autonomous-loop hook wiring and validation expectations.
 - `architecture/MicroRigMatrixHarness.md`
   - Registry-driven micro-rig parity harness, matrix outputs, and coverage backlog.
+- `architecture/MsesClosurePlan.md`
+  - Clean-room MSES-class closure reimplementation plan (Drela 1986 thesis basis). Parallel assembly; does not replace the XFoil parity path.
 - `projects/XFoil.Core/00-index.md`
   - Domain model and geometry-service entry point.
 - `projects/XFoil.Solver/00-index.md`
