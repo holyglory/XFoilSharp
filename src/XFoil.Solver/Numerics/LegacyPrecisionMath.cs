@@ -35,6 +35,15 @@ internal static class LegacyPrecisionMath
             ? RoundBarrier(RoundBarrier(a * b) + c)
             : MathF.FusedMultiplyAdd(a, b, c);
 
+    // Phase 1 doubled-tree counterpart. Same DisableFma-aware routing as the
+    // float Fma above. Auto-generated *.Double.cs twins call this via
+    // overload resolution when their args become double.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double Fma(double a, double b, double c)
+        => DisableFma
+            ? RoundBarrier(RoundBarrier(a * b) + c)
+            : Math.FusedMultiplyAdd(a, b, c);
+
     // Legacy mapping: f_xfoil/src/XFOIL.INC :: GAMMA/GAMM1 REAL staging and the general BLKIN/BLVAR scalar REAL path.
     // Difference from legacy: The managed port centralizes classic REAL rounding and scalar operator selection into explicit helpers instead of relying on ambient type declarations.
     // Decision: Keep this scalar helper family because it provides the audit's canonical legacy-float template.
@@ -54,12 +63,29 @@ internal static class LegacyPrecisionMath
     internal static float RoundBarrier(float value)
         => BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(value));
 
+    // Phase 1 doubled-tree counterpart. Round-trips through Int64Bits so the JIT
+    // can't keep wider precision in registers across the call. Auto-generated
+    // *.Double.cs twins reach this via gen-double's `RoundBarrier(<doubleArg>)`
+    // overload resolution.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static double RoundBarrier(double value)
+        => BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(value));
+
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal static float AddRounded(float left, float right)
     {
         float roundedLeft = RoundBarrier(left);
         float roundedRight = RoundBarrier(right);
+        return RoundBarrier(roundedLeft + roundedRight);
+    }
+
+    // Phase 1 doubled-tree counterpart. Same shape as the float AddRounded.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static double AddRounded(double left, double right)
+    {
+        double roundedLeft = RoundBarrier(left);
+        double roundedRight = RoundBarrier(right);
         return RoundBarrier(roundedLeft + roundedRight);
     }
 
@@ -135,6 +161,94 @@ internal static class LegacyPrecisionMath
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static float MinF(float left, float right) => MathF.Min(left, right);
+
+    // -----------------------------------------------------------------
+    // Phase 1 doubled-tree counterparts. Same shape as the *F helpers
+    // above but using double arithmetic — no float casts. Doubled callers
+    // (auto-generated *.Double.cs twins via gen-double.py) reach these
+    // via the gen-double `LegacyPrecisionMath.*F` → `LegacyPrecisionMath.*D`
+    // substitution.
+    // -----------------------------------------------------------------
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double MultiplyD(double left, double right) => left * right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double MultiplyD(double left, double middle, double right) => left * middle * right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double AddD(double left, double right) => left + right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double SubtractD(double left, double right) => left - right;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double NegateD(double value) => -value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double DivideD(double numerator, double denominator) => numerator / denominator;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double AverageD(double left, double right) => 0.5d * (left + right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double SquareD(double value) => value * value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double SqrtD(double value) => Math.Sqrt(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double PowD(double value, double exponent) => Math.Pow(value, exponent);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double ExpD(double value) => Math.Exp(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double LogD(double value) => Math.Log(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double Log10D(double value) => Math.Log10(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double TanhD(double value) => Math.Tanh(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double SinD(double value) => Math.Sin(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double CosD(double value) => Math.Cos(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double Atan2D(double y, double x) => Math.Atan2(y, x);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double AbsD(double value) => Math.Abs(value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double MaxD(double left, double right) => Math.Max(left, right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double MinD(double left, double right) => Math.Min(left, right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double MultiplyAddD(double left, double right, double addend) => (left * right) + addend;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double MultiplySubtractD(double left, double right, double minuend) => minuend - (left * right);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double ProductThenAddD(double left, double right, double addend) => (left * right) + addend;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double ProductThenSubtractD(double left, double right, double subtrahend) => (left * right) - subtrahend;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double SumOfProductsD(double left1, double right1, double left2, double right2)
+        => (left1 * right1) + (left2 * right2);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double SumOfProductsD(double left1, double right1, double left2, double right2, double left3, double right3)
+        => (left1 * right1) + (left2 * right2) + (left3 * right3);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static float MultiplyAddF(float left, float right, float addend) => Fma(left, right, addend);
@@ -242,22 +356,12 @@ internal static class LegacyPrecisionMath
 
     internal static double ProductThenAdd(double left, double right, double addend, bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (left * right) + addend;
-        }
-
         float product = (float)left * (float)right;
         return product + (float)addend;
     }
 
     internal static double ProductThenSubtract(double left, double right, double subtrahend, bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (left * right) - subtrahend;
-        }
-
         float product = (float)left * (float)right;
         return product - (float)subtrahend;
     }
@@ -367,11 +471,6 @@ internal static class LegacyPrecisionMath
         double right2,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (left1 * right1) + (left2 * right2);
-        }
-
         float sum = (float)left1 * (float)right1;
         sum = (float)(sum + ((float)left2 * (float)right2));
         return sum;
@@ -386,11 +485,6 @@ internal static class LegacyPrecisionMath
         double right3,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (left1 * right1) + (left2 * right2) + (left3 * right3);
-        }
-
         float sum = (float)left1 * (float)right1;
         sum = (float)(sum + ((float)left2 * (float)right2));
         sum = (float)(sum + ((float)left3 * (float)right3));
@@ -407,11 +501,6 @@ internal static class LegacyPrecisionMath
         double addend,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (left1 * right1) + (left2 * right2) + (left3 * right3) + addend;
-        }
-
         // Products-first, addend-last matches the -O2 Fortran best.
         // Source order (addend first) gives 138/180 diffs vs 46/180.
         float sum = (float)left1 * (float)right1;
@@ -436,11 +525,6 @@ internal static class LegacyPrecisionMath
         double right2,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (left1 * right1) + (left2 * right2);
-        }
-
         float addend = (float)((float)left2 * (float)right2);
         return Fma((float)left1, (float)right1, addend);
     }
@@ -455,11 +539,6 @@ internal static class LegacyPrecisionMath
         double addend,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (left1 * right1) + (left2 * right2) + (left3 * right3) + addend;
-        }
-
         float sum = Fma((float)left1, (float)right1, (float)addend);
         sum = Fma((float)left2, (float)right2, sum);
         sum = Fma((float)left3, (float)right3, sum);
@@ -693,6 +772,18 @@ internal static class LegacyPrecisionMath
         return minuend - genericProduct;
     }
 
+    // Non-generic float overload of SeparateMultiplySubtract. Matches the
+    // typeof(T)==typeof(float) branch above bit-exactly. Added for the
+    // float-tree strip (Phase 1 of the float→double tree split): callers in
+    // the float tree should prefer this non-generic form so the doubled tree
+    // gets a proper non-generic double overload from gen-double.py.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SeparateMultiplySubtract(float left, float right, float minuend)
+    {
+        float product = RoundBarrier(left * right);
+        return RoundBarrier(minuend - product);
+    }
+
     // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV/GAUSS product-sum updates.
     // Difference from legacy: The managed port uses FMA chains for float to match
     // the contraction behavior that gfortran emits for REAL multiply-add patterns.
@@ -712,6 +803,13 @@ internal static class LegacyPrecisionMath
 
         return (left1 * right1) + (left2 * right2);
     }
+
+    // Non-generic float overload of SeparateSumOfProducts(2-pair). Bit-exact
+    // mirror of the float branch above. See SeparateMultiplySubtract overload
+    // notes for the float-tree strip rationale.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SeparateSumOfProducts(float left1, float right1, float left2, float right2)
+        => Fma(left1, right1, left2 * right2);
 
     // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV three-term elimination sums.
     // Difference from legacy: Uses FMA chains for float to match gfortran contraction.
@@ -737,5 +835,21 @@ internal static class LegacyPrecisionMath
         }
 
         return ((left1 * right1) + (left2 * right2)) + (left3 * right3);
+    }
+
+    // Non-generic float overload of SeparateSumOfProducts(3-pair). Bit-exact
+    // mirror of the float branch above. See SeparateMultiplySubtract overload
+    // notes for the float-tree strip rationale.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float SeparateSumOfProducts(
+        float left1, float right1,
+        float left2, float right2,
+        float left3, float right3)
+    {
+        float p1 = RoundBarrier(left1 * right1);
+        float p2 = RoundBarrier(left2 * right2);
+        float p3 = RoundBarrier(left3 * right3);
+        float s1 = RoundBarrier(p1 + p2);
+        return RoundBarrier(s1 + p3);
     }
 }

@@ -46,45 +46,6 @@ public sealed class PolarCsvExporterTests
     }
 
     [Fact]
-    // Legacy mapping: legacy viscous polar reporting fields.
-    // Difference from legacy: The port emits explicit lowercase boolean CSV fields that have no direct textual legacy analogue.
-    // Decision: Keep the managed CSV schema because it is a deliberate reporting improvement over the legacy output.
-    public void Format_ViscousSweep_IncludesViscousColumnsAndLowerCaseBooleans()
-    {
-        var exporter = new PolarCsvExporter();
-        var sweep = new ViscousPolarSweepResult(
-            CreateGeometry(),
-            new AnalysisSettings(
-                panelCount: 140,
-                machNumber: 0.15d,
-                reynoldsNumber: 750_000d,
-                transitionReynoldsTheta: 110d,
-                criticalAmplificationFactor: 7d),
-            new[]
-            {
-                new ViscousPolarPoint(
-                    2d,
-                    0.634210d,
-                    0.023456d,
-                    -0.031415d,
-                    0.210987d,
-                    0.056789d,
-                    0.004321d,
-                    outerConverged: true,
-                    innerInteractionConverged: false,
-                    finalDisplacementRelaxation: 0.275d,
-                    finalSeedEdgeVelocityChange: 0.008765d),
-            });
-
-        var content = exporter.Format(sweep);
-
-        Assert.Contains("# Kind: ViscousAlphaSweep\n", content);
-        Assert.Contains("# ReynoldsNumber: 750000.000000\n", content);
-        Assert.Contains("AngleOfAttackDegrees,LiftCoefficient,EstimatedProfileDragCoefficient,MomentCoefficientQuarterChord,FinalSurfaceResidual,FinalTransitionResidual,FinalWakeResidual,OuterConverged,InnerInteractionConverged,FinalDisplacementRelaxation,FinalSeedEdgeVelocityChange\n", content);
-        Assert.Contains("2.000000,0.634210,0.023456,-0.031415,0.210987,0.056789,0.004321,true,false,0.275000,0.008765\n", content);
-    }
-
-    [Fact]
     // Legacy mapping: none.
     // Difference from legacy: Parent-directory creation and file writing semantics are managed filesystem concerns rather than legacy solver behavior.
     // Decision: Keep the managed-only export test because it protects the convenience contract of the .NET exporter.
@@ -137,7 +98,7 @@ public sealed class PolarCsvExporterTests
     {
         var exporter = new PolarCsvExporter();
         var operatingPoint = new InviscidAnalysisResult(
-            mesh: CreateMesh(),
+            panelCount: 2,
             angleOfAttackDegrees: 3d,
             machNumber: 0.1d,
             circulation: 0.801d,
@@ -229,21 +190,4 @@ public sealed class PolarCsvExporterTests
             AirfoilFormat.PlainCoordinates);
     }
 
-    private static PanelMesh CreateMesh()
-    {
-        var points = new[]
-        {
-            new AirfoilPoint(1d, 0d),
-            new AirfoilPoint(0.5d, 0.1d),
-            new AirfoilPoint(0d, 0d),
-        };
-
-        var panels = new[]
-        {
-            new Panel(0, points[0], points[1], new AirfoilPoint(0.75d, 0.05d), 0.509902d, -0.980581d, 0.196116d, -0.196116d, -0.980581d),
-            new Panel(1, points[1], points[2], new AirfoilPoint(0.25d, 0.05d), 0.509902d, -0.980581d, -0.196116d, 0.196116d, -0.980581d),
-        };
-
-        return new PanelMesh(points, panels, isCounterClockwise: true);
-    }
 }

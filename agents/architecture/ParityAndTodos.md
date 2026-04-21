@@ -310,7 +310,7 @@ That does not close the current alpha-0 station-4 gauss-window owner, though. Th
 
 That standalone `PSILIN` batch is now green on the curated micro-cases. The proved replay family in `StreamfunctionInfluenceCalculator` now includes the traced mixed radius-square staging (`rs1` / `rs2` on the contracted square-sum path and the source-midpoint `rs0` on the single-rounding `X0*X0 + YY*YY` path), half-1 and half-2 `PDX` numerators, half-1 and half-2 `PDYY` / `PSNI` / `PDNI` sums, and the corresponding vortex `PDX` / `PDYY` / `PSNI` / `PDNI` sums.
 
-The latest upstream paneling producer bug on the same 12-panel rung is closed too. Focused `pangen_snew_node` and `pangen_newton_state` traces proved the first bad updated node came from the PANGEN Newton main diagonal `ww2`, not from downstream panel geometry or `PSILIN`. `CosineClusteringPanelDistributor` now replays that parity-only path as: round `fp + fm` to `float` first, compute `cc * ((dsp * cavpS2) + (dsm * cavmS2))` wide, then cast the final sum back to `float`. With that helper in place, the focused `pangen_snew_node stage=final` and `pangen_panel_node` suites now match the fresh Fortran references bitwise.
+The latest upstream paneling producer bug on the same 12-panel rung is closed too. Focused `pangen_snew_node` and `pangen_newton_state` traces proved the first bad updated node came from the PANGEN Newton main diagonal `ww2`, not from downstream panel geometry or `PSILIN`. `CurvatureAdaptivePanelDistributor` now replays that parity-only path as: round `fp + fm` to `float` first, compute `cc * ((dsp * cavpS2) + (dsm * cavmS2))` wide, then cast the final sum back to `float`. With that helper in place, the focused `pangen_snew_node stage=final` and `pangen_panel_node` suites now match the fresh Fortran references bitwise.
 
 That fix also exposed a tooling rule: the earlier `psilin_source_dq_terms` drift on the 12-panel alpha-0 rung was a stale-oracle problem, not a new kernel bug. Fresh focused `n0012_re1e6_a0_p12_n9_psilin` references match the managed trace for the same window, so block-level streamfunction tests must use the small focused PSILIN case instead of the older `n0012_re1e6_a0_p12_n9_full` artifact set.
 
@@ -445,16 +445,12 @@ The non-generated C# audit is now complete across `src/` and `tests/`.
 ### Inviscid solver
 
 - Implemented
-  - Hess-Smith inviscid path with prepared-system reuse across sweeps.
-  - Linear-vortex inviscid solver with XFoil-style streamfunction assembly, LU factorization, alpha solve, and target-`CL` solve.
-  - Cosine-clustered panel generation, streamfunction influence assembly, and compressibility-aware force recovery.
+  - Linear-vortex inviscid solver with XFoil-style streamfunction assembly, LU factorization, alpha solve, and target-`CL` solve. Single inviscid path on the parity → doubled → modern progression.
+  - Curvature-adaptive PANGEN panel generation (Newton equidistribution of curvature-weighted composite spacing; faithful port), streamfunction influence assembly, and compressibility-aware force recovery.
 - Missing or weaker than legacy
-- Exact Fortran parity still needs a real reference bench.
-  - The standalone `PSILIN` micro-driver is now green on curated micro-cases, the fresh full-run `BIJ row 47` producer mismatch is closed, and the focused 12-panel PSILIN block tests now run on a fresh dedicated oracle instead of the stale broad `..._full` case. The next inviscid parity work should move outward to broader `AIJ` / wake-coupling benches instead of reopening the same source-midpoint kernel family first.
-  - The focused 12-panel PANGEN oracle is green too. `CosineClusteringPanelDistributor` now has a proved parity-only mixed-width replay for the Newton main diagonal `ww2`, and `PangenParityTests` guard both final `snew` nodes and final panel-node geometry against fresh Fortran references.
-  - On the alpha-0 `NACA 0012, Re=1e6, panels=60` rung, the first proved viscous consumer mismatch already inherits a wrong station-2 `UINV` baseline. The next parity move there is upstream on the inviscid/stagnation producer path, not farther down the seed march.
-  - Public inviscid sweep APIs still route through Hess-Smith only.
-  - The public `InviscidAnalysisResult` adapter for the linear-vortex path still omits wake and `Cp` samples.
+  - The standalone `PSILIN` micro-driver is green on curated micro-cases; the fresh full-run `BIJ row 47` producer mismatch is closed; the focused 12-panel PSILIN block tests run on a dedicated oracle. Next inviscid parity work moves outward to broader `AIJ` / wake-coupling benches.
+  - The focused 12-panel PANGEN oracle is green. `CurvatureAdaptivePanelDistributor` has a proved parity-only mixed-width replay for the Newton main diagonal `ww2`, and `PangenParityTests` guard both final `snew` nodes and final panel-node geometry against fresh Fortran references.
+  - The public `InviscidAnalysisResult` adapter for the linear-vortex path still omits wake samples (only `Cp` samples carry over).
 
 ### Viscous solver and coupling
 
@@ -469,6 +465,20 @@ The non-generated C# audit is now complete across `src/` and `tests/`.
   - The Newton solver behavior is still several orders of magnitude away from the 0.001% target.
   - Seed and correction services from the older staged pipeline are now mostly diagnostic, not part of the primary operating-point solve.
   - After the full C# audit, the remaining gap is no longer missing repository-wide float-thread coverage. The active work is now true solver-fidelity debugging inside the legacy viscous path.
+
+#### Phase 2 known limitations (doubled tree)
+
+- **Refined (iter 62 + iter 63 5k validation):** The float-vs-double Newton system can converge to different basins for some operating points. On a 5k random Selig sample, ~12% of converged-and-physical pairs show CD disagreement >1%. Both trees Newton-converge in 1-6 iters with rms~1e-7 to results within the physical envelope but at different fixed points.
+- For SPECIFIC cases (e.g. giiif Re=1e5 α=6) the disagreement is dominated by SETTINGS mismatch: matching panels/wake/maxIter/tol/solver collapses |ΔCL| from ~0.68 to ~0.0076 (95% → 0.55%). Pinned by `DoubledTree_MatchedSettings_NarrowsMultiAttractorGap`.
+- For the AGGREGATE 5k sample, however, matched-vs-mismatched produces essentially the same statistics (88.3% vs 88.9% CD within 1%; 89 vs 87 cases >5% disagreement). Different settings drive WHICH cases disagree, not HOW MANY. Reported by the `--matched` flag of `--double-sweep`.
+- Resolving specific multi-attractor cases requires either multi-start Newton with attractor-selection logic, or per-station regime detection. Both are out of Phase 2 scope.
+- The harness `--double-sweep [--matched]` flag now exists for users to inspect either CLI-default-comparison or pure-precision-comparison numbers.
+- **SolveAtLiftCoefficient initial-guess bug fixed (iter 89):** Previously `α = targetCl/(2π)` (correct for symmetric, bad for cambered). Now calls `SolveAtAngleOfAttack(0)` first to get CL_0 (zero-lift CL), then `α = (targetCl - CL_0)/(2π)` shifts the initial guess to land near the true root for any airfoil. On NACA 4412 fixed CL=0.5, the inviscid CL-target finder now returns CL≈0.516 (was 0.37). One extra inviscid solve per call but reliable convergence. Applied to both float and doubled facades.
+- **Iter-89 fix unlocked Type 2 polar (SweepViscousCL) on cambered airfoils (iter 105 finding):** Cambered NACA 4412 SweepViscousCL Re=1e6 sweep CL=0.3..0.9 step 0.2 now converges on ALL 4 points (CLs match targets within 0.05). Pre-iter-89 none converged. Pinned by `DoubledTree_SweepViscousCL_CamberedConvergesAllPoints`. Type 2 polar is now functional on cambered airfoils.
+- **SweepViscousRe (Type 3 polar with deeper warm-start corruption) still partial:** NACA 4412 fixed CL=0.5 sweep Re=5e5..3e6 — first inviscid CL hits target (0.516), but viscous Newton fails on early points and the panel-state corruption from failures gives NaN/sign-flip on subsequent points. Iter-94/96 partial fix (per-iteration re-assembly) helps some points but not all. Full fix needs panel-state lifecycle redesign — out of Phase 2 scope. Pinned by `DoubledTree_SweepViscousRe_ProducesPhysicalCDvsRe`.
+- **Phase 3 cleanup (post-Phase-2):** The HessSmith inviscid path, PanelMeshGenerator, and the surrogate viscous pipeline (ViscousLaminarCorrector, ViscousStateEstimator, ViscousStateSeedBuilder, BoundaryLayerTopologyBuilder, WakeGeometryGenerator + 8 surrogate model types + 2 NotSupportedException-throwing diagnostic façade methods) were all DELETED. Only the linear-vortex + Newton-coupled viscous stack remains on the parity → doubled → modern progression path. NACA 4455/4455 = 100% bit-exact preserved; full 100k Selig DB = 100228 / 100228 = 100% bit-exact preserved.
+- The `Plausible()` / `PhysicalEnvelope.IsAirfoilResultPhysical` envelope (|CL|≤5, CD∈[0,1]) catches "Converged: True" non-physical attractors (CD up to 1e105 observed at extreme α/Re). The float facade can produce these too — the envelope is checked at harness, test, and CLI level via `XFoil.Solver.Models.PhysicalEnvelope`.
+- Validation gap: the doubled tree has no external accuracy reference (wind-tunnel data, refined-mesh study, higher-order CFD) in this repo. Agreement with the float tree measures *agreement*, not *accuracy*. Mesh-refinement convergence in `DoubledTree_ViscousMeshRefinement_CLConvergesTowardLimit` is the strongest in-repo accuracy proxy.
 
 ### IO and polar/session formats
 
@@ -505,9 +515,7 @@ The non-generated C# audit is now complete across `src/` and `tests/`.
 ### CLI, UI, and plotting
 
 - Implemented
-  - Rich batch CLI command set.
-  - Diagnostic topology and seed commands.
-  - Deprecation shims for removed surrogate viscous commands.
+  - Rich batch CLI command set focused on the linear-vortex inviscid path and the Newton-coupled viscous solver. Surrogate-pipeline CLI commands and their helpers were deleted in Phase 3 cleanup.
 - Missing or weaker than legacy
   - No managed replacement for original plotting stack.
   - No interactive shell or retained session state comparable to `xfoil.f`.
@@ -534,8 +542,6 @@ The non-generated C# audit is now complete across `src/` and `tests/`.
 - Keep using the new `parity_report` output as a coarse locator only. Route it through `route_full_xfoil_disparity.py`, switch to the responsible focused rig immediately, and do not spend another inner-loop iteration inside a broad full XFoil rerun.
 - Treat the live-compare context budget as the primary rig-speed lever. If the next exact producer does not fall out within about 5 minutes, stop the patch hunt and improve the rig before running more cases.
 - Keep the reduced-case `BT2(K,2)` replay idea rejected unless a fresh trace proves matching inputs and a direct output-only TRDIF divergence.
-- Either wire public inviscid sweeps to `InviscidSolverType.LinearVortex` or keep the Hess-Smith-only behavior explicit.
-- Decide whether the obsolete surrogate APIs and CLI verbs should be deleted rather than kept as compatibility shims.
 - Wire the CLI to real viscous solver controls (`ViscousSolverMode`, max iterations, tolerance, wake options) instead of parsing legacy-only arguments.
 - Validate binary polar-dump import against real historical artifacts, not only synthetic fixtures.
 - Tighten `QDES EXEC` and `MDES EXEC` toward legacy behavior instead of normal-displacement surrogates.

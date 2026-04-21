@@ -21,7 +21,7 @@
 - [numerics/band-matrix-solver.md](numerics/band-matrix-solver.md)
 - [services/airfoil-analysis-service.md](services/airfoil-analysis-service.md)
 - [services/panel-mesh-generator.md](services/panel-mesh-generator.md)
-- [services/cosine-clustering-panel-distributor.md](services/cosine-clustering-panel-distributor.md)
+- [services/curvature-adaptive-panel-distributor.md](services/curvature-adaptive-panel-distributor.md)
 - [services/hess-smith-inviscid-solver.md](services/hess-smith-inviscid-solver.md)
 - [services/linear-vortex-inviscid-solver.md](services/linear-vortex-inviscid-solver.md)
 - [services/panel-geometry-builder.md](services/panel-geometry-builder.md)

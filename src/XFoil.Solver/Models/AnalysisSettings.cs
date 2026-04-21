@@ -21,7 +21,6 @@ public sealed class AnalysisSettings
         PanelingOptions? paneling = null,
         double transitionReynoldsTheta = 320d,
         double criticalAmplificationFactor = 9.0d,
-        InviscidSolverType inviscidSolverType = InviscidSolverType.HessSmith,
         ViscousSolverMode viscousSolverMode = ViscousSolverMode.TrustRegion,
         double? forcedTransitionUpper = null,
         double? forcedTransitionLower = null,
@@ -35,7 +34,8 @@ public sealed class AnalysisSettings
         bool useLegacyBoundaryLayerInitialization = false,
         bool useLegacyWakeSourceKernelPrecision = false,
         bool useLegacyStreamfunctionKernelPrecision = false,
-        bool useLegacyPanelingPrecision = false)
+        bool useLegacyPanelingPrecision = false,
+        double wakeStationMultiplier = 1.0d)
     {
         if (panelCount < MinimumSupportedPanelCount)
         {
@@ -86,7 +86,6 @@ public sealed class AnalysisSettings
         Paneling = paneling ?? new PanelingOptions();
         TransitionReynoldsTheta = transitionReynoldsTheta;
         CriticalAmplificationFactor = criticalAmplificationFactor;
-        InviscidSolverType = inviscidSolverType;
         ViscousSolverMode = viscousSolverMode;
         ForcedTransitionUpper = forcedTransitionUpper;
         ForcedTransitionLower = forcedTransitionLower;
@@ -101,6 +100,11 @@ public sealed class AnalysisSettings
         UseLegacyWakeSourceKernelPrecision = useLegacyWakeSourceKernelPrecision;
         UseLegacyStreamfunctionKernelPrecision = useLegacyStreamfunctionKernelPrecision;
         UseLegacyPanelingPrecision = useLegacyPanelingPrecision;
+        if (wakeStationMultiplier < 1.0d)
+        {
+            throw new ArgumentOutOfRangeException(nameof(wakeStationMultiplier), "Wake station multiplier must be >= 1.0.");
+        }
+        WakeStationMultiplier = wakeStationMultiplier;
     }
 
     public int PanelCount { get; }
@@ -116,12 +120,6 @@ public sealed class AnalysisSettings
     public double TransitionReynoldsTheta { get; }
 
     public double CriticalAmplificationFactor { get; }
-
-    /// <summary>
-    /// Selects which inviscid solver to use for the analysis.
-    /// Default is <see cref="Models.InviscidSolverType.HessSmith"/> to preserve backward compatibility.
-    /// </summary>
-    public InviscidSolverType InviscidSolverType { get; }
 
     /// <summary>
     /// Selects which viscous Newton solver strategy to use.
@@ -212,6 +210,16 @@ public sealed class AnalysisSettings
     /// managed paneling remains the runtime default.
     /// </summary>
     public bool UseLegacyPanelingPrecision { get; }
+
+    /// <summary>
+    /// Phase 2 algorithmic improvement: scale factor for the BL wake-station
+    /// count. Default 1.0 preserves Fortran-parity wake length `(n/8)+2`.
+    /// Values &gt; 1 extend the wake (e.g. 2.0 → `(n/4)+2`), giving better
+    /// wake-integrated drag and Newton stability on post-stall cases. Only the
+    /// doubled tree should bump this — the float-parity branch must keep 1.0
+    /// for bit-exact agreement with classic XFoil.
+    /// </summary>
+    public double WakeStationMultiplier { get; }
 
     /// <summary>
     /// Returns the effective NCrit for the given side.

@@ -44,7 +44,7 @@ public class InfluenceMatrixParityDiagnosticsTests
             panelCount: panelCount,
             reynoldsNumber: 1_000_000,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,
@@ -59,7 +59,7 @@ public class InfluenceMatrixParityDiagnosticsTests
         var panel = new LinearVortexPanelState(maxNodes);
         var inviscidState = new InviscidSolverState(maxNodes);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
             panel, settings.PanelCount,
             useLegacyPrecision: settings.UseLegacyPanelingPrecision);
@@ -572,7 +572,7 @@ public class InfluenceMatrixParityDiagnosticsTests
         var referencePanelNodes = ReadReferencePanelNodes(tracePath);
 
         var panel = new LinearVortexPanelState(referencePanelNodes.Count);
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             referenceBufferNodes.Select(node => node.x).ToArray(),
             referenceBufferNodes.Select(node => node.y).ToArray(),
             referenceBufferNodes.Count,
@@ -661,7 +661,7 @@ public class InfluenceMatrixParityDiagnosticsTests
         });
         using var traceScope = SolverTrace.Begin(traceWriter);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             referenceBufferNodes.Select(node => node.x).ToArray(),
             referenceBufferNodes.Select(node => node.y).ToArray(),
             referenceBufferNodes.Count,

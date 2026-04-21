@@ -49,6 +49,13 @@ tools/fortran-debug/reference/n2412_*/
 tools/fortran-debug/reference/n4412_*/
 tools/fortran-debug/reference/n0012_re1e6_a0/
 
+# Large external-reference archives (OpenFOAM CFD runs, multi-GB)
+tools/external-references/openfoam/
+tools/external-references/openfoam_fine/
+
+# Publications PDFs (thesis, papers — large binaries, keep local only)
+Publications/
+
 # Local / editor / agent config
 .agents/
 .claude/

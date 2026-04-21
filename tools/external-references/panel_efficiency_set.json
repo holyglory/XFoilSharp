@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "description": "Phase 3 B1 panel-efficiency curated airfoil set — 20 geometrically-diverse airfoils spanning thickness, camber, and LE/TE feature variety. Used by ParallelPolarCompare --panel-efficiency.",
+  "notes": [
+    "NACA entries are procedural (generated via NacaAirfoilGenerator.Generate4DigitClassic).",
+    "Selig entries are .dat paths relative to the repository root.",
+    "Selection rationale:",
+    "  - NACAs span thickness {6, 8, 12, 18, 24} and camber {0, 2, 4, 6}%.",
+    "  - s1223: aggressive high-lift low-Re airfoil (Selig, UIUC) — sharp LE, high camber.",
+    "  - e387: classic low-Re reference (Eppler).",
+    "  - clarky: 11.7% cambered flat-bottom (Clark Y) — historical reference.",
+    "  - goe387: Göttingen 387 — low-Re glider airfoil.",
+    "  - ah79k135: Althaus — 13.5% thick, 3.9% camber, known high-alpha behavior.",
+    "  - rg15: Roncz FAI-soaring airfoil — near-laminar design.",
+    "  - sd7037: Selig-Donovan 7037 — low-Re contest airfoil.",
+    "  - ag35: Drela Allegro-class — thin, cambered, low-Re model glider.",
+    "  - ag45c03: Drela Allegro — slight camber variation from ag35.",
+    "  - s1010: NREL-style thick aerofoil — 19% thick, 7% camber."
+  ],
+  "airfoils": [
+    "0006",
+    "0008",
+    "0012",
+    "0018",
+    "0024",
+    "2412",
+    "4412",
+    "6412",
+    "4415",
+    "4418",
+    "tools/selig-database/s1223.dat",
+    "tools/selig-database/e387.dat",
+    "tools/selig-database/clarky.dat",
+    "tools/selig-database/goe387.dat",
+    "tools/selig-database/ah79k135.dat",
+    "tools/selig-database/rg15.dat",
+    "tools/selig-database/sd7037.dat",
+    "tools/selig-database/ag35.dat",
+    "tools/selig-database/ag45c03.dat",
+    "tools/selig-database/s1010.dat"
+  ]
+}

@@ -220,7 +220,7 @@ files:
     lines: 260
     branch_relevance: both
     notes: >
-      Used by ParametricSpline.cs and CosineClusteringPanelDistributor.cs
+      Used by ParametricSpline.cs and CurvatureAdaptivePanelDistributor.cs
       (panel meshing). Direct port of TRISOL (spline.f:219). Float overload
       exposed; no current standard-branch caller passes float - all callers
       pass double arrays.
@@ -245,7 +245,7 @@ files:
         correctness_concerns: []
         notes: >
           Grep of /src shows no caller currently invokes the float overload.
-          Panel meshing (CosineClusteringPanelDistributor) and ParametricSpline
+          Panel meshing (CurvatureAdaptivePanelDistributor) and ParametricSpline
           both use double arrays. The overload remains as an escape hatch for
           future parity work on spline/paneling. S1 finding: dead in practice
           but publicly exposed.

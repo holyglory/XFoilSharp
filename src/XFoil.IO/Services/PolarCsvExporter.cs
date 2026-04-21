@@ -57,52 +57,6 @@ public sealed class PolarCsvExporter
         return string.Join('\n', lines) + "\n";
     }
 
-    // Legacy mapping: none directly; managed CSV export of a viscous alpha sweep.
-    // Difference from legacy: The exported columns are tailored to the managed viscous result model rather than to the original polar save-file writer.
-    // Decision: Keep the managed formatter because it exposes the managed solver outputs clearly.
-    public string Format(ViscousPolarSweepResult sweep)
-    {
-        if (sweep is null)
-        {
-            throw new ArgumentNullException(nameof(sweep));
-        }
-
-        var lines = new List<string>
-        {
-            "# XFoil.CSharp Polar Export",
-            "# Kind: ViscousAlphaSweep",
-            $"# Geometry: {sweep.Geometry.Name}",
-            $"# PanelCount: {FormatInteger(sweep.Settings.PanelCount)}",
-            $"# MachNumber: {FormatDouble(sweep.Settings.MachNumber)}",
-            $"# ReynoldsNumber: {FormatDouble(sweep.Settings.ReynoldsNumber)}",
-            $"# TransitionReynoldsTheta: {FormatDouble(sweep.Settings.TransitionReynoldsTheta)}",
-            $"# CriticalAmplificationFactor: {FormatDouble(sweep.Settings.CriticalAmplificationFactor)}",
-            "AngleOfAttackDegrees,LiftCoefficient,EstimatedProfileDragCoefficient,MomentCoefficientQuarterChord,FinalSurfaceResidual,FinalTransitionResidual,FinalWakeResidual,OuterConverged,InnerInteractionConverged,FinalDisplacementRelaxation,FinalSeedEdgeVelocityChange",
-        };
-
-        // Legacy block: Managed-only CSV row emission for the viscous alpha sweep.
-        // Difference: The managed export includes Newton/interaction convergence diagnostics that are not laid out like the legacy save-file text.
-        // Decision: Keep the managed loop because it reflects the managed result contract.
-        foreach (var point in sweep.Points)
-        {
-            lines.Add(string.Join(
-                ',',
-                FormatDouble(point.AngleOfAttackDegrees),
-                FormatDouble(point.LiftCoefficient),
-                FormatDouble(point.EstimatedProfileDragCoefficient),
-                FormatDouble(point.MomentCoefficientQuarterChord),
-                FormatDouble(point.FinalSurfaceResidual),
-                FormatDouble(point.FinalTransitionResidual),
-                FormatDouble(point.FinalWakeResidual),
-                FormatBoolean(point.OuterConverged),
-                FormatBoolean(point.InnerInteractionConverged),
-                FormatDouble(point.FinalDisplacementRelaxation),
-                FormatDouble(point.FinalSeedEdgeVelocityChange)));
-        }
-
-        return string.Join('\n', lines) + "\n";
-    }
-
     // Legacy mapping: none directly; managed CSV export of an inviscid lift-target sweep.
     // Difference from legacy: The formatter projects managed lift-target results into CSV instead of replaying the legacy interactive save path.
     // Decision: Keep the managed formatter.
@@ -146,53 +100,6 @@ public sealed class PolarCsvExporter
         return string.Join('\n', lines) + "\n";
     }
 
-    // Legacy mapping: none directly; managed CSV export of a viscous lift-target sweep.
-    // Difference from legacy: The exported fields are aligned with the managed viscous lift result model rather than the old save-file layout.
-    // Decision: Keep the managed formatter.
-    public string Format(ViscousLiftSweepResult sweep)
-    {
-        if (sweep is null)
-        {
-            throw new ArgumentNullException(nameof(sweep));
-        }
-
-        var lines = new List<string>
-        {
-            "# XFoil.CSharp Polar Export",
-            "# Kind: ViscousLiftSweep",
-            $"# Geometry: {sweep.Geometry.Name}",
-            $"# PanelCount: {FormatInteger(sweep.Settings.PanelCount)}",
-            $"# MachNumber: {FormatDouble(sweep.Settings.MachNumber)}",
-            $"# ReynoldsNumber: {FormatDouble(sweep.Settings.ReynoldsNumber)}",
-            $"# TransitionReynoldsTheta: {FormatDouble(sweep.Settings.TransitionReynoldsTheta)}",
-            $"# CriticalAmplificationFactor: {FormatDouble(sweep.Settings.CriticalAmplificationFactor)}",
-            "TargetLiftCoefficient,SolvedAngleOfAttackDegrees,LiftCoefficient,EstimatedProfileDragCoefficient,MomentCoefficientQuarterChord,FinalSurfaceResidual,FinalTransitionResidual,FinalWakeResidual,OuterConverged,InnerInteractionConverged,FinalDisplacementRelaxation,FinalSeedEdgeVelocityChange",
-        };
-
-        // Legacy block: Managed-only CSV row emission for the viscous lift-target sweep.
-        // Difference: The export reflects managed solver result objects instead of the original interactive save-file state.
-        // Decision: Keep the managed loop because it is stable and explicit.
-        foreach (var point in sweep.Points)
-        {
-            lines.Add(string.Join(
-                ',',
-                FormatDouble(point.TargetLiftCoefficient),
-                FormatDouble(point.SolvedAngleOfAttackDegrees),
-                FormatDouble(point.OperatingPoint.FinalAnalysis.LiftCoefficient),
-                FormatDouble(point.OperatingPoint.EstimatedProfileDragCoefficient),
-                FormatDouble(point.OperatingPoint.FinalAnalysis.MomentCoefficientQuarterChord),
-                FormatDouble(point.OperatingPoint.FinalSolveResult.FinalSurfaceResidual),
-                FormatDouble(point.OperatingPoint.FinalSolveResult.FinalTransitionResidual),
-                FormatDouble(point.OperatingPoint.FinalSolveResult.FinalWakeResidual),
-                FormatBoolean(point.OperatingPoint.Converged),
-                FormatBoolean(point.OperatingPoint.InnerInteractionConverged),
-                FormatDouble(point.OperatingPoint.FinalDisplacementRelaxation),
-                FormatDouble(point.OperatingPoint.FinalSeedEdgeVelocityChange)));
-        }
-
-        return string.Join('\n', lines) + "\n";
-    }
-
     // Legacy mapping: none; managed file writer for inviscid alpha sweep CSV output.
     // Difference from legacy: The original runtime did not expose this reusable file-writing API.
     // Decision: Keep the managed wrapper.
@@ -206,36 +113,10 @@ public sealed class PolarCsvExporter
         WriteFile(path, Format(sweep));
     }
 
-    // Legacy mapping: none; managed file writer for viscous alpha sweep CSV output.
-    // Difference from legacy: File export is explicit and reusable instead of command-driven.
-    // Decision: Keep the managed wrapper.
-    public void Export(string path, ViscousPolarSweepResult sweep)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            throw new ArgumentException("An output path is required.", nameof(path));
-        }
-
-        WriteFile(path, Format(sweep));
-    }
-
     // Legacy mapping: none; managed file writer for inviscid lift-target sweep CSV output.
     // Difference from legacy: File export is explicit and reusable instead of command-driven.
     // Decision: Keep the managed wrapper.
     public void Export(string path, InviscidLiftSweepResult sweep)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            throw new ArgumentException("An output path is required.", nameof(path));
-        }
-
-        WriteFile(path, Format(sweep));
-    }
-
-    // Legacy mapping: none; managed file writer for viscous lift-target sweep CSV output.
-    // Difference from legacy: File export is explicit and reusable instead of command-driven.
-    // Decision: Keep the managed wrapper.
-    public void Export(string path, ViscousLiftSweepResult sweep)
     {
         if (string.IsNullOrWhiteSpace(path))
         {

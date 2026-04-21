@@ -10,7 +10,7 @@ using XFoil.Core.Models;
 // Decision: Keep both paths: the clearer managed generator for default use and the classic legacy-replay path for parity-sensitive comparisons.
 namespace XFoil.Core.Services;
 
-public sealed class NacaAirfoilGenerator
+public class NacaAirfoilGenerator
 {
     private const double TrailingEdgeBunchingExponent = 1.5;
     private const double FiniteTrailingEdgeThicknessCoefficient = -0.10150;
@@ -18,13 +18,13 @@ public sealed class NacaAirfoilGenerator
     // Legacy mapping: f_xfoil/src/naca.f :: NACA4 entry path.
     // Difference from legacy: The default managed entry deliberately uses the improved normal-offset geometry rather than the classic ordinate-only construction.
     // Decision: Keep the improved default because it produces the better modern geometry while the classic path remains available separately.
-    public AirfoilGeometry Generate4Digit(string designation, int pointCount = 161)
+    public virtual AirfoilGeometry Generate4Digit(string designation, int pointCount = 161)
         => Generate4DigitCore<double>(designation, pointCount, useClassicXFoilGeometry: false);
 
     // Legacy mapping: f_xfoil/src/naca.f :: NACA4.
     // Difference from legacy: This entry point exposes the classic XFoil-compatible construction and optional legacy single-precision replay explicitly to the caller.
     // Decision: Keep this dedicated classic entry because it is the right parity reference surface for geometry debugging.
-    public AirfoilGeometry Generate4DigitClassic(
+    public virtual AirfoilGeometry Generate4DigitClassic(
         string designation,
         int pointCount = 161,
         bool useLegacyPrecision = true)

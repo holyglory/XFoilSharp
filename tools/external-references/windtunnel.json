@@ -1,0 +1,2330 @@
+{
+  "schema_version": 2,
+  "description": "Hand-curated wind-tunnel reference data for Modern (#3) validation. Each row is a single (airfoil, alpha, Re, Mach) -> (CL, CD, CM_c/4) measurement with citation. Schema v2 adds optional Xtr_U / Xtr_L (measured transition x/c) and cp_distribution (array of {x_over_c, Cp_upper, Cp_lower}) for B2/B4 Phase-3 Tier-B validation.",
+  "notes": [
+    "Numbers are read from published curves and tables. Wind-tunnel uncertainty is documented per-source; for the NACA Langley smooth-airfoil tunnel tests it is typically +/-0.0005-0.001 in CD at low CL, larger near stall.",
+    "All data is in the standard 2D, smooth, free-transition condition unless explicitly noted (e.g., 'standard_roughness').",
+    "Mach numbers are nominally 0 for the NACA 6-series tests (low-speed wind tunnel; M < 0.17 in practice).",
+    "When the source publishes a curve only, we read points off the curve and tag uncertainty appropriately.",
+    "Airfoil naming: naca####  -> generated via NacaAirfoilGenerator.Generate4DigitClassic. 5-digit and arbitrary airfoils need a .dat path (TODO: stage common reference geometries under tools/external-references/geometry/).",
+    "Schema v2 additions: 'Xtr_U' / 'Xtr_L' are measured/estimated transition x/c on upper/lower surface (B2 DAMPL2). For laminar separation bubbles these are typically taken as the turbulent reattachment point from oil-flow visualization. 'cp_distribution' is an array of {x_over_c, Cp_upper, Cp_lower} records for B4 Karman-Tsien validation. Both fields are optional."
+  ],
+  "uncertainty_default": {
+    "CL_abs": 0.02,
+    "CD_abs": 0.0005,
+    "CM_abs": 0.005,
+    "Xtr_abs": 0.05,
+    "Cp_abs": 0.05
+  },
+  "rows": [
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 0.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.0,
+      "CD": 0.007,
+      "CM_c4": 0.0,
+      "uncertainty": {
+        "CL_abs": 0.005,
+        "CD_abs": 0.0003,
+        "CM_abs": 0.001
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 2.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.215,
+      "CD": 0.0072,
+      "CM_c4": -0.001,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0003,
+        "CM_abs": 0.002
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 4.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.43,
+      "CD": 0.0078,
+      "CM_c4": -0.002,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0004,
+        "CM_abs": 0.002
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 6.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.64,
+      "CD": 0.0093,
+      "CM_c4": -0.005,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0005,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 8.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.84,
+      "CD": 0.0115,
+      "CM_c4": -0.008,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0006,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 10.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.0,
+      "CD": 0.0145,
+      "CM_c4": -0.013,
+      "uncertainty": {
+        "CL_abs": 0.025,
+        "CD_abs": 0.0008,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 12.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.15,
+      "CD": 0.0185,
+      "CM_c4": -0.02,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.0012,
+        "CM_abs": 0.006
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 0.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 0.0,
+      "CD": 0.0078,
+      "CM_c4": 0.0,
+      "uncertainty": {
+        "CL_abs": 0.005,
+        "CD_abs": 0.0004,
+        "CM_abs": 0.001
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 4.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 0.43,
+      "CD": 0.0085,
+      "CM_c4": -0.002,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005,
+        "CM_abs": 0.002
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 8.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 0.835,
+      "CD": 0.0125,
+      "CM_c4": -0.008,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0007,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 0.0,
+      "Re": 9000000.0,
+      "Mach": 0.0,
+      "CL": 0.0,
+      "CD": 0.0064,
+      "CM_c4": 0.0,
+      "uncertainty": {
+        "CL_abs": 0.005,
+        "CD_abs": 0.0003,
+        "CM_abs": 0.001
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=9.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 4.0,
+      "Re": 9000000.0,
+      "Mach": 0.0,
+      "CL": 0.43,
+      "CD": 0.0072,
+      "CM_c4": -0.002,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0004,
+        "CM_abs": 0.002
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=9.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 8.0,
+      "Re": 9000000.0,
+      "Mach": 0.0,
+      "CL": 0.84,
+      "CD": 0.0107,
+      "CM_c4": -0.008,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0006,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 462; smooth, Re=9.0e6"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": -4.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": -0.05,
+      "CD": 0.008,
+      "CM_c4": -0.082,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0004,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 0.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.4,
+      "CD": 0.0078,
+      "CM_c4": -0.085,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0004,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 4.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.83,
+      "CD": 0.008,
+      "CM_c4": -0.088,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0005,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 8.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.2,
+      "CD": 0.0102,
+      "CM_c4": -0.088,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0006,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 12.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.55,
+      "CD": 0.0152,
+      "CM_c4": -0.087,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.001,
+        "CM_abs": 0.005
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 0.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 0.4,
+      "CD": 0.0084,
+      "CM_c4": -0.085,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 4.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 0.83,
+      "CD": 0.0086,
+      "CM_c4": -0.088,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0005,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 8.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.19,
+      "CD": 0.0114,
+      "CM_c4": -0.088,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0007,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 4.0,
+      "Re": 1500000.0,
+      "Mach": 0.0,
+      "CL": 0.43,
+      "CD": 0.0098,
+      "CM_c4": -0.002,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0007,
+        "CM_abs": 0.002
+      },
+      "source": "naca_tr1832",
+      "citation": "McCroskey (1987), 'A critical assessment of wind tunnel results for the NACA 0012 airfoil', NASA TM-100019; collated value at Re=1.5e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 0.0,
+      "Re": 1500000.0,
+      "Mach": 0.0,
+      "CL": 0.0,
+      "CD": 0.009,
+      "CM_c4": 0.0,
+      "uncertainty": {
+        "CL_abs": 0.005,
+        "CD_abs": 0.0006,
+        "CM_abs": 0.001
+      },
+      "source": "naca_tr1832",
+      "citation": "McCroskey (1987), NASA TM-100019; collated value at Re=1.5e6"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 0.0,
+      "Re": 500000.0,
+      "Mach": 0.0,
+      "CL": 0.0,
+      "CD": 0.0125,
+      "CM_c4": 0.0,
+      "uncertainty": {
+        "CL_abs": 0.005,
+        "CD_abs": 0.001,
+        "CM_abs": 0.002
+      },
+      "source": "selig_lowre",
+      "citation": "Selig, Donovan, Fraser (1989), 'Airfoils at Low Speeds', Soartech 8 / UIUC LSAT"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 4.0,
+      "Re": 500000.0,
+      "Mach": 0.0,
+      "CL": 0.43,
+      "CD": 0.0125,
+      "CM_c4": -0.002,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.001,
+        "CM_abs": 0.002
+      },
+      "source": "selig_lowre",
+      "citation": "Selig, Donovan, Fraser (1989), 'Airfoils at Low Speeds', Soartech 8 / UIUC LSAT"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 10.12,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.0775,
+      "CD": 0.01175,
+      "CM_c4": -0.002,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0003,
+        "CM_abs": 0.003
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074, 'Effects of Independent Variation of Mach and Reynolds Numbers on the Low-Speed Aerodynamic Characteristics of the NACA 0012 Airfoil Section'; transition tripped with 120-grit, Re=6e6, M=0.15"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 11.13,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.1849,
+      "CD": 0.01248,
+      "CM_c4": -0.005,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0004,
+        "CM_abs": 0.003
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; transition tripped with 120-grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 12.12,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.272,
+      "CD": 0.01282,
+      "CM_c4": -0.008,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0005,
+        "CM_abs": 0.004
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; transition tripped with 120-grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 13.08,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.3699,
+      "CD": 0.01408,
+      "CM_c4": -0.01,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0006,
+        "CM_abs": 0.004
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; transition tripped with 120-grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 14.22,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.4571,
+      "CD": 0.01628,
+      "CM_c4": -0.013,
+      "uncertainty": {
+        "CL_abs": 0.025,
+        "CD_abs": 0.0008,
+        "CM_abs": 0.005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; transition tripped with 120-grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 15.26,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.528,
+      "CD": 0.0179,
+      "CM_c4": -0.016,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.001,
+        "CM_abs": 0.005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; transition tripped with 120-grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 16.3,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.5838,
+      "CD": 0.02093,
+      "CM_c4": -0.022,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.0015,
+        "CM_abs": 0.006
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; transition tripped with 120-grit; approaching CL_max"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 17.13,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.6347,
+      "CD": 0.02519,
+      "CM_c4": -0.028,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.002,
+        "CM_abs": 0.008
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; transition tripped with 120-grit; CL_max ~ 1.635 @ alpha=17.1 deg"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 14.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.59,
+      "CD": 0.0215,
+      "CM_c4": -0.086,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.002,
+        "CM_abs": 0.006
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=3.0e6; near CL_max"
+    },
+    {
+      "airfoil": "naca4412",
+      "alpha_deg": 16.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.62,
+      "CD": 0.032,
+      "CM_c4": -0.082,
+      "uncertainty": {
+        "CL_abs": 0.05,
+        "CD_abs": 0.004,
+        "CM_abs": 0.01
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 480; smooth, Re=3.0e6; CL_max ~ 1.62 @ alpha ~ 16 deg"
+    },
+    {
+      "airfoil": "naca4415",
+      "alpha_deg": 8.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.075,
+      "CD": 0.0104,
+      "CM_c4": -0.094,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0006,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 486; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca4415",
+      "alpha_deg": 12.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.4,
+      "CD": 0.017,
+      "CM_c4": -0.092,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.0012,
+        "CM_abs": 0.005
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 486; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca4415",
+      "alpha_deg": 14.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.5,
+      "CD": 0.0225,
+      "CM_c4": -0.089,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.0018,
+        "CM_abs": 0.006
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 486; smooth, Re=3.0e6; near CL_max"
+    },
+    {
+      "airfoil": "naca4415",
+      "alpha_deg": 16.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.52,
+      "CD": 0.034,
+      "CM_c4": -0.082,
+      "uncertainty": {
+        "CL_abs": 0.05,
+        "CD_abs": 0.004,
+        "CM_abs": 0.01
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 486; smooth, Re=3.0e6; CL_max ~ 1.52 @ alpha ~ 15-16 deg"
+    },
+    {
+      "airfoil": "naca0015",
+      "alpha_deg": 8.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.83,
+      "CD": 0.0108,
+      "CM_c4": 0.0,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0006,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 464; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0015",
+      "alpha_deg": 12.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.23,
+      "CD": 0.017,
+      "CM_c4": -0.001,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.0012,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 464; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0015",
+      "alpha_deg": 14.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.37,
+      "CD": 0.023,
+      "CM_c4": -0.005,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.0018,
+        "CM_abs": 0.005
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 464; smooth, Re=6.0e6; near CL_max ~ 1.47 @ alpha ~ 16 deg"
+    },
+    {
+      "airfoil": "naca0018",
+      "alpha_deg": 8.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 0.81,
+      "CD": 0.011,
+      "CM_c4": 0.0,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0007,
+        "CM_abs": 0.003
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 466; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0018",
+      "alpha_deg": 12.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.17,
+      "CD": 0.0195,
+      "CM_c4": -0.001,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.0015,
+        "CM_abs": 0.005
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 466; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca0018",
+      "alpha_deg": 14.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.3,
+      "CD": 0.026,
+      "CM_c4": -0.004,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.0022,
+        "CM_abs": 0.006
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 466; smooth, Re=6.0e6; CL_max ~ 1.34 @ alpha ~ 17 deg"
+    },
+    {
+      "airfoil": "naca2412",
+      "alpha_deg": 12.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.45,
+      "CD": 0.0175,
+      "CM_c4": -0.045,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.0014,
+        "CM_abs": 0.005
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 474; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca2412",
+      "alpha_deg": 14.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.53,
+      "CD": 0.0245,
+      "CM_c4": -0.04,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.002,
+        "CM_abs": 0.006
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 474; smooth, Re=3.0e6; near CL_max ~ 1.55 @ alpha ~ 16 deg"
+    },
+    {
+      "airfoil": "naca23012",
+      "alpha_deg": 10.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.28,
+      "CD": 0.0135,
+      "CM_c4": -0.014,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.001,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 496; smooth, Re=3.0e6"
+    },
+    {
+      "airfoil": "naca23012",
+      "alpha_deg": 14.0,
+      "Re": 3000000.0,
+      "Mach": 0.0,
+      "CL": 1.66,
+      "CD": 0.026,
+      "CM_c4": -0.012,
+      "uncertainty": {
+        "CL_abs": 0.05,
+        "CD_abs": 0.0025,
+        "CM_abs": 0.006
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 496; smooth, Re=3.0e6; CL_max ~ 1.67 @ alpha ~ 15 deg"
+    },
+    {
+      "airfoil": "naca63-210",
+      "alpha_deg": 10.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.1,
+      "CD": 0.011,
+      "CM_c4": -0.035,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.0008,
+        "CM_abs": 0.004
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 512; smooth, Re=6.0e6"
+    },
+    {
+      "airfoil": "naca63-210",
+      "alpha_deg": 12.0,
+      "Re": 6000000.0,
+      "Mach": 0.0,
+      "CL": 1.3,
+      "CD": 0.017,
+      "CM_c4": -0.032,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.0015,
+        "CM_abs": 0.005
+      },
+      "source": "naca_tr824",
+      "citation": "Abbott, von Doenhoff, Stivers (1945), NACA TR 824, p. 512; smooth, Re=6.0e6; near CL_max ~ 1.32 @ alpha ~ 13 deg"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 0.0,
+      "Re": 100000.0,
+      "Mach": 0.0,
+      "CL": 0.27,
+      "CD": 0.0302,
+      "CM_c4": -0.07,
+      "Xtr_U": 0.6,
+      "Xtr_L": 0.75,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0015,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.05
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee, Walker, Millard (1988), NASA TM 4062, 'Experimental Results for the Eppler 387 Airfoil at Low Reynolds Numbers in the Langley Low-Turbulence Pressure Tunnel'; Xtr_U is mid-bubble reattachment point from oil-flow visualization"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 2.0,
+      "Re": 100000.0,
+      "Mach": 0.0,
+      "CL": 0.48,
+      "CD": 0.027,
+      "CM_c4": -0.075,
+      "Xtr_U": 0.55,
+      "Xtr_L": 0.8,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0015,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.05
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; LSB-dominated regime, Re=100k, free transition"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 4.0,
+      "Re": 100000.0,
+      "Mach": 0.0,
+      "CL": 0.67,
+      "CD": 0.0258,
+      "CM_c4": -0.076,
+      "Xtr_U": 0.5,
+      "Xtr_L": 0.85,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0015,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.05
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; Re=100k, free transition"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 0.0,
+      "Re": 200000.0,
+      "Mach": 0.0,
+      "CL": 0.28,
+      "CD": 0.0143,
+      "CM_c4": -0.074,
+      "Xtr_U": 0.55,
+      "Xtr_L": 0.7,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.001,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.04
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; LSB regime, Re=200k, free transition"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 2.0,
+      "Re": 200000.0,
+      "Mach": 0.0,
+      "CL": 0.49,
+      "CD": 0.013,
+      "CM_c4": -0.075,
+      "Xtr_U": 0.5,
+      "Xtr_L": 0.75,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.001,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.04
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; Re=200k, free transition; confirmed by UIUC LSAT agreement within 1-2% x/c"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 4.0,
+      "Re": 200000.0,
+      "Mach": 0.0,
+      "CL": 0.69,
+      "CD": 0.0128,
+      "CM_c4": -0.076,
+      "Xtr_U": 0.45,
+      "Xtr_L": 0.8,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.001,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.04
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; Re=200k, free transition"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 0.0,
+      "Re": 300000.0,
+      "Mach": 0.0,
+      "CL": 0.285,
+      "CD": 0.0109,
+      "CM_c4": -0.075,
+      "Xtr_U": 0.52,
+      "Xtr_L": 0.68,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0008,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.04
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; Re=300k, free transition"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 4.0,
+      "Re": 300000.0,
+      "Mach": 0.0,
+      "CL": 0.7,
+      "CD": 0.0098,
+      "CM_c4": -0.076,
+      "Xtr_U": 0.42,
+      "Xtr_L": 0.75,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0008,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.04
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; Re=300k, free transition"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 4.0,
+      "Re": 460000.0,
+      "Mach": 0.0,
+      "CL": 0.71,
+      "CD": 0.0088,
+      "CM_c4": -0.077,
+      "Xtr_U": 0.35,
+      "Xtr_L": 0.65,
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0008,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.04
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; Re=460k, free transition; LSB shrinks substantially vs Re=100k"
+    },
+    {
+      "airfoil": "e387",
+      "alpha_deg": 6.0,
+      "Re": 200000.0,
+      "Mach": 0.0,
+      "CL": 0.89,
+      "CD": 0.0165,
+      "CM_c4": -0.078,
+      "Xtr_U": 0.3,
+      "Xtr_L": 0.82,
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0012,
+        "CM_abs": 0.005,
+        "Xtr_abs": 0.05
+      },
+      "source": "mcghee_tm4062",
+      "citation": "McGhee et al. (1988), NASA TM 4062; Re=200k, LSB moving forward with alpha"
+    },
+    {
+      "airfoil": "s1223",
+      "alpha_deg": 4.0,
+      "Re": 200000.0,
+      "Mach": 0.0,
+      "CL": 1.35,
+      "CD": 0.022,
+      "CM_c4": -0.265,
+      "Xtr_U": 0.25,
+      "Xtr_L": 0.7,
+      "uncertainty": {
+        "CL_abs": 0.03,
+        "CD_abs": 0.0018,
+        "CM_abs": 0.01,
+        "Xtr_abs": 0.05
+      },
+      "source": "selig_s1223",
+      "citation": "Selig, Guglielmo (1997), 'High-Lift Low Reynolds Number Airfoil Design', J. Aircraft 34(1); S1223 at Re=200k"
+    },
+    {
+      "airfoil": "s1223",
+      "alpha_deg": 8.0,
+      "Re": 200000.0,
+      "Mach": 0.0,
+      "CL": 1.83,
+      "CD": 0.029,
+      "CM_c4": -0.27,
+      "Xtr_U": 0.12,
+      "Xtr_L": 0.75,
+      "uncertainty": {
+        "CL_abs": 0.04,
+        "CD_abs": 0.0022,
+        "CM_abs": 0.012,
+        "Xtr_abs": 0.05
+      },
+      "source": "selig_s1223",
+      "citation": "Selig, Guglielmo (1997), J. Aircraft 34(1); S1223 at Re=200k"
+    },
+    {
+      "airfoil": "sg6043",
+      "alpha_deg": 4.0,
+      "Re": 300000.0,
+      "Mach": 0.0,
+      "CL": 0.95,
+      "CD": 0.017,
+      "CM_c4": -0.17,
+      "Xtr_U": 0.4,
+      "Xtr_L": 0.68,
+      "uncertainty": {
+        "CL_abs": 0.025,
+        "CD_abs": 0.0015,
+        "CM_abs": 0.008,
+        "Xtr_abs": 0.05
+      },
+      "source": "selig_mcgranahan_2004",
+      "citation": "Selig, McGranahan (2004), 'Wind Tunnel Aerodynamic Tests of Six Airfoils for Use on Small Wind Turbines', NREL/SR-500-34515; SG6043 Vol 3 at Re=300k"
+    },
+    {
+      "airfoil": "fx63-137",
+      "alpha_deg": 4.0,
+      "Re": 200000.0,
+      "Mach": 0.0,
+      "CL": 0.99,
+      "CD": 0.0195,
+      "CM_c4": -0.175,
+      "Xtr_U": 0.35,
+      "Xtr_L": 0.72,
+      "uncertainty": {
+        "CL_abs": 0.025,
+        "CD_abs": 0.0018,
+        "CM_abs": 0.008,
+        "Xtr_abs": 0.05
+      },
+      "source": "selig_vol1",
+      "citation": "Selig et al. (1995), 'Summary of Low Speed Airfoil Data', Vol 1, UIUC LSAT; FX63-137 at Re=200k"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 2.0,
+      "Re": 3000000.0,
+      "Mach": 0.3,
+      "CL": 0.224,
+      "CD": 0.0085,
+      "CM_c4": 0.0,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.0,
+          "Cp_upper": 1.0,
+          "Cp_lower": 1.0
+        },
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -1.21,
+          "Cp_lower": 0.22
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -0.95,
+          "Cp_lower": 0.02
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -0.72,
+          "Cp_lower": -0.12
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -0.55,
+          "Cp_lower": -0.2
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.44,
+          "Cp_lower": -0.22
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.28,
+          "Cp_lower": -0.17
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.13,
+          "Cp_lower": -0.07
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": 0.06,
+          "Cp_lower": 0.09
+        }
+      ],
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005,
+        "CM_abs": 0.003,
+        "Cp_abs": 0.05
+      },
+      "source": "harris_tm81927",
+      "citation": "Harris (1981), NASA TM 81927, 'Two-Dimensional Aerodynamic Characteristics of the NACA 0012 Airfoil in the Langley 8-Foot Transonic Pressure Tunnel'; Re=3.0e6, transition fixed at 5% c, M=0.30; Cp values hand-digitized from Fig. 9"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 2.0,
+      "Re": 3000000.0,
+      "Mach": 0.5,
+      "CL": 0.238,
+      "CD": 0.0086,
+      "CM_c4": 0.0,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.0,
+          "Cp_upper": 1.0,
+          "Cp_lower": 1.0
+        },
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -1.42,
+          "Cp_lower": 0.26
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -1.1,
+          "Cp_lower": 0.03
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -0.83,
+          "Cp_lower": -0.13
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -0.63,
+          "Cp_lower": -0.23
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.5,
+          "Cp_lower": -0.25
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.31,
+          "Cp_lower": -0.19
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.15,
+          "Cp_lower": -0.08
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": 0.07,
+          "Cp_lower": 0.1
+        }
+      ],
+      "uncertainty": {
+        "CL_abs": 0.015,
+        "CD_abs": 0.0006,
+        "CM_abs": 0.003,
+        "Cp_abs": 0.05
+      },
+      "source": "harris_tm81927",
+      "citation": "Harris (1981), NASA TM 81927; Re=3.0e6, transition fixed at 5% c, M=0.50; Cp values hand-digitized from Fig. 13"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 2.0,
+      "Re": 3000000.0,
+      "Mach": 0.7,
+      "CL": 0.258,
+      "CD": 0.0092,
+      "CM_c4": 0.0,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.0,
+          "Cp_upper": 1.0,
+          "Cp_lower": 1.0
+        },
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -1.74,
+          "Cp_lower": 0.32
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -1.36,
+          "Cp_lower": 0.05
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -1.02,
+          "Cp_lower": -0.15
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -0.78,
+          "Cp_lower": -0.28
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.62,
+          "Cp_lower": -0.3
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.38,
+          "Cp_lower": -0.23
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.19,
+          "Cp_lower": -0.09
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": 0.08,
+          "Cp_lower": 0.12
+        }
+      ],
+      "uncertainty": {
+        "CL_abs": 0.02,
+        "CD_abs": 0.0008,
+        "CM_abs": 0.004,
+        "Cp_abs": 0.07
+      },
+      "source": "harris_tm81927",
+      "citation": "Harris (1981), NASA TM 81927; Re=3.0e6, transition fixed at 5% c, M=0.70; below critical Mach; Cp values hand-digitized from Fig. 17"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -4.04,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.4417,
+      "CD": 0.00871,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -2.14,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.2385,
+      "CD": 0.008,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -0.05,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.0126,
+      "CD": 0.00809,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 2.05,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.2125,
+      "CD": 0.00816,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 4.04,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.4316,
+      "CD": 0.00823,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 6.09,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.6546,
+      "CD": 0.00885,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 8.3,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.8873,
+      "CD": 0.0105,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 18.02,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.9967,
+      "CD": 0.18785,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 19.08,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.1358,
+      "CD": 0.27292,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=80 grit, Re=6e6, M=0.15",
+      "trip": "80 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -4.01,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.4466,
+      "CD": 0.00843,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -2.12,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.2425,
+      "CD": 0.00789,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -0.01,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.012,
+      "CD": 0.00811,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 2.15,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.2236,
+      "CD": 0.00823,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 4.11,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.4397,
+      "CD": 0.00879,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 6.01,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.6487,
+      "CD": 0.00842,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 8.08,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.8701,
+      "CD": 0.00995,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 11.23,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.1849,
+      "CD": 0.01248,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 13.26,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.3699,
+      "CD": 0.01408,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 14.3,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.4571,
+      "CD": 0.01628,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 16.16,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.5838,
+      "CD": 0.02093,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 17.24,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.6347,
+      "CD": 0.02519,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 18.18,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.1886,
+      "CD": 0.25194,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 19.25,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.1888,
+      "CD": 0.28015,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=120 grit, Re=6e6, M=0.15",
+      "trip": "120 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -3.99,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.4363,
+      "CD": 0.00871,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -1.98,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.2213,
+      "CD": 0.00792,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": -0.03,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": -0.0115,
+      "CD": 0.00803,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 2.0,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.2213,
+      "CD": 0.00814,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 4.06,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.4365,
+      "CD": 0.00814,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 6.09,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.6558,
+      "CD": 0.00851,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 8.09,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 0.8689,
+      "CD": 0.00985,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 10.18,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.0809,
+      "CD": 0.01165,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 13.31,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.3676,
+      "CD": 0.01408,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 14.08,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.4316,
+      "CD": 0.01533,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 15.24,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.5169,
+      "CD": 0.0187,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 18.21,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.0104,
+      "CD": 0.25899,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 19.27,
+      "Re": 6000000.0,
+      "Mach": 0.15,
+      "CL": 1.0664,
+      "CD": 0.43446,
+      "uncertainty": {
+        "CL_abs": 0.01,
+        "CD_abs": 0.0005
+      },
+      "source": "ladson_tm4074",
+      "citation": "Ladson (1988), NASA TM 4074; NACA 0012 trip=180 grit, Re=6e6, M=0.15",
+      "trip": "180 grit"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 0.02,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -0.1413,
+          "Cp_lower": -0.219
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -0.2795,
+          "Cp_lower": -0.3471
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -0.3642,
+          "Cp_lower": -0.3949
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -0.3615,
+          "Cp_lower": -0.3855
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.3138,
+          "Cp_lower": -0.3258
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.2063,
+          "Cp_lower": -0.2152
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.0965,
+          "Cp_lower": -0.1029
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": 0.0484,
+          "Cp_lower": 0.0279
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=0.02\u00b0 (Re=6 million, alpha=.0169, free transition)"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 10.03,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -3.0944,
+          "Cp_lower": 0.98
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -2.338,
+          "Cp_lower": 0.779
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -1.7205,
+          "Cp_lower": 0.5194
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -1.1672,
+          "Cp_lower": 0.2814
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.8689,
+          "Cp_lower": 0.1868
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.5028,
+          "Cp_lower": 0.1022
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.2426,
+          "Cp_lower": 0.0809
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": 0.0162,
+          "Cp_lower": 0.0783
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=10.03\u00b0 (Re=6 million, alpha=10.0254, free transition)"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 15.03,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -4.708,
+          "Cp_lower": 0.998
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -3.3312,
+          "Cp_lower": 0.9691
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -2.2898,
+          "Cp_lower": 0.7577
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -1.4575,
+          "Cp_lower": 0.493
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -1.0508,
+          "Cp_lower": 0.3524
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.5949,
+          "Cp_lower": 0.2027
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.2985,
+          "Cp_lower": 0.1208
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": -0.0361,
+          "Cp_lower": 0.0513
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=15.03\u00b0 (Re=6 million, alpha=15.0299, free transition)"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 0.01,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -0.1098,
+          "Cp_lower": -0.1617
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -0.2659,
+          "Cp_lower": -0.3035
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -0.3553,
+          "Cp_lower": -0.3781
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -0.3389,
+          "Cp_lower": -0.3568
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.2903,
+          "Cp_lower": -0.298
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.1749,
+          "Cp_lower": -0.1821
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.0671,
+          "Cp_lower": -0.0706
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": 0.0798,
+          "Cp_lower": 0.069
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=0.01\u00b0 (Re=3 million, alpha=.0083, fixed transition)"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 10.01,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -2.9816,
+          "Cp_lower": 1.0206
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -2.3742,
+          "Cp_lower": 0.8204
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -1.7016,
+          "Cp_lower": 0.5591
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -1.137,
+          "Cp_lower": 0.3161
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.8343,
+          "Cp_lower": 0.2147
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.462,
+          "Cp_lower": 0.1261
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.1998,
+          "Cp_lower": 0.1055
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": 0.0477,
+          "Cp_lower": 0.1026
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=10.01\u00b0 (Re=3 million, alpha=10.0130, fixed transition)"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 15.0,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -4.5981,
+          "Cp_lower": 1.0273
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -3.2838,
+          "Cp_lower": 1.0063
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -2.2879,
+          "Cp_lower": 0.7971
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -1.4277,
+          "Cp_lower": 0.5193
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.9785,
+          "Cp_lower": 0.3589
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.5189,
+          "Cp_lower": 0.227
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.2359,
+          "Cp_lower": 0.1398
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": -0.0593,
+          "Cp_lower": 0.0591
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=15.0\u00b0 (Re=3 million, alpha=14.9994, fixed transition)"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 0.02,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -0.1685,
+          "Cp_lower": -0.2016
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -0.3254,
+          "Cp_lower": -0.3677
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -0.4076,
+          "Cp_lower": -0.425
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -0.3902,
+          "Cp_lower": -0.4028
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.3445,
+          "Cp_lower": -0.3402
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.2238,
+          "Cp_lower": -0.2314
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.1114,
+          "Cp_lower": -0.1149
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": 0.0372,
+          "Cp_lower": 0.0196
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=0.02\u00b0 (Re=9 million, alpha=.0210, fixed transition)"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 10.02,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -3.261,
+          "Cp_lower": 1.0082
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -2.5288,
+          "Cp_lower": 0.811
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -1.8192,
+          "Cp_lower": 0.5435
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -1.2277,
+          "Cp_lower": 0.298
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -0.9298,
+          "Cp_lower": 0.1895
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.5369,
+          "Cp_lower": 0.094
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.2631,
+          "Cp_lower": 0.0739
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": -0.0009,
+          "Cp_lower": 0.0684
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=10.02\u00b0 (Re=9 million, alpha=10.0228, fixed transition)"
+    },
+    {
+      "airfoil": "naca0012",
+      "alpha_deg": 14.99,
+      "Re": 6000000.0,
+      "Mach": 0.3,
+      "CL": null,
+      "CD": null,
+      "cp_distribution": [
+        {
+          "x_over_c": 0.025,
+          "Cp_upper": -4.8388,
+          "Cp_lower": 1.0219
+        },
+        {
+          "x_over_c": 0.05,
+          "Cp_upper": -3.5242,
+          "Cp_lower": 0.998
+        },
+        {
+          "x_over_c": 0.1,
+          "Cp_upper": -2.369,
+          "Cp_lower": 0.7725
+        },
+        {
+          "x_over_c": 0.2,
+          "Cp_upper": -1.5184,
+          "Cp_lower": 0.5031
+        },
+        {
+          "x_over_c": 0.3,
+          "Cp_upper": -1.0854,
+          "Cp_lower": 0.3526
+        },
+        {
+          "x_over_c": 0.5,
+          "Cp_upper": -0.6005,
+          "Cp_lower": 0.1913
+        },
+        {
+          "x_over_c": 0.7,
+          "Cp_upper": -0.3137,
+          "Cp_lower": 0.0952
+        },
+        {
+          "x_over_c": 0.9,
+          "Cp_upper": -0.0718,
+          "Cp_lower": 0.0344
+        }
+      ],
+      "uncertainty": {
+        "Cp_abs": 0.02
+      },
+      "source": "ladson_tm100526",
+      "citation": "Ladson, Hill, Johnson (1987), NASA TM 100526; NACA 0012 M=0.3 \u03b1=14.99\u00b0 (Re=9 million, alpha=14.9911, fixed transition)"
+    }
+  ]
+}

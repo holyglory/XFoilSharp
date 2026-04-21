@@ -48,13 +48,9 @@ public static class PanelGeometryBuilder
     // Decision: Keep the explicit precision gate because it centralizes parity behavior cleanly.
     public static void ComputeNormals(LinearVortexPanelState panel, bool useLegacyPrecision)
     {
-        if (useLegacyPrecision)
-        {
-            ComputeNormalsCore<float>(panel);
-            return;
-        }
-
-        ComputeNormalsCore<double>(panel);
+        // Phase 1 strip: float-only path. The doubled tree (auto-generated
+        // *.Double.cs twin via gen-double.py) gets the double-precision mirror.
+        ComputeNormalsCore<float>(panel);
     }
 
     // Legacy mapping: f_xfoil/src/xpanel.f :: NCALC.
@@ -165,17 +161,13 @@ public static class PanelGeometryBuilder
         InviscidSolverState state,
         bool useLegacyPrecision)
     {
-        if (useLegacyPrecision)
-        {
-            // Legacy parity uses libm atan2f directly because MathF.Atan2 drifts
-            // 1-3 ULP from glibc atan2f at certain input combinations. The drift
-            // compounds through the streamfunction influence matrix and breaks
-            // bit-exact parity for thicker airfoils (NACA 0009+).
-            ComputePanelAnglesLegacyFloat(panel, state);
-            return;
-        }
-
-        ComputePanelAnglesCore<double>(panel, state);
+        // Phase 1 strip: legacy parity uses libm atan2f directly because
+        // MathF.Atan2 drifts 1-3 ULP from glibc atan2f at certain input
+        // combinations. The drift compounds through the streamfunction
+        // influence matrix and breaks bit-exact parity for thicker airfoils
+        // (NACA 0009+). The doubled tree (auto-generated *.Double.cs twin via
+        // gen-double.py) replaces atan2f with the IEEE double Math.Atan2.
+        ComputePanelAnglesLegacyFloat(panel, state);
     }
 
     private static void ComputePanelAnglesLegacyFloat(LinearVortexPanelState panel, InviscidSolverState state)
@@ -271,13 +263,9 @@ public static class PanelGeometryBuilder
         InviscidSolverState state,
         bool useLegacyPrecision)
     {
-        if (useLegacyPrecision)
-        {
-            ComputeTrailingEdgeGeometryCore<float>(panel, state);
-            return;
-        }
-
-        ComputeTrailingEdgeGeometryCore<double>(panel, state);
+        // Phase 1 strip: float-only path. The doubled tree (auto-generated
+        // *.Double.cs twin via gen-double.py) gets the double-precision mirror.
+        ComputeTrailingEdgeGeometryCore<float>(panel, state);
     }
 
     // Legacy mapping: f_xfoil/src/xfoil.f :: TECALC.
@@ -365,17 +353,14 @@ public static class PanelGeometryBuilder
     /// </summary>
     public static double ContinuousAtan2(double y, double x, double referenceAngle, bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return ContinuousAtan2(y, x, referenceAngle);
-        }
-
+        // Phase 1 strip: legacy float path. Uses libm atan2f to match Fortran's
+        // REAL ATAN2 bit-for-bit. The doubled tree replaces atan2f with the
+        // IEEE double Math.Atan2.
         const float twoPi = 2.0f * MathF.PI;
 
         float newAngle = LegacyLibm.Atan2((float)y, (float)x);
         float deltaTheta = newAngle - (float)referenceAngle;
 
-        // Remove multiples of 2*PI to keep delta within (-PI, PI]
         float correction = deltaTheta - twoPi * MathF.Truncate((deltaTheta + MathF.CopySign(MathF.PI, deltaTheta)) / twoPi);
 
         return (float)referenceAngle + correction;

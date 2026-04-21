@@ -1500,13 +1500,33 @@ try
                 analysisService);
             return 0;
 
+        case "viscous-polar-file-double":
+            // Phase 2 iter 61: doubled-tree variant for arbitrary .dat files.
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-file-double command requires a file path, alpha start, alpha end, and alpha step.");
+            }
+
+            var viscousPolarAirfoilFromFileDouble = parser.ParseFile(args[1]);
+            WriteViscousPolarSummaryDouble(
+                viscousPolarAirfoilFromFileDouble,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 160,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseDouble(args[8], "transition Reynolds-theta") : 320d,
+                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d);
+            return 0;
+
         case "viscous-polar-naca":
             if (args.Length < 5)
             {
                 throw new ArgumentException("The viscous-polar-naca command requires a 4-digit designation, alpha start, alpha end, and alpha step.");
             }
 
-            var viscousPolarAirfoilFromNaca = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239, useLegacyPrecision: true);
+            var viscousPolarAirfoilFromNaca = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
             WriteViscousPolarSummary(
                 viscousPolarAirfoilFromNaca,
                 ParseDouble(args[2], "alpha start"),
@@ -1522,6 +1542,103 @@ try
                 args.Length >= 13 ? ParseDouble(args[12], "transition Reynolds-theta") : 320d,
                 args.Length >= 14 ? ParseDouble(args[13], "critical amplification factor") : 9d,
                 analysisService);
+            return 0;
+
+        case "viscous-polar-naca-double":
+            // Phase 2: doubled-tree (native double-precision) viscous polar.
+            // Same arg layout as viscous-polar-naca for parity. Routes through
+            // XFoil.Solver.Double.Services.AirfoilAnalysisService with the
+            // Phase-2-standardized settings (panels default 160, useExtendedWake=true,
+            // maxIter=200, tol=1e-5, TrustRegion default).
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-naca-double command requires a 4-digit designation, alpha start, alpha end, and alpha step.");
+            }
+
+            var viscousPolarAirfoilFromNacaDouble = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
+            WriteViscousPolarSummaryDouble(
+                viscousPolarAirfoilFromNacaDouble,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 160,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseDouble(args[8], "transition Reynolds-theta") : 320d,
+                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d);
+            return 0;
+
+        case "viscous-point-modern":
+            // Phase 3: single-alpha viscous analysis on Modern (#3) tree.
+            // Unlike viscous-polar-naca-modern which uses SweepViscousAlpha
+            // (currently identical to Doubled per B1 v6 deferred), this
+            // command goes through Modern.AnalyzeViscous — the path where
+            // Tier A1 multi-start AND Tier B1 solution-adaptive paneling
+            // BOTH actually apply. At coarse N (≤ 100) B1 biases panel
+            // distribution by Cp gradient; A1 retries failed physical
+            // convergence with jittered alphas. Best for single-point
+            // queries where Modern's algorithmic improvements are
+            // demonstrably used.
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The viscous-point-modern command requires a 4-digit designation and alpha (degrees).");
+            }
+
+            var pointAirfoilModern = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
+            WriteViscousSinglePointModern(
+                pointAirfoilModern,
+                ParseDouble(args[2], "alpha"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 160,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
+                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
+                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d);
+            return 0;
+
+        case "viscous-polar-naca-modern":
+            // Phase 3: Modern (#3) viscous polar — inherits from the doubled tree,
+            // adds Tier A1 multi-start retry and Tier A2 fresh-state Type-3 sweeps.
+            // Same args + settings as viscous-polar-naca-double.
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-naca-modern command requires a 4-digit designation, alpha start, alpha end, and alpha step.");
+            }
+
+            var viscousPolarAirfoilFromNacaModern = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
+            WriteViscousPolarSummaryModern(
+                viscousPolarAirfoilFromNacaModern,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 160,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseDouble(args[8], "transition Reynolds-theta") : 320d,
+                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d);
+            return 0;
+
+        case "viscous-polar-file-modern":
+            // Phase 3: Modern tree polar sweep from an airfoil coordinate file.
+            // Same ergonomics as viscous-polar-file-double but routes through
+            // the Modern facade so v7 auto-ramp rescues apply to suspicious
+            // stall-region points. Useful for Selig-database airfoils where
+            // the NACA 4-digit generator path doesn't apply.
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-file-modern command requires a file path, alpha start, alpha end, and alpha step.");
+            }
+
+            var viscousPolarFromFileModern = parser.ParseFile(args[1]);
+            WriteViscousPolarSummaryModern(
+                viscousPolarFromFileModern,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 160,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseDouble(args[8], "transition Reynolds-theta") : 320d,
+                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d);
             return 0;
 
         case "export-viscous-polar-file":
@@ -1643,50 +1760,6 @@ try
                 analysisService);
             return 0;
 
-        case "viscous-solve-cl-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-solve-cl-file command requires a file path and target lift coefficient.");
-            }
-
-            var viscousClAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteViscousTargetLiftSummary(
-                viscousClAirfoilFromFile,
-                ParseDouble(args[2], "target lift coefficient"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "coupling iterations") : 2,
-                args.Length >= 8 ? ParseInteger(args[7], "viscous iterations") : 8,
-                args.Length >= 9 ? ParseDouble(args[8], "residual tolerance") : 0.3d,
-                args.Length >= 10 ? ParseDouble(args[9], "displacement relaxation") : 0.5d,
-                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
-                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-solve-cl-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-solve-cl-naca command requires a 4-digit designation and target lift coefficient.");
-            }
-
-            var viscousClAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteViscousTargetLiftSummary(
-                viscousClAirfoilFromNaca,
-                ParseDouble(args[2], "target lift coefficient"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "coupling iterations") : 2,
-                args.Length >= 8 ? ParseInteger(args[7], "viscous iterations") : 8,
-                args.Length >= 9 ? ParseDouble(args[8], "residual tolerance") : 0.3d,
-                args.Length >= 10 ? ParseDouble(args[9], "displacement relaxation") : 0.5d,
-                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
-                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
         case "solve-cl-naca":
             if (args.Length < 3)
             {
@@ -1719,54 +1792,6 @@ try
                 analysisService);
             return 0;
 
-        case "viscous-polar-cl-file":
-            if (args.Length < 5)
-            {
-                throw new ArgumentException("The viscous-polar-cl-file command requires a file path, CL start, CL end, and CL step.");
-            }
-
-            var viscousPolarClAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteViscousLiftSweepSummary(
-                viscousPolarClAirfoilFromFile,
-                ParseDouble(args[2], "CL start"),
-                ParseDouble(args[3], "CL end"),
-                ParseDouble(args[4], "CL step"),
-                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
-                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
-                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
-                args.Length >= 9 ? ParseInteger(args[8], "coupling iterations") : 2,
-                args.Length >= 10 ? ParseInteger(args[9], "viscous iterations") : 8,
-                args.Length >= 11 ? ParseDouble(args[10], "residual tolerance") : 0.3d,
-                args.Length >= 12 ? ParseDouble(args[11], "displacement relaxation") : 0.5d,
-                args.Length >= 13 ? ParseDouble(args[12], "transition Reynolds-theta") : 320d,
-                args.Length >= 14 ? ParseDouble(args[13], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-polar-cl-naca":
-            if (args.Length < 5)
-            {
-                throw new ArgumentException("The viscous-polar-cl-naca command requires a 4-digit designation, CL start, CL end, and CL step.");
-            }
-
-            var viscousPolarClAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteViscousLiftSweepSummary(
-                viscousPolarClAirfoilFromNaca,
-                ParseDouble(args[2], "CL start"),
-                ParseDouble(args[3], "CL end"),
-                ParseDouble(args[4], "CL step"),
-                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
-                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
-                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
-                args.Length >= 9 ? ParseInteger(args[8], "coupling iterations") : 2,
-                args.Length >= 10 ? ParseInteger(args[9], "viscous iterations") : 8,
-                args.Length >= 11 ? ParseDouble(args[10], "residual tolerance") : 0.3d,
-                args.Length >= 12 ? ParseDouble(args[11], "displacement relaxation") : 0.5d,
-                args.Length >= 13 ? ParseDouble(args[12], "transition Reynolds-theta") : 320d,
-                args.Length >= 14 ? ParseDouble(args[13], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
         case "polar-cl-naca":
             if (args.Length < 5)
             {
@@ -1781,304 +1806,6 @@ try
                 ParseDouble(args[4], "CL step"),
                 args.Length >= 6 ? ParseInteger(args[5], "panel count") : 120,
                 args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
-                analysisService);
-            return 0;
-
-        case "topology-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The topology-file command requires a file path and angle of attack.");
-            }
-
-            var topologyAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteBoundaryLayerTopologySummary(
-                topologyAirfoilFromFile,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                analysisService);
-            return 0;
-
-        case "topology-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The topology-naca command requires a 4-digit designation and angle of attack.");
-            }
-
-            var topologyAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteBoundaryLayerTopologySummary(
-                topologyAirfoilFromNaca,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                analysisService);
-            return 0;
-
-        case "viscous-seed-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-seed-file command requires a file path and angle of attack.");
-            }
-
-            var viscousSeedAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteViscousSeedSummary(
-                viscousSeedAirfoilFromFile,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                analysisService);
-            return 0;
-
-        case "viscous-seed-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-seed-naca command requires a 4-digit designation and angle of attack.");
-            }
-
-            var viscousSeedAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteViscousSeedSummary(
-                viscousSeedAirfoilFromNaca,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                analysisService);
-            return 0;
-
-        case "viscous-init-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-init-file command requires a file path and angle of attack.");
-            }
-
-            var viscousInitAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteViscousInitialStateSummary(
-                viscousInitAirfoilFromFile,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
-                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-init-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-init-naca command requires a 4-digit designation and angle of attack.");
-            }
-
-            var viscousInitAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteViscousInitialStateSummary(
-                viscousInitAirfoilFromNaca,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
-                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-interval-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-interval-file command requires a file path and angle of attack.");
-            }
-
-            var viscousIntervalAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteViscousIntervalSummary(
-                viscousIntervalAirfoilFromFile,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
-                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-interval-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-interval-naca command requires a 4-digit designation and angle of attack.");
-            }
-
-            var viscousIntervalAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteViscousIntervalSummary(
-                viscousIntervalAirfoilFromNaca,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseDouble(args[6], "transition Reynolds-theta") : 320d,
-                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-correct-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-correct-file command requires a file path and angle of attack.");
-            }
-
-            var viscousCorrectAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteViscousCorrectionSummary(
-                viscousCorrectAirfoilFromFile,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "iteration count") : 3,
-                args.Length >= 8 ? ParseDouble(args[7], "transition Reynolds-theta") : 320d,
-                args.Length >= 9 ? ParseDouble(args[8], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-correct-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-correct-naca command requires a 4-digit designation and angle of attack.");
-            }
-
-            var viscousCorrectAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteViscousCorrectionSummary(
-                viscousCorrectAirfoilFromNaca,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "iteration count") : 3,
-                args.Length >= 8 ? ParseDouble(args[7], "transition Reynolds-theta") : 320d,
-                args.Length >= 9 ? ParseDouble(args[8], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-solve-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-solve-file command requires a file path and angle of attack.");
-            }
-
-            var viscousSolveAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteViscousSolveSummary(
-                viscousSolveAirfoilFromFile,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "max iterations") : 10,
-                args.Length >= 8 ? ParseDouble(args[7], "residual tolerance") : 0.2d,
-                args.Length >= 9 ? ParseDouble(args[8], "transition Reynolds-theta") : 320d,
-                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-solve-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-solve-naca command requires a 4-digit designation and angle of attack.");
-            }
-
-            var viscousSolveAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteViscousSolveSummary(
-                viscousSolveAirfoilFromNaca,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "max iterations") : 10,
-                args.Length >= 8 ? ParseDouble(args[7], "residual tolerance") : 0.2d,
-                args.Length >= 9 ? ParseDouble(args[8], "transition Reynolds-theta") : 320d,
-                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-interact-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-interact-file command requires a file path and angle of attack.");
-            }
-
-            var viscousInteractAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteViscousInteractionSummary(
-                viscousInteractAirfoilFromFile,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "interaction iterations") : 3,
-                args.Length >= 8 ? ParseDouble(args[7], "coupling factor") : 0.12d,
-                args.Length >= 9 ? ParseInteger(args[8], "viscous iterations") : 8,
-                args.Length >= 10 ? ParseDouble(args[9], "residual tolerance") : 0.3d,
-                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
-                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-interact-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-interact-naca command requires a 4-digit designation and angle of attack.");
-            }
-
-            var viscousInteractAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteViscousInteractionSummary(
-                viscousInteractAirfoilFromNaca,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "interaction iterations") : 3,
-                args.Length >= 8 ? ParseDouble(args[7], "coupling factor") : 0.12d,
-                args.Length >= 9 ? ParseInteger(args[8], "viscous iterations") : 8,
-                args.Length >= 10 ? ParseDouble(args[9], "residual tolerance") : 0.3d,
-                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
-                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-coupled-file":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-coupled-file command requires a file path and angle of attack.");
-            }
-
-            var viscousCoupledAirfoilFromFile = parser.ParseFile(args[1]);
-            WriteDisplacementCoupledSummary(
-                viscousCoupledAirfoilFromFile,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "coupling iterations") : 2,
-                args.Length >= 8 ? ParseInteger(args[7], "viscous iterations") : 8,
-                args.Length >= 9 ? ParseDouble(args[8], "residual tolerance") : 0.3d,
-                args.Length >= 10 ? ParseDouble(args[9], "displacement relaxation") : 0.5d,
-                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
-                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
-                analysisService);
-            return 0;
-
-        case "viscous-coupled-naca":
-            if (args.Length < 3)
-            {
-                throw new ArgumentException("The viscous-coupled-naca command requires a 4-digit designation and angle of attack.");
-            }
-
-            var viscousCoupledAirfoilFromNaca = nacaGenerator.Generate4Digit(args[1]);
-            WriteDisplacementCoupledSummary(
-                viscousCoupledAirfoilFromNaca,
-                ParseDouble(args[2], "angle of attack"),
-                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 120,
-                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
-                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 1_000_000d,
-                args.Length >= 7 ? ParseInteger(args[6], "coupling iterations") : 2,
-                args.Length >= 8 ? ParseInteger(args[7], "viscous iterations") : 8,
-                args.Length >= 9 ? ParseDouble(args[8], "residual tolerance") : 0.3d,
-                args.Length >= 10 ? ParseDouble(args[9], "displacement relaxation") : 0.5d,
-                args.Length >= 11 ? ParseDouble(args[10], "transition Reynolds-theta") : 320d,
-                args.Length >= 12 ? ParseDouble(args[11], "critical amplification factor") : 9d,
                 analysisService);
             return 0;
 
@@ -2210,6 +1937,11 @@ static void PrintUsage()
     Console.WriteLine("  scale-geometry-naca <####> <outputDatPath> <scaleFactor> <LE|TE|POINT> [originX originY] [pointCount]");
     Console.WriteLine("  viscous-polar-file <path> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
     Console.WriteLine("  viscous-polar-naca <####> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
+    Console.WriteLine("  viscous-polar-naca-double <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: native double-precision tree)");
+    Console.WriteLine("  viscous-polar-naca-modern <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree, multi-start retry on non-physical results)");
+    Console.WriteLine("  viscous-point-modern <####> <alpha> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: single-alpha modern analysis — A1 multi-start for non-physical results)");
+    Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
+    Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
     Console.WriteLine("  export-viscous-polar-naca <####> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
     Console.WriteLine("  export-viscous-polar-cl-file <path> <outputCsvPath> <clStart> <clEnd> <clStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2254,7 +1986,7 @@ static void WriteInviscidSummary(
     var analysis = analysisService.AnalyzeInviscid(geometry, angleOfAttackDegrees, new AnalysisSettings(panelCount, machNumber: machNumber));
 
     Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"Panels: {analysis.Mesh.Panels.Count}");
+    Console.WriteLine($"Panels: {analysis.PanelCount}");
     Console.WriteLine($"AlphaDeg: {analysis.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"Mach: {analysis.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"CL: {analysis.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
@@ -2343,6 +2075,13 @@ static void WriteViscousPolarSummary(
 
     foreach (var r in results)
     {
+        // Same physicality classification as the doubled-tree CLI — float
+        // facade also produces "Converged: True" non-physical attractors at
+        // extreme α/Re. Mark them so downstream consumers don't treat them
+        // as engineering data.
+        string qualityTag = r.Converged
+            ? (PhysicalEnvelope.IsAirfoilResultPhysical(r) ? "PHYSICAL" : "NON-PHYSICAL")
+            : "DIVERGED";
         Console.WriteLine(
             $"{r.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}\t" +
             $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
@@ -2353,7 +2092,218 @@ static void WriteViscousPolarSummary(
             $"CDf={r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}\t" +
             $"CDp={r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}\t" +
             $"Xtr_U={r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
-            $"Xtr_L={r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}");
+            $"Xtr_L={r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"Quality={qualityTag}");
+    }
+}
+
+// Phase 2: doubled-tree (native double precision) viscous polar summary.
+// Mirrors WriteViscousPolarSummary but routes through the doubled-tree
+// facade. Uses Phase-2-standardized settings: useExtendedWake=true,
+// maxIter=200, tol=1e-5, TrustRegion default.
+static void WriteViscousPolarSummaryDouble(
+    AirfoilGeometry geometry,
+    double alphaStartDegrees,
+    double alphaEndDegrees,
+    double alphaStepDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor)
+{
+    var settings = new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        transitionReynoldsTheta: transitionReynoldsTheta,
+        criticalAmplificationFactor: criticalAmplificationFactor,
+
+        useExtendedWake: true,
+        useLegacyBoundaryLayerInitialization: true,
+        useLegacyPanelingPrecision: true,
+        useLegacyStreamfunctionKernelPrecision: true,
+        useLegacyWakeSourceKernelPrecision: true,
+        useModernTransitionCorrections: false,
+        maxViscousIterations: 200,
+        viscousConvergenceTolerance: 1e-5);
+
+    var doubleService = new XFoil.Solver.Double.Services.AirfoilAnalysisService();
+    var results = doubleService.SweepViscousAlpha(
+        geometry,
+        alphaStartDegrees,
+        alphaEndDegrees,
+        alphaStepDegrees,
+        settings);
+
+    Console.WriteLine($"Name: {geometry.Name} (doubled tree)");
+    Console.WriteLine($"Panels: {settings.PanelCount}");
+    Console.WriteLine($"Mach: {settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("AlphaDeg\tCL\tCD\tCM\tConverged\tIterations");
+
+    foreach (var r in results)
+    {
+        // PhysicalEnvelope flags converged results outside the realistic 2D
+        // envelope (|CL|≤5, CD∈[0,1]) — those are non-physical attractors
+        // even though Newton reports converged. POST-STALL tags non-
+        // converged-but-physically-bounded results (Modern v7 auto-ramp
+        // or Viterna extrapolation), distinct from true DIVERGED.
+        string plausibleTag;
+        if (r.Converged && PhysicalEnvelope.IsAirfoilResultPhysical(r))
+            plausibleTag = "PHYSICAL";
+        else if (!r.Converged && PhysicalEnvelope.IsAirfoilResultPhysicalPostStall(r))
+            plausibleTag = "POST-STALL";
+        else if (r.Converged)
+            plausibleTag = "NON-PHYSICAL";
+        else
+            plausibleTag = "DIVERGED";
+        Console.WriteLine(
+            $"{r.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.Converged}\t" +
+            $"{r.Iterations}\t" +
+            $"CDf={r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"CDp={r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"Xtr_U={r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"Xtr_L={r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"Quality={plausibleTag}");
+    }
+}
+
+static void WriteViscousSinglePointModern(
+    AirfoilGeometry geometry,
+    double alphaDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor)
+{
+    var settings = new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        transitionReynoldsTheta: transitionReynoldsTheta,
+        criticalAmplificationFactor: criticalAmplificationFactor,
+        useExtendedWake: true,
+        useLegacyBoundaryLayerInitialization: true,
+        useLegacyPanelingPrecision: true,
+        useLegacyStreamfunctionKernelPrecision: true,
+        useLegacyWakeSourceKernelPrecision: true,
+        useModernTransitionCorrections: false,
+        maxViscousIterations: 200,
+        viscousConvergenceTolerance: 1e-5);
+
+    var modernService = new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
+    var r = modernService.AnalyzeViscous(geometry, alphaDegrees, settings);
+
+    Console.WriteLine($"Name: {geometry.Name} (modern single-point)");
+    Console.WriteLine($"Panels: {settings.PanelCount}");
+    Console.WriteLine($"Mach: {settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Alpha: {alphaDegrees.ToString("F4", CultureInfo.InvariantCulture)}°");
+    Console.WriteLine($"B1 (inviscid bias): applied per Cp-gradient sensor via base.AnalyzeInviscid. Viscous B1 is disabled as of v11 — see Phase3TierBMetrics.md for Re-sensitivity findings.");
+    Console.WriteLine($"A1 multi-start: active (fires only on non-physical primary results).");
+    // Quality tag now distinguishes POST-STALL (v7 auto-ramp or Viterna
+    // result — Converged=False but CL/CD pass the relaxed post-stall
+    // envelope |CL|≤2.2). The old "DIVERGED" label was misleading for
+    // cases where the Modern facade produced a physical result via
+    // fallbacks even though Newton didn't formally converge.
+    string plausibleTag;
+    if (r.Converged && PhysicalEnvelope.IsAirfoilResultPhysical(r))
+        plausibleTag = "PHYSICAL";
+    else if (!r.Converged && PhysicalEnvelope.IsAirfoilResultPhysicalPostStall(r))
+        plausibleTag = "POST-STALL";
+    else if (r.Converged)
+        plausibleTag = "NON-PHYSICAL";
+    else
+        plausibleTag = "DIVERGED";
+
+    Console.WriteLine();
+    Console.WriteLine($"CL:        {r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CD:        {r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CDf:       {r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CDp:       {r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CM:        {r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Xtr_U:     {r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Xtr_L:     {r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Converged: {r.Converged}");
+    Console.WriteLine($"Iters:     {r.Iterations}");
+    Console.WriteLine($"Quality:   {plausibleTag}");
+}
+
+static void WriteViscousPolarSummaryModern(
+    AirfoilGeometry geometry,
+    double alphaStartDegrees,
+    double alphaEndDegrees,
+    double alphaStepDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double transitionReynoldsTheta,
+    double criticalAmplificationFactor)
+{
+    var settings = new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        transitionReynoldsTheta: transitionReynoldsTheta,
+        criticalAmplificationFactor: criticalAmplificationFactor,
+        useExtendedWake: true,
+        useLegacyBoundaryLayerInitialization: true,
+        useLegacyPanelingPrecision: true,
+        useLegacyStreamfunctionKernelPrecision: true,
+        useLegacyWakeSourceKernelPrecision: true,
+        useModernTransitionCorrections: false,
+        maxViscousIterations: 200,
+        viscousConvergenceTolerance: 1e-5);
+
+    var modernService = new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
+    var results = modernService.SweepViscousAlpha(
+        geometry,
+        alphaStartDegrees,
+        alphaEndDegrees,
+        alphaStepDegrees,
+        settings);
+
+    Console.WriteLine($"Name: {geometry.Name} (modern tree)");
+    Console.WriteLine($"Panels: {settings.PanelCount}");
+    Console.WriteLine($"Mach: {settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Re: {settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
+    Console.WriteLine("AlphaDeg\tCL\tCD\tCM\tConverged\tIterations");
+
+    foreach (var r in results)
+    {
+        string plausibleTag;
+        if (r.Converged && PhysicalEnvelope.IsAirfoilResultPhysical(r))
+            plausibleTag = "PHYSICAL";
+        else if (!r.Converged && PhysicalEnvelope.IsAirfoilResultPhysicalPostStall(r))
+            plausibleTag = "POST-STALL";
+        else if (r.Converged)
+            plausibleTag = "NON-PHYSICAL";
+        else
+            plausibleTag = "DIVERGED";
+        Console.WriteLine(
+            $"{r.AngleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{r.Converged}\t" +
+            $"{r.Iterations}\t" +
+            $"CDf={r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"CDp={r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"Xtr_U={r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"Xtr_L={r.LowerTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)}\t" +
+            $"Quality={plausibleTag}");
     }
 }
 
@@ -2624,367 +2574,37 @@ static void WriteTargetLiftSummary(
     Console.WriteLine($"CMc/4: {analysis.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
 }
 
-// Legacy mapping: f_xfoil/src/xfoil.f :: CLI/VISC target-lift operating-point lineage.
-// Difference from legacy: The managed CLI uses the viscous sweep service to recover the target-CL operating point and prints a compact summary instead of driving the interactive operating-point display.
-// Decision: Keep the managed summary wrapper because it is headless presentation over the viscous solver.
-static void WriteViscousTargetLiftSummary(
-    AirfoilGeometry geometry,
-    double targetLiftCoefficient,
-    int panelCount,
-    double machNumber,
-    double reynoldsNumber,
-    int couplingIterations,
-    int viscousIterations,
-    double residualTolerance,
-    double displacementRelaxation,
-    double transitionReynoldsTheta,
-    double criticalAmplificationFactor,
-    AirfoilAnalysisService analysisService)
-{
-    var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
-    // Use a narrow CL sweep to find a single operating point near the target CL
-    var results = analysisService.SweepViscousCL(
-        geometry,
-        targetLiftCoefficient,
-        targetLiftCoefficient,
-        0.1d,
-        settings);
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"TargetCL: {targetLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-
-    if (results.Count > 0)
-    {
-        var r = results[0];
-        Console.WriteLine($"SolvedAlphaDeg: {r.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}");
-        Console.WriteLine($"CL: {r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-        Console.WriteLine($"CD: {r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}");
-        Console.WriteLine($"CM: {r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
-        Console.WriteLine($"Converged: {r.Converged}");
-        Console.WriteLine($"Iterations: {r.Iterations}");
-    }
-    else
-    {
-        Console.WriteLine("No results returned for target CL.");
-    }
-}
-
-// Legacy mapping: f_xfoil/src/xfoil.f :: CSEQ and f_xfoil/src/xoper.f :: PACC/PWRT.
-// Difference from legacy: The managed helper prints the lift sweep directly from service results instead of routing through the interactive polar accumulator.
-// Decision: Keep the managed summary wrapper because it is deterministic CLI presentation over the same lift-sweep lineage.
 static void WriteLiftSweepSummary(
     AirfoilGeometry geometry,
-    double liftStart,
-    double liftEnd,
-    double liftStep,
+    double clStart,
+    double clEnd,
+    double clStep,
     int panelCount,
     double machNumber,
     AirfoilAnalysisService analysisService)
 {
     var sweep = analysisService.SweepInviscidLiftCoefficient(
         geometry,
-        liftStart,
-        liftEnd,
-        liftStep,
+        clStart,
+        clEnd,
+        clStep,
         new AnalysisSettings(panelCount, machNumber: machNumber));
 
     Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"Panels: {sweep.Settings.PanelCount}");
-    Console.WriteLine($"Mach: {sweep.Settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
     Console.WriteLine("TargetCL\tSolvedAlphaDeg\tCL\tCD\tCMc/4");
-
     foreach (var point in sweep.Points)
     {
+        var op = point.OperatingPoint;
         Console.WriteLine(
             $"{point.TargetLiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.DragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{point.OperatingPoint.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
+            $"{op.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{op.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{op.DragCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
+            $"{op.MomentCoefficientQuarterChord.ToString("F6", CultureInfo.InvariantCulture)}");
     }
 }
 
-// Legacy mapping: f_xfoil/src/xfoil.f :: CSEQ/VISC and f_xfoil/src/xoper.f :: PACC/PWRT.
-// Difference from legacy: The helper formats viscous lift-sweep results directly rather than replaying the interactive saved-polar path.
-// Decision: Keep the managed summary wrapper because it is a CLI view over the viscous lift sweep.
-static void WriteViscousLiftSweepSummary(
-    AirfoilGeometry geometry,
-    double liftStart,
-    double liftEnd,
-    double liftStep,
-    int panelCount,
-    double machNumber,
-    double reynoldsNumber,
-    int couplingIterations,
-    int viscousIterations,
-    double residualTolerance,
-    double displacementRelaxation,
-    double transitionReynoldsTheta,
-    double criticalAmplificationFactor,
-    AirfoilAnalysisService analysisService)
-{
-    var settings = CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor);
-    var results = analysisService.SweepViscousCL(
-        geometry,
-        liftStart,
-        liftEnd,
-        liftStep,
-        settings);
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"Panels: {settings.PanelCount}");
-    Console.WriteLine($"Mach: {settings.MachNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {settings.ReynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine("AlphaDeg\tCL\tCD\tCM\tConverged\tIterations");
-
-    foreach (var r in results)
-    {
-        Console.WriteLine(
-            $"{r.AngleOfAttackDegrees.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t" +
-            $"{r.Converged}\t" +
-            $"{r.Iterations}");
-    }
-}
-
-// Legacy mapping: f_xfoil/src/xpanel.f :: STFIND/IBLPAN and f_xfoil/src/xbl.f :: IBLSYS topology lineage.
-// Difference from legacy: The helper prints managed topology objects instead of exposing boundary-layer station arrays through the interactive prompt.
-// Decision: Keep the managed summary because topology inspection is a CLI/debugging aid, not a parity kernel.
-static void WriteBoundaryLayerTopologySummary(
-    AirfoilGeometry geometry,
-    double angleOfAttackDegrees,
-    int panelCount,
-    double machNumber,
-    AirfoilAnalysisService analysisService)
-{
-    var topology = analysisService.AnalyzeBoundaryLayerTopology(
-        geometry,
-        angleOfAttackDegrees,
-        new AnalysisSettings(panelCount, machNumber: machNumber));
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"StagnationX: {topology.StagnationPoint.X.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"StagnationY: {topology.StagnationPoint.Y.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"StagnationS: {topology.StagnationArcLength.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperStations: {topology.UpperSurfaceStations.Count}");
-    Console.WriteLine($"LowerStations: {topology.LowerSurfaceStations.Count}");
-    Console.WriteLine($"WakeStations: {topology.WakeStations.Count}");
-    Console.WriteLine($"UpperTeDistance: {topology.UpperSurfaceStations[^1].DistanceFromStagnation.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTeDistance: {topology.LowerSurfaceStations[^1].DistanceFromStagnation.ToString("F6", CultureInfo.InvariantCulture)}");
-}
-
-// Legacy mapping: f_xfoil/src/xoper.f :: COMSET/MRCHUE seed lineage and f_xfoil/src/xbl.f :: SETBL state setup.
-// Difference from legacy: The helper reports the managed seed object explicitly instead of relying on hidden COMMON-state inspection.
-// Decision: Keep the managed summary because seed visibility is a debugging-oriented improvement.
-static void WriteViscousSeedSummary(
-    AirfoilGeometry geometry,
-    double angleOfAttackDegrees,
-    int panelCount,
-    double machNumber,
-    AirfoilAnalysisService analysisService)
-{
-    var seed = analysisService.AnalyzeViscousStateSeed(
-        geometry,
-        angleOfAttackDegrees,
-        new AnalysisSettings(panelCount, machNumber: machNumber));
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperStations: {seed.UpperSurface.Stations.Count}");
-    Console.WriteLine($"LowerStations: {seed.LowerSurface.Stations.Count}");
-    Console.WriteLine($"WakeStations: {seed.Wake.Stations.Count}");
-    Console.WriteLine($"TrailingEdgeGap: {seed.TrailingEdgeGap.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TrailingEdgeNormalGap: {seed.TrailingEdgeNormalGap.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TrailingEdgeStreamwiseGap: {seed.TrailingEdgeStreamwiseGap.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTeXi: {seed.UpperSurface.Stations[^1].Xi.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTeXi: {seed.LowerSurface.Stations[^1].Xi.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeInitialUe: {seed.Wake.Stations[0].EdgeVelocity.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeSecondUe: {seed.Wake.Stations[Math.Min(1, seed.Wake.Stations.Count - 1)].EdgeVelocity.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeSecondGap: {seed.Wake.Stations[Math.Min(1, seed.Wake.Stations.Count - 1)].WakeGap.ToString("F6", CultureInfo.InvariantCulture)}");
-}
-
-// Legacy mapping: f_xfoil/src/xoper.f :: COMSET/MRCHUE initial-state lineage and f_xfoil/src/xblsys.f :: transition-state data.
-// Difference from legacy: The managed helper formats a derived state summary from explicit objects rather than reading scattered solver arrays interactively.
-// Decision: Keep the managed summary because it improves visibility into the viscous initialization pipeline.
-static void WriteViscousInitialStateSummary(
-    AirfoilGeometry geometry,
-    double angleOfAttackDegrees,
-    int panelCount,
-    double machNumber,
-    double reynoldsNumber,
-    double transitionReynoldsTheta,
-    double criticalAmplificationFactor,
-    AirfoilAnalysisService analysisService)
-{
-    var state = analysisService.AnalyzeViscousInitialState(
-        geometry,
-        angleOfAttackDegrees,
-        CreateViscousSettings(panelCount, machNumber, reynoldsNumber, transitionReynoldsTheta, criticalAmplificationFactor));
-
-    Console.WriteLine($"Name: {geometry.Name}");
-    Console.WriteLine($"AlphaDeg: {angleOfAttackDegrees.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Mach: {machNumber.ToString("F4", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Re: {reynoldsNumber.ToString("F0", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"TransitionReTheta: {transitionReynoldsTheta.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"CriticalN: {criticalAmplificationFactor.ToString("F3", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTeTheta: {state.UpperSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTeDstar: {state.UpperSurface.Stations[^1].DisplacementThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTeTheta: {state.LowerSurface.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTeDstar: {state.LowerSurface.Stations[^1].DisplacementThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTransitionXi: {FindTransitionXi(state.UpperSurface).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperTransitionN: {FindTransitionAmplification(state.UpperSurface).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTransitionXi: {FindTransitionXi(state.LowerSurface).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerTransitionN: {FindTransitionAmplification(state.LowerSurface).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"UpperMaxN: {state.UpperSurface.Stations.Max(station => station.AmplificationFactor).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"LowerMaxN: {state.LowerSurface.Stations.Max(station => station.AmplificationFactor).ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeTheta0: {state.Wake.Stations[0].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeDstar0: {state.Wake.Stations[0].DisplacementThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeThetaEnd: {state.Wake.Stations[^1].MomentumThickness.ToString("F6", CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"WakeReThetaEnd: {state.Wake.Stations[^1].ReynoldsTheta.ToString("F2", CultureInfo.InvariantCulture)}");
-}
-
-// Legacy mapping: none; this command reports the removal of an older managed surrogate pipeline, not a legacy XFoil routine.
-// Difference from legacy: The helper emits a deprecation notice instead of attempting to mimic a removed managed-only workflow.
-// Decision: Keep the explicit deprecation message because it preserves CLI compatibility while steering users to the active solver path.
-static void WriteViscousIntervalSummary(
-    AirfoilGeometry geometry,
-    double angleOfAttackDegrees,
-    int panelCount,
-    double machNumber,
-    double reynoldsNumber,
-    double transitionReynoldsTheta,
-    double criticalAmplificationFactor,
-    AirfoilAnalysisService analysisService)
-{
-    Console.WriteLine("[DEPRECATED] The surrogate interval system pipeline has been replaced by the Newton-coupled viscous solver.");
-    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
-}
-
-// Legacy mapping: none; this helper documents the removal of an older managed surrogate correction path.
-// Difference from legacy: It intentionally reports deprecation rather than dispatching into a legacy or managed solver pipeline.
-// Decision: Keep the deprecation notice because it is clearer than silently dropping the command.
-static void WriteViscousCorrectionSummary(
-    AirfoilGeometry geometry,
-    double angleOfAttackDegrees,
-    int panelCount,
-    double machNumber,
-    double reynoldsNumber,
-    int iterations,
-    double transitionReynoldsTheta,
-    double criticalAmplificationFactor,
-    AirfoilAnalysisService analysisService)
-{
-    Console.WriteLine("[DEPRECATED] The surrogate laminar correction pipeline has been replaced by the Newton-coupled viscous solver.");
-    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
-}
-
-// Legacy mapping: none; this helper documents the removal of an older managed surrogate solve path.
-// Difference from legacy: It emits a deprecation notice instead of preserving a non-parity solver fork.
-// Decision: Keep the notice because the Newton-coupled solver is now the supported path.
-static void WriteViscousSolveSummary(
-    AirfoilGeometry geometry,
-    double angleOfAttackDegrees,
-    int panelCount,
-    double machNumber,
-    double reynoldsNumber,
-    int maxIterations,
-    double residualTolerance,
-    double transitionReynoldsTheta,
-    double criticalAmplificationFactor,
-    AirfoilAnalysisService analysisService)
-{
-    Console.WriteLine("[DEPRECATED] The surrogate laminar solve pipeline has been replaced by the Newton-coupled viscous solver.");
-    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
-}
-
-// Legacy mapping: none; this helper documents the removal of an older managed interaction workflow.
-// Difference from legacy: It prints a deprecation notice rather than maintaining a second non-legacy interaction implementation.
-// Decision: Keep the notice because the active viscous workflow now lives in the Newton-coupled solver.
-static void WriteViscousInteractionSummary(
-    AirfoilGeometry geometry,
-    double angleOfAttackDegrees,
-    int panelCount,
-    double machNumber,
-    double reynoldsNumber,
-    int interactionIterations,
-    double couplingFactor,
-    int viscousIterations,
-    double residualTolerance,
-    double transitionReynoldsTheta,
-    double criticalAmplificationFactor,
-    AirfoilAnalysisService analysisService)
-{
-    Console.WriteLine("[DEPRECATED] The surrogate viscous interaction pipeline has been replaced by the Newton-coupled viscous solver.");
-    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
-}
-
-// Legacy mapping: none; this helper documents the retirement of the earlier managed displacement-coupled surrogate.
-// Difference from legacy: It preserves the CLI contract with a deprecation message instead of emulating obsolete behavior.
-// Decision: Keep the notice because it avoids hidden command removal.
-static void WriteDisplacementCoupledSummary(
-    AirfoilGeometry geometry,
-    double angleOfAttackDegrees,
-    int panelCount,
-    double machNumber,
-    double reynoldsNumber,
-    int couplingIterations,
-    int viscousIterations,
-    double residualTolerance,
-    double displacementRelaxation,
-    double transitionReynoldsTheta,
-    double criticalAmplificationFactor,
-    AirfoilAnalysisService analysisService)
-{
-    Console.WriteLine("[DEPRECATED] The surrogate displacement-coupled pipeline has been replaced by the Newton-coupled viscous solver.");
-    Console.WriteLine("Use the viscous-polar or viscous-lift-sweep commands instead.");
-}
-
-// Legacy mapping: f_xfoil/src/xblsys.f :: TRCHEK2 transition-state lineage.
-// Difference from legacy: The helper scans the managed branch object instead of reading transition indices from COMMON arrays.
-// Decision: Keep the managed scan because it is a presentation helper over explicit state objects.
-static double FindTransitionXi(ViscousBranchState branch)
-{
-    foreach (var station in branch.Stations)
-    {
-        if (station.Regime == ViscousFlowRegime.Turbulent)
-        {
-            return station.Xi;
-        }
-    }
-
-    return -1d;
-}
-
-// Legacy mapping: f_xfoil/src/xblsys.f :: TRCHEK2 transition-state lineage.
-// Difference from legacy: The helper scans managed station objects for the first turbulent state instead of consulting implicit runtime arrays.
-// Decision: Keep the managed scan because it is a simple reporting helper.
-static double FindTransitionAmplification(ViscousBranchState branch)
-{
-    foreach (var station in branch.Stations)
-    {
-        if (station.Regime == ViscousFlowRegime.Turbulent)
-        {
-            return station.AmplificationFactor;
-        }
-    }
-
-    return -1d;
-}
-
-// Legacy mapping: none; packaging solver settings into an immutable managed object has no direct Fortran analogue.
-// Difference from legacy: Parameter values are grouped into a typed settings record instead of being assigned into global solver state slot by slot.
-// Decision: Keep the managed settings helper because it is the clean API boundary for the CLI.
 static AnalysisSettings CreateViscousSettings(
     int panelCount,
     double machNumber,
@@ -2998,6 +2618,7 @@ static AnalysisSettings CreateViscousSettings(
         reynoldsNumber: reynoldsNumber,
         transitionReynoldsTheta: transitionReynoldsTheta,
         criticalAmplificationFactor: criticalAmplificationFactor,
+        useExtendedWake: true,
         maxViscousIterations: 200,
         viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
         useModernTransitionCorrections: false,

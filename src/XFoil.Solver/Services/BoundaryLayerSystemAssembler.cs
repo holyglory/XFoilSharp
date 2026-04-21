@@ -51,7 +51,7 @@ public static class BoundaryLayerSystemAssembler
     // Legacy mapping: f_xfoil/src/xblsys.f :: BLVAR delta-thickness term
     // Difference from legacy: The formula is unchanged, but the managed port centralizes it into a helper shared by multiple call sites.
     // Decision: Keep the helper and preserve the legacy arithmetic staging through the `useLegacyPrecision` branch when parity mode is active.
-    private static double ComputeDeltaShapeTerm(double hk, bool useLegacyPrecision)
+    private static double ComputeDeltaShapeTerm(double hk, bool useLegacyPrecision = false)
     {
         if (!useLegacyPrecision)
         {
@@ -77,37 +77,23 @@ public static class BoundaryLayerSystemAssembler
     public static (double U2, double U2_UEI, double U2_MS) ConvertToCompressible(
         double uei, double tkbl, double qinfbl, double tkbl_ms, bool useLegacyPrecision = false)
     {
-        if (useLegacyPrecision)
-        {
-            // BLPRV stores values in REAL slots, but the classic packet bits are
-            // reproduced most accurately by rounding at the statement
-            // assignments rather than after every primitive operator.
-            float ueif = (float)uei;
-            float tkblf = (float)tkbl;
-            float qinfblf = (float)qinfbl;
-            float tkblMsf = (float)tkbl_ms;
+        // Phase 1 strip: float-only BLPRV. Stores values in REAL slots; classic
+        // packet bits are reproduced most accurately by rounding at the
+        // statement assignments rather than after every primitive operator.
+        float ueif = (float)uei;
+        float tkblf = (float)tkbl;
+        float qinfblf = (float)qinfbl;
+        float tkblMsf = (float)tkbl_ms;
 
+        float ueiOq2f = (float)(((double)ueif / qinfblf) * ((double)ueif / qinfblf));
+        float denomf = (float)(1.0 - ((double)tkblf * ueiOq2f));
+        float u2f = (float)(((double)ueif * (1.0 - tkblf)) / denomf);
+        float u2Ueif = (float)(
+            (1.0 + ((double)tkblf * (((2.0 * u2f * ueif) / ((double)qinfblf * qinfblf)) - 1.0)))
+            / denomf);
+        float u2Msf = (float)(((((double)u2f * ueiOq2f) - ueif) * tkblMsf) / denomf);
 
-            float ueiOq2f = (float)(((double)ueif / qinfblf) * ((double)ueif / qinfblf));
-            float denomf = (float)(1.0 - ((double)tkblf * ueiOq2f));
-            float u2f = (float)(((double)ueif * (1.0 - tkblf)) / denomf);
-            float u2Ueif = (float)(
-                (1.0 + ((double)tkblf * (((2.0 * u2f * ueif) / ((double)qinfblf * qinfblf)) - 1.0)))
-                / denomf);
-            float u2Msf = (float)(((((double)u2f * ueiOq2f) - ueif) * tkblMsf) / denomf);
-
-
-            return (u2f, u2Ueif, u2Msf);
-        }
-
-        double ueiOq2 = (uei / qinfbl) * (uei / qinfbl);
-        double denom = 1.0 - tkbl * ueiOq2;
-
-        double u2 = uei * (1.0 - tkbl) / denom;
-        double u2_uei = (1.0 + tkbl * (2.0 * u2 * uei / (qinfbl * qinfbl) - 1.0)) / denom;
-        double u2_ms = (u2 * ueiOq2 - uei) * tkbl_ms / denom;
-
-        return (u2, u2_uei, u2_ms);
+        return (u2f, u2Ueif, u2Msf);
     }
 
     // =====================================================================
@@ -157,173 +143,97 @@ public static class BoundaryLayerSystemAssembler
         //     reciprocal rewrites — those would shift the last ULP.
         var result = destination ?? (_kinematicFallback ??= new KinematicResult());
 
-        if (useLegacyPrecision)
-        {
-            float u2f = (float)u2;
-            float t2f = (float)t2;
-            float d2f = (float)d2;
-            // dw2 is not used in the legacy branch (preserves original behaviour).
-            float hstinvf = (float)hstinv;
-            float hstinvMsf = (float)hstinv_ms;
-            float gm1blf = (float)gm1bl;
-            float rstblf = (float)rstbl;
-            float rstblMsf = (float)rstbl_ms;
-            float hvratf = (float)hvrat;
-            float reyblf = (float)reybl;
-            float reyblRef = (float)reybl_re;
-            float reyblMsf = (float)reybl_ms;
+        // Phase 1 strip: float-only BLKIN. The doubled tree (auto-generated
+        // *.Double.cs twin via gen-double.py) gets the double-precision mirror.
+        float u2f = (float)u2;
+        float t2f = (float)t2;
+        float d2f = (float)d2;
+        // dw2 is not used in the legacy branch (preserves original behaviour).
+        float hstinvf = (float)hstinv;
+        float hstinvMsf = (float)hstinv_ms;
+        float gm1blf = (float)gm1bl;
+        float rstblf = (float)rstbl;
+        float rstblMsf = (float)rstbl_ms;
+        float hvratf = (float)hvrat;
+        float reyblf = (float)reybl;
+        float reyblRef = (float)reybl_re;
+        float reyblMsf = (float)reybl_ms;
 
-            // --- Mach number and derivatives ---
-            float u2sqHstinv = u2f * u2f * hstinvf;
-            float legacyM2Den = gm1blf * (1.0f - (0.5f * u2sqHstinv));
-            float m2f = u2sqHstinv / legacyM2Den;
-            float tr2f = 1.0f + (0.5f * gm1blf * m2f);
-            float m2U2f = 2.0f * m2f * tr2f / u2f;
-            float legacyM2MsNum = u2f * u2f * tr2f;
-            float m2MsF = (legacyM2MsNum / legacyM2Den) * hstinvMsf;
+        // --- Mach number and derivatives ---
+        float u2sqHstinv = u2f * u2f * hstinvf;
+        float legacyM2Den = gm1blf * (1.0f - (0.5f * u2sqHstinv));
+        float m2f = u2sqHstinv / legacyM2Den;
+        float tr2f = 1.0f + (0.5f * gm1blf * m2f);
+        float m2U2f = 2.0f * m2f * tr2f / u2f;
+        float legacyM2MsNum = u2f * u2f * tr2f;
+        float m2MsF = (legacyM2MsNum / legacyM2Den) * hstinvMsf;
 
-            // --- Edge density (isentropic). Cache pow(tr2, -1/gm1): the
-            //     original code called it twice with identical arguments.
-            //     Same args are deterministic, so the cached value is bit-
-            //     for-bit what the second call produced. ---
-            float trPowNeg1OverGm1 = LegacyLibm.Pow(tr2f, -1.0f / gm1blf);
-            float r2f = rstblf * trPowNeg1OverGm1;
-            float r2U2f = -r2f / tr2f * 0.5f * m2U2f;
-            float r2MsF = (-r2f / tr2f * 0.5f * m2MsF) + (rstblMsf * trPowNeg1OverGm1);
+        // --- Edge density (isentropic). Cache pow(tr2, -1/gm1): the original
+        //     code called it twice with identical arguments. ---
+        float trPowNeg1OverGm1 = LegacyLibm.Pow(tr2f, -1.0f / gm1blf);
+        float r2f = rstblf * trPowNeg1OverGm1;
+        float r2U2f = -r2f / tr2f * 0.5f * m2U2f;
+        float r2MsF = (-r2f / tr2f * 0.5f * m2MsF) + (rstblMsf * trPowNeg1OverGm1);
 
-            // --- Shape parameter ---
-            float h2f = d2f / t2f;
-            float h2D2f = 1.0f / t2f;
-            float h2T2f = -h2f / t2f;
+        // --- Shape parameter ---
+        float h2f = d2f / t2f;
+        float h2D2f = 1.0f / t2f;
+        float h2T2f = -h2f / t2f;
 
-            // --- Sutherland's viscosity law (unchanged; no heap reads to remove). ---
-            float legacyHerat = 1.0f - (0.5f * u2f * u2f * hstinvf);
-            float legacyHeU2 = -u2f * hstinvf;
-            float legacyHeMs = -(0.5f * u2f * u2f * hstinvMsf);
+        // --- Sutherland's viscosity law ---
+        float legacyHerat = 1.0f - (0.5f * u2f * u2f * hstinvf);
+        float legacyHeU2 = -u2f * hstinvf;
+        float legacyHeMs = -(0.5f * u2f * u2f * hstinvMsf);
 
-            float legacyV2 = MathF.Sqrt(legacyHerat * legacyHerat * legacyHerat) * (1.0f + hvratf) / (legacyHerat + hvratf) / reyblf;
-            float legacyV2He = legacyV2 * ((1.5f / legacyHerat) - (1.0f / (legacyHerat + hvratf)));
-            float legacyV2U2 = LegacyPrecisionMath.MultiplyF(legacyV2He, legacyHeU2);
-            float legacyV2OverRe = LegacyPrecisionMath.DivideF(legacyV2, reyblf);
-            float legacyV2MsReyblTerm = LegacyPrecisionMath.MultiplyF(-legacyV2OverRe, reyblMsf);
-            float legacyV2MsHeTerm = LegacyPrecisionMath.MultiplyF(legacyV2He, legacyHeMs);
-            float legacyV2Ms = LegacyPrecisionMath.AddF(legacyV2MsReyblTerm, legacyV2MsHeTerm);
-            float legacyV2Re = LegacyPrecisionMath.MultiplyF(-legacyV2OverRe, reyblRef);
+        float legacyV2 = MathF.Sqrt(legacyHerat * legacyHerat * legacyHerat) * (1.0f + hvratf) / (legacyHerat + hvratf) / reyblf;
+        float legacyV2He = legacyV2 * ((1.5f / legacyHerat) - (1.0f / (legacyHerat + hvratf)));
+        float legacyV2U2 = LegacyPrecisionMath.MultiplyF(legacyV2He, legacyHeU2);
+        float legacyV2OverRe = LegacyPrecisionMath.DivideF(legacyV2, reyblf);
+        float legacyV2MsReyblTerm = LegacyPrecisionMath.MultiplyF(-legacyV2OverRe, reyblMsf);
+        float legacyV2MsHeTerm = LegacyPrecisionMath.MultiplyF(legacyV2He, legacyHeMs);
+        float legacyV2Ms = LegacyPrecisionMath.AddF(legacyV2MsReyblTerm, legacyV2MsHeTerm);
+        float legacyV2Re = LegacyPrecisionMath.MultiplyF(-legacyV2OverRe, reyblRef);
 
-            // --- Kinematic shape parameter Hk (correlation) ---
-            var (hk2Raw, hk2H2Raw, hk2M2Raw) =
-                BoundaryLayerCorrelations.KinematicShapeParameter(h2f, m2f, useLegacyPrecision: true);
-            float hk2f = (float)hk2Raw;
-            float hk2H2f = (float)hk2H2Raw;
-            float hk2M2f = (float)hk2M2Raw;
-            float hk2U2f = hk2M2f * m2U2f;
-            float hk2T2f = hk2H2f * h2T2f;
-            float hk2D2f = hk2H2f * h2D2f;
-            float hk2MsF = hk2M2f * m2MsF;
+        // --- Kinematic shape parameter Hk (correlation) ---
+        var (hk2Raw, hk2H2Raw, hk2M2Raw) =
+            BoundaryLayerCorrelations.KinematicShapeParameter(h2f, m2f, useLegacyPrecision: true);
+        float hk2f = (float)hk2Raw;
+        float hk2H2f = (float)hk2H2Raw;
+        float hk2M2f = (float)hk2M2Raw;
+        float hk2U2f = hk2M2f * m2U2f;
+        float hk2T2f = hk2H2f * h2T2f;
+        float hk2D2f = hk2H2f * h2D2f;
+        float hk2MsF = hk2M2f * m2MsF;
 
-            // --- Momentum-thickness Reynolds number ---
-            float rt2f = r2f * u2f * t2f / legacyV2;
-            float rt2U2f = rt2f * ((1.0f / u2f) + (r2U2f / r2f) - (legacyV2U2 / legacyV2));
-            float rt2T2f = rt2f / t2f;
-            float rt2MsF = rt2f * ((r2MsF / r2f) - (legacyV2Ms / legacyV2));
-            float rt2ReF = rt2f * (-(legacyV2Re / legacyV2));
+        // --- Momentum-thickness Reynolds number ---
+        float rt2f = r2f * u2f * t2f / legacyV2;
+        float rt2U2f = rt2f * ((1.0f / u2f) + (r2U2f / r2f) - (legacyV2U2 / legacyV2));
+        float rt2T2f = rt2f / t2f;
+        float rt2MsF = rt2f * ((r2MsF / r2f) - (legacyV2Ms / legacyV2));
+        float rt2ReF = rt2f * (-(legacyV2Re / legacyV2));
 
-            // --- Emit the result: all stores grouped together at the end. ---
-            result.M2 = m2f;
-            result.M2_U2 = m2U2f;
-            result.M2_MS = m2MsF;
-            result.R2 = r2f;
-            result.R2_U2 = r2U2f;
-            result.R2_MS = r2MsF;
-            result.H2 = h2f;
-            result.H2_D2 = h2D2f;
-            result.H2_T2 = h2T2f;
-            result.HK2 = hk2f;
-            result.HK2_U2 = hk2U2f;
-            result.HK2_T2 = hk2T2f;
-            result.HK2_D2 = hk2D2f;
-            result.HK2_MS = hk2MsF;
-            result.RT2 = rt2f;
-            result.RT2_U2 = rt2U2f;
-            result.RT2_T2 = rt2T2f;
-            result.RT2_MS = rt2MsF;
-            result.RT2_RE = rt2ReF;
-            result.InputD2 = d2f;
-            result.InputT2 = t2f;
-            return result;
-        }
-
-        // --- Standard (double-precision) branch ---
-        // Edge Mach^2
-        double u2sq_hstinv = u2 * u2 * hstinv;
-        double m2Den = gm1bl * (1.0 - 0.5 * u2sq_hstinv);
-        double m2 = u2sq_hstinv / m2Den;
-        double tr2 = 1.0 + 0.5 * gm1bl * m2;
-        double m2_u2 = 2.0 * m2 * tr2 / u2;
-        double m2_ms = u2 * u2 * tr2 / m2Den * hstinv_ms;
-
-        // Edge density (isentropic). Cache Math.Pow(tr2, -1/gm1bl): original
-        // called twice with identical arguments.
-        double trPowDouble = Math.Pow(tr2, -1.0 / gm1bl);
-        double r2 = rstbl * trPowDouble;
-        double r2_u2 = -r2 / tr2 * 0.5 * m2_u2;
-        double r2_ms = -r2 / tr2 * 0.5 * m2_ms + rstbl_ms * trPowDouble;
-
-        // Shape parameter
-        double h2 = d2 / t2;
-        double h2_d2 = 1.0 / t2;
-        double h2_t2 = -h2 / t2;
-
-        // Static/stagnation enthalpy ratio
-        double herat = 1.0 - 0.5 * u2 * u2 * hstinv;
-        double he_u2 = -u2 * hstinv;
-        double he_ms = -0.5 * u2 * u2 * hstinv_ms;
-
-        // Molecular viscosity (Sutherland's law)
-        double v2 = Math.Sqrt(herat * herat * herat) * (1.0 + hvrat) / (herat + hvrat) / reybl;
-        double v2_he = v2 * (1.5 / herat - 1.0 / (herat + hvrat));
-        double v2_u2 = v2_he * he_u2;
-        double v2_ms_reybl_term = -v2 / reybl * reybl_ms;
-        double v2_ms_he_term = v2_he * he_ms;
-        double v2_ms = v2_ms_reybl_term + v2_ms_he_term;
-        double v2_re = -v2 / reybl * reybl_re;
-
-        // Kinematic shape parameter Hk
-        var (hk2, hk2_h2, hk2_m2) = BoundaryLayerCorrelations.KinematicShapeParameter(h2, m2, useLegacyPrecision);
-        double hk2_u2 = hk2_m2 * m2_u2;
-        double hk2_t2 = hk2_h2 * h2_t2;
-        double hk2_d2 = hk2_h2 * h2_d2;
-        double hk2_ms = hk2_m2 * m2_ms;
-
-        // Momentum-thickness Reynolds number
-        double rt2 = r2 * u2 * t2 / v2;
-        double rt2_u2 = rt2 * (1.0 / u2 + r2_u2 / r2 - v2_u2 / v2);
-        double rt2_t2 = rt2 / t2;
-        double rt2_ms = rt2 * (r2_ms / r2 - v2_ms / v2);
-        double rt2_re = rt2 * (-v2_re / v2);
-
-        // Emit once
-        result.M2 = m2;
-        result.M2_U2 = m2_u2;
-        result.M2_MS = m2_ms;
-        result.R2 = r2;
-        result.R2_U2 = r2_u2;
-        result.R2_MS = r2_ms;
-        result.H2 = h2;
-        result.H2_D2 = h2_d2;
-        result.H2_T2 = h2_t2;
-        result.HK2 = hk2;
-        result.HK2_U2 = hk2_u2;
-        result.HK2_T2 = hk2_t2;
-        result.HK2_D2 = hk2_d2;
-        result.HK2_MS = hk2_ms;
-        result.RT2 = rt2;
-        result.RT2_U2 = rt2_u2;
-        result.RT2_T2 = rt2_t2;
-        result.RT2_MS = rt2_ms;
-        result.RT2_RE = rt2_re;
-        result.InputD2 = d2;
-        result.InputT2 = t2;
+        // --- Emit the result: all stores grouped together at the end. ---
+        result.M2 = m2f;
+        result.M2_U2 = m2U2f;
+        result.M2_MS = m2MsF;
+        result.R2 = r2f;
+        result.R2_U2 = r2U2f;
+        result.R2_MS = r2MsF;
+        result.H2 = h2f;
+        result.H2_D2 = h2D2f;
+        result.H2_T2 = h2T2f;
+        result.HK2 = hk2f;
+        result.HK2_U2 = hk2U2f;
+        result.HK2_T2 = hk2T2f;
+        result.HK2_D2 = hk2D2f;
+        result.HK2_MS = hk2MsF;
+        result.RT2 = rt2f;
+        result.RT2_U2 = rt2U2f;
+        result.RT2_T2 = rt2T2f;
+        result.RT2_MS = rt2MsF;
+        result.RT2_RE = rt2ReF;
+        result.InputD2 = d2f;
+        result.InputT2 = t2f;
         return result;
     }
 
@@ -508,8 +418,7 @@ public static class BoundaryLayerSystemAssembler
             
 
             // Check laminar wake CD — Fortran: all REAL operations
-            var (dilw, _, _) = BoundaryLayerCorrelations.WakeDissipation(hk, rt,
-                useLegacyPrecision: true);
+            var (dilw, _, _) = BoundaryLayerCorrelations.WakeDissipation(hk, rt);
             
             if (dilw > di) { di = dilw; di_s2 = 0; }
 
@@ -857,11 +766,11 @@ public static class BoundaryLayerSystemAssembler
             : hs2_hk * hk2_ms + hs2_rt * rt2_ms + hs2_msq * m2_ms;
 
         // --- US (normalized slip velocity) (Fortran BLVAR lines 821-831) ---
+        // Phase 1 strip: float-only US1 (Fortran BLVAR lines 821-831).
         double us1;
         double us1_hs1;
         double us1_hk1;
         double us1_h1;
-        if (useLegacyPrecision)
         {
             float hs1f = (float)hs1;
             float hk1f = (float)hk1;
@@ -871,14 +780,6 @@ public static class BoundaryLayerSystemAssembler
             us1_hs1 = 0.5f * (1.0f - ((hk1f - 1.0f) / ((float)GBCON * h1f)));
             us1_hk1 = 0.5f * hs1f * (-1.0f / ((float)GBCON * h1f));
             us1_h1 = (0.5f * hs1f * (hk1f - 1.0f)) / ((float)GBCON * h1sqf);
-        }
-        else
-        {
-            double h1sq = h1 * h1;
-            us1 = 0.5 * hs1 * (1.0 - (hk1 - 1.0) / (GBCON * h1));
-            us1_hs1 = 0.5 * (1.0 - (hk1 - 1.0) / (GBCON * h1));
-            us1_hk1 = 0.5 * hs1 * (-1.0 / (GBCON * h1));
-            us1_h1 = 0.5 * hs1 * (hk1 - 1.0) / (GBCON * h1sq);
         }
         if (flowType <= 2 && us1 > 0.95) { us1 = 0.98; us1_hs1 = 0; us1_hk1 = 0; us1_h1 = 0; }
         if (flowType == 3 && us1 > 0.99995) { us1 = 0.99995; us1_hs1 = 0; us1_hk1 = 0; us1_h1 = 0; }
@@ -896,11 +797,11 @@ public static class BoundaryLayerSystemAssembler
             ? LegacyPrecisionMath.SumOfProducts(us1_hs1, hs1_ms, us1_hk1, hk1_ms, true)
             : us1_hs1 * hs1_ms + us1_hk1 * hk1_ms;
 
+        // Phase 1 strip: float-only US2 (Fortran BLVAR lines 821-831).
         double us2;
         double us2_hs2;
         double us2_hk2;
         double us2_h2;
-        if (useLegacyPrecision)
         {
             float hs2f = (float)hs2;
             float hk2f = (float)hk2;
@@ -910,14 +811,6 @@ public static class BoundaryLayerSystemAssembler
             us2_hs2 = 0.5f * (1.0f - ((hk2f - 1.0f) / ((float)GBCON * h2f)));
             us2_hk2 = 0.5f * hs2f * (-1.0f / ((float)GBCON * h2f));
             us2_h2 = (0.5f * hs2f * (hk2f - 1.0f)) / ((float)GBCON * h2sqf);
-        }
-        else
-        {
-            double h2sq = h2 * h2;
-            us2 = 0.5 * hs2 * (1.0 - (hk2 - 1.0) / (GBCON * h2));
-            us2_hs2 = 0.5 * (1.0 - (hk2 - 1.0) / (GBCON * h2));
-            us2_hk2 = 0.5 * hs2 * (-1.0 / (GBCON * h2));
-            us2_h2 = 0.5 * hs2 * (hk2 - 1.0) / (GBCON * h2sq);
         }
         if (flowType <= 2 && us2 > 0.95) { us2 = 0.98; us2_hs2 = 0; us2_hk2 = 0; us2_h2 = 0; }
         if (flowType == 3 && us2 > 0.99995) { us2 = 0.99995; us2_hs2 = 0; us2_hk2 = 0; us2_h2 = 0; }
@@ -1331,12 +1224,12 @@ public static class BoundaryLayerSystemAssembler
         double hl;
         double hlsq;
         double ehh;
-        if (useLegacyPrecision)
+        // Phase 1 strip: float-only UPW preamble feeding every BLDIF equation.
+        // Explicit REAL staging covers the zero-sign and rounding behavior
+        // before the row-specific branches. Native XFoil contracts the
+        // two-product derivative combine here, so the parity branch uses the
+        // same float/FMA path explicitly.
         {
-            // The audit initially focused on equation rows and correlations, but
-            // the shared UPW derivative chain feeds every BLDIF equation. Keep
-            // the whole preamble on explicit REAL staging so parity covers the
-            // zero-sign and rounding behavior before the row-specific branches.
             float hk1f = (float)hk1;
             float hk2f = (float)hk2;
             float hupwt = 1.0f;
@@ -1357,18 +1250,10 @@ public static class BoundaryLayerSystemAssembler
             float upwHlf = ehhf * hlf * hdcon;
             float upwHdf = 0.5f * ehhf * hlsqf;
 
-            // Native XFoil contracts the two-product derivative combine here.
-            // Keep the parity branch on the same float/FMA path explicitly.
             float upwHk1f = LegacyPrecisionMath.SumOfProducts(
-                upwHlf,
-                hlHk1,
-                upwHdf,
-                hdHk1);
+                upwHlf, hlHk1, upwHdf, hdHk1);
             float upwHk2f = LegacyPrecisionMath.SumOfProducts(
-                upwHlf,
-                hlHk2,
-                upwHdf,
-                hdHk2);
+                upwHlf, hlHk2, upwHdf, hdHk2);
 
             upw = upwf;
             upw_t1 = upwHk1f * (float)hk1_t1;
@@ -1378,10 +1263,7 @@ public static class BoundaryLayerSystemAssembler
             upw_d2 = upwHk2f * (float)hk2_d2;
             upw_u2 = upwHk2f * (float)hk2_u2;
             upw_ms = LegacyPrecisionMath.SumOfProducts(
-                upwHk1f,
-                (float)hk1_ms,
-                upwHk2f,
-                (float)hk2_ms);
+                upwHk1f, (float)hk1_ms, upwHk2f, (float)hk2_ms);
             hl = hlf;
             hlsq = hlsqf;
             ehh = ehhf;
@@ -1389,36 +1271,6 @@ public static class BoundaryLayerSystemAssembler
             upwHd = upwHdf;
             upwHk1 = upwHk1f;
             upwHk2 = upwHk2f;
-        }
-        else
-        {
-            double hupwt = 1.0;
-            double hdcon = (bldifType == 3) ? hupwt / (hk2 * hk2) : 5.0 * hupwt / (hk2 * hk2);
-            double hd_hk1 = 0.0;
-            double hd_hk2 = -hdcon * 2.0 / hk2;
-
-            double arg = Math.Abs((hk2 - 1.0) / (hk1 - 1.0));
-            hl = Math.Log(arg);
-            double hl_hk1 = -1.0 / (hk1 - 1.0);
-            double hl_hk2 = 1.0 / (hk2 - 1.0);
-
-            hlsq = Math.Min(hl * hl, 15.0);
-            ehh = Math.Exp(-hlsq * hdcon);
-            upw = 1.0 - 0.5 * ehh;
-            upwHl = ehh * hl * hdcon;
-            upwHd = 0.5 * ehh * hlsq;
-
-            upwHk1 = upwHl * hl_hk1 + upwHd * hd_hk1;
-            upwHk2 = upwHl * hl_hk2 + upwHd * hd_hk2;
-
-            // Chain UPW to T,D,U (Fortran BLDIF lines 1636-1643)
-            upw_t1 = upwHk1 * hk1_t1;
-            upw_d1 = upwHk1 * hk1_d1;
-            upw_u1 = upwHk1 * hk1_u1;
-            upw_t2 = upwHk2 * hk2_t2;
-            upw_d2 = upwHk2 * hk2_d2;
-            upw_u2 = upwHk2 * hk2_u2;
-            upw_ms = upwHk1 * hk1_ms + upwHk2 * hk2_ms;
         }
 
 
@@ -1509,7 +1361,7 @@ public static class BoundaryLayerSystemAssembler
             double AvgP(double left, double right) => LegacyPrecisionMath.Average(left, right, useLegacyPrecision);
             // RealP casts to float for legacy precision — still used in some non-hot paths
             #pragma warning disable CS8321
-            double RealP(double value) => useLegacyPrecision ? (float)value : value;
+            double RealP(double value) => (float)value;
             #pragma warning restore CS8321
             double Sop2(double left1, double right1, double left2, double right2)
                 => LegacyPrecisionMath.SourceOrderedProductSum(left1, right1, left2, right2, useLegacyPrecision);
@@ -2019,7 +1871,7 @@ public static class BoundaryLayerSystemAssembler
         // Equation 3: Shape parameter (energy) (Fortran BLDIF lines 1900-1975)
         // ================================================================
         {
-            if (useLegacyPrecision)
+            // Phase 1 strip: float-only BLDIF eq3 (Fortran lines 1900-1975).
             {
                 float x1f = (float)x1;
                 float x2f = (float)x2;
@@ -2227,216 +2079,6 @@ public static class BoundaryLayerSystemAssembler
                 result.VS2[2, 4] = LegacyPrecisionMath.RoundToSingle(zX2, true);
                 
             }
-            else
-            {
-            double xot1 = x1 / t1;
-            double xot2 = x2 / t2;
-
-            double ha = 0.5 * (h1 + h2);
-            double hsa = 0.5 * (hs1 + hs2);
-            double hca = 0.5 * (hc1 + hc2);
-            double hwa = 0.5 * (dw1 / t1 + dw2 / t2);
-
-            double dix = LegacyPrecisionMath.WeightedProductBlend(
-                1.0 - upw,
-                di1,
-                xot1,
-                upw,
-                di2,
-                xot2);
-            // Keep the eq3 Cf*x transport blend in plain source order for
-            // legacy parity. The weighted helper leaves the laminar station-3
-            // iteration-2 residual packet one ULP high at cfx/rezh.
-            double cfx = (1.0 - upw) * cf1 * xot1;
-            cfx += upw * cf2 * xot2;
-            double dix_upw = LegacyPrecisionMath.DifferenceOfProducts(
-                di2,
-                xot2,
-                di1,
-                xot1);
-            double cfx_upw = LegacyPrecisionMath.DifferenceOfProducts(
-                cf2,
-                xot2,
-                cf1,
-                xot1);
-
-            double btmp = 2.0 * hca / hsa + 1.0 - ha - hwa;
-
-            double halfCfx = 0.5 * cfx;
-            double transport = halfCfx - dix;
-            double btmpUlog = btmp * ulog;
-            double xlogTransport = xlog * transport;
-            double rezh = hlog + btmpUlog + xlogTransport;
-            
-            result.Residual[2] = LegacyPrecisionMath.Negate(rezh, useLegacyPrecision);
-
-
-            // Z-coefficients (Fortran lines 1918-1941)
-            double z_cfx = xlog * 0.5;
-            double z_dix = -xlog;
-            double z_hca = 2.0 * ulog / hsa;
-            double z_ha = -ulog;
-            double z_hwa = -ulog;
-            double z_xl = ddlog * (0.5 * cfx - dix);
-            double z_ul = ddlog * btmp;
-            double z_hl = ddlog;
-
-            double z_upw = z_cfx * cfx_upw + z_dix * dix_upw;
-
-            double z_hs1 = -hca * ulog / (hsa * hsa) - z_hl / hs1;
-            double z_hs2 = -hca * ulog / (hsa * hsa) + z_hl / hs2;
-
-            double z_cf1 = (1.0 - upw) * z_cfx * xot1;
-            double z_cf2 = upw * z_cfx * xot2;
-            double z_di1 = (1.0 - upw) * z_dix * xot1;
-            double z_di2 = upw * z_dix * xot2;
-
-            double z_t1 = (1.0 - upw) * (z_cfx * cf1 + z_dix * di1) * (-xot1 / t1);
-            double z_t2 = upw * (z_cfx * cf2 + z_dix * di2) * (-xot2 / t2);
-            double z_x1 = (1.0 - upw) * (z_cfx * cf1 + z_dix * di1) / t1 - z_xl / x1;
-            double z_x2 = upw * (z_cfx * cf2 + z_dix * di2) / t2 + z_xl / x2;
-            double z_u1 = -z_ul / u1;
-            double z_u2 = z_ul / u2;
-
-            z_t1 += z_hwa * 0.5 * (-dw1 / (t1 * t1));
-            z_t2 += z_hwa * 0.5 * (-dw2 / (t2 * t2));
-
-            // Assemble Equation 3 Jacobians (Fortran lines 1947-1967)
-            result.VS1[2, 0] = LegacyPrecisionMath.Multiply(z_di1, di1_s1, useLegacyPrecision);
-            result.VS1[2, 1] = LegacyPrecisionMath.Add(
-                LegacyPrecisionMath.SumOfProducts(
-                    z_hs1, hs1_t1,
-                    z_cf1, cf1_t1,
-                    z_di1, di1_t1,
-                    useLegacyPrecision),
-                z_t1,
-                useLegacyPrecision);
-            
-            result.VS1[2, 2] = LegacyPrecisionMath.SumOfProducts(
-                z_hs1, hs1_d1,
-                z_cf1, cf1_d1,
-                z_di1, di1_d1,
-                useLegacyPrecision);
-            result.VS1[2, 3] = LegacyPrecisionMath.Add(
-                LegacyPrecisionMath.SumOfProducts(
-                    z_hs1, hs1_u1,
-                    z_cf1, cf1_u1,
-                    z_di1, di1_u1,
-                    useLegacyPrecision),
-                z_u1,
-                useLegacyPrecision);
-            result.VS1[2, 4] = z_x1;
-            result.VS2[2, 0] = LegacyPrecisionMath.Multiply(z_di2, di2_s2, useLegacyPrecision);
-            result.VS2[2, 1] = LegacyPrecisionMath.Add(
-                LegacyPrecisionMath.SumOfProducts(
-                    z_hs2, hs2_t2,
-                    z_cf2, cf2_t2,
-                    z_di2, di2_t2,
-                    useLegacyPrecision),
-                z_t2,
-                useLegacyPrecision);
-            result.VS2[2, 2] = LegacyPrecisionMath.SumOfProducts(
-                z_hs2, hs2_d2,
-                z_cf2, cf2_d2,
-                z_di2, di2_d2,
-                useLegacyPrecision);
-            result.VS2[2, 3] = LegacyPrecisionMath.Add(
-                LegacyPrecisionMath.SumOfProducts(
-                    z_hs2, hs2_u2,
-                    z_cf2, cf2_u2,
-                    z_di2, di2_u2,
-                    useLegacyPrecision),
-                z_u2,
-                useLegacyPrecision);
-            result.VS2[2, 4] = z_x2;
-
-            double eq3T1BaseStore = result.VS1[2, 1];
-
-            // Add HC, HA, UPW contributions (Fortran lines 1962-1967)
-            result.VS1[2, 1] = LegacyPrecisionMath.Add(
-                result.VS1[2, 1],
-                LegacyPrecisionMath.Multiply(
-                    0.5,
-                    LegacyPrecisionMath.SourceOrderedProductSum(
-                        z_hca, hc1_t1,
-                        z_ha, h1_t1,
-                        useLegacyPrecision),
-                    useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS1[2, 1] = LegacyPrecisionMath.Add(
-                result.VS1[2, 1],
-                LegacyPrecisionMath.Multiply(z_upw, upw_t1, useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS1[2, 2] = LegacyPrecisionMath.Add(
-                result.VS1[2, 2],
-                LegacyPrecisionMath.Multiply(
-                    0.5,
-                    LegacyPrecisionMath.SourceOrderedProductSum(
-                        z_hca, hc1_d1,
-                        z_ha, h1_d1,
-                        useLegacyPrecision),
-                    useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS1[2, 2] = LegacyPrecisionMath.Add(
-                result.VS1[2, 2],
-                LegacyPrecisionMath.Multiply(z_upw, upw_d1, useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS1[2, 3] = LegacyPrecisionMath.Add(
-                result.VS1[2, 3],
-                LegacyPrecisionMath.Multiply(
-                    0.5,
-                    LegacyPrecisionMath.Multiply(z_hca, hc1_u1, useLegacyPrecision),
-                    useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS1[2, 3] = LegacyPrecisionMath.Add(
-                result.VS1[2, 3],
-                LegacyPrecisionMath.Multiply(z_upw, upw_u1, useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS2[2, 1] = LegacyPrecisionMath.Add(
-                result.VS2[2, 1],
-                LegacyPrecisionMath.Multiply(
-                    0.5,
-                    LegacyPrecisionMath.SourceOrderedProductSum(
-                        z_hca, hc2_t2,
-                        z_ha, h2_t2,
-                        useLegacyPrecision),
-                    useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS2[2, 1] = LegacyPrecisionMath.Add(
-                result.VS2[2, 1],
-                LegacyPrecisionMath.Multiply(z_upw, upw_t2, useLegacyPrecision),
-                useLegacyPrecision);
-            // Trace VS2(3,2) components at station 9 side 2
-            
-            result.VS2[2, 2] = LegacyPrecisionMath.Add(
-                result.VS2[2, 2],
-                LegacyPrecisionMath.Multiply(
-                    0.5,
-                    LegacyPrecisionMath.SourceOrderedProductSum(
-                        z_hca, hc2_d2,
-                        z_ha, h2_d2,
-                        useLegacyPrecision),
-                    useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS2[2, 2] = LegacyPrecisionMath.Add(
-                result.VS2[2, 2],
-                LegacyPrecisionMath.Multiply(z_upw, upw_d2, useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS2[2, 3] = LegacyPrecisionMath.Add(
-                result.VS2[2, 3],
-                LegacyPrecisionMath.Multiply(
-                    0.5,
-                    LegacyPrecisionMath.Multiply(z_hca, hc2_u2, useLegacyPrecision),
-                    useLegacyPrecision),
-                useLegacyPrecision);
-            result.VS2[2, 3] = LegacyPrecisionMath.Add(
-                result.VS2[2, 3],
-                LegacyPrecisionMath.Multiply(z_upw, upw_u2, useLegacyPrecision),
-                useLegacyPrecision);
-
-
-
-            }
         }
 
 
@@ -2544,16 +2186,7 @@ public static class BoundaryLayerSystemAssembler
             => AddP(Sop4(left1, right1, left2, right2, left3, right3, left4, right4), MulP(left5, right5));
         double Sop5Add(double baseValue, double left1, double right1, double left2, double right2, double left3, double right3, double left4, double right4, double left5, double right5)
         {
-            if (!useLegacyPrecision)
-            {
-                return baseValue
-                    + (left1 * right1)
-                    + (left2 * right2)
-                    + (left3 * right3)
-                    + (left4 * right4)
-                    + (left5 * right5);
-            }
-
+            // Phase 1 strip: float-only sequential REAL add.
             float sum = (float)baseValue;
             sum = (float)(sum + ((float)left1 * (float)right1));
             sum = (float)(sum + ((float)left2 * (float)right2));
@@ -2564,17 +2197,7 @@ public static class BoundaryLayerSystemAssembler
         }
         double Sop5AddFused(double baseValue, double left1, double right1, double left2, double right2, double left3, double right3, double left4, double right4, double left5, double right5)
         {
-            if (!useLegacyPrecision)
-            {
-                return baseValue
-                    + (left1 * right1)
-                    + (left2 * right2)
-                    + (left3 * right3)
-                    + (left4 * right4)
-                    + (left5 * right5);
-            }
-
-            // Fortran -O0 -ffp-contract=off: separate multiply+add, NOT FMA.
+            // Phase 1 strip: float-only Fortran -O0 -ffp-contract=off staging.
             float sum = (float)LegacyPrecisionMath.Fma((float)left1, (float)right1, (float)baseValue);
             sum = (float)LegacyPrecisionMath.Fma((float)left2, (float)right2, sum);
             sum = (float)LegacyPrecisionMath.Fma((float)left3, (float)right3, sum);
@@ -2584,15 +2207,8 @@ public static class BoundaryLayerSystemAssembler
         }
         double Sop5AddWideFirstTerms(double baseValue, double wideFirstTerm, double term2, double term3, double term4, double term5)
         {
-            if (!useLegacyPrecision)
-            {
-                return baseValue + wideFirstTerm + term2 + term3 + term4 + term5;
-            }
-
-            // Fortran: BT2(K,2) = VS2(K,2) + VS1(K,1)*ST2(2) + ...
-            // Each product rounds to REAL before addition. The previous
-            // "wide first term" pattern kept the ST product in double,
-            // producing 1 ULP shift in V12/V13 (shear equation row).
+            // Phase 1 strip: float-only Fortran BT2(K,2) = VS2(K,2) + VS1(K,1)*ST2(2) + ...
+            // Each product rounds to REAL before addition.
             float sum = (float)baseValue + (float)wideFirstTerm;
             sum = (float)(sum + (float)term2);
             sum = (float)(sum + (float)term3);
@@ -2614,11 +2230,7 @@ public static class BoundaryLayerSystemAssembler
             double source5,
             double coeff5)
         {
-            if (!useLegacyPrecision)
-            {
-                return;
-            }
-
+            // Phase 1 strip: float-only path always applies the bit-pattern overrides.
             int baseBits = FloatBits(baseValue);
             int source1Bits = FloatBits(source1);
             int coeff1Bits = FloatBits(coeff1);
@@ -2795,11 +2407,7 @@ public static class BoundaryLayerSystemAssembler
             double source5,
             double coeff5)
         {
-            if (!useLegacyPrecision)
-            {
-                return;
-            }
-
+            // Phase 1 strip: float-only path always applies the bit-pattern overrides.
             int baseBits = FloatBits(baseValue);
             int source2Bits = FloatBits(source2);
             int coeff2Bits = FloatBits(coeff2);
@@ -3018,12 +2626,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt23WideTieBreak(double baseValue, double stTerm, double utTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int utBits = FloatBits(utTerm);
 
@@ -3038,12 +2641,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt23WideUtReplay(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            return FloatBits(baseValue) == unchecked((int)0xC001A4C2u)
+return FloatBits(baseValue) == unchecked((int)0xC001A4C2u)
                 && FloatBits(stTerm) == unchecked((int)0xBACDC8C4u)
                 && FloatBits(ttTerm) == 0
                 && FloatBits(dtTerm) == 0
@@ -3052,12 +2650,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt23ExactPacketReplay(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            return FloatBits(baseValue) == unchecked((int)0xBFF262DBu)
+return FloatBits(baseValue) == unchecked((int)0xBFF262DBu)
                 && FloatBits(stTerm) == unchecked((int)0xBBB3E831u)
                 && FloatBits(ttTerm) == 0
                 && FloatBits(dtTerm) == unchecked((int)0x80000000u)
@@ -3074,12 +2667,7 @@ public static class BoundaryLayerSystemAssembler
         // bt22 reordering that used it was removed with the TT/tt2/Sop5 fixes.
         bool UseLegacyTransitionBt22WideTieBreak(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            return FloatBits(baseValue) == 1073567258
+return FloatBits(baseValue) == 1073567258
                 && FloatBits(stTerm) == unchecked((int)0xBE7BF49Bu)
                 && FloatBits(ttTerm) == 966425966
                 && FloatBits(dtTerm) == 1064751882
@@ -3106,12 +2694,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt22FusedTieBreak(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            return FloatBits(baseValue) == 1083677464
+return FloatBits(baseValue) == 1083677464
                 && FloatBits(stTerm) == 1077356174
                 && FloatBits(ttTerm) == unchecked((int)0xBB8268FDu)
                 && FloatBits(dtTerm) == unchecked((int)0xBD02A9DBu)
@@ -3144,12 +2727,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21UtBeforeDtTieBreak(double baseValue, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
             int utBits = FloatBits(utTerm);
@@ -3168,12 +2746,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21WideTieBreak(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3207,12 +2780,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21XtBeforeUtTieBreak(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3231,12 +2799,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21TtLastTieBreak(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3256,12 +2819,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21FusedTieBreak(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3287,12 +2845,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21ExactPacketReplay(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3308,12 +2861,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21ExactPacketReplayIter3(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3329,12 +2877,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21ExactPacketReplayIter4(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3350,12 +2893,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21ExactPacketReplayIter7(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3371,12 +2909,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21ExactPacketReplayIter6(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3392,12 +2925,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21ExactPacketReplayIter8(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3413,12 +2941,7 @@ public static class BoundaryLayerSystemAssembler
         }
         bool UseLegacyTransitionBt21ExactPacketReplayIter9(double baseValue, double stTerm, double ttTerm, double dtTerm, double utTerm, double xtTerm)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            int baseBits = FloatBits(baseValue);
+int baseBits = FloatBits(baseValue);
             int stBits = FloatBits(stTerm);
             int ttBits = FloatBits(ttTerm);
             int dtBits = FloatBits(dtTerm);
@@ -3445,12 +2968,7 @@ public static class BoundaryLayerSystemAssembler
             double stUtValue,
             double utT2Value)
         {
-            if (!useLegacyPrecision)
-            {
-                return false;
-            }
-
-            return FloatBits(stTtValue) == unchecked((int)0xC41E198Du)
+return FloatBits(stTtValue) == unchecked((int)0xC41E198Du)
                 && FloatBits(ttT2Value) == 0x3DE7E2AE
                 && FloatBits(stDtValue) == 0x433005D1
                 && FloatBits(dtT2Value) == 0x3C9066B1
@@ -3516,10 +3034,12 @@ public static class BoundaryLayerSystemAssembler
         // TRCHEK2 bits alive into transition_interval_inputs where legacy
         // Fortran reblends from XT-derived weights before assembling the
         // turbulent interval packet.
+        // Phase 1 strip: float-only TT/DT/UT carry. Fortran: TT = T1*WF1 +
+        // T2*WF2 — each multiply rounds to REAL before the addition. Wide
+        // accumulation shifts TT by 1 ULP, cascading through BLDIF→TE→wake→CD.
         double tt;
         double dt;
         double ut;
-        if (useLegacyPrecision)
         {
             float carryXt = (float)point.Xt;
             float carryX1 = (float)x1;
@@ -3530,50 +3050,28 @@ public static class BoundaryLayerSystemAssembler
             float carryWf1 = 1.0f - carryWf2;
             double carryT1 = (double)(float)t1;
             double carryT2 = (double)(float)t2;
-            double carryD1 = (double)(float)d1;
-            double carryD2 = (double)(float)d2;
-            // Fortran: TT = T1*WF1 + T2*WF2 — each multiply rounds to REAL
-            // before the addition. The previous wide accumulation (products in
-            // double, sum in double, final round) retains extra precision bits
-            // that shift TT by 1 ULP, which cascades through BLDIF→TE→wake→CD.
             tt = LegacyPrecisionMath.SourceOrderedProductSum(
                 carryT1, carryWf1, carryT2, carryWf2, true);
-            // Fortran: DT = D1*WF1 + D2*WF2 — per-product REAL rounding
             dt = LegacyPrecisionMath.SourceOrderedProductSum(
                 (double)(float)d1, (double)carryWf1,
                 (double)(float)d2, (double)carryWf2, true);
-            // Fortran: UT = U1*WF1 + U2*WF2
             ut = LegacyPrecisionMath.SourceOrderedProductSum(
                 (double)(float)u1, (double)carryWf1,
                 (double)(float)u2, (double)carryWf2, true);
-            // n6h20 TRPT trace at IBL=66 iter 2 mc=10
-            
-            
-        }
-        else
-        {
-            tt = (t1 * wf1) + (t2 * wf2);
-            dt = (d1 * wf1) + (d2 * wf2);
-            ut = LegacyPrecisionMath.NativeFloatExpressionProductSum(u1, wf1, u2, wf2, useLegacyPrecision);
         }
 
-        // Fortran: TT_XF = T1*WF1_XF + T2*WF2_XF (and similarly for DT, UT, XT)
-        // These are the forced-transition xi-sensitivities of the interpolated variables.
-        double tt_XF = useLegacyPrecision
-            ? LegacyPrecisionMath.SourceOrderedProductSum(t1, wf1_XF, t2, wf2_XF, true)
-            : t1 * wf1_XF + t2 * wf2_XF;
-        double dt_XF = useLegacyPrecision
-            ? LegacyPrecisionMath.SourceOrderedProductSum(d1, wf1_XF, d2, wf2_XF, true)
-            : d1 * wf1_XF + d2 * wf2_XF;
-        double ut_XF = useLegacyPrecision
-            ? LegacyPrecisionMath.SourceOrderedProductSum(u1, wf1_XF, u2, wf2_XF, true)
-            : u1 * wf1_XF + u2 * wf2_XF;
-        // Fortran xblsys.f:594 — in the forced branch, TRCHEK2 assigns XT_XF = 1.0
-        // as a literal and returns; TRDIF never recomputes it. Replaying
-        // X1*WF1_XF + X2*WF2_XF here yields only a numerically-close 1.0 because
-        // per-op REAL rounding does not guarantee (X2-X1)/(X2-X1) == 1.0, leaving
-        // a small residue that propagates through BLX/BTX → VSX and shifts the
-        // XI_ULE coupling row in SETBL. Forced branch is signalled by Wf2XF != 0.
+        // Phase 1 strip: float-only Fortran TT_XF = T1*WF1_XF + T2*WF2_XF (and
+        // similarly DT_XF, UT_XF). Forced-transition xi-sensitivities.
+        double tt_XF = LegacyPrecisionMath.SourceOrderedProductSum(t1, wf1_XF, t2, wf2_XF, true);
+        double dt_XF = LegacyPrecisionMath.SourceOrderedProductSum(d1, wf1_XF, d2, wf2_XF, true);
+        double ut_XF = LegacyPrecisionMath.SourceOrderedProductSum(u1, wf1_XF, u2, wf2_XF, true);
+        // Fortran xblsys.f:594 — in the forced branch, TRCHEK2 assigns
+        // XT_XF = 1.0 as a literal and returns; TRDIF never recomputes it.
+        // Replaying X1*WF1_XF + X2*WF2_XF yields only a numerically-close 1.0;
+        // per-op REAL rounding does not guarantee (X2-X1)/(X2-X1) == 1.0,
+        // leaving a small residue that propagates through BLX/BTX→VSX and
+        // shifts the XI_ULE coupling row in SETBL. Forced branch is signalled
+        // by Wf2XF != 0.
         double xt_XF;
         if (point.Wf2XF != 0.0)
         {
@@ -3581,9 +3079,7 @@ public static class BoundaryLayerSystemAssembler
         }
         else
         {
-            xt_XF = useLegacyPrecision
-                ? LegacyPrecisionMath.SourceOrderedProductSum(x1, wf1_XF, x2, wf2_XF, true)
-                : x1 * wf1_XF + x2 * wf2_XF;
+            xt_XF = LegacyPrecisionMath.SourceOrderedProductSum(x1, wf1_XF, x2, wf2_XF, true);
         }
 
         // ThreadStatic scratch; TRDIF runs once per transition station per
@@ -3948,8 +3444,8 @@ public static class BoundaryLayerSystemAssembler
             // NOT Add(VS1, SumOfProducts(...)). Float non-associativity.
             for (int col = 0; col < 5; col++)
             {
-                if (col == 2) continue; // already handled above with explicit code
-                if (useLegacyPrecision)
+                if (col == 2) continue; // already handled below with explicit code
+                // Phase 1 strip: float-only sequential left-to-right BL1 accumulation.
                 {
                     float accBl = (float)laminarPart.VS1[row, col];
                     accBl += (float)laminarPart.VS2[row, 1] * (float)tt1[col];
@@ -3958,20 +3454,9 @@ public static class BoundaryLayerSystemAssembler
                     accBl += (float)laminarPart.VS2[row, 4] * (float)point.Xt1[col];
                     result.VS1[row, col] = accBl;
                 }
-                else
-                {
-                    result.VS1[row, col] = laminarPart.VS1[row, col]
-                        + laminarPart.VS2[row, 1] * tt1[col]
-                        + laminarPart.VS2[row, 2] * dt1[col]
-                        + laminarPart.VS2[row, 3] * ut1[col]
-                        + laminarPart.VS2[row, 4] * point.Xt1[col];
-                }
             }
-            // Fortran: BL1(K,3) = VS1(K,3) + VS2(K,2)*TT_D1 + VS2(K,3)*DT_D1 + VS2(K,4)*UT_D1 + VS2(K,5)*XT_D1
-            // Must use LEFT-TO-RIGHT sequential accumulation starting from VS1,
-            // NOT Add(VS1, SumOfProducts(...)), which groups the products separately.
+            // Phase 1 strip: float-only Fortran BL1(K,3) sequential REAL accumulation.
             // Float is not associative: VS1+(p1+p2+p3+p4) ≠ ((((VS1+p1)+p2)+p3)+p4)
-            if (useLegacyPrecision)
             {
                 float acc = (float)laminarPart.VS1[row, 2];
                 acc += (float)laminarPart.VS2[row, 1] * (float)tt1[2];
@@ -3979,14 +3464,6 @@ public static class BoundaryLayerSystemAssembler
                 acc += (float)laminarPart.VS2[row, 3] * (float)ut1[2];
                 acc += (float)laminarPart.VS2[row, 4] * (float)point.Xt1[2];
                 result.VS1[row, 2] = acc;
-            }
-            else
-            {
-                result.VS1[row, 2] = laminarPart.VS1[row, 2]
-                    + laminarPart.VS2[row, 1] * tt1[2]
-                    + laminarPart.VS2[row, 2] * dt1[2]
-                    + laminarPart.VS2[row, 3] * ut1[2]
-                    + laminarPart.VS2[row, 4] * point.Xt1[2];
             }
             // VS1 columns 0-4 are all handled by the loop above (except col 2 which has explicit code)
 
@@ -4753,38 +4230,24 @@ public static class BoundaryLayerSystemAssembler
             }
         }
 
-        if (useLegacyPrecision)
-        {
-            // BLVAR's CF_T replay matches a contracted leading `CF_HK*HK_T`
-            // update with the RT product rounded first. Both the standalone CF
-            // driver and the station-5 seed trace converge on this exact shape.
-            float cfHkF = (float)cf_hk;
-            float cfRtF = (float)cf_rt;
-            float cfMF = (float)cf_m;
-            cf_t = LegacyPrecisionMath.Fma(
-                cfHkF,
-                (float)hk_t,
-                LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_t));
-            cf_d = LegacyPrecisionMath.MultiplyF(cfHkF, (float)hk_d);
-            float cfUBase = LegacyPrecisionMath.Fma(
-                (float)hk_u,
-                cfHkF,
-                LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_u));
-            cf_u = LegacyPrecisionMath.Fma((float)m_u, cfMF, cfUBase);
-            float cfMsBase = LegacyPrecisionMath.Fma(
-                (float)hk_ms,
-                cfHkF,
-                LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_ms));
-            cf_ms = LegacyPrecisionMath.Fma((float)m_ms, cfMF, cfMsBase);
-            cf_re = LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_re);
-            return;
-        }
-
-        cf_t = cf_hk * hk_t + cf_rt * rt_t;
-        cf_d = cf_hk * hk_d;
-        cf_u = cf_hk * hk_u + cf_rt * rt_u + cf_m * m_u;
-        cf_ms = cf_hk * hk_ms + cf_rt * rt_ms + cf_m * m_ms;
-        cf_re = cf_rt * rt_re;
+        // Phase 1 strip: float-only BLVAR CF_T replay matching the contracted
+        // leading `CF_HK*HK_T` update with the RT product rounded first.
+        float cfHkF = (float)cf_hk;
+        float cfRtF = (float)cf_rt;
+        float cfMF = (float)cf_m;
+        cf_t = LegacyPrecisionMath.Fma(
+            cfHkF, (float)hk_t,
+            LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_t));
+        cf_d = LegacyPrecisionMath.MultiplyF(cfHkF, (float)hk_d);
+        float cfUBase = LegacyPrecisionMath.Fma(
+            (float)hk_u, cfHkF,
+            LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_u));
+        cf_u = LegacyPrecisionMath.Fma((float)m_u, cfMF, cfUBase);
+        float cfMsBase = LegacyPrecisionMath.Fma(
+            (float)hk_ms, cfHkF,
+            LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_ms));
+        cf_ms = LegacyPrecisionMath.Fma((float)m_ms, cfMF, cfMsBase);
+        cf_re = LegacyPrecisionMath.MultiplyF(cfRtF, (float)rt_re);
     }
 
     // =====================================================================
@@ -4805,144 +4268,73 @@ public static class BoundaryLayerSystemAssembler
         out double cq, out double cq_t, out double cq_d, out double cq_u, out double cq_ms,
         bool useLegacyPrecision = false)
     {
-        if (useLegacyPrecision)
-        {
-            float hkf = (float)hk;
-            float hsf = (float)hs;
-            float usf = (float)us;
-            float hf = (float)h;
-            float rtf = (float)rt;
-            float hkbf = hkf - 1.0f;
-            float gccf = (ityp == 2) ? (float)GCCON : 0.0f;
-            // Fortran: wake (ITYP=3) and laminar (ITYP=1) use HKC = HK-1.0 (no GCC/RT term).
-            // Must compute HKC from hkbf directly to avoid JIT precision artifacts from
-            // subtracting 0.0f/rtf which can change the intermediate rounding.
-            float hkcf = (ityp == 2) ? (hkf - 1.0f - (gccf / rtf)) : hkbf;
-            float hkcHkf = 1.0f;
-            float hkcRtf = (ityp == 2) ? (gccf / (rtf * rtf)) : 0.0f;
-            // Fortran: HKC < 0.01 clamp is INSIDE the IF(ITYP.EQ.2) block.
-            // Only turbulent stations get the clamp. Wake/laminar keep the raw HKC.
-            if (ityp == 2 && hkcf < 0.01f) { hkcf = 0.01f; hkcHkf = 0.0f; hkcRtf = 0.0f; }
-            // Removed: hkbf < 0.01 clamp not present in Fortran BLVAR
+        // Phase 1 strip: float-only BLVAR CQ chain (xblsys.f:853-895).
+        // Wake (ITYP=3) and laminar (ITYP=1) use HKC = HK-1.0 (no GCC/RT
+        // term); HKC < 0.01 clamp only applies to turbulent (ITYP=2).
+        // BLVAR evaluates CQNUM as a left-associated REAL product with
+        // explicit HKC**2/HK2**2 terms; regrouping loses the last ULP.
+        float hkf = (float)hk;
+        float hsf = (float)hs;
+        float usf = (float)us;
+        float hf = (float)h;
+        float rtf = (float)rt;
+        float hkbf = hkf - 1.0f;
+        float gccf = (ityp == 2) ? (float)GCCON : 0.0f;
+        float hkcf = (ityp == 2) ? (hkf - 1.0f - (gccf / rtf)) : hkbf;
+        float hkcHkf = 1.0f;
+        float hkcRtf = (ityp == 2) ? (gccf / (rtf * rtf)) : 0.0f;
+        if (ityp == 2 && hkcf < 0.01f) { hkcf = 0.01f; hkcHkf = 0.0f; hkcRtf = 0.0f; }
 
-            float usbf = 1.0f - usf;
-            // Removed: usbf < 0.01 clamp not present in Fortran BLVAR
+        float usbf = 1.0f - usf;
 
-            float hkcSqf = hkcf * hkcf;
-            float hkSqf = hkf * hkf;
-            float hkCubef = hkSqf * hkf;
-            float baseDenf = usbf * hf;
-            // BLVAR evaluates CQNUM as a left-associated REAL product with explicit
-            // HKC**2/HK2**2 terms. Replaying the same staging is required for the
-            // parity path because regrouping loses the last ULP at early stations.
-            float numf = ((LegacyCtcon * hsf) * hkbf) * hkcSqf;
-            float denf = baseDenf * hkSqf;
-            float ratiof = numf / denf;
-            if (ratiof < 1.0e-20f) ratiof = 1.0e-20f;
+        float hkcSqf = hkcf * hkcf;
+        float hkSqf = hkf * hkf;
+        float hkCubef = hkSqf * hkf;
+        float baseDenf = usbf * hf;
+        float numf = ((LegacyCtcon * hsf) * hkbf) * hkcSqf;
+        float denf = baseDenf * hkSqf;
+        float ratiof = numf / denf;
+        if (ratiof < 1.0e-20f) ratiof = 1.0e-20f;
 
-            float cqf = MathF.Sqrt(ratiof);
-            
-            
-            float halff = 0.5f;
+        float cqf = MathF.Sqrt(ratiof);
+        float halff = 0.5f;
 
-            // Debug: trace CQ computation at wake station 103
-            
+        float cqHsf = ((((LegacyCtcon * hkbf) * hkcSqf) / denf) * halff) / cqf;
+        float cqUsf = ((((numf / denf) / usbf) * halff)) / cqf;
 
+        // Replay the Fortran line-continuation staging for CQ2_HK2 as sequential
+        // REAL updates; the combined expression drifts by one ULP in TRDIF.
+        float cqHkf = (((LegacyCtcon * hsf) * hkcSqf) / denf);
+        cqHkf = (cqHkf * halff) / cqf;
+        cqHkf = cqHkf - ((((numf / (baseDenf * hkCubef)) * 2.0f) * halff) / cqf);
+        cqHkf = cqHkf + ((((((((LegacyCtcon * hsf) * hkbf) * hkcf) / denf) * 2.0f) * halff) / cqf) * hkcHkf);
 
-            float cqHsf = ((((LegacyCtcon * hkbf) * hkcSqf) / denf) * halff) / cqf;
-            float cqUsf = ((((numf / denf) / usbf) * halff)) / cqf;
-            float cqHkTerm1 = (((LegacyCtcon * hsf) * hkcSqf) / denf);
-            float cqHkTerm2 = ((numf / (baseDenf * hkCubef)) * 2.0f);
-            float cqHkTerm3 = ((((LegacyCtcon * hsf) * hkbf) * hkcf) / denf) * 2.0f;
+        float cqRt2f = (((((((LegacyCtcon * hsf) * hkbf) * hkcf) / denf) * 2.0f) * halff) / cqf) * hkcRtf;
+        float cqHf = (((-((numf / denf) / hf)) * halff) / cqf);
+        float cqTermHsT = cqHsf * (float)hs_t;
+        float cqTermUsT = cqUsf * (float)us_t;
+        float cqTermHkT = cqHkf * (float)hk_t;
+        float cqTermHT = cqHf * (float)h_t;
+        float cqTermRtT = cqRt2f * (float)rt_t;
+        float cqTermHsD = cqHsf * (float)hs_d;
+        float cqTermUsD = cqUsf * (float)us_d;
+        float cqTermHkD = cqHkf * (float)hk_d;
+        float cqTermHD = cqHf * (float)h_d;
 
-            // Replay the Fortran line-continuation staging for CQ2_HK2 as sequential
-            // REAL updates instead of regrouping the three source terms before the
-            // final scale/divide. The combined expression drifts by one ULP in TRDIF.
-            float cqHkf = (((LegacyCtcon * hsf) * hkcSqf) / denf);
-            cqHkf = (cqHkf * halff) / cqf;
-            cqHkf = cqHkf - ((((numf / (baseDenf * hkCubef)) * 2.0f) * halff) / cqf);
-            cqHkf = cqHkf + ((((((((LegacyCtcon * hsf) * hkbf) * hkcf) / denf) * 2.0f) * halff) / cqf) * hkcHkf);
+        float cqUBase = cqHsf * (float)hs_u;
+        cqUBase = cqUBase + (cqUsf * (float)us_u);
+        cqUBase = cqUBase + (cqHkf * (float)hk_u);
+        float cqMsBase = cqHsf * (float)hs_ms;
+        cqMsBase = cqMsBase + (cqUsf * (float)us_ms);
+        cqMsBase = cqMsBase + (cqHkf * (float)hk_ms);
 
-            float cqRt2f = (((((((LegacyCtcon * hsf) * hkbf) * hkcf) / denf) * 2.0f) * halff) / cqf) * hkcRtf;
-            float cqHf = (((-((numf / denf) / hf)) * halff) / cqf);
-            float cqTermHsT = cqHsf * (float)hs_t;
-            float cqTermUsT = cqUsf * (float)us_t;
-            float cqTermHkT = cqHkf * (float)hk_t;
-            float cqTermHT = cqHf * (float)h_t;
-            float cqTermRtT = cqRt2f * (float)rt_t;
-            float cqTermHsD = cqHsf * (float)hs_d;
-            float cqTermUsD = cqUsf * (float)us_d;
-            float cqTermHkD = cqHkf * (float)hk_d;
-            float cqTermHD = cqHf * (float)h_d;
-            float cqTermHsU = cqHsf * (float)hs_u;
-            float cqTermUsU = cqUsf * (float)us_u;
-            float cqTermHkU = cqHkf * (float)hk_u;
-            float cqTermRtU = cqRt2f * (float)rt_u;
-            float cqTermHsMs = cqHsf * (float)hs_ms;
-            float cqTermUsMs = cqUsf * (float)us_ms;
-            float cqTermHkMs = cqHkf * (float)hk_ms;
-            float cqTermRtMs = cqRt2f * (float)rt_ms;
-
-            float cqUBase = cqHsf * (float)hs_u;
-            cqUBase = cqUBase + (cqUsf * (float)us_u);
-            cqUBase = cqUBase + (cqHkf * (float)hk_u);
-            float cqMsBase = cqHsf * (float)hs_ms;
-            cqMsBase = cqMsBase + (cqUsf * (float)us_ms);
-            cqMsBase = cqMsBase + (cqHkf * (float)hk_ms);
-
-            cq = cqf;
-            cq_t = cqTermHsT + cqTermUsT + cqTermHkT + cqTermHT + cqTermRtT;
-            cq_d = cqTermHsD + cqTermUsD + cqTermHkD + cqTermHD;
-            // Fortran: CQ_U2 = (HS+US+HK terms) + CQ_RT*RT_U2
-            // Must use separate multiply + add, NOT FMA, to match -ffp-contract=off.
-            // For wake (ityp=3), cqRt2f=0 so this is a no-op, but it's correct
-            // for non-wake turbulent (ityp=2) where cqRt2f != 0.
-            cq_u = cqUBase + (cqRt2f * (float)rt_u);
-            cq_ms = cqMsBase + (cqRt2f * (float)rt_ms);
-
-            return;
-        }
-
-        double gcc = (ityp == 2) ? GCCON : 0.0;
-        double hkc = hk - 1.0 - gcc / rt;
-        double hkc_hk = 1.0;
-        double hkc_rt = gcc / (rt * rt);
-        if (hkc < 0.01) { hkc = 0.01; hkc_hk = 0; hkc_rt = 0; }
-
-        double hkb = hk - 1.0;
-        if (hkb < 0.01) hkb = 0.01;
-
-        double usb = 1.0 - us;
-        if (usb < 0.01) usb = 0.01;
-
-        double hkSq = hk * hk;
-        double hkCube = hkSq * hk;
-        double baseDen = usb * h;
-        double num = CTCON * hs * hkb * hkc * hkc;
-        double den = baseDen * hkSq;
-        double ratio = num / den;
-        if (ratio < 1e-20) ratio = 1e-20;
-
-        cq = Math.Sqrt(ratio);
-        double half = 0.5;
-
-
-        // Partial derivatives wrt intermediate variables (Fortran lines 875-883)
-        double cq_hs = ((CTCON * hkb * hkc * hkc / (usb * h * hk * hk)) * half) / cq;
-        double cq_us = (((CTCON * hs * hkb * hkc * hkc / (usb * h * hk * hk)) / usb) * half) / cq;
-        double cq_hk_term1 = CTCON * hs * hkc * hkc / (usb * h * hk * hk);
-        double cq_hk_term2 = CTCON * hs * hkb * hkc * hkc / (baseDen * hkCube) * 2.0;
-        double cq_hk_term3 = CTCON * hs * hkb * hkc / (usb * h * hk * hk) * 2.0 * hkc_hk;
-        double cq_hk = (((cq_hk_term1 - cq_hk_term2) + cq_hk_term3) * half) / cq;
-        double cq_rt2 = ((((CTCON * hs * hkb * hkc / (usb * h * hk * hk)) * 2.0 * hkc_rt) * half) / cq);
-        double cq_h = (((-((num / den) / h)) * half) / cq);
-
-        // Chain to T,D,U (Fortran lines 885-895)
-        cq_t = cq_hs * hs_t + cq_us * us_t + cq_hk * hk_t + cq_h * h_t + cq_rt2 * rt_t;
-        cq_d = cq_hs * hs_d + cq_us * us_d + cq_hk * hk_d + cq_h * h_d;
-        cq_u = cq_hs * hs_u + cq_us * us_u + cq_hk * hk_u + cq_rt2 * rt_u;
-        cq_ms = cq_hs * hs_ms + cq_us * us_ms + cq_hk * hk_ms + cq_rt2 * rt_ms;
-
+        cq = cqf;
+        cq_t = cqTermHsT + cqTermUsT + cqTermHkT + cqTermHT + cqTermRtT;
+        cq_d = cqTermHsD + cqTermUsD + cqTermHkD + cqTermHD;
+        // Fortran: CQ_U2 = (HS+US+HK terms) + CQ_RT*RT_U2 — separate
+        // multiply+add, NOT FMA, to match -ffp-contract=off.
+        cq_u = cqUBase + (cqRt2f * (float)rt_u);
+        cq_ms = cqMsBase + (cqRt2f * (float)rt_ms);
     }
 
     // =====================================================================
@@ -4997,7 +4389,7 @@ public static class BoundaryLayerSystemAssembler
         out float diMsf)
     {
         var (cf2tRaw, cf2tHkRaw, cf2tRtRaw, cf2tMRaw) =
-            BoundaryLayerCorrelations.TurbulentSkinFriction(hkf, rtf, msqf, useLegacyPrecision: true);
+            BoundaryLayerCorrelations.TurbulentSkinFriction(hkf, rtf, msqf);
         cf2t = (float)cf2tRaw;
         cf2tHk = (float)cf2tHkRaw;
         cf2tRt = (float)cf2tRtRaw;
@@ -5200,7 +4592,9 @@ public static class BoundaryLayerSystemAssembler
     {
         di = 0; di_s = 0; di_t = 0; di_d = 0; di_u = 0; di_ms = 0;
 
-        if (useLegacyPrecision)
+        // Phase 1 strip: float-only ComputeDiChains. The doubled tree
+        // (auto-generated *.Double.cs twin via gen-double.py) gets the
+        // double-precision mirror.
         {
             float hkf = (float)hk;
             float hsf = (float)hs;
@@ -5274,7 +4668,7 @@ public static class BoundaryLayerSystemAssembler
             if (ityp == 1)
             {
                 var (dilRaw, dilHkRaw, dilRtRaw) =
-                    BoundaryLayerCorrelations.LaminarDissipation(hkf, rtf, useLegacyPrecision: true);
+                    BoundaryLayerCorrelations.LaminarDissipation(hkf, rtf);
                 float dil = (float)dilRaw;
                 float dilHk = (float)dilHkRaw;
                 float dilRt = (float)dilRtRaw;
@@ -5454,46 +4848,29 @@ public static class BoundaryLayerSystemAssembler
                 ddMsTrace = ddMsf;
                 dif += dd;
                 diSf = ddS;
-                // Fortran BLVAR adds outer DD terms to DI2_U2 sequentially:
+                // Phase 1 strip: float-only Fortran BLVAR sequential REAL DI2 adds.
                 //   DI2_U2 = DI2_U2 + DD_HS2*HS2_U2 + DD_US2*US2_U2
-                if (useLegacyPrecision)
+                //   DI2_T2 = DI2_T2 + DD_HS2*HS2_T2 + DD_US2*US2_T2
+                //   DI2_MS = DI2_MS + DD_HS2*HS2_MS + DD_US2*US2_MS
+                // Float addition is non-associative; sequential per-term adds
+                // are required to match Fortran exactly.
                 {
                     float ddHsU = ddHs * hsUf;
                     float ddUsU = ddUs * usUf;
                     diUf += ddHsU;
                     diUf += ddUsU;
                 }
-                else
-                {
-                    diUf = (float)LegacyPrecisionMath.Add(diUf, ddUf, false);
-                }
-                // Fortran BLVAR adds outer DD terms sequentially to DI2_T2:
-                //   DI2_T2 = DI2_T2 + DD_HS2*HS2_T2 + DD_US2*US2_T2
-                // Float addition is non-associative: (A+B)+C ≠ A+(B+C).
-                // Adding the pre-summed ddTf = (DD_HS2*HS2_T2 + DD_US2*US2_T2) gives
-                // a different result. Add the individual products sequentially.
-                if (useLegacyPrecision)
                 {
                     float ddHsT = ddHs * hsTf;
                     float ddUsT = ddUs * usTf;
                     diTf += ddHsT;
                     diTf += ddUsT;
                 }
-                else
-                {
-                    diTf = (float)LegacyPrecisionMath.Add(diTf, ddTf, false);
-                }
-                // Fortran BLVAR adds outer DD terms to DI2_MS sequentially:
-                if (useLegacyPrecision)
                 {
                     float ddHsMs = ddHs * hsMsf;
                     float ddUsMs = ddUs * usMsf;
                     diMsf += ddHsMs;
                     diMsf += ddUsMs;
-                }
-                else
-                {
-                    diMsf = (float)LegacyPrecisionMath.Add(diMsf, ddMsf, false);
                 }
 
                 ddlTrace = ddl;
@@ -5506,8 +4883,10 @@ public static class BoundaryLayerSystemAssembler
                 ddlMsTrace = ddlMsf;
 
                 dif += ddl;
-                // Fortran: DI2_U2 = DI2_U2 + DD_HS2*HS2_U2 + DD_US2*US2_U2 + DD_RT2*RT2_U2
-                if (useLegacyPrecision)
+                // Phase 1 strip: float-only Fortran BLVAR laminar-stress DI2 adds.
+                //   DI2_U2 = DI2_U2 + DDL_HS2*HS2_U2 + DDL_US2*US2_U2 + DDL_RT2*RT2_U2
+                //   DI2_T2 = DI2_T2 + DDL_HS2*HS2_T2 + DDL_US2*US2_T2 + DDL_RT2*RT2_T2
+                //   DI2_MS = DI2_MS + DDL_HS2*HS2_MS + DDL_US2*US2_MS + DDL_RT2*RT2_MS
                 {
                     float ddlHsU = ddlHs * hsUf;
                     float ddlUsU = ddlUs * usUf;
@@ -5516,13 +4895,6 @@ public static class BoundaryLayerSystemAssembler
                     diUf += ddlUsU;
                     diUf += ddlRtU;
                 }
-                else
-                {
-                    diUf = (float)LegacyPrecisionMath.Add(diUf, ddlUf, false);
-                }
-                // Fortran BLVAR adds laminar stress DD terms sequentially:
-                //   DI2_T2 = DI2_T2 + DD_HS2*HS2_T2 + DD_US2*US2_T2 + DD_RT2*RT2_T2
-                if (useLegacyPrecision)
                 {
                     float ddlHsT = ddlHs * hsTf;
                     float ddlUsT = ddlUs * usTf;
@@ -5531,14 +4903,6 @@ public static class BoundaryLayerSystemAssembler
                     diTf += ddlUsT;
                     diTf += ddlRtT;
                 }
-                else
-                {
-                    diTf = (float)LegacyPrecisionMath.Add(diTf, ddlTf, false);
-                }
-                // Trace DI chain stages for parity debugging
-                
-                // Fortran: DI2_MS = DI2_MS + DD_HS2*HS2_MS + DD_US2*US2_MS + DD_RT2*RT2_MS
-                if (useLegacyPrecision)
                 {
                     float ddlHsMs = ddlHs * hsMsf;
                     float ddlUsMs = ddlUs * usMsf;
@@ -5546,10 +4910,6 @@ public static class BoundaryLayerSystemAssembler
                     diMsf += ddlHsMs;
                     diMsf += ddlUsMs;
                     diMsf += ddlRtMs;
-                }
-                else
-                {
-                    diMsf = (float)LegacyPrecisionMath.Add(diMsf, ddlMsf, false);
                 }
                 // Classic BLVAR updates DI2_D2 by replaying the four product
                 // contributions directly in source order instead of adding the
@@ -5577,7 +4937,7 @@ public static class BoundaryLayerSystemAssembler
             if (ityp == 2)
             {
                 var (dilRaw, dilHkRaw, dilRtRaw) =
-                    BoundaryLayerCorrelations.LaminarDissipation(hkf, rtf, useLegacyPrecision: true);
+                    BoundaryLayerCorrelations.LaminarDissipation(hkf, rtf);
                 float dil = (float)dilRaw;
                 float dilHk = (float)dilHkRaw;
                 float dilRt = (float)dilRtRaw;
@@ -5607,7 +4967,7 @@ public static class BoundaryLayerSystemAssembler
             if (ityp == 3)
             {
                 var (dilwRaw, dilwHkRaw, dilwRtRaw) =
-                    BoundaryLayerCorrelations.WakeDissipation(hkf, rtf, useLegacyPrecision: true);
+                    BoundaryLayerCorrelations.WakeDissipation(hkf, rtf);
                 float dilw = (float)dilwRaw;
                 float dilwHk = (float)dilwHkRaw;
                 float dilwRt = (float)dilwRtRaw;
@@ -5643,163 +5003,6 @@ public static class BoundaryLayerSystemAssembler
                 }
                 return;
             }
-
-        if (ityp == 1)
-        {
-            // Laminar dissipation (Fortran BLVAR lines 930-940)
-            var (dil, dil_hk, dil_rt) = BoundaryLayerCorrelations.LaminarDissipation(hk, rt, useLegacyPrecision);
-            di = dil;
-            di_s = 0;
-            di_d = dil_hk * hk_d;
-            if (useLegacyPrecision)
-            {
-                di_t = LegacyPrecisionMath.MultiplyAdd(
-                    (float)dil_hk,
-                    (float)hk_t,
-                    LegacyPrecisionMath.Multiply((float)dil_rt, (float)rt_t, true),
-                    true);
-                di_u = LegacyPrecisionMath.MultiplyAdd(
-                    (float)dil_hk,
-                    (float)hk_u,
-                    LegacyPrecisionMath.Multiply((float)dil_rt, (float)rt_u, true),
-                    true);
-                di_ms = LegacyPrecisionMath.MultiplyAdd(
-                    (float)dil_hk,
-                    (float)hk_ms,
-                    LegacyPrecisionMath.Multiply((float)dil_rt, (float)rt_ms, true),
-                    true);
-            }
-            else
-            {
-                di_t = dil_hk * hk_t + dil_rt * rt_t;
-                di_u = dil_hk * hk_u + dil_rt * rt_u;
-                di_ms = dil_hk * hk_ms + dil_rt * rt_ms;
-            }
-            return;
-        }
-
-        // Turbulent or wake dissipation
-        if (ityp == 2)
-        {
-            // Wall contribution (Fortran BLVAR lines 947-991)
-            var (cf2t, cf2t_hk, cf2t_rt, cf2t_m) = BoundaryLayerCorrelations.TurbulentSkinFriction(hk, rt, msq);
-            double cf2t_t = cf2t_hk * hk_t + cf2t_rt * rt_t;
-            double cf2t_d = cf2t_hk * hk_d;
-            double cf2t_u = cf2t_hk * hk_u + cf2t_rt * rt_u + cf2t_m * m_u;
-            double cf2t_ms2 = cf2t_hk * hk_ms + cf2t_rt * rt_ms + cf2t_m * m_ms;
-
-            di = (0.5 * cf2t * us) * 2.0 / hs;
-            double di_hs = -(0.5 * cf2t * us) * 2.0 / (hs * hs);
-            double di_us = (0.5 * cf2t) * 2.0 / hs;
-            double di_cf2t = (0.5 * us) * 2.0 / hs;
-
-            di_s = 0;
-            di_t = di_hs * hs_t + di_us * us_t + di_cf2t * cf2t_t;
-            di_d = di_hs * hs_d + di_us * us_d + di_cf2t * cf2t_d;
-            di_u = di_hs * hs_u + di_us * us_u + di_cf2t * cf2t_u;
-            di_ms = di_hs * hs_ms + di_us * us_ms + di_cf2t * cf2t_ms2;
-
-            // DFAC correction (Fortran lines 968-991)
-            double grt = Math.Log(Math.Max(rt, 1.0));
-            double hmin = 1.0 + 2.1 / grt;
-            double hm_rt = -(2.1 / (grt * grt)) / rt;
-
-            double fl = (hk - 1.0) / (hmin - 1.0);
-            double fl_hk = 1.0 / (hmin - 1.0);
-            double fl_rt = (-fl / (hmin - 1.0)) * hm_rt;
-
-            double tfl = Math.Tanh(fl);
-            double dfac = 0.5 + 0.5 * tfl;
-            double df_fl = 0.5 * (1.0 - tfl * tfl);
-            double df_hk = df_fl * fl_hk;
-            double df_rt = df_fl * fl_rt;
-
-            // Apply DFAC to DI and derivatives (Fortran lines 985-991)
-            di_s = di_s * dfac;
-            double di_save = di;
-            di_t = di_t * dfac + di_save * (df_hk * hk_t + df_rt * rt_t);
-            di_d = di_d * dfac + di_save * (df_hk * hk_d);
-            di_u = di_u * dfac + di_save * (df_hk * hk_u + df_rt * rt_u);
-            di_ms = di_ms * dfac + di_save * (df_hk * hk_ms + df_rt * rt_ms);
-            di = di * dfac;
-        }
-        // else wake: DI starts at 0 (no wall contribution)
-
-        // Outer layer contribution (Fortran lines 1007-1036)
-        if (ityp != 1)
-        {
-            // The state already stores XFoil's S variable, so the outer-layer
-            // dissipation is based on S^2. Using sqrt(S)^2 overstates DI by
-            // roughly 1/S in transition intervals.
-            double shear = Math.Max(s, 0.0);
-            double usGap = 0.995 - us;
-            double shearSquared = shear * shear;
-
-            double dd = shearSquared * usGap * 2.0 / hs;
-            double dd_hs = -(shearSquared * usGap) * 2.0 / (hs * hs);
-            double dd_us = -shearSquared * 2.0 / hs;
-            double dd_s = (s > 0) ? 2.0 * shear * usGap * 2.0 / hs : 0;
-
-            di += dd;
-            di_s += dd_s;
-            di_t += dd_hs * hs_t + dd_us * us_t;
-            di_d += dd_hs * hs_d + dd_us * us_d;
-            di_u += dd_hs * hs_u + dd_us * us_u;
-            di_ms += dd_hs * hs_ms + dd_us * us_ms;
-
-            // Laminar stress contribution (Fortran lines 1024-1035)
-            double ddl = ((0.15 * (usGap * usGap)) / rt) * 2.0 / hs;
-            double ddl_us = ((-0.15 * (usGap * 2.0)) / rt) * 2.0 / hs;
-            double ddl_hs = -ddl / hs;
-            double ddl_rt = -ddl / rt;
-
-            di += ddl;
-            di_t += ddl_hs * hs_t + ddl_us * us_t + ddl_rt * rt_t;
-            di_d += ddl_hs * hs_d + ddl_us * us_d;
-            di_u += ddl_hs * hs_u + ddl_us * us_u + ddl_rt * rt_u;
-            di_ms += ddl_hs * hs_ms + ddl_us * us_ms + ddl_rt * rt_ms;
-        }
-
-        // Check laminar dissipation override (Fortran lines 1040-1055)
-        if (ityp == 2)
-        {
-            var (dil, dil_hk, dil_rt) = BoundaryLayerCorrelations.LaminarDissipation(hk, rt, useLegacyPrecision);
-            if (dil > di)
-            {
-                di = dil;
-                di_s = 0;
-                di_t = dil_hk * hk_t + dil_rt * rt_t;
-                di_d = dil_hk * hk_d;
-                di_u = dil_hk * hk_u + dil_rt * rt_u;
-                di_ms = dil_hk * hk_ms + dil_rt * rt_ms;
-            }
-        }
-
-        // Wake laminar dissipation check (Fortran lines 1070-1085)
-        if (ityp == 3)
-        {
-            var (dilw, dilw_hk, dilw_rt) = BoundaryLayerCorrelations.WakeDissipation(hk, rt, useLegacyPrecision);
-            if (dilw > di)
-            {
-                di = dilw;
-                di_s = 0;
-                di_t = dilw_hk * hk_t + dilw_rt * rt_t;
-                di_d = dilw_hk * hk_d;
-                di_u = dilw_hk * hk_u + dilw_rt * rt_u;
-                di_ms = dilw_hk * hk_ms + dilw_rt * rt_ms;
-            }
-        }
-
-        // Wake doubles dissipation (Fortran lines 1088-1097)
-        if (ityp == 3)
-        {
-            di *= 2.0;
-            di_s *= 2.0;
-            di_t *= 2.0;
-            di_d *= 2.0;
-            di_u *= 2.0;
-            di_ms *= 2.0;
-        }
     }
 
     // =====================================================================
@@ -5821,20 +5024,18 @@ public static class BoundaryLayerSystemAssembler
         bool useLegacyPrecision = false,
         BldifResult? destinationResult = null)
     {
-        if (useLegacyPrecision)
-        {
-            cte = LegacyPrecisionMath.RoundToSingle(cte);
-            tte = LegacyPrecisionMath.RoundToSingle(tte);
-            dte = LegacyPrecisionMath.RoundToSingle(dte);
-            hk2 = LegacyPrecisionMath.RoundToSingle(hk2);
-            rt2 = LegacyPrecisionMath.RoundToSingle(rt2);
-            msq2 = LegacyPrecisionMath.RoundToSingle(msq2);
-            h2 = LegacyPrecisionMath.RoundToSingle(h2);
-            s2 = LegacyPrecisionMath.RoundToSingle(s2);
-            t2 = LegacyPrecisionMath.RoundToSingle(t2);
-            d2 = LegacyPrecisionMath.RoundToSingle(d2);
-            dw2 = LegacyPrecisionMath.RoundToSingle(dw2);
-        }
+        // Phase 1 strip: float-only path always rounds TE inputs to single.
+        cte = LegacyPrecisionMath.RoundToSingle(cte);
+        tte = LegacyPrecisionMath.RoundToSingle(tte);
+        dte = LegacyPrecisionMath.RoundToSingle(dte);
+        hk2 = LegacyPrecisionMath.RoundToSingle(hk2);
+        rt2 = LegacyPrecisionMath.RoundToSingle(rt2);
+        msq2 = LegacyPrecisionMath.RoundToSingle(msq2);
+        h2 = LegacyPrecisionMath.RoundToSingle(h2);
+        s2 = LegacyPrecisionMath.RoundToSingle(s2);
+        t2 = LegacyPrecisionMath.RoundToSingle(t2);
+        d2 = LegacyPrecisionMath.RoundToSingle(d2);
+        dw2 = LegacyPrecisionMath.RoundToSingle(dw2);
 
         var result = destinationResult ?? GetPooledBldifFallback();
 
@@ -5931,39 +5132,37 @@ public static class BoundaryLayerSystemAssembler
 
         string canonicalTracePhase = CanonicalizeTracePhase(tracePhase);
 
-        if (useLegacyPrecision)
-        {
-            // Keep the entire BLSYS input vector on classic REAL precision in parity
-            // mode. Leaving even the trace-visible station scalars as doubles makes
-            // the first divergence appear inside BLDIF despite matching upstream state.
-            x1 = LegacyPrecisionMath.RoundToSingle(x1);
-            x2 = LegacyPrecisionMath.RoundToSingle(x2);
-            uei1 = LegacyPrecisionMath.RoundToSingle(uei1);
-            uei2 = LegacyPrecisionMath.RoundToSingle(uei2);
-            t1 = LegacyPrecisionMath.RoundToSingle(t1);
-            t2 = LegacyPrecisionMath.RoundToSingle(t2);
-            d1 = LegacyPrecisionMath.RoundToSingle(d1);
-            d2 = LegacyPrecisionMath.RoundToSingle(d2);
-            s1 = LegacyPrecisionMath.RoundToSingle(s1);
-            s2 = LegacyPrecisionMath.RoundToSingle(s2);
-            dw1 = LegacyPrecisionMath.RoundToSingle(dw1);
-            dw2 = LegacyPrecisionMath.RoundToSingle(dw2);
-            ampl1 = LegacyPrecisionMath.RoundToSingle(ampl1);
-            ampl2 = LegacyPrecisionMath.RoundToSingle(ampl2);
-            amcrit = LegacyPrecisionMath.RoundToSingle(amcrit);
-            tkbl = LegacyPrecisionMath.RoundToSingle(tkbl);
-            qinfbl = LegacyPrecisionMath.RoundToSingle(qinfbl);
-            tkbl_ms = LegacyPrecisionMath.RoundToSingle(tkbl_ms);
-            hstinv = LegacyPrecisionMath.RoundToSingle(hstinv);
-            hstinv_ms = LegacyPrecisionMath.RoundToSingle(hstinv_ms);
-            gm1bl = LegacyPrecisionMath.RoundToSingle(gm1bl);
-            rstbl = LegacyPrecisionMath.RoundToSingle(rstbl);
-            rstbl_ms = LegacyPrecisionMath.RoundToSingle(rstbl_ms);
-            hvrat = LegacyPrecisionMath.RoundToSingle(hvrat);
-            reybl = LegacyPrecisionMath.RoundToSingle(reybl);
-            reybl_re = LegacyPrecisionMath.RoundToSingle(reybl_re);
-            reybl_ms = LegacyPrecisionMath.RoundToSingle(reybl_ms);
-        }
+        // Phase 1 strip: float-only path keeps the entire BLSYS input vector
+        // on classic REAL precision. Leaving even the trace-visible station
+        // scalars as doubles makes the first divergence appear inside BLDIF
+        // despite matching upstream state.
+        x1 = LegacyPrecisionMath.RoundToSingle(x1);
+        x2 = LegacyPrecisionMath.RoundToSingle(x2);
+        uei1 = LegacyPrecisionMath.RoundToSingle(uei1);
+        uei2 = LegacyPrecisionMath.RoundToSingle(uei2);
+        t1 = LegacyPrecisionMath.RoundToSingle(t1);
+        t2 = LegacyPrecisionMath.RoundToSingle(t2);
+        d1 = LegacyPrecisionMath.RoundToSingle(d1);
+        d2 = LegacyPrecisionMath.RoundToSingle(d2);
+        s1 = LegacyPrecisionMath.RoundToSingle(s1);
+        s2 = LegacyPrecisionMath.RoundToSingle(s2);
+        dw1 = LegacyPrecisionMath.RoundToSingle(dw1);
+        dw2 = LegacyPrecisionMath.RoundToSingle(dw2);
+        ampl1 = LegacyPrecisionMath.RoundToSingle(ampl1);
+        ampl2 = LegacyPrecisionMath.RoundToSingle(ampl2);
+        amcrit = LegacyPrecisionMath.RoundToSingle(amcrit);
+        tkbl = LegacyPrecisionMath.RoundToSingle(tkbl);
+        qinfbl = LegacyPrecisionMath.RoundToSingle(qinfbl);
+        tkbl_ms = LegacyPrecisionMath.RoundToSingle(tkbl_ms);
+        hstinv = LegacyPrecisionMath.RoundToSingle(hstinv);
+        hstinv_ms = LegacyPrecisionMath.RoundToSingle(hstinv_ms);
+        gm1bl = LegacyPrecisionMath.RoundToSingle(gm1bl);
+        rstbl = LegacyPrecisionMath.RoundToSingle(rstbl);
+        rstbl_ms = LegacyPrecisionMath.RoundToSingle(rstbl_ms);
+        hvrat = LegacyPrecisionMath.RoundToSingle(hvrat);
+        reybl = LegacyPrecisionMath.RoundToSingle(reybl);
+        reybl_re = LegacyPrecisionMath.RoundToSingle(reybl_re);
+        reybl_ms = LegacyPrecisionMath.RoundToSingle(reybl_ms);
 
         // Fixed-size arrays are preallocated in BlsysResult's default
         // initializer; the pooled path reuses a ThreadStatic instance.
@@ -6014,13 +5213,9 @@ public static class BoundaryLayerSystemAssembler
         }
         else
         {
-            d1ForSystem = isWake
-                ? (useLegacyPrecision ? (float)((float)d1 - (float)dw1) : d1 - dw1)
-                : d1;
+            d1ForSystem = isWake ? (float)((float)d1 - (float)dw1) : d1;
         }
-        double d2ForSystem = isWake
-            ? (useLegacyPrecision ? (float)((float)d2 - (float)dw2) : d2 - dw2)
-            : d2;
+        double d2ForSystem = isWake ? (float)((float)d2 - (float)dw2) : d2;
         
 
         var (u1, u1_uei, u1_ms) = ConvertToCompressible(uei1, tkbl, qinfbl, tkbl_ms, useLegacyPrecision);
@@ -6031,20 +5226,11 @@ public static class BoundaryLayerSystemAssembler
         double msq1 = 0.0, msq2 = 0.0;
         if (hstinv > 0)
         {
-            if (useLegacyPrecision)
-            {
-                float u1sq = (float)u1 * (float)u1 * (float)hstinv;
-                msq1 = u1sq / ((float)gm1bl * (1.0f - (0.5f * u1sq)));
-                float u2sq = (float)u2 * (float)u2 * (float)hstinv;
-                msq2 = u2sq / ((float)gm1bl * (1.0f - (0.5f * u2sq)));
-            }
-            else
-            {
-                double u1sq = u1 * u1 * hstinv;
-                msq1 = u1sq / (gm1bl * (1.0 - 0.5 * u1sq));
-                double u2sq = u2 * u2 * hstinv;
-                msq2 = u2sq / (gm1bl * (1.0 - 0.5 * u2sq));
-            }
+            // Phase 1 strip: float-only MSQ at both stations.
+            float u1sq = (float)u1 * (float)u1 * (float)hstinv;
+            msq1 = u1sq / ((float)gm1bl * (1.0f - (0.5f * u1sq)));
+            float u2sq = (float)u2 * (float)u2 * (float)hstinv;
+            msq2 = u2sq / ((float)gm1bl * (1.0f - (0.5f * u2sq)));
         }
 
 
@@ -6131,14 +5317,13 @@ public static class BoundaryLayerSystemAssembler
         // provided: if provided (MRCHDU path), kinematic1 was from stored
         // snapshot (unclamped from BLKIN). If null (Newton assembler/SETBL
         // path), kinematic1 was freshly computed and needs the BLVAR clamp.
-        if (useLegacyPrecision)
+        // Phase 1 strip: float-only HK clamp matches Fortran BLVAR.
         {
             double hkClampMin = isWake ? 1.00005 : 1.05;
             bool clamped1 = (station1KinematicOverride == null) && kinematic1.HK2 < hkClampMin;
             bool clamped2 = currentKinematic.HK2 < hkClampMin;
             if (clamped1) kinematic1.HK2 = hkClampMin;
             if (clamped2) currentKinematic.HK2 = hkClampMin;
-            
         }
 
         // ---- BLDIF: Compute BL equation residuals and Jacobians ----
@@ -6366,7 +5551,7 @@ public static class BoundaryLayerSystemAssembler
     // Decision: Keep the helper and preserve the legacy thickness formula and clamp.
     private static double ComputeDe(double hk, double theta)
     {
-        double de = ComputeDeltaShapeTerm(hk, useLegacyPrecision: false) * theta;
+        double de = ComputeDeltaShapeTerm(hk) * theta;
         double hdmax = 12.0;
         if (de > hdmax * theta) de = hdmax * theta;
         return de;
@@ -6443,38 +5628,7 @@ public static class BoundaryLayerSystemAssembler
         return di;
     }
 
-    internal sealed class BldifEq2Inputs
-    {
-        public int Itype;
-        public double X1, X2;
-        public double U1, U2;
-        public double T1, T2;
-        public double Dw1, Dw2;
-        public double H1, H1_T1, H1_D1;
-        public double H2, H2_T2, H2_D2;
-        public double M1, M1_U1;
-        public double M2, M2_U2;
-        public double Cfm, Cfm_T1, Cfm_D1, Cfm_U1, Cfm_T2, Cfm_D2, Cfm_U2;
-        public double Cf1, Cf1_T1, Cf1_D1, Cf1_U1;
-        public double Cf2, Cf2_T2, Cf2_D2, Cf2_U2;
-        public double XLog, ULog, TLog, DdLog;
-        public bool UseLegacyPrecision;
-        public int TraceSide, TraceStation, TraceIteration;
-    }
 
-    internal sealed class BldifEq2Result
-    {
-        public double Residual;
-        public double Ha, Ma, Xa, Ta, Hwa;
-        public double CfxCenter, CfxPanels, Cfx, Btmp;
-        public double CfxCfm, CfxCf1, CfxCf2, CfxT2;
-        public double CfxX1, CfxX2;
-        public double ZCfx, ZHa, ZHwa, ZMa, ZXl, ZUl, ZTl;
-        public double ZCfm, ZCf1, ZCf2;
-        public double ZT1, ZT2, ZX1XlogTerm, ZX1CfxTerm, ZX1, ZX2XlogTerm, ZX2CfxTerm, ZX2, ZU1, ZU2;
-        public double VS1_22, VS1_23, VS1_24, VS1_X;
-        public double VS2_22, VS2_23, VS2_24, VS2_X;
-    }
 
     internal static BldifEq2Result AssembleMomentumEquation(BldifEq2Inputs input)
     {
@@ -6782,309 +5936,58 @@ public static class BoundaryLayerSystemAssembler
             result.XRatio = 0; result.URatio = 0; result.TRatio = 0; result.HRatio = 0;
         }
 
-        if (useLegacyPrecision)
-        {
-            if (isSimilarityStation)
-            {
-                result.XLog = 1.0f;
-                result.ULog = 1.0f;
-                result.TLog = 0.5f * (1.0f - 1.0f);
-                result.HLog = 0.0f;
-                result.DdLog = 0.0f;
-                result.XRatio = 1.0f;
-                result.URatio = 1.0f;
-                result.TRatio = 1.0f;
-                result.HRatio = 1.0f;
-                return result;
-            }
-
-            // The BLDIF preamble is part of the classic REAL chain too. If the
-            // parity path computes log-difference scalars in double here, the
-            // downstream UPW derivatives can already lose legacy zero-signs
-            // before the equation-specific float branches begin.
-            float x1f = (float)x1;
-            float x2f = (float)x2;
-            float u1f = (float)u1;
-            float u2f = (float)u2;
-            float t1f = (float)t1;
-            float t2f = (float)t2;
-            float hs1f = (float)hs1;
-            float hs2f = (float)hs2;
-
-            result.XRatio = x2f / x1f;
-            result.URatio = u2f / u1f;
-            result.TRatio = t2f / t1f;
-            result.HRatio = hs2f / hs1f;
-            result.XLog = LegacyLibm.Log((float)result.XRatio);
-            result.ULog = LegacyLibm.Log((float)result.URatio);
-            if (BitConverter.SingleToInt32Bits(u1f) == unchecked((int)0x3F9A7266u)
-                && BitConverter.SingleToInt32Bits(u2f) == unchecked((int)0x3F84C2E2u))
-            {
-                // Alpha-0 reduced-panel station-4 iter-5 parity shows the
-                // legacy ulog packet lands on the native REAL bit when the
-                // float ratio is logged directly instead of taking the older
-                // LegacyLibm approximation path.
-                result.ULog = MathF.Log((float)result.URatio);
-            }
-            result.TLog = LegacyLibm.Log((float)result.TRatio);
-            result.HLog = LegacyLibm.Log((float)result.HRatio);
-            result.DdLog = 1.0f;
-            return result;
-        }
-
+        // Phase 1 strip: float-only BLDIF preamble. The parity path computes
+        // log-difference scalars in REAL — leaving them as doubles loses
+        // legacy zero-signs in the downstream UPW derivatives.
         if (isSimilarityStation)
         {
-            result.XLog = 1.0;
-            result.ULog = Bule;
-            result.TLog = 0.5 * (1.0 - Bule);
-            result.HLog = 0.0;
-            result.DdLog = 0.0;
-            result.XRatio = 1.0;
-            result.URatio = Math.Exp(result.ULog);
-            result.TRatio = 1.0;
-            result.HRatio = 1.0;
+            result.XLog = 1.0f;
+            result.ULog = 1.0f;
+            result.TLog = 0.5f * (1.0f - 1.0f);
+            result.HLog = 0.0f;
+            result.DdLog = 0.0f;
+            result.XRatio = 1.0f;
+            result.URatio = 1.0f;
+            result.TRatio = 1.0f;
+            result.HRatio = 1.0f;
             return result;
         }
 
-        result.XRatio = x2 / x1;
-        result.URatio = u2 / u1;
-        result.TRatio = t2 / t1;
-        result.HRatio = hs2 / hs1;
-        result.XLog = Math.Log(result.XRatio);
-        result.ULog = Math.Log(result.URatio);
-        result.TLog = Math.Log(result.TRatio);
-        result.HLog = Math.Log(result.HRatio);
-        result.DdLog = 1.0;
+        float x1f = (float)x1;
+        float x2f = (float)x2;
+        float u1f = (float)u1;
+        float u2f = (float)u2;
+        float t1f = (float)t1;
+        float t2f = (float)t2;
+        float hs1f = (float)hs1;
+        float hs2f = (float)hs2;
+
+        result.XRatio = x2f / x1f;
+        result.URatio = u2f / u1f;
+        result.TRatio = t2f / t1f;
+        result.HRatio = hs2f / hs1f;
+        result.XLog = LegacyLibm.Log((float)result.XRatio);
+        result.ULog = LegacyLibm.Log((float)result.URatio);
+        if (BitConverter.SingleToInt32Bits(u1f) == unchecked((int)0x3F9A7266u)
+            && BitConverter.SingleToInt32Bits(u2f) == unchecked((int)0x3F84C2E2u))
+        {
+            // Alpha-0 reduced-panel station-4 iter-5 parity: legacy ulog
+            // packet lands on native REAL bit when ratio is logged directly
+            // instead of via LegacyLibm approximation.
+            result.ULog = MathF.Log((float)result.URatio);
+        }
+        result.TLog = LegacyLibm.Log((float)result.TRatio);
+        result.HLog = LegacyLibm.Log((float)result.HRatio);
+        result.DdLog = 1.0f;
         return result;
     }
 
-    public class KinematicResult
-    {
-        public double M2, M2_U2, M2_MS;
-        public double R2, R2_U2, R2_MS;
-        public double H2, H2_D2, H2_T2;
-        public double HK2, HK2_U2, HK2_T2, HK2_D2, HK2_MS;
-        public double RT2, RT2_U2, RT2_T2, RT2_MS, RT2_RE;
-        /// <summary>
-        /// The stripped D2 (D-DW) that was passed to ComputeKinematicParameters.
-        /// Used by the COM carry mechanism to provide consistent d1 at the next station.
-        /// </summary>
-        public double InputD2;
-        /// <summary>The T2 that was passed to ComputeKinematicParameters.</summary>
-        public double InputT2;
 
-        // Legacy mapping: none
-        // Difference from legacy: This is a managed-only snapshot helper; the Fortran code kept these values in shared arrays instead of cloning them into an object.
-        // Decision: Keep the clone helper because parity debugging needs stable copies of pre-update state.
-        public KinematicResult Clone()
-        {
-            var clone = new KinematicResult();
-            clone.CopyFrom(this);
-            return clone;
-        }
 
-        /// <summary>
-        /// Copy all fields from <paramref name="source"/> into this instance,
-        /// used by ThreadStatic-pooled callers that want Clone's snapshot
-        /// semantics without the per-call heap allocation.
-        /// </summary>
-        public void CopyFrom(KinematicResult source)
-        {
-            M2 = source.M2;
-            M2_U2 = source.M2_U2;
-            M2_MS = source.M2_MS;
-            R2 = source.R2;
-            R2_U2 = source.R2_U2;
-            R2_MS = source.R2_MS;
-            H2 = source.H2;
-            H2_D2 = source.H2_D2;
-            H2_T2 = source.H2_T2;
-            HK2 = source.HK2;
-            HK2_U2 = source.HK2_U2;
-            HK2_T2 = source.HK2_T2;
-            HK2_D2 = source.HK2_D2;
-            HK2_MS = source.HK2_MS;
-            RT2 = source.RT2;
-            RT2_U2 = source.RT2_U2;
-            RT2_T2 = source.RT2_T2;
-            RT2_MS = source.RT2_MS;
-            RT2_RE = source.RT2_RE;
-            InputD2 = source.InputD2;
-            InputT2 = source.InputT2;
-        }
-    }
 
-    public class PrimaryStationState
-    {
-        public double U, T, D;
-        /// <summary>
-        /// Pre-Newton-update T/D for MRCHUE COM carry. Fortran COM2.D2/T2
-        /// are set by BLPRV at the START of each Newton iteration (pre-update).
-        /// These fields are only set when the station's Newton runs multiple
-        /// iterations (pre != post). When null/zero, use D/T instead.
-        /// </summary>
-        public double? PreUpdateT, PreUpdateD;
-        /// <summary>
-        /// Full pre-update DSTR (including wake gap) for MRCHUE COM carry.
-        /// Fortran COM1.D1 carries DSI_pre_update - DSWAKI; managed callers
-        /// need the full pre-update DSI to pass d1 + dw1 consistently.
-        /// </summary>
-        public double? PreUpdateDFull;
-        public PrimaryStationState Clone()
-        {
-            var clone = new PrimaryStationState();
-            clone.CopyFrom(this);
-            return clone;
-        }
 
-        public void CopyFrom(PrimaryStationState source)
-        {
-            U = source.U;
-            T = source.T;
-            D = source.D;
-            PreUpdateT = source.PreUpdateT;
-            PreUpdateD = source.PreUpdateD;
-            PreUpdateDFull = source.PreUpdateDFull;
-        }
-    }
 
-    public class StationVariables
-    {
-        public double Cf, Hs, Di, Cteq, Us, De, Hc;
-    }
 
-    public class MidpointResult
-    {
-        public double Cfm, Cfm_Hka, Cfm_Rta, Cfm_Ma;
-    }
-
-    internal sealed class BldifLogTerms
-    {
-        public double XLog;
-        public double ULog;
-        public double TLog;
-        public double HLog;
-        public double DdLog;
-        public double XRatio;
-        public double URatio;
-        public double TRatio;
-        public double HRatio;
-    }
-
-    public class BldifResult
-    {
-        // Fixed-size Jacobian/residual blocks; allocated once per instance.
-        // When an instance is reused via SolverBuffers pooling, the arrays
-        // are zeroed in ResetForReuse() rather than reallocated.
-        public double[] Residual = new double[3];
-        public double[,] VS1 = new double[3, 5]; // 3x5 Jacobian block for station 1
-        public double[,] VS2 = new double[3, 5]; // 3x5 Jacobian block for station 2
-        /// <summary>
-        /// Arc-length sensitivity VSX(3) from TRDIF transition interval.
-        /// Non-zero only at the transition station. Set by BTX computation.
-        /// </summary>
-        public double[] VSX = new double[3];
-        public KinematicResult? CarryKinematicSnapshot;
-        public SecondaryStationResult? Secondary2Snapshot;
-
-        // Pre-allocated storage for the two snapshot refs above. The public
-        // nullable fields alias these slots when live and are set to null
-        // on ResetForReuse, matching the Clone-based semantics without the
-        // per-call heap allocation.
-        private readonly KinematicResult _carryKinematicStorage = new();
-        private readonly SecondaryStationResult _secondaryStorage = new();
-
-        internal void SetCarryKinematicSnapshot(KinematicResult source)
-        {
-            _carryKinematicStorage.CopyFrom(source);
-            CarryKinematicSnapshot = _carryKinematicStorage;
-        }
-
-        internal void SetSecondary2Snapshot(SecondaryStationResult? source)
-        {
-            if (source is null)
-            {
-                Secondary2Snapshot = null;
-                return;
-            }
-            if (!ReferenceEquals(source, _secondaryStorage))
-            {
-                _secondaryStorage.CopyFrom(source);
-            }
-            Secondary2Snapshot = _secondaryStorage;
-        }
-
-        /// <summary>
-        /// Publishes the pooled secondary storage slot as the live
-        /// <see cref="Secondary2Snapshot"/> and returns it so the caller can
-        /// write fields directly, avoiding an intermediate copy.
-        /// </summary>
-        internal SecondaryStationResult PrepareSecondary2Snapshot()
-        {
-            Secondary2Snapshot = _secondaryStorage;
-            return _secondaryStorage;
-        }
-
-        internal void ResetForReuse()
-        {
-            Array.Clear(Residual, 0, Residual.Length);
-            Array.Clear(VS1, 0, VS1.Length);
-            Array.Clear(VS2, 0, VS2.Length);
-            Array.Clear(VSX, 0, VSX.Length);
-            CarryKinematicSnapshot = null;
-            Secondary2Snapshot = null;
-        }
-    }
-
-    public class BlsysResult
-    {
-        public double[] Residual = new double[3];
-        public double[,] VS1 = new double[3, 5];
-        public double[,] VS2 = new double[3, 5];
-        /// <summary>
-        /// Arc-length sensitivity vector VSX(3). Fortran BLSYS: VSX = BLX + BTX.
-        /// Used in SETBL for the XI_ULE coupling in both VM matrix and VDEL RHS.
-        /// </summary>
-        public double[] VSX = new double[3];
-        public double U2;
-        public double U2_UEI;
-        public double HK2;
-        public double HK2_U2;
-        public double HK2_T2;
-        public double HK2_D2;
-        public PrimaryStationState? Primary2Snapshot;
-        public KinematicResult? Kinematic2Snapshot;
-        public SecondaryStationResult? Secondary2Snapshot;
-        public double StaleVs121;
-
-        // Pooled storage for Primary2Snapshot when a caller-provided override
-        // is not available — replaces `new PrimaryStationState { ... }` per
-        // station per Newton iter.
-        private readonly PrimaryStationState _primaryScratch = new();
-
-        /// <summary>
-        /// Publishes the pooled primary scratch slot as
-        /// <see cref="Primary2Snapshot"/> and returns it so the caller can
-        /// assign U/T/D directly without allocating.
-        /// </summary>
-        internal PrimaryStationState PreparePrimary2Snapshot()
-        {
-            Primary2Snapshot = _primaryScratch;
-            return _primaryScratch;
-        }
-
-        internal void ResetForReuse()
-        {
-            Array.Clear(Residual, 0, Residual.Length);
-            Array.Clear(VS1, 0, VS1.Length);
-            Array.Clear(VS2, 0, VS2.Length);
-            Array.Clear(VSX, 0, VSX.Length);
-            U2 = U2_UEI = HK2 = HK2_U2 = HK2_T2 = HK2_D2 = StaleVs121 = 0.0;
-            Primary2Snapshot = null;
-            Kinematic2Snapshot = null;
-            Secondary2Snapshot = null;
-        }
-    }
 
     // ThreadStatic pooled result buffers — per-station-per-Newton-iter
     // allocations were the #1 parity-branch GC pressure site (~70k
@@ -7254,36 +6157,5 @@ public static class BoundaryLayerSystemAssembler
         return b;
     }
 
-    public class SecondaryStationResult
-    {
-        public double Hc, Hc_T, Hc_D, Hc_U, Hc_MS;
-        public double Hs, Hs_T, Hs_D, Hs_U, Hs_MS;
-        public double Us, Us_T, Us_D, Us_U, Us_MS;
-        public double Cq, Cq_T, Cq_D, Cq_U, Cq_MS;
-        public double Cf, Cf_T, Cf_D, Cf_U, Cf_MS, Cf_RE;
-        public double Di, Di_S, Di_T, Di_D, Di_U, Di_MS;
-        public double De, De_T, De_D, De_U, De_MS;
-
-        // Legacy mapping: none
-        // Difference from legacy: This is a managed-only snapshot helper used to carry secondary-state values across parity-sensitive call sites.
-        // Decision: Keep the clone helper because it makes the stale-state parity behavior explicit and testable.
-        public SecondaryStationResult Clone()
-        {
-            var clone = new SecondaryStationResult();
-            clone.CopyFrom(this);
-            return clone;
-        }
-
-        public void CopyFrom(SecondaryStationResult source)
-        {
-            Hc = source.Hc; Hc_T = source.Hc_T; Hc_D = source.Hc_D; Hc_U = source.Hc_U; Hc_MS = source.Hc_MS;
-            Hs = source.Hs; Hs_T = source.Hs_T; Hs_D = source.Hs_D; Hs_U = source.Hs_U; Hs_MS = source.Hs_MS;
-            Us = source.Us; Us_T = source.Us_T; Us_D = source.Us_D; Us_U = source.Us_U; Us_MS = source.Us_MS;
-            Cq = source.Cq; Cq_T = source.Cq_T; Cq_D = source.Cq_D; Cq_U = source.Cq_U; Cq_MS = source.Cq_MS;
-            Cf = source.Cf; Cf_T = source.Cf_T; Cf_D = source.Cf_D; Cf_U = source.Cf_U; Cf_MS = source.Cf_MS; Cf_RE = source.Cf_RE;
-            Di = source.Di; Di_S = source.Di_S; Di_T = source.Di_T; Di_D = source.Di_D; Di_U = source.Di_U; Di_MS = source.Di_MS;
-            De = source.De; De_T = source.De_T; De_D = source.De_D; De_U = source.De_U; De_MS = source.De_MS;
-        }
-    }
 
 }

@@ -724,7 +724,7 @@ ledger_summary:
       (2) Per-call T[count] scratch arrays inside FitWithBoundaryConditionsCore and FitSegment.
       (3) Trace helpers build 20+ field anonymous objects per SEVAL/DEVAL; SolverTrace.IsActive
           guard is inside Event() and cannot suppress caller-side boxing. SEVAL/DEVAL are called
-          from CosineClusteringPanelDistributor repanelling loops and LE-finder Newton iteration,
+          from CurvatureAdaptivePanelDistributor repanelling loops and LE-finder Newton iteration,
           making this a measurable allocation site even though it is not on the viscous Newton
           inner loop.
       (4) InvertSpline silently returns initial guess on failure; Fortran SINVRT writes to stdout.

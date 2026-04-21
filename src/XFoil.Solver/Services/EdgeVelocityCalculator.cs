@@ -198,7 +198,7 @@ public static class EdgeVelocityCalculator
         double[] gamma = destination ?? new double[n];
         for (int i = 0; i < n; i++)
         {
-            gamma[i] = useLegacyPrecision ? (float)qvis[i] : qvis[i];
+            gamma[i] = (float)qvis[i];
         }
 
         return gamma;

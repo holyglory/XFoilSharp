@@ -36,7 +36,7 @@ public class InitialInfluenceTraceTests
             panelCount: 160,
             reynoldsNumber: 1_000_000,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,
@@ -65,7 +65,7 @@ public class InitialInfluenceTraceTests
         });
         using var traceScope = SolverTrace.Begin(traceWriter);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             geometry.x,
             geometry.y,
             geometry.x.Length,

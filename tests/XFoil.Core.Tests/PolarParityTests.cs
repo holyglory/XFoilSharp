@@ -477,7 +477,7 @@ public class PolarParityTests
             panelCount: 160,
             reynoldsNumber: reynoldsNumber,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,

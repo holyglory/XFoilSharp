@@ -145,7 +145,7 @@ public class ViscousSolverEngineTests
         var settings = new AnalysisSettings(
             panelCount: 80,
             reynoldsNumber: 1_000_000,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             maxViscousIterations: 3,
             viscousConvergenceTolerance: 1e-20);
@@ -211,7 +211,7 @@ public class ViscousSolverEngineTests
         var settings = new AnalysisSettings(
             panelCount: 120,
             reynoldsNumber: 3_000_000,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             maxViscousIterations: 200,
             viscousConvergenceTolerance: 1e-4);
@@ -265,7 +265,7 @@ public class ViscousSolverEngineTests
         var settings = new AnalysisSettings(
             panelCount: 80,
             reynoldsNumber: 1_000_000,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             maxViscousIterations: 10,
             viscousConvergenceTolerance: 1e-4,
@@ -293,7 +293,7 @@ public class ViscousSolverEngineTests
         var settings = new AnalysisSettings(
             panelCount: 120,
             reynoldsNumber: 1_000_000,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             maxViscousIterations: 200,
             viscousConvergenceTolerance: 1e-4);

@@ -199,7 +199,7 @@ public static class InfluenceMatrixBuilder
     /// <summary>
     /// Builds the numerical (finite-difference) DIJ matrix by perturbing each source
     /// strength and measuring the resulting edge velocity change.
-    /// Useful for HessSmith adapter and debugging/validation.
+    /// Useful for debugging/validation.
     /// </summary>
     /// <param name="inviscidState">Inviscid solver state.</param>
     /// <param name="panelState">Panel geometry.</param>
@@ -540,7 +540,7 @@ public static class InfluenceMatrixBuilder
         // ThreadStatic pool — eliminates ~103KB LOH + int[] allocation per case.
         // Each call overwrites the buffers, so sharing across calls is safe since
         // the context is consumed fully before the next case begins.
-        var luFactors = XFoil.Solver.Numerics.SolverBuffers.LegacyWakeLuFactors(size);
+        var luFactors = XFoil.Solver.Numerics.SolverBuffers.LegacyWakeLuFactorsFloat(size);
         for (int row = 0; row < size; row++)
         {
             for (int column = 0; column < size; column++)

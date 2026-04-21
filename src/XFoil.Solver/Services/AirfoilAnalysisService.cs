@@ -19,46 +19,10 @@ namespace XFoil.Solver.Services;
 /// (ViscousSolverEngine + PolarSweepRunner). The old surrogate-pipeline methods
 /// now throw NotSupportedException directing callers to the Newton path.
 /// </summary>
-public sealed class AirfoilAnalysisService
+public class AirfoilAnalysisService
 {
-    private readonly PanelMeshGenerator panelMeshGenerator;
-    private readonly HessSmithInviscidSolver inviscidSolver;
-    private readonly BoundaryLayerTopologyBuilder boundaryLayerTopologyBuilder;
-    private readonly ViscousStateSeedBuilder viscousStateSeedBuilder;
-    private readonly ViscousStateEstimator viscousStateEstimator;
-    private readonly ViscousLaminarCorrector viscousLaminarCorrector;
-
-    // Legacy mapping: managed-only façade constructor with no direct Fortran analogue.
-    // Difference from legacy: XFoil constructs and reuses global solver state implicitly; the port wires explicit service dependencies.
-    // Decision: Keep the constructor because dependency injection is the right managed boundary.
     public AirfoilAnalysisService()
-        : this(
-            new PanelMeshGenerator(),
-            new HessSmithInviscidSolver(),
-            new BoundaryLayerTopologyBuilder(),
-            new ViscousStateSeedBuilder(),
-            new ViscousStateEstimator(),
-            new ViscousLaminarCorrector())
     {
-    }
-
-    // Legacy mapping: managed-only dependency-injection constructor.
-    // Difference from legacy: The original code does not compose services this way because routines operate through shared COMMON state.
-    // Decision: Keep the explicit constructor for testability and API clarity.
-    public AirfoilAnalysisService(
-        PanelMeshGenerator panelMeshGenerator,
-        HessSmithInviscidSolver inviscidSolver,
-        BoundaryLayerTopologyBuilder boundaryLayerTopologyBuilder,
-        ViscousStateSeedBuilder viscousStateSeedBuilder,
-        ViscousStateEstimator viscousStateEstimator,
-        ViscousLaminarCorrector viscousLaminarCorrector)
-    {
-        this.panelMeshGenerator = panelMeshGenerator ?? throw new ArgumentNullException(nameof(panelMeshGenerator));
-        this.inviscidSolver = inviscidSolver ?? throw new ArgumentNullException(nameof(inviscidSolver));
-        this.boundaryLayerTopologyBuilder = boundaryLayerTopologyBuilder ?? throw new ArgumentNullException(nameof(boundaryLayerTopologyBuilder));
-        this.viscousStateSeedBuilder = viscousStateSeedBuilder ?? throw new ArgumentNullException(nameof(viscousStateSeedBuilder));
-        this.viscousStateEstimator = viscousStateEstimator ?? throw new ArgumentNullException(nameof(viscousStateEstimator));
-        this.viscousLaminarCorrector = viscousLaminarCorrector ?? throw new ArgumentNullException(nameof(viscousLaminarCorrector));
     }
 
     // ================================================================
@@ -68,7 +32,7 @@ public sealed class AirfoilAnalysisService
     // Legacy mapping: managed façade over f_xfoil/src/xoper.f :: SPECAL/SPECCL lineage plus the alternative linear-vortex path.
     // Difference from legacy: The managed API can dispatch between Hess-Smith and linear-vortex inviscid implementations through settings instead of a single monolithic OPER path.
     // Decision: Keep the dispatching façade because it exposes the supported inviscid runtime choices clearly.
-    public InviscidAnalysisResult AnalyzeInviscid(
+    public virtual InviscidAnalysisResult AnalyzeInviscid(
         AirfoilGeometry geometry,
         double angleOfAttackDegrees,
         AnalysisSettings? settings = null)
@@ -79,52 +43,7 @@ public sealed class AirfoilAnalysisService
         }
 
         settings ??= new AnalysisSettings();
-
-        if (settings.InviscidSolverType == InviscidSolverType.LinearVortex)
-        {
-            return AnalyzeInviscidLinearVortex(geometry, angleOfAttackDegrees, settings);
-        }
-
-        var preparedSystem = PrepareInviscidSystem(geometry, settings);
-        return inviscidSolver.Analyze(preparedSystem, angleOfAttackDegrees, settings.FreestreamVelocity, settings.MachNumber);
-    }
-
-    // Legacy mapping: managed-only diagnostic façade derived from stagnation/topology bookkeeping in xpanel.f/xbl.f.
-    // Difference from legacy: The topology is returned as a value object instead of being held in solver-side arrays.
-    // Decision: Keep the diagnostic entry point because it supports tooling and tests cleanly.
-    public BoundaryLayerTopology AnalyzeBoundaryLayerTopology(
-        AirfoilGeometry geometry,
-        double angleOfAttackDegrees,
-        AnalysisSettings? settings = null)
-    {
-        var analysis = AnalyzeInviscid(geometry, angleOfAttackDegrees, settings);
-        return boundaryLayerTopologyBuilder.Build(analysis);
-    }
-
-    // Legacy mapping: managed-only diagnostic façade derived from legacy seed-state concepts.
-    // Difference from legacy: The method packages seed data into explicit objects instead of exposing solver arrays.
-    // Decision: Keep the diagnostic API.
-    public ViscousStateSeed AnalyzeViscousStateSeed(
-        AirfoilGeometry geometry,
-        double angleOfAttackDegrees,
-        AnalysisSettings? settings = null)
-    {
-        var analysis = AnalyzeInviscid(geometry, angleOfAttackDegrees, settings);
-        var topology = boundaryLayerTopologyBuilder.Build(analysis);
-        return viscousStateSeedBuilder.Build(analysis, topology);
-    }
-
-    // Legacy mapping: managed-only diagnostic façade around the simplified initial-state estimator.
-    // Difference from legacy: XFoil does not expose this standalone estimate step as a public API.
-    // Decision: Keep it because it is useful for inspection and testing.
-    public ViscousStateEstimate AnalyzeViscousInitialState(
-        AirfoilGeometry geometry,
-        double angleOfAttackDegrees,
-        AnalysisSettings? settings = null)
-    {
-        settings ??= new AnalysisSettings();
-        var seed = AnalyzeViscousStateSeed(geometry, angleOfAttackDegrees, settings);
-        return viscousStateEstimator.Estimate(seed, settings);
+        return AnalyzeInviscidLinearVortex(geometry, angleOfAttackDegrees, settings);
     }
 
     // ================================================================
@@ -142,7 +61,7 @@ public sealed class AirfoilAnalysisService
     // Legacy mapping: f_xfoil/src/xoper.f :: operating-point viscous solve lineage through VISCAL.
     // Difference from legacy: The façade extracts coordinates and delegates to ViscousSolverEngine instead of embedding the full operating-point loop itself.
     // Decision: Keep the thin wrapper because it defines the supported single-point viscous API cleanly.
-    public ViscousAnalysisResult AnalyzeViscous(
+    public virtual ViscousAnalysisResult AnalyzeViscous(
         AirfoilGeometry geometry,
         double angleOfAttackDegrees,
         AnalysisSettings? settings = null)
@@ -178,7 +97,7 @@ public sealed class AirfoilAnalysisService
     // Legacy mapping: f_xfoil/src/xoper.f :: Type-1 polar sweep lineage.
     // Difference from legacy: The actual sweep logic lives in PolarSweepRunner and returns managed result objects.
     // Decision: Keep the wrapper because it preserves a small public façade.
-    public List<ViscousAnalysisResult> SweepViscousAlpha(
+    public virtual List<ViscousAnalysisResult> SweepViscousAlpha(
         AirfoilGeometry geometry,
         double alphaStartDegrees,
         double alphaEndDegrees,
@@ -204,7 +123,7 @@ public sealed class AirfoilAnalysisService
     // Legacy mapping: f_xfoil/src/xoper.f :: Type-2 polar sweep lineage.
     // Difference from legacy: Delegates to the managed sweep runner instead of owning the loop locally.
     // Decision: Keep the wrapper because it exposes the public CL-sweep API cleanly.
-    public List<ViscousAnalysisResult> SweepViscousCL(
+    public virtual List<ViscousAnalysisResult> SweepViscousCL(
         AirfoilGeometry geometry,
         double clStart,
         double clEnd,
@@ -229,7 +148,7 @@ public sealed class AirfoilAnalysisService
     // Legacy mapping: f_xfoil/src/xoper.f :: Type-3 polar sweep lineage with f_xfoil/src/xfoil.f :: MRCL semantics.
     // Difference from legacy: The actual loop and reduced MRCL handling live in PolarSweepRunner.
     // Decision: Keep the wrapper because it keeps the public API small.
-    public List<ViscousAnalysisResult> SweepViscousRe(
+    public virtual List<ViscousAnalysisResult> SweepViscousRe(
         AirfoilGeometry geometry,
         double fixedCL,
         double reStart,
@@ -249,194 +168,13 @@ public sealed class AirfoilAnalysisService
     }
 
     // ================================================================
-    // Surrogate pipeline methods (replaced -- throw NotSupportedException)
-    // ================================================================
-
-    /// <summary>
-    /// [REMOVED] The surrogate ViscousIntervalSystem has been replaced by the Newton solver.
-    /// Use <see cref="AnalyzeViscous"/> instead.
-    /// </summary>
-    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
-    // Legacy mapping: none; managed-only compatibility shim.
-    // Difference from legacy: The method no longer performs work and exists only to prevent silent behavioral drift for older callers.
-    // Decision: Keep the explicit throw until the obsolete API surface can be removed.
-    public ViscousIntervalSystem AnalyzeViscousIntervalSystem(
-        AirfoilGeometry geometry,
-        double angleOfAttackDegrees,
-        AnalysisSettings? settings = null)
-    {
-        throw new NotSupportedException(
-            "The surrogate viscous interval system has been replaced by the Newton solver. " +
-            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
-    }
-
-    /// <summary>
-    /// [REMOVED] The surrogate laminar correction has been replaced by the Newton solver.
-    /// Use <see cref="AnalyzeViscous"/> instead.
-    /// </summary>
-    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
-    // Legacy mapping: none; managed-only compatibility shim.
-    // Difference from legacy: This obsolete member only redirects callers to the current Newton path.
-    // Decision: Keep the throw-only shim until callers are migrated.
-    public ViscousCorrectionResult AnalyzeViscousLaminarCorrection(
-        AirfoilGeometry geometry,
-        double angleOfAttackDegrees,
-        AnalysisSettings? settings = null,
-        int iterations = 3)
-    {
-        throw new NotSupportedException(
-            "The surrogate laminar correction has been replaced by the Newton solver. " +
-            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
-    }
-
-    /// <summary>
-    /// [REMOVED] The surrogate laminar solver has been replaced by the Newton solver.
-    /// Use <see cref="AnalyzeViscous"/> instead.
-    /// </summary>
-    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
-    // Legacy mapping: none; managed-only compatibility shim.
-    // Difference from legacy: This method no longer represents a supported solver path.
-    // Decision: Keep the explicit failure until the obsolete API is removed.
-    public ViscousSolveResult AnalyzeViscousLaminarSolve(
-        AirfoilGeometry geometry,
-        double angleOfAttackDegrees,
-        AnalysisSettings? settings = null,
-        int maxIterations = 10,
-        double residualTolerance = 0.2d)
-    {
-        throw new NotSupportedException(
-            "The surrogate laminar solver has been replaced by the Newton solver. " +
-            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
-    }
-
-    /// <summary>
-    /// [REMOVED] The surrogate viscous interaction coupler has been replaced by the Newton solver.
-    /// Use <see cref="AnalyzeViscous"/> instead.
-    /// </summary>
-    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
-    // Legacy mapping: none; managed-only compatibility shim.
-    // Difference from legacy: The staged interaction coupler is no longer implemented here.
-    // Decision: Keep the explicit throw while the obsolete API remains public.
-    public ViscousInteractionResult AnalyzeViscousInteraction(
-        AirfoilGeometry geometry,
-        double angleOfAttackDegrees,
-        AnalysisSettings? settings = null,
-        int interactionIterations = 3,
-        double couplingFactor = 0.12d,
-        int viscousIterations = 8,
-        double residualTolerance = 0.3d)
-    {
-        throw new NotSupportedException(
-            "The surrogate viscous interaction coupler has been replaced by the Newton solver. " +
-            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
-    }
-
-    /// <summary>
-    /// [REMOVED] The surrogate displacement-coupled solver has been replaced by the Newton solver.
-    /// Use <see cref="AnalyzeViscous"/> or <see cref="SweepViscousAlpha"/> instead.
-    /// </summary>
-    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
-    // Legacy mapping: none; managed-only compatibility shim.
-    // Difference from legacy: The old displacement-coupled path is not part of the supported runtime anymore.
-    // Decision: Keep the throw-only stub until the obsolete public surface is retired.
-    public DisplacementCoupledResult AnalyzeDisplacementCoupledViscous(
-        AirfoilGeometry geometry,
-        double angleOfAttackDegrees,
-        AnalysisSettings? settings = null,
-        int iterations = 2,
-        int viscousIterations = 8,
-        double residualTolerance = 0.3d,
-        double displacementRelaxation = 0.5d)
-    {
-        throw new NotSupportedException(
-            "The surrogate displacement-coupled solver has been replaced by the Newton solver. " +
-            "Use AnalyzeViscous() or SweepViscousAlpha() instead.");
-    }
-
-    /// <summary>
-    /// [REMOVED] The surrogate displacement-coupled alpha sweep has been replaced.
-    /// Use <see cref="SweepViscousAlpha"/> instead.
-    /// </summary>
-    [Obsolete("Surrogate viscous pipeline removed. Use SweepViscousAlpha() instead.")]
-    // Legacy mapping: none; managed-only compatibility shim.
-    // Difference from legacy: The historical sweep path has been removed in favor of PolarSweepRunner.
-    // Decision: Keep the explicit throw while compatibility stubs still exist.
-    public ViscousPolarSweepResult SweepDisplacementCoupledAlpha(
-        AirfoilGeometry geometry,
-        double alphaStartDegrees,
-        double alphaEndDegrees,
-        double alphaStepDegrees,
-        AnalysisSettings? settings = null,
-        int couplingIterations = 2,
-        int viscousIterations = 8,
-        double residualTolerance = 0.3d,
-        double displacementRelaxation = 0.5d)
-    {
-        throw new NotSupportedException(
-            "The surrogate displacement-coupled alpha sweep has been replaced. " +
-            "Use SweepViscousAlpha() instead.");
-    }
-
-    /// <summary>
-    /// [REMOVED] The surrogate displacement-coupled CL sweep has been replaced.
-    /// Use <see cref="SweepViscousCL"/> instead.
-    /// </summary>
-    [Obsolete("Surrogate viscous pipeline removed. Use SweepViscousCL() instead.")]
-    // Legacy mapping: none; managed-only compatibility shim.
-    // Difference from legacy: The obsolete member does not implement the former path anymore.
-    // Decision: Keep the throw-only stub until public cleanup is allowed.
-    public ViscousLiftSweepResult SweepDisplacementCoupledLiftCoefficient(
-        AirfoilGeometry geometry,
-        double liftStart,
-        double liftEnd,
-        double liftStep,
-        AnalysisSettings? settings = null,
-        int couplingIterations = 2,
-        int viscousIterations = 8,
-        double residualTolerance = 0.3d,
-        double displacementRelaxation = 0.5d,
-        double initialAlphaDegrees = 0d,
-        double liftTolerance = 0.05d,
-        int maxIterations = 12)
-    {
-        throw new NotSupportedException(
-            "The surrogate displacement-coupled CL sweep has been replaced. " +
-            "Use SweepViscousCL() instead.");
-    }
-
-    /// <summary>
-    /// [REMOVED] The surrogate displacement-coupled CL find has been replaced.
-    /// Use <see cref="AnalyzeViscous"/> with the target CL approach instead.
-    /// </summary>
-    [Obsolete("Surrogate viscous pipeline removed. Use AnalyzeViscous() instead.")]
-    // Legacy mapping: none; managed-only compatibility shim.
-    // Difference from legacy: The method now exists only to redirect older callers.
-    // Decision: Keep the explicit failure until the obsolete API is deleted.
-    public ViscousTargetLiftResult AnalyzeDisplacementCoupledForLiftCoefficient(
-        AirfoilGeometry geometry,
-        double targetLiftCoefficient,
-        AnalysisSettings? settings = null,
-        int couplingIterations = 2,
-        int viscousIterations = 8,
-        double residualTolerance = 0.3d,
-        double displacementRelaxation = 0.5d,
-        double initialAlphaDegrees = 0d,
-        double liftTolerance = 0.05d,
-        int maxIterations = 12)
-    {
-        throw new NotSupportedException(
-            "The surrogate displacement-coupled CL finder has been replaced. " +
-            "Use AnalyzeViscous() or SweepViscousCL() instead.");
-    }
-
-    // ================================================================
     // Inviscid sweep methods (unchanged)
     // ================================================================
 
     // Legacy mapping: f_xfoil/src/xoper.f :: SPECAL repeated over an alpha range.
     // Difference from legacy: The sweep uses the prepared Hess-Smith system and stores managed polar points explicitly.
     // Decision: Keep the managed sweep because it cleanly exposes the current public inviscid alpha-polar API.
-    public PolarSweepResult SweepInviscidAlpha(
+    public virtual PolarSweepResult SweepInviscidAlpha(
         AirfoilGeometry geometry,
         double alphaStartDegrees,
         double alphaEndDegrees,
@@ -454,13 +192,12 @@ public sealed class AirfoilAnalysisService
         }
 
         settings ??= new AnalysisSettings();
-        var preparedSystem = PrepareInviscidSystem(geometry, settings);
         var step = NormalizeStep(alphaStartDegrees, alphaEndDegrees, alphaStepDegrees);
         var points = new List<PolarPoint>();
 
         for (var alpha = alphaStartDegrees; ShouldContinue(alpha, alphaEndDegrees, step); alpha += step)
         {
-            var result = inviscidSolver.Analyze(preparedSystem, alpha, settings.FreestreamVelocity, settings.MachNumber);
+            var result = AnalyzeInviscidLinearVortex(geometry, alpha, settings);
             points.Add(ToPolarPoint(result));
         }
 
@@ -470,7 +207,7 @@ public sealed class AirfoilAnalysisService
     // Legacy mapping: f_xfoil/src/xoper.f :: SPECCL repeated over a CL range.
     // Difference from legacy: The sweep iterates through the prepared managed system and packages the results as explicit target-lift records.
     // Decision: Keep the managed implementation because it fits the public API surface cleanly.
-    public InviscidLiftSweepResult SweepInviscidLiftCoefficient(
+    public virtual InviscidLiftSweepResult SweepInviscidLiftCoefficient(
         AirfoilGeometry geometry,
         double liftStart,
         double liftEnd,
@@ -489,14 +226,15 @@ public sealed class AirfoilAnalysisService
         }
 
         settings ??= new AnalysisSettings();
-        var preparedSystem = PrepareInviscidSystem(geometry, settings);
         var step = NormalizeStep(liftStart, liftEnd, liftStep);
         var points = new List<InviscidTargetLiftResult>();
         var alphaGuess = initialAlphaDegrees;
 
+        var caps = settings;
+        Func<double, InviscidAnalysisResult> evaluate = alpha => AnalyzeInviscidLinearVortex(geometry, alpha, caps);
         for (var targetLift = liftStart; ShouldContinue(targetLift, liftEnd, step); targetLift += step)
         {
-            var result = AnalyzeInviscidForLiftCoefficient(preparedSystem, targetLift, settings, alphaGuess);
+            var result = AnalyzeInviscidForLiftCoefficient(evaluate, targetLift, alphaGuess, liftTolerance: 0.01d, maxIterations: 20);
             alphaGuess = result.AngleOfAttackDegrees;
             points.Add(new InviscidTargetLiftResult(targetLift, result));
         }
@@ -507,7 +245,7 @@ public sealed class AirfoilAnalysisService
     // Legacy mapping: f_xfoil/src/xoper.f :: SPECCL.
     // Difference from legacy: The managed API exposes this as a direct public query returning an InviscidAnalysisResult instead of mutating the global operating state.
     // Decision: Keep the public helper because it is a useful capability boundary.
-    public InviscidAnalysisResult AnalyzeInviscidForLiftCoefficient(
+    public virtual InviscidAnalysisResult AnalyzeInviscidForLiftCoefficient(
         AirfoilGeometry geometry,
         double targetLiftCoefficient,
         AnalysisSettings? settings = null,
@@ -531,8 +269,10 @@ public sealed class AirfoilAnalysisService
         }
 
         settings ??= new AnalysisSettings();
-        var preparedSystem = PrepareInviscidSystem(geometry, settings);
-        return AnalyzeInviscidForLiftCoefficient(preparedSystem, targetLiftCoefficient, settings, initialAlphaDegrees, liftTolerance, maxIterations);
+        var caps = settings;
+        return AnalyzeInviscidForLiftCoefficient(
+            alpha => AnalyzeInviscidLinearVortex(geometry, alpha, caps),
+            targetLiftCoefficient, initialAlphaDegrees, liftTolerance, maxIterations);
     }
 
     // ================================================================
@@ -557,17 +297,18 @@ public sealed class AirfoilAnalysisService
 
     // Legacy mapping: f_xfoil/src/xoper.f :: SPECCL-style target-CL solve, managed-derived for the Hess-Smith path.
     // Difference from legacy: The root find is a simple secant-style managed loop around the prepared Hess-Smith solver instead of the original XFoil inviscid state machine.
-    // Decision: Keep the helper because it provides the current public target-CL behavior.
-    private InviscidAnalysisResult AnalyzeInviscidForLiftCoefficient(
-        PreparedInviscidSystem preparedSystem,
+    // Solver-agnostic Newton/secant alpha search: takes an evaluator that
+    // returns the inviscid result for a given alpha, then iterates to hit
+    // the target CL.
+    private static InviscidAnalysisResult AnalyzeInviscidForLiftCoefficient(
+        Func<double, InviscidAnalysisResult> evaluate,
         double targetLiftCoefficient,
-        AnalysisSettings settings,
         double initialAlphaDegrees,
-        double liftTolerance = 0.01d,
-        int maxIterations = 20)
+        double liftTolerance,
+        int maxIterations)
     {
         var alpha1 = initialAlphaDegrees;
-        var result1 = inviscidSolver.Analyze(preparedSystem, alpha1, settings.FreestreamVelocity, settings.MachNumber);
+        var result1 = evaluate(alpha1);
         var error1 = targetLiftCoefficient - result1.LiftCoefficient;
         if (Math.Abs(error1) <= liftTolerance)
         {
@@ -581,7 +322,7 @@ public sealed class AirfoilAnalysisService
         }
 
         var alpha2 = alpha1 + (2d * seedStep);
-        var result2 = inviscidSolver.Analyze(preparedSystem, alpha2, settings.FreestreamVelocity, settings.MachNumber);
+        var result2 = evaluate(alpha2);
         var error2 = targetLiftCoefficient - result2.LiftCoefficient;
         if (Math.Abs(error2) <= liftTolerance)
         {
@@ -611,7 +352,7 @@ public sealed class AirfoilAnalysisService
                 nextAlpha = alpha2 + (0.25d * Math.Sign(error2 == 0d ? 1d : error2));
             }
 
-            var nextResult = inviscidSolver.Analyze(preparedSystem, nextAlpha, settings.FreestreamVelocity, settings.MachNumber);
+            var nextResult = evaluate(nextAlpha);
             var nextError = targetLiftCoefficient - nextResult.LiftCoefficient;
             if (Math.Abs(nextError) < bestError)
             {
@@ -660,10 +401,34 @@ public sealed class AirfoilAnalysisService
             settings.MachNumber,
             settings.UseLegacyPanelingPrecision);
 
-        var mesh = panelMeshGenerator.Generate(geometry, settings.PanelCount, settings.Paneling);
+        // Cleanup Step 0.A: replicate LinearVortexInviscidSolver.AnalyzeInviscid's
+        // panel distribution locally so we get control points that ACTUALLY
+        // correspond to the panels the inviscid solver used. Previously this
+        // method called panelMeshGenerator.Generate(), which used a DIFFERENT
+        // distributor (managed approximation, not PANGEN port) — Cp values
+        // were silently mapped to control points from a different mesh.
+        int maxNodes = settings.PanelCount + 40;
+        var lvPanel = new LinearVortexPanelState(maxNodes);
+        CurvatureAdaptivePanelDistributor.Distribute(
+            inputX, inputY, points.Count,
+            lvPanel, settings.PanelCount,
+            useLegacyPrecision: settings.UseLegacyPanelingPrecision);
+
+        int sampleCount = Math.Min(lvResult.PressureCoefficients.Count, lvPanel.NodeCount - 1);
+        var lvSamples = new PressureCoefficientSample[sampleCount];
+        for (int si = 0; si < sampleCount; si++)
+        {
+            double midX = 0.5 * (lvPanel.X[si] + lvPanel.X[si + 1]);
+            double midY = 0.5 * (lvPanel.Y[si] + lvPanel.Y[si + 1]);
+            lvSamples[si] = new PressureCoefficientSample(
+                new AirfoilPoint(midX, midY),
+                tangentialVelocity: 0d,
+                pressureCoefficient: lvResult.PressureCoefficients[si],
+                correctedPressureCoefficient: lvResult.PressureCoefficients[si]);
+        }
 
         return new InviscidAnalysisResult(
-            mesh,
+            panelCount: lvPanel.NodeCount - 1,
             angleOfAttackDegrees,
             settings.MachNumber,
             circulation: 0.0,
@@ -676,17 +441,8 @@ public sealed class AirfoilAnalysisService
             momentCoefficientQuarterChord: lvResult.MomentCoefficient,
             sourceStrengths: Array.Empty<double>(),
             vortexStrength: 0.0,
-            pressureSamples: Array.Empty<PressureCoefficientSample>(),
+            pressureSamples: lvSamples,
             wake: new WakeGeometry(Array.Empty<WakePoint>()));
-    }
-
-    // Legacy mapping: managed-only prepared-system helper around the Hess-Smith path.
-    // Difference from legacy: XFoil does not expose this prepared-system concept as a separate step.
-    // Decision: Keep the helper because it supports repeated inviscid queries efficiently.
-    private PreparedInviscidSystem PrepareInviscidSystem(AirfoilGeometry geometry, AnalysisSettings settings)
-    {
-        var mesh = panelMeshGenerator.Generate(geometry, settings.PanelCount, settings.Paneling);
-        return inviscidSolver.Prepare(mesh);
     }
 
     // Legacy mapping: managed-only result adapter with no direct Fortran analogue.

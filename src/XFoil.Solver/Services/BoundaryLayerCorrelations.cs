@@ -62,11 +62,7 @@ public static class BoundaryLayerCorrelations
         double msq,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return KinematicShapeParameter(h, msq);
-        }
-
+        // Phase 1 strip: float-only path. The 2-arg overload remains modern double.
         float hf = (float)h;
         float msqf = (float)msq;
         // HKIN is a small algebraic kernel, but the parity path still needs the
@@ -129,11 +125,7 @@ public static class BoundaryLayerCorrelations
         double hk,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return LaminarShapeParameter(hk);
-        }
-
+        // Phase 1 strip: float-only path. The 1-arg overload remains modern.
         float hkf = (float)hk;
         float hsf;
         float hsHkf;
@@ -243,80 +235,7 @@ public static class BoundaryLayerCorrelations
         double msq,
         bool useLegacyPrecision)
     {
-        const double HsMin = 1.500;
-        const double DHsInf = 0.015;
-
-        if (!useLegacyPrecision)
-        {
-            // Limited Rtheta dependence for Rtheta < 200 (12/4/94 correction)
-            double ho, ho_rt;
-            if (rt > 400.0)
-            {
-                ho = 3.0 + 400.0 / rt;
-                ho_rt = -400.0 / (rt * rt);
-            }
-            else
-            {
-                ho = 4.0;
-                ho_rt = 0.0;
-            }
-
-            double rtz, rtz_rt;
-            if (rt > 200.0)
-            {
-                rtz = rt;
-                rtz_rt = 1.0;
-            }
-            else
-            {
-                rtz = 200.0;
-                rtz_rt = 0.0;
-            }
-
-            double hs, hs_hk, hs_rt;
-
-            if (hk < ho)
-            {
-                // Attached branch (new correlation 29 Nov 91)
-                double hr = (ho - hk) / (ho - 1.0);
-                double hr_hk = -1.0 / (ho - 1.0);
-                double hr_rt = (1.0 - hr) / (ho - 1.0) * ho_rt;
-
-                hs = (2.0 - HsMin - 4.0 / rtz) * hr * hr * 1.5 / (hk + 0.5) + HsMin
-                   + 4.0 / rtz;
-                hs_hk = -(2.0 - HsMin - 4.0 / rtz) * hr * hr * 1.5 / ((hk + 0.5) * (hk + 0.5))
-                       + (2.0 - HsMin - 4.0 / rtz) * hr * 2.0 * 1.5 / (hk + 0.5) * hr_hk;
-                hs_rt = (2.0 - HsMin - 4.0 / rtz) * hr * 2.0 * 1.5 / (hk + 0.5) * hr_rt
-                       + (hr * hr * 1.5 / (hk + 0.5) - 1.0) * 4.0 / (rtz * rtz) * rtz_rt;
-            }
-            else
-            {
-                // Separated branch
-                double grt = Math.Log(rtz);
-                double hdif = hk - ho;
-                double rtmp = hk - ho + 4.0 / grt;
-                double htmp = 0.007 * grt / (rtmp * rtmp) + DHsInf / hk;
-                double htmp_hk = -0.014 * grt / (rtmp * rtmp * rtmp) - DHsInf / (hk * hk);
-                double htmp_rt = -0.014 * grt / (rtmp * rtmp * rtmp) * (-ho_rt - 4.0 / (grt * grt) / rtz * rtz_rt)
-                               + 0.007 / (rtmp * rtmp) / rtz * rtz_rt;
-
-                hs = hdif * hdif * htmp + HsMin + 4.0 / rtz;
-                hs_hk = hdif * 2.0 * htmp
-                       + hdif * hdif * htmp_hk;
-                hs_rt = hdif * hdif * htmp_rt - 4.0 / (rtz * rtz) * rtz_rt
-                       + hdif * 2.0 * htmp * (-ho_rt);
-            }
-
-            // Whitfield's minor additional compressibility correction
-            double fm = 1.0 + 0.014 * msq;
-            hs = (hs + 0.028 * msq) / fm;
-            hs_hk = hs_hk / fm;
-            hs_rt = hs_rt / fm;
-            double hs_msq = 0.028 / fm - 0.014 * hs / fm;
-
-            return (hs, hs_hk, hs_rt, hs_msq);
-        }
-
+        // Phase 1 strip: float-only path. 3-arg overload provides modern.
         float hkf = (float)hk;
         float rtf = (float)rt;
         float msqf = (float)msq;
@@ -473,11 +392,7 @@ public static class BoundaryLayerCorrelations
         double msq,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return LaminarSkinFriction(hk, rt, msq);
-        }
-
+        // Phase 1 strip: float-only path. The 3-arg overload remains modern.
         float hkf = (float)hk;
         float rtf = (float)rt;
         float cf;
@@ -550,101 +465,62 @@ public static class BoundaryLayerCorrelations
     public static (double Cf, double Cf_Hk, double Cf_Rt, double Cf_Msq) TurbulentSkinFriction(
         double hk, double rt, double msq, bool useLegacyPrecision, double cfFac = DefaultCfFac)
     {
-        if (useLegacyPrecision)
-        {
-            float hkf = (float)hk;
-            float rtf = (float)rt;
-            float msqf = (float)msq;
-            float cfFacf = (float)cfFac;
-            float gm1f = (float)LegacyPrecisionMath.GammaMinusOne(true);
-            // The legacy CFT entry follows the native build's single-round
-            // `1.0 + 0.5*GM1*MSQ` behavior. Replaying it as a separately rounded
-            // product plus add leaves FCARG one ULP low and cascades through the
-            // turbulent CF/DI family.
-            float fcArg = LegacyPrecisionMath.Fma(0.5f * gm1f, msqf, 1.0f);
-            float fc32 = MathF.Sqrt(fcArg);
-            float grt32 = LegacyLibm.Log(rtf / fc32);
-            grt32 = MathF.Max(grt32, 3.0f);
+        // Phase 1 strip: float-only path. 3-arg overload provides modern.
+        float hkf = (float)hk;
+        float rtf = (float)rt;
+        float msqf = (float)msq;
+        float cfFacf = (float)cfFac;
+        float gm1f = (float)LegacyPrecisionMath.GammaMinusOne(true);
+        // The legacy CFT entry follows the native build's single-round
+        // `1.0 + 0.5*GM1*MSQ` behavior. Replaying it as a separately rounded
+        // product plus add leaves FCARG one ULP low and cascades through the
+        // turbulent CF/DI family.
+        float fcArg = LegacyPrecisionMath.Fma(0.5f * gm1f, msqf, 1.0f);
+        float fc32 = MathF.Sqrt(fcArg);
+        float grt32 = LegacyLibm.Log(rtf / fc32);
+        grt32 = MathF.Max(grt32, 3.0f);
 
-            float gex32 = LegacyPrecisionMath.Fma(-hkf, 0.31f, -1.74f);
+        float gex32 = LegacyPrecisionMath.Fma(-hkf, 0.31f, -1.74f);
 
-            float arg32 = -1.33f * hkf;
-            arg32 = MathF.Max(-20.0f, arg32);
+        float arg32 = -1.33f * hkf;
+        arg32 = MathF.Max(-20.0f, arg32);
 
-            float thkArg32 = 4.0f - (hkf / 0.875f);
-            float thk32 = LegacyLibm.Tanh(thkArg32);
+        float thkArg32 = 4.0f - (hkf / 0.875f);
+        float thk32 = LegacyLibm.Tanh(thkArg32);
 
-            float grtRatio32 = grt32 / 2.3026f;
-            float cfo32 = cfFacf;
-            cfo32 *= 0.3f;
-            cfo32 *= LegacyLibm.Exp(arg32);
-            cfo32 *= LegacyLibm.Pow(grtRatio32, gex32);
+        float grtRatio32 = grt32 / 2.3026f;
+        float cfo32 = cfFacf;
+        cfo32 *= 0.3f;
+        cfo32 *= LegacyLibm.Exp(arg32);
+        cfo32 *= LegacyLibm.Pow(grtRatio32, gex32);
 
-            float cfTail32 = thk32 - 1.0f;
-            float cfNumerator32 = LegacyPrecisionMath.Fma(cfTail32, 1.1e-4f, cfo32);
-            float cf32 = cfNumerator32 / fc32;
+        float cfTail32 = thk32 - 1.0f;
+        float cfNumerator32 = LegacyPrecisionMath.Fma(cfTail32, 1.1e-4f, cfo32);
+        float cf32 = cfNumerator32 / fc32;
 
-            float cfHkTerm1 = -1.33f * cfo32;
-            float logGrtRatio32 = LegacyLibm.Log(grtRatio32);
-            float cfHkTerm2 = (-0.31f * logGrtRatio32) * cfo32;
-            float thkSq32 = LegacyPrecisionMath.MultiplyF(thk32, thk32);
-            float oneMinusThkSq32 = LegacyPrecisionMath.SubtractF(1.0f, thkSq32);
-            float scaledThkDiff32 = LegacyPrecisionMath.MultiplyF(-1.1e-4f, oneMinusThkSq32);
-            float cfHkTerm3 = LegacyPrecisionMath.DivideF(scaledThkDiff32, 0.875f);
-            // CFT stores CFHKTERM1/2/3 to REAL before assembling CF_HK, so the
-            // parity path must sum the staged terms rather than recomputing a
-            // wider inline numerator.
-            float cfHk32 = (cfHkTerm1 + cfHkTerm2 + cfHkTerm3) / fc32;
+        float cfHkTerm1 = -1.33f * cfo32;
+        float logGrtRatio32 = LegacyLibm.Log(grtRatio32);
+        float cfHkTerm2 = (-0.31f * logGrtRatio32) * cfo32;
+        float thkSq32 = LegacyPrecisionMath.MultiplyF(thk32, thk32);
+        float oneMinusThkSq32 = LegacyPrecisionMath.SubtractF(1.0f, thkSq32);
+        float scaledThkDiff32 = LegacyPrecisionMath.MultiplyF(-1.1e-4f, oneMinusThkSq32);
+        float cfHkTerm3 = LegacyPrecisionMath.DivideF(scaledThkDiff32, 0.875f);
+        // CFT stores CFHKTERM1/2/3 to REAL before assembling CF_HK; sum the
+        // staged terms rather than recomputing a wider inline numerator.
+        float cfHk32 = (cfHkTerm1 + cfHkTerm2 + cfHkTerm3) / fc32;
 
-            float cfRt32 = ((gex32 * cfo32) / (fc32 * grt32)) / rtf;
-            float fcSq32 = fc32 * fc32;
-            float cfMsqScaleConstant32 = 0.25f * gm1f;
-            float cfMsqScale32 = cfMsqScaleConstant32 / fcSq32;
-            float cfMsqLeadNumerator32 = gex32 * cfo32;
-            float cfMsqLeadDenominator32 = fc32 * grt32;
-            float cfMsqLeadCore32 = cfMsqLeadNumerator32 / cfMsqLeadDenominator32;
-            float cfMsqTail32 = cf32 * cfMsqScale32;
-            float cfMsqLeadTerm32 = cfMsqLeadCore32 * (-cfMsqScale32);
-            float cfMsq32 = cfMsqLeadTerm32 - cfMsqTail32;
+        float cfRt32 = ((gex32 * cfo32) / (fc32 * grt32)) / rtf;
+        float fcSq32 = fc32 * fc32;
+        float cfMsqScaleConstant32 = 0.25f * gm1f;
+        float cfMsqScale32 = cfMsqScaleConstant32 / fcSq32;
+        float cfMsqLeadNumerator32 = gex32 * cfo32;
+        float cfMsqLeadDenominator32 = fc32 * grt32;
+        float cfMsqLeadCore32 = cfMsqLeadNumerator32 / cfMsqLeadDenominator32;
+        float cfMsqTail32 = cf32 * cfMsqScale32;
+        float cfMsqLeadTerm32 = cfMsqLeadCore32 * (-cfMsqScale32);
+        float cfMsq32 = cfMsqLeadTerm32 - cfMsqTail32;
 
-
-            return (cf32, cfHk32, cfRt32, cfMsq32);
-        }
-
-        double gm1 = Gamma - 1.0;
-        double fc = Math.Sqrt(1.0 + 0.5 * gm1 * msq);
-        double grt = Math.Log(rt / fc);
-        grt = Math.Max(grt, 3.0);
-
-        double gex = -1.74 - 0.31 * hk;
-
-        double arg = -1.33 * hk;
-        arg = Math.Max(-20.0, arg);
-
-        double thk = Math.Tanh(4.0 - hk / 0.875);
-
-        double cfo = cfFac * 0.3 * Math.Exp(arg) * Math.Pow(grt / 2.3026, gex);
-        double cf = (cfo + 1.1e-4 * (thk - 1.0)) / fc;
-
-        double cf_hk = (-1.33 * cfo - 0.31 * Math.Log(grt / 2.3026) * cfo
-                       - 1.1e-4 * (1.0 - thk * thk) / 0.875) / fc;
-
-        double cf_rt, cf_msq;
-
-        // Only compute Rt/Msq sensitivities when GRT > 3.0 (otherwise clamped)
-        if (Math.Log(rt / fc) > 3.0)
-        {
-            cf_rt = gex * cfo / (fc * grt) / rt;
-            cf_msq = gex * cfo / (fc * grt) * (-0.25 * gm1 / (fc * fc)) - 0.25 * gm1 * cf / (fc * fc);
-        }
-        else
-        {
-            // GRT is clamped at 3.0, so Rt/Msq sensitivities through GRT vanish
-            cf_rt = 0.0;
-            cf_msq = -0.25 * gm1 * cf / (fc * fc);
-        }
-
-        return (cf, cf_hk, cf_rt, cf_msq);
+        return (cf32, cfHk32, cfRt32, cfMsq32);
     }
 
     // =====================================================================
@@ -669,96 +545,39 @@ public static class BoundaryLayerCorrelations
     // Decision: Keep the shared implementation with a parity branch because DIL is part of the active parity boundary search.
     public static (double Di, double Di_Hk, double Di_Rt) LaminarDissipation(double hk, double rt, bool useLegacyPrecision)
     {
-        if (useLegacyPrecision)
+        // Phase 1 strip: float-only path. 2-arg overload provides modern.
+        float hkf = (float)hk;
+        float rtf = (float)rt;
+
+        float di32;
+        float diHk32;
+
+        if (hkf < 4.0f)
         {
-            float hkf = (float)hk;
-            float rtf = (float)rt;
-
-            float di32;
-            float diHk32;
-            float hkbTrace = 0.0f;
-            float hkbSqTrace = 0.0f;
-            float denTrace = 0.0f;
-            float ratioTrace = 0.0f;
-            float numeratorTrace = 0.0f;
-
-            if (hkf < 4.0f)
-            {
-                float diff = 4.0f - hkf;
-                float pow55 = LegacyLibm.Pow(diff, 5.5f);
-                // Fresh DIL micro-driver cases show the low-Hk numerator does not
-                // round the product before the final REAL store. Replaying the
-                // source tree with plain float operators keeps DI one ULP low on
-                // raw-bit comparisons, so keep the multiply-add wide here and
-                // cast once at the end.
-                float numerator = LegacyPrecisionMath.DisableFma
-                    ? (0.00205f * pow55) + 0.207f
-                    : (float)(((double)0.00205f * pow55) + 0.207f);
-                numeratorTrace = numerator;
-                di32 = numerator / rtf;
-                diHk32 = (-0.00205f * 5.5f * LegacyLibm.Pow(diff, 4.5f)) / rtf;
-            }
-            else
-            {
-                // The hk>=4 numerator follows the same native REAL storage rule
-                // as the low-Hk branch: keep the product-add wide until the
-                // final REAL store. Rounding the product before the add leaves
-                // DI two bits low on the standalone DIL driver.
-                float hkbf = hkf - 4.0f;
-                float hkbSqf = hkbf * hkbf;
-                float denf = 1.0f + (0.02f * hkbSqf);
-                float ratiof = hkbSqf / denf;
-                float numeratorf = LegacyPrecisionMath.DisableFma
-                    ? ((-0.0016f) * ratiof) + 0.207f
-                    : (float)(((double)(-0.0016f) * ratiof) + 0.207f);
-                hkbTrace = hkbf;
-                hkbSqTrace = hkbSqf;
-                denTrace = denf;
-                ratioTrace = ratiof;
-                numeratorTrace = numeratorf;
-                di32 = numeratorf / rtf;
-                float diHkBracketf = (1.0f / denf) - ((0.02f * hkbSqf) / (denf * denf));
-                diHk32 = (((-0.0016f * 2.0f) * hkbf) * diHkBracketf) / rtf;
-            }
-
-            float diRt32 = -di32 / rtf;
-            
-            return (di32, diHk32, diRt32);
-        }
-
-        double di, di_hk;
-        double hkbTrace64 = 0.0;
-        double hkbSqTrace64 = 0.0;
-        double denTrace64 = 0.0;
-        double ratioTrace64 = 0.0;
-        double numeratorTrace64 = 0.0;
-
-        if (hk < 4.0)
-        {
-            numeratorTrace64 = 0.00205 * Math.Pow(4.0 - hk, 5.5) + 0.207;
-            di = numeratorTrace64 / rt;
-            di_hk = (-0.00205 * 5.5 * Math.Pow(4.0 - hk, 4.5)) / rt;
+            float diff = 4.0f - hkf;
+            float pow55 = LegacyLibm.Pow(diff, 5.5f);
+            float numerator = LegacyPrecisionMath.DisableFma
+                ? (0.00205f * pow55) + 0.207f
+                : (float)(((double)0.00205f * pow55) + 0.207f);
+            di32 = numerator / rtf;
+            diHk32 = (-0.00205f * 5.5f * LegacyLibm.Pow(diff, 4.5f)) / rtf;
         }
         else
         {
-            double hkb = hk - 4.0;
-            double hkbSq = hkb * hkb;
-            double den = 1.0 + 0.02 * hkbSq;
-            double ratio = hkbSq / den;
-            double numerator = -0.0016 * ratio + 0.207;
-            hkbTrace64 = hkb;
-            hkbSqTrace64 = hkbSq;
-            denTrace64 = den;
-            ratioTrace64 = ratio;
-            numeratorTrace64 = numerator;
-            di = numerator / rt;
-            di_hk = (-0.0016 * 2.0 * hkb * (1.0 / den - 0.02 * hkb * hkb / (den * den))) / rt;
+            float hkbf = hkf - 4.0f;
+            float hkbSqf = hkbf * hkbf;
+            float denf = 1.0f + (0.02f * hkbSqf);
+            float ratiof = hkbSqf / denf;
+            float numeratorf = LegacyPrecisionMath.DisableFma
+                ? ((-0.0016f) * ratiof) + 0.207f
+                : (float)(((double)(-0.0016f) * ratiof) + 0.207f);
+            di32 = numeratorf / rtf;
+            float diHkBracketf = (1.0f / denf) - ((0.02f * hkbSqf) / (denf * denf));
+            diHk32 = (((-0.0016f * 2.0f) * hkbf) * diHkBracketf) / rtf;
         }
 
-        double di_rt = -di / rt;
-
-
-        return (di, di_hk, di_rt);
+        float diRt32 = -di32 / rtf;
+        return (di32, diHk32, diRt32);
     }
 
     // =====================================================================
@@ -784,52 +603,24 @@ public static class BoundaryLayerCorrelations
     // Decision: Keep the corrected managed documentation and parity overload; preserve the legacy formula inputs while retaining the clarified derivative implementation.
     public static (double Di, double Di_Hk, double Di_Rt) WakeDissipation(double hk, double rt, bool useLegacyPrecision)
     {
-        if (useLegacyPrecision)
-        {
-            var (hsf, hsHkf, hsRtf, _) = LaminarShapeParameter(hk, useLegacyPrecision: true);
-            float hkf = (float)hk;
-            float rtf = (float)rt;
-            float hsf32 = (float)hsf;
-            float hsHk32 = (float)hsHkf;
-            float hsRt32 = (float)hsRtf;
+        // Phase 1 strip: float-only path. 2-arg overload provides modern.
+        var (hsf, hsHkf, hsRtf, _) = LaminarShapeParameter(hk, useLegacyPrecision: true);
+        float hkf = (float)hk;
+        float rtf = (float)rt;
+        float hsf32 = (float)hsf;
+        float hsHk32 = (float)hsHkf;
+        float hsRt32 = (float)hsRtf;
 
-            float oneMinusInvHk = 1.0f - 1.0f / hkf;
-            // Fortran: RCD = 1.10*(1.0-1.0/HK)**2/HK
-            // The **2 operator computes x*x first, then 1.10*result.
-            float oneMinusInvHkSq = oneMinusInvHk * oneMinusInvHk;
-            float rcd32 = 1.10f * oneMinusInvHkSq / hkf;
-            // Fortran: RCD_HK = -1.10*(1.0-1.0/HK)*2.0/HK**3 - RCD/HK
-            // This simplifies to -1.10*(HK-1)*(HK+1)/HK^4 which is NEGATIVE
-            // for HK>1. The mathematically correct derivative is
-            // +1.10*(HK-1)*(3-HK)/HK^4 (positive), but Fortran uses the
-            // above expression which has a different algebraic form. For
-            // binary parity we must match the Fortran evaluation exactly.
-            float hkCubed = hkf * hkf * hkf;
-            float rcdHk32 = -1.10f * oneMinusInvHk * 2.0f / hkCubed
-                            - rcd32 / hkf;
+        float oneMinusInvHk = 1.0f - 1.0f / hkf;
+        float oneMinusInvHkSq = oneMinusInvHk * oneMinusInvHk;
+        float rcd32 = 1.10f * oneMinusInvHkSq / hkf;
+        float hkCubed = hkf * hkf * hkf;
+        float rcdHk32 = -1.10f * oneMinusInvHk * 2.0f / hkCubed - rcd32 / hkf;
 
-            float di32 = 2.0f * rcd32 / (hsf32 * rtf);
-            float diHk32 = 2.0f * rcdHk32 / (hsf32 * rtf) - (di32 / hsf32) * hsHk32;
-            float diRt32 = -di32 / rtf - (di32 / hsf32) * hsRt32;
-            return (di32, diHk32, diRt32);
-        }
-
-        // Call HSL with MSQ=0 (wake is incompressible in XFoil's formulation)
-        var (hs, hs_hk, hs_rt, _) = LaminarShapeParameter(hk);
-
-        // RCD = 1.10 * (1 - 1/Hk)^2 / Hk = 1.10 * (Hk-1)^2 / Hk^3
-        // Note: Fortran xblsys.f:2315 has a sign error in RCD_HK (negative instead of positive
-        // on the first term). Here we use the mathematically correct derivative:
-        // d/dHk[(Hk-1)^2/Hk^3] = (Hk-1)(3-Hk)/Hk^4
-        double rcd = 1.10 * Math.Pow(1.0 - 1.0 / hk, 2) / hk;
-        double rcd_hk = 1.10 * (hk - 1.0) * (3.0 - hk) / (hk * hk * hk * hk);
-
-        // DI = 2*RCD / (HS*RT)
-        double di = 2.0 * rcd / (hs * rt);
-        double di_hk = 2.0 * rcd_hk / (hs * rt) - (di / hs) * hs_hk;
-        double di_rt = -di / rt - (di / hs) * hs_rt;
-
-        return (di, di_hk, di_rt);
+        float di32 = 2.0f * rcd32 / (hsf32 * rtf);
+        float diHk32 = 2.0f * rcdHk32 / (hsf32 * rtf) - (di32 / hsf32) * hsHk32;
+        float diRt32 = -di32 / rtf - (di32 / hsf32) * hsRt32;
+        return (di32, diHk32, diRt32);
     }
 
     // =====================================================================

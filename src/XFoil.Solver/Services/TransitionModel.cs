@@ -90,8 +90,8 @@ public static class TransitionModel
         /// 0 when free transition governs. Used for BTX/VSX computation.
         /// </summary>
         public double Wf2XF;
-        public BoundaryLayerSystemAssembler.KinematicResult? DownstreamKinematic;
-        public BoundaryLayerSystemAssembler.KinematicResult? FinalTransitionKinematic;
+        public KinematicResult? DownstreamKinematic;
+        public KinematicResult? FinalTransitionKinematic;
         public AxsetResult? FinalAx;
 
         // Pre-allocated snapshot storage for DownstreamKinematic and
@@ -99,16 +99,16 @@ public static class TransitionModel
         // fields into these slots instead of cloning a fresh instance
         // per TRCHEK2 call; the public nullable properties alias back
         // to the slot when live and to null when cleared.
-        private readonly BoundaryLayerSystemAssembler.KinematicResult _downstreamStorage = new();
-        private readonly BoundaryLayerSystemAssembler.KinematicResult _finalTransitionStorage = new();
+        private readonly KinematicResult _downstreamStorage = new();
+        private readonly KinematicResult _finalTransitionStorage = new();
 
-        internal void SetDownstreamKinematic(BoundaryLayerSystemAssembler.KinematicResult source)
+        internal void SetDownstreamKinematic(KinematicResult source)
         {
             _downstreamStorage.CopyFrom(source);
             DownstreamKinematic = _downstreamStorage;
         }
 
-        internal void SetFinalTransitionKinematic(BoundaryLayerSystemAssembler.KinematicResult source)
+        internal void SetFinalTransitionKinematic(KinematicResult source)
         {
             _finalTransitionStorage.CopyFrom(source);
             FinalTransitionKinematic = _finalTransitionStorage;
@@ -274,40 +274,25 @@ public static class TransitionModel
             double rnorm2 = LegacyPrecisionMath.Square(rnorm, useLegacyPrecision);
             double rnorm3 = LegacyPrecisionMath.Multiply(rnorm2, rnorm, useLegacyPrecision);
             rnorm2Trace = rnorm2;
-            double rfac_rn;
-            if (useLegacyPrecision)
-            {
-                float rnormf = (float)rnorm;
-                float rnorm2f = (float)rnorm2;
-                float rnorm2Powf = MathF.Pow(rnormf, 2.0f);
-                float rnorm3Powf = MathF.Pow(rnormf, 3.0f);
-                float rnorm3f = rnorm2f * rnormf;
-                rfacMulChainTrace = (3.0f * rnorm2f) - (2.0f * rnorm3f);
-                rfacWideTrace = (float)((3.0 * (double)rnorm2f) - (2.0 * ((double)rnorm2f * (double)rnormf)));
-                rfacPowTrace = (3.0f * rnorm2Powf) - (2.0f * rnorm3Powf);
-                // Fortran: RFAC = 3.0*RNORM**2 - 2.0*RNORM**3 — all in REAL
-                float threeRnorm2f = 3.0f * rnorm2f;
-                float twoRnorm3f = 2.0f * rnorm3f;
-                rfacMixedTrace = threeRnorm2f - twoRnorm3f;
-                rfac = rfacMixedTrace;
-                // Fortran: RFAC_RN = 6.0*RNORM - 6.0*RNORM**2 — all in REAL
-                float sixRnormf = 6.0f * rnormf;
-                float sixRnorm2f = 6.0f * rnorm2f;
-                sixRnormTrace = sixRnormf;
-                sixRnorm2Trace = sixRnorm2f;
-                rfac_rn = sixRnormf - sixRnorm2f;
-            }
-            else
-            {
-                rfac = (3.0 * rnorm2) - (2.0 * rnorm3);
-                rfacMulChainTrace = rfac;
-                rfacWideTrace = rfac;
-                rfacPowTrace = rfac;
-                rfacMixedTrace = rfac;
-                sixRnormTrace = 6.0 * rnorm;
-                sixRnorm2Trace = 6.0 * rnorm2;
-                rfac_rn = (6.0 * rnorm) - (6.0 * rnorm2);
-            }
+            // Phase 1 strip: float-only Fortran RFAC = 3.0*RNORM**2 - 2.0*RNORM**3
+            // and RFAC_RN = 6.0*RNORM - 6.0*RNORM**2 — all in REAL.
+            float rnormf = (float)rnorm;
+            float rnorm2f = (float)rnorm2;
+            float rnorm2Powf = MathF.Pow(rnormf, 2.0f);
+            float rnorm3Powf = MathF.Pow(rnormf, 3.0f);
+            float rnorm3f = rnorm2f * rnormf;
+            rfacMulChainTrace = (3.0f * rnorm2f) - (2.0f * rnorm3f);
+            rfacWideTrace = (float)((3.0 * (double)rnorm2f) - (2.0 * ((double)rnorm2f * (double)rnormf)));
+            rfacPowTrace = (3.0f * rnorm2Powf) - (2.0f * rnorm3Powf);
+            float threeRnorm2f = 3.0f * rnorm2f;
+            float twoRnorm3f = 2.0f * rnorm3f;
+            rfacMixedTrace = threeRnorm2f - twoRnorm3f;
+            rfac = rfacMixedTrace;
+            float sixRnormf = 6.0f * rnormf;
+            float sixRnorm2f = 6.0f * rnorm2f;
+            sixRnormTrace = sixRnormf;
+            sixRnorm2Trace = sixRnorm2f;
+            double rfac_rn = sixRnormf - sixRnorm2f;
             rfacRnTrace = rfac_rn;
             rfac_hk = LegacyPrecisionMath.Multiply(rfac_rn, rn_hk, useLegacyPrecision);
             rfac_rt = LegacyPrecisionMath.Multiply(rfac_rn, rn_rt, useLegacyPrecision);
@@ -322,33 +307,18 @@ public static class TransitionModel
         double ex = LegacyPrecisionMath.Exp(-arg2, useLegacyPrecision);
         double ex_hk = LegacyPrecisionMath.Multiply(ex, LegacyPrecisionMath.Multiply(-2.0, arg, arg_hk, useLegacyPrecision), useLegacyPrecision);
 
-        double dadr;
-        if (useLegacyPrecision)
-        {
-            float hkMinusOnef = (float)hkMinusOne;
-            float exf = (float)ex;
-            float exTermf = 0.0345f * exf;
-            // Fortran: DADR = 0.028*(HK-1.0) - 0.0345*EXP(...) — all in REAL
-            dadr = (0.028f * hkMinusOnef) - exTermf;
-        }
-        else
-        {
-            dadr = 0.028 * hkMinusOne - (0.0345 * ex);
-        }
-        double dadr_hk;
-        if (useLegacyPrecision)
-        {
-            // The native legacy build widens this literal-minus-product derivative
-            // before the final REAL store, so the product cannot be rounded to
-            // single first without shifting AX_HK_BASE by one ULP.
-            float exHkf = (float)ex_hk;
-            // Fortran: all in REAL
-            dadr_hk = 0.028f - (0.0345f * exHkf);
-        }
-        else
-        {
-            dadr_hk = 0.028 - (0.0345 * ex_hk);
-        }
+        // Phase 1 strip: float-only Fortran DADR = 0.028*(HK-1.0) - 0.0345*EXP(...) — all in REAL.
+        float hkMinusOnef = (float)hkMinusOne;
+        float exf = (float)ex;
+        float exTermf = 0.0345f * exf;
+        double dadr = (0.028f * hkMinusOnef) - exTermf;
+
+        // Phase 1 strip: float-only. Fortran: DADR_HK = 0.028 - 0.0345*EX_HK — all in REAL.
+        // Native legacy build widens this literal-minus-product derivative
+        // before the final REAL store, so the product cannot be rounded to
+        // single first without shifting AX_HK_BASE by one ULP.
+        float exHkf = (float)ex_hk;
+        double dadr_hk = 0.028f - (0.0345f * exHkf);
 
         // m(H) correlation (1 March 91)
         // xblsys.f:2081-2083
@@ -364,32 +334,16 @@ public static class TransitionModel
                 useLegacyPrecision),
             LegacyPrecisionMath.Multiply(3.0, hmi3, useLegacyPrecision),
             useLegacyPrecision);
-        double af_hmi;
-        double afHmiBaseTrace;
-        double afHmiQuadTrace;
-        double afHmiWideSumTrace = 0.0;
-        double afHmiWideAllTrace = 0.0;
-        if (useLegacyPrecision)
-        {
-            float hmif = (float)hmi;
-            float hmi2f = (float)hmi2;
-            // Fortran: AF_HMI = 2.7 - 11.0*HMI + 9.0*HMI**2 — all in REAL
-            float afHmiBasef = 2.7f - (11.0f * hmif);
-            float afHmiQuadf = 9.0f * hmi2f;
-            afHmiBaseTrace = afHmiBasef;
-            afHmiQuadTrace = afHmiQuadf;
-            afHmiWideSumTrace = afHmiBasef + afHmiQuadf;
-            afHmiWideAllTrace = afHmiWideSumTrace;
-            af_hmi = afHmiBasef + afHmiQuadf;
-        }
-        else
-        {
-            afHmiBaseTrace = 2.7 - (11.0 * hmi);
-            afHmiQuadTrace = 9.0 * hmi2;
-            afHmiWideSumTrace = afHmiBaseTrace + afHmiQuadTrace;
-            afHmiWideAllTrace = afHmiBaseTrace + afHmiQuadTrace;
-            af_hmi = 2.7 - (11.0 * hmi) + (9.0 * hmi2);
-        }
+        // Phase 1 strip: float-only Fortran AF_HMI = 2.7 - 11.0*HMI + 9.0*HMI**2 — all in REAL.
+        float hmif = (float)hmi;
+        float hmi2f = (float)hmi2;
+        float afHmiBasef = 2.7f - (11.0f * hmif);
+        float afHmiQuadf = 9.0f * hmi2f;
+        double afHmiBaseTrace = afHmiBasef;
+        double afHmiQuadTrace = afHmiQuadf;
+        double afHmiWideSumTrace = afHmiBasef + afHmiQuadf;
+        double afHmiWideAllTrace = afHmiWideSumTrace;
+        double af_hmi = afHmiBasef + afHmiQuadf;
         double af_hk = LegacyPrecisionMath.Multiply(af_hmi, hmi_hk, useLegacyPrecision);
 
 
@@ -507,24 +461,15 @@ public static class TransitionModel
         {
             double rnorm2 = LegacyPrecisionMath.Square(rnorm, useLegacyPrecision);
             double rnorm3 = LegacyPrecisionMath.Multiply(rnorm2, rnorm, useLegacyPrecision);
-            double rfac_rn;
-            if (useLegacyPrecision)
-            {
-                // Fortran: RFAC = 3.0*RNORM**2 - 2.0*RNORM**3 — all in REAL
-                // Fortran optimizes **2 to X*X, **3 to X*X*X
-                float rnormf = (float)rnorm;
-                float rnorm2f = rnormf * rnormf;
-                float rnorm3f = rnorm2f * rnormf;
-                rfac = (3.0f * rnorm2f) - (2.0f * rnorm3f);
-                float sixRnormf = 6.0f * rnormf;
-                float sixRnorm2f = 6.0f * rnorm2f;
-                rfac_rn = sixRnormf - sixRnorm2f;
-            }
-            else
-            {
-                rfac = (3.0 * rnorm2) - (2.0 * rnorm3);
-                rfac_rn = (6.0 * rnorm) - (6.0 * rnorm2);
-            }
+            // Phase 1 strip: float-only DAMPL2 RFAC = 3.0*RNORM**2 - 2.0*RNORM**3
+            // and RFAC_RN = 6.0*RNORM - 6.0*RNORM**2 — all in REAL.
+            float rnormDam2f = (float)rnorm;
+            float rnorm2Dam2f = rnormDam2f * rnormDam2f;
+            float rnorm3Dam2f = rnorm2Dam2f * rnormDam2f;
+            rfac = (3.0f * rnorm2Dam2f) - (2.0f * rnorm3Dam2f);
+            float sixRnormDam2f = 6.0f * rnormDam2f;
+            float sixRnorm2Dam2f = 6.0f * rnorm2Dam2f;
+            double rfac_rn = sixRnormDam2f - sixRnorm2Dam2f;
             rfac_hk = LegacyPrecisionMath.Multiply(rfac_rn, rn_hk, useLegacyPrecision);
             rfac_rt = LegacyPrecisionMath.Multiply(rfac_rn, rn_rt, useLegacyPrecision);
         }
@@ -538,32 +483,13 @@ public static class TransitionModel
         double ex = LegacyPrecisionMath.Exp(-arg2, useLegacyPrecision);
         double ex_hk = LegacyPrecisionMath.Multiply(ex, LegacyPrecisionMath.Multiply(-2.0, arg, arg_hk, useLegacyPrecision), useLegacyPrecision);
 
-        double dadr;
-        if (useLegacyPrecision)
-        {
-            float hkMinusOnef = (float)hkMinusOne;
-            float exf = (float)ex;
-            float exTermf = 0.0345f * exf;
-            // Fortran: DADR = 0.028*(HK-1.0) - 0.0345*EXP(...) — all in REAL
-            dadr = (0.028f * hkMinusOnef) - exTermf;
-        }
-        else
-        {
-            dadr = 0.028 * hkMinusOne - (0.0345 * ex);
-        }
-        double dadr_hk;
-        if (useLegacyPrecision)
-        {
-            // DAMPL2 inherits the same legacy mixed-width derivative staging as
-            // DAMPL for the envelope slope sensitivity.
-            float exHkf = (float)ex_hk;
-            // Fortran: all in REAL
-            dadr_hk = 0.028f - (0.0345f * exHkf);
-        }
-        else
-        {
-            dadr_hk = 0.028 - (0.0345 * ex_hk);
-        }
+        // Phase 1 strip: float-only DAMPL2 DADR / DADR_HK — same staging as DAMPL.
+        float hkMinusOneDam2f = (float)hkMinusOne;
+        float exDam2f = (float)ex;
+        float exTermDam2f = 0.0345f * exDam2f;
+        double dadr = (0.028f * hkMinusOneDam2f) - exTermDam2f;
+        float exHkDam2f = (float)ex_hk;
+        double dadr_hk = 0.028f - (0.0345f * exHkDam2f);
 
         // DAMPL2 has additional exp(-20*HMI) term in AF
         // xblsys.f:2205-2208
@@ -581,20 +507,13 @@ public static class TransitionModel
                 useLegacyPrecision),
             LegacyPrecisionMath.Multiply(0.1, expBrg, useLegacyPrecision),
             useLegacyPrecision);
-        double af_hmi;
-        if (useLegacyPrecision)
-        {
-            float hmif = (float)hmi;
-            float hmi2f = (float)hmi2;
-            float expBrgf = (float)expBrg;
-            float afHmiBasef = (float)(2.7 - (11.0 * hmif));
-            float afHmiAccumf = afHmiBasef + (9.0f * hmi2f);
-            af_hmi = afHmiAccumf - (2.0f * expBrgf);
-        }
-        else
-        {
-            af_hmi = 2.7 - (11.0 * hmi) + (9.0 * hmi2) - (2.0 * expBrg);
-        }
+        // Phase 1 strip: float-only DAMPL2 AF_HMI = 2.7 - 11.0*HMI + 9.0*HMI**2 - 2.0*EXP(BRG).
+        float hmiDam2f = (float)hmi;
+        float hmi2Dam2f = (float)hmi2;
+        float expBrgDam2f = (float)expBrg;
+        float afHmiBaseDam2f = (float)(2.7 - (11.0 * hmiDam2f));
+        float afHmiAccumDam2f = afHmiBaseDam2f + (9.0f * hmi2Dam2f);
+        double af_hmi = afHmiAccumDam2f - (2.0f * expBrgDam2f);
         double af_hk = LegacyPrecisionMath.Multiply(af_hmi, hmi_hk, useLegacyPrecision);
 
         double afdadr_over_th = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(af, dadr, useLegacyPrecision), th, useLegacyPrecision);
@@ -751,76 +670,57 @@ public static class TransitionModel
     {
         // Dispatch to DAMPL or DAMPL2
         // xblsys.f:70-76
+        // Phase 2 algorithmic improvement: when useHighHkModel is requested, use
+        // DAMPL2 ONLY for stations where Hk is in the regime DAMPL2 was designed
+        // for (Hk > 4 — separated/post-stall). Below that threshold the legacy
+        // DAMPL is more accurate. Without this regime split, blanket DAMPL2 wreck
+        // ed normal-Hk cases (5k Selig: 33% CD within 1% vs 86% with split).
         double ax1, ax1_hk1, ax1_t1, ax1_rt1;
         double ax2, ax2_hk2, ax2_t2, ax2_rt2;
 
-        if (!useHighHkModel)
-        {
-            (ax1, ax1_hk1, ax1_t1, ax1_rt1) = ComputeAmplificationRate(hk1, t1, rt1, useLegacyPrecision);
-            (ax2, ax2_hk2, ax2_t2, ax2_rt2) = ComputeAmplificationRate(hk2, t2, rt2, useLegacyPrecision);
-        }
-        else
-        {
-            (ax1, ax1_hk1, ax1_t1, ax1_rt1) = ComputeAmplificationRateHighHk(hk1, t1, rt1, useLegacyPrecision);
-            (ax2, ax2_hk2, ax2_t2, ax2_rt2) = ComputeAmplificationRateHighHk(hk2, t2, rt2, useLegacyPrecision);
-        }
+        const double HighHkThreshold = 4.0;
+        bool use1HighHk = useHighHkModel && hk1 > HighHkThreshold;
+        bool use2HighHk = useHighHkModel && hk2 > HighHkThreshold;
+
+        (ax1, ax1_hk1, ax1_t1, ax1_rt1) = use1HighHk
+            ? ComputeAmplificationRateHighHk(hk1, t1, rt1, useLegacyPrecision)
+            : ComputeAmplificationRate(hk1, t1, rt1, useLegacyPrecision);
+        (ax2, ax2_hk2, ax2_t2, ax2_rt2) = use2HighHk
+            ? ComputeAmplificationRateHighHk(hk2, t2, rt2, useLegacyPrecision)
+            : ComputeAmplificationRate(hk2, t2, rt2, useLegacyPrecision);
 
         // RMS-average version (better on coarse grids per Fortran comment)
         // xblsys.f:90-99
         double axa, axa_ax1, axa_ax2;
         double axsq;
         double ax1SqTrace, ax2SqTrace, axSumTrace;
-        if (useLegacyPrecision)
-        {
-            // Legacy block: xblsys.f AXSET RMS average.
-            // Difference from legacy: The helperized replay widened the final half-scaling, but the live REAL build uses stored REAL squares, a stored REAL sum, and then a REAL multiply by 0.5.
-            // Decision: Replay that explicit REAL staging in parity mode because the fresh AXSET trace shows AXSQ follows 0.5*(AX1SQ+AX2SQ) after the REAL square terms are already rounded.
-            float ax1f = (float)ax1;
-            float ax2f = (float)ax2;
-            float ax1Sqf = ax1f * ax1f;
-            float ax2Sqf = ax2f * ax2f;
-            float axSumf = ax1Sqf + ax2Sqf;
-            ax1SqTrace = ax1Sqf;
-            ax2SqTrace = ax2Sqf;
-            axSumTrace = axSumf;
-            float axsqf = 0.5f * axSumf;
-            axsq = axsqf;
+        // Phase 1 strip: float-only AXSET RMS average. The live REAL build uses
+        // stored REAL squares, a stored REAL sum, and a REAL multiply by 0.5
+        // (AXSQ = 0.5*(AX1SQ+AX2SQ) after the REAL square terms are already
+        // rounded).
+        float ax1f = (float)ax1;
+        float ax2f = (float)ax2;
+        float ax1Sqf = ax1f * ax1f;
+        float ax2Sqf = ax2f * ax2f;
+        float axSumf = ax1Sqf + ax2Sqf;
+        ax1SqTrace = ax1Sqf;
+        ax2SqTrace = ax2Sqf;
+        axSumTrace = axSumf;
+        float axsqf = 0.5f * axSumf;
+        axsq = axsqf;
 
-            if (axsqf <= 0.0f)
-            {
-                axa = 0.0;
-                axa_ax1 = 0.0;
-                axa_ax2 = 0.0;
-            }
-            else
-            {
-                float axaf = MathF.Sqrt(axsqf);
-                axa = axaf;
-                axa_ax1 = (0.5f * ax1f) / axaf;
-                axa_ax2 = (0.5f * ax2f) / axaf;
-            }
+        if (axsqf <= 0.0f)
+        {
+            axa = 0.0;
+            axa_ax1 = 0.0;
+            axa_ax2 = 0.0;
         }
         else
         {
-            ax1SqTrace = LegacyPrecisionMath.Square(ax1, useLegacyPrecision);
-            ax2SqTrace = LegacyPrecisionMath.Square(ax2, useLegacyPrecision);
-            axSumTrace = LegacyPrecisionMath.Add(ax1SqTrace, ax2SqTrace, useLegacyPrecision);
-            axsq = LegacyPrecisionMath.Multiply(
-                0.5,
-                axSumTrace,
-                useLegacyPrecision);
-            if (axsq <= 0.0)
-            {
-                axa = 0.0;
-                axa_ax1 = 0.0;
-                axa_ax2 = 0.0;
-            }
-            else
-            {
-                axa = LegacyPrecisionMath.Sqrt(axsq, useLegacyPrecision);
-                axa_ax1 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(0.5, ax1, useLegacyPrecision), axa, useLegacyPrecision);
-                axa_ax2 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(0.5, ax2, useLegacyPrecision), axa, useLegacyPrecision);
-            }
+            float axaf = MathF.Sqrt(axsqf);
+            axa = axaf;
+            axa_ax1 = (0.5f * ax1f) / axaf;
+            axa_ax2 = (0.5f * ax2f) / axaf;
         }
 
         // Small additional term to ensure dN/dx > 0 near N = Ncrit
@@ -915,9 +815,9 @@ public static class TransitionModel
         int? traceStation = null,
         int? traceIteration = null,
         string? tracePhase = null,
-        BoundaryLayerSystemAssembler.KinematicResult? station1KinematicOverride = null,
-        BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride = null,
-        BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride = null,
+        KinematicResult? station1KinematicOverride = null,
+        KinematicResult? station2KinematicOverride = null,
+        PrimaryStationState? station2PrimaryOverride = null,
         bool useInternalAmpl2Seed = true,
         TransitionPointResult? destinationResult = null)
     {
@@ -1269,77 +1169,53 @@ public static class TransitionModel
         // carried REAL interval state, not the wider managed doubles that fed
         // the Newton loop. Replaying that carried state here keeps the final
         // AX/ZX packets aligned with the accepted transition handoff.
-        double finalX1 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(x1, true) : x1;
-        double finalX2 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(x2, true) : x2;
-        double finalT1 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(t1, true) : t1;
-        double finalT2 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(t2, true) : t2;
-        double finalD1 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(d1, true) : d1;
-        double finalD2 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(d2, true) : d2;
-        double finalU1 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(u1, true) : u1;
-        double finalU2 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(u2, true) : u2;
-        double finalAmpl1 = useLegacyPrecision ? LegacyPrecisionMath.RoundToSingle(ampl1, true) : ampl1;
-        double finalDx = useLegacyPrecision ? LegacyPrecisionMath.Subtract(finalX2, finalX1, true) : dx;
+        // Phase 1 strip: float-only path always rounds the final state to single.
+        double finalX1 = LegacyPrecisionMath.RoundToSingle(x1, true);
+        double finalX2 = LegacyPrecisionMath.RoundToSingle(x2, true);
+        double finalT1 = LegacyPrecisionMath.RoundToSingle(t1, true);
+        double finalT2 = LegacyPrecisionMath.RoundToSingle(t2, true);
+        double finalD1 = LegacyPrecisionMath.RoundToSingle(d1, true);
+        double finalD2 = LegacyPrecisionMath.RoundToSingle(d2, true);
+        double finalU1 = LegacyPrecisionMath.RoundToSingle(u1, true);
+        double finalU2 = LegacyPrecisionMath.RoundToSingle(u2, true);
+        double finalAmpl1 = LegacyPrecisionMath.RoundToSingle(ampl1, true);
+        double finalDx = LegacyPrecisionMath.Subtract(finalX2, finalX1, true);
 
-        var finalUpstreamKinematic = useLegacyPrecision
-            ? BoundaryLayerSystemAssembler.ComputeKinematicParameters(
-                finalU1,
-                finalT1,
-                finalD1,
-                0.0,
-                hstinv,
-                hstinv_ms,
-                gm1bl,
-                rstbl,
-                rstbl_ms,
-                hvrat,
-                reybl,
-                reybl_re,
-                reybl_ms,
-                true,
-                destination: BoundaryLayerSystemAssembler.GetPooledTrchekFinalUpstreamKinematic())
-            : kinematic1;
+        // Phase 1 strip: float-only path always recomputes the upstream kinematic.
+        var finalUpstreamKinematic = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
+            finalU1,
+            finalT1,
+            finalD1,
+            0.0,
+            hstinv,
+            hstinv_ms,
+            gm1bl,
+            rstbl,
+            rstbl_ms,
+            hvrat,
+            reybl,
+            reybl_re,
+            reybl_ms,
+            true,
+            destination: BoundaryLayerSystemAssembler.GetPooledTrchekFinalUpstreamKinematic());
 
-        double finalWf2;
-        double finalWf2_A1;
-        double finalWf2_A2;
-        double finalWf2_X1;
-        double finalWf2_X2;
-
-        if (useLegacyPrecision)
+        // Phase 1 strip: float-only path. Fortran TRCHEK2 uses the LAST Newton
+        // iter's WF2 (from inside loop) for the post-loop sensitivity block,
+        // NOT a recomputed value. Recomputing produces 5% error in derivatives
+        // because Newton may not converge perfectly and inside-loop WF2 differs
+        // from post-loop recompute.
+        double finalWf2 = carriedWf2;
+        double finalWf2_A1 = carriedWf2_A1;
+        double finalWf2_A2 = carriedWf2_A2;
+        double finalWf2_X1 = carriedWf2_X1;
+        double finalWf2_X2 = carriedWf2_X2;
+        // ah79k135 fix: when Newton converged WF2=1 exactly (transition at X2),
+        // WF2 is at the boundary of its domain and does not depend on X1/X2
+        // infinitesimally. F's free-transition branch matches this via
+        // XT_X2=WF2=1, TT_X2=DT_X2=UT_X2=0 (since T1*WF1_X2+T2*WF2_X2=0 when
+        // both derivs=0).
+        if (freeTransition && (float)finalWf2 == 1.0f)
         {
-            // Fortran TRCHEK2 uses the LAST Newton iter's WF2 (from inside loop)
-            // for the post-loop sensitivity block, NOT a recomputed value.
-            // Recomputing produces 5% error in derivatives because Newton may not
-            // converge perfectly and inside-loop WF2 differs from post-loop recompute.
-            finalWf2 = carriedWf2;
-            finalWf2_A1 = carriedWf2_A1;
-            finalWf2_A2 = carriedWf2_A2;
-            finalWf2_X1 = carriedWf2_X1;
-            finalWf2_X2 = carriedWf2_X2;
-            // ah79k135 fix: when Newton converged WF2=1 exactly (transition at X2),
-            // WF2 is at the boundary of its domain and does not depend on X1/X2
-            // infinitesimally. F's free-transition branch matches this via XT_X2=WF2=1,
-            // TT_X2=DT_X2=UT_X2=0 (since T1*WF1_X2+T2*WF2_X2=0 when both derivs=0).
-            if (freeTransition && (float)finalWf2 == 1.0f)
-            {
-                finalWf2_X1 = 0.0;
-                finalWf2_X2 = 0.0;
-            }
-        }
-        else if (forcedTransition)
-        {
-            finalWf2 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Subtract(forcedXtr!.Value, finalX1, useLegacyPrecision), finalDx, useLegacyPrecision);
-            finalWf2_A1 = 0.0;
-            finalWf2_A2 = 0.0;
-            finalWf2_X1 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Subtract(finalWf2, 1.0, useLegacyPrecision), finalDx, useLegacyPrecision);
-            finalWf2_X2 = -LegacyPrecisionMath.Divide(finalWf2, finalDx, useLegacyPrecision);
-        }
-        else
-        {
-            double amplDen = LegacyPrecisionMath.Max(LegacyPrecisionMath.Subtract(ampl2Iter, finalAmpl1, useLegacyPrecision), 1e-30, useLegacyPrecision);
-            finalWf2 = (ampl2Iter <= amcrit) ? 1.0 : LegacyPrecisionMath.Divide(LegacyPrecisionMath.Subtract(amcrit, finalAmpl1, useLegacyPrecision), amplDen, useLegacyPrecision);
-            finalWf2_A1 = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Subtract(finalWf2, 1.0, useLegacyPrecision), amplDen, useLegacyPrecision);
-            finalWf2_A2 = -LegacyPrecisionMath.Divide(finalWf2, amplDen, useLegacyPrecision);
             finalWf2_X1 = 0.0;
             finalWf2_X2 = 0.0;
         }
@@ -1363,8 +1239,9 @@ public static class TransitionModel
         double finalWf1_X1 = -finalWf2_X1;
         double finalWf1_X2 = -finalWf2_X2;
         double finalWf1_XF = -finalWf2_XF;
-        double directWf1 = useLegacyPrecision ? carriedWf1 : finalWf1;
-        double directWf2 = useLegacyPrecision ? carriedWf2 : finalWf2;
+        // Phase 1 strip: float-only path uses the in-loop carried Wf values.
+        double directWf1 = carriedWf1;
+        double directWf2 = carriedWf2;
 
 
         // Legacy block: TRCHEK2 final free-transition sensitivities.
@@ -1473,7 +1350,7 @@ public static class TransitionModel
         // the transition solve converges. Reusing the last in-loop snapshot keeps
         // an earlier transition iterate alive and shifts the carried station-1
         // COM state by a few ULPs before the next turbulent interval is assembled.
-        BoundaryLayerSystemAssembler.KinematicResult finalTransitionKinematic =
+        KinematicResult finalTransitionKinematic =
             BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                 point.Ut,
                 point.Tt,
@@ -1615,48 +1492,26 @@ public static class TransitionModel
         double zD2 = LegacyPrecisionMath.Multiply(zAx, ax_D2, useLegacyPrecision);
         double zU2 = LegacyPrecisionMath.Multiply(zAx, ax_U2, useLegacyPrecision);
         double zX2 = LegacyPrecisionMath.Subtract(LegacyPrecisionMath.Multiply(zAx, ax_X2, useLegacyPrecision), finalAx.Ax, useLegacyPrecision);
-        double xt2OverZa2 = LegacyPrecisionMath.Divide(point.Xt2[0], zA2, useLegacyPrecision);
-        double xtA1Base = point.Xt1[0];
-        double xtA1Correction = LegacyPrecisionMath.Multiply(xt2OverZa2, zA1, useLegacyPrecision);
-        double xtX2Base = point.Xt2[4];
-        double xtX2Correction = LegacyPrecisionMath.Multiply(xt2OverZa2, zX2, useLegacyPrecision);
-        if (useLegacyPrecision)
-        {
-            // TRCHEK2 keeps (XT_A2/Z_A2) inline on every derivative update.
-            // Reusing a cached quotient here moved XT_T1 by one ULP in the
-            // iteration-5 direct-seed transition window, so the parity branch
-            // must preserve the literal source-tree staging.
-            float xtA2f = (float)point.Xt2[0];
-            float zA2f = (float)zA2;
-            float xt2OverZa2f = xtA2f / zA2f;
-            
-            point.Xt1[0] = (float)((float)point.Xt1[0] - ((xtA2f / zA2f) * (float)zA1));
-            point.Xt1[1] = -((xtA2f / zA2f) * (float)zT1);
-            point.Xt1[2] = -((xtA2f / zA2f) * (float)zD1);
-            point.Xt1[3] = -((xtA2f / zA2f) * (float)zU1);
-            point.Xt1[4] = (float)((float)point.Xt1[4] - ((xtA2f / zA2f) * (float)zX1));
-            point.Xt2[1] = -((xtA2f / zA2f) * (float)zT2);
-            point.Xt2[2] = -((xtA2f / zA2f) * (float)zD2);
-            point.Xt2[3] = -((xtA2f / zA2f) * (float)zU2);
-            // n6h20 XT derivative inputs trace at IBL=66 iter 2 mc=10
-            
-            // The direct-seed station-15 iteration-5 window only matches the
-            // legacy packet when the ZX2 correction product is rounded back to
-            // REAL before the final subtraction, just like the other XT_* updates.
-            point.Xt2[4] = (float)((float)point.Xt2[4] - (xt2OverZa2f * (float)zX2));
-        }
-        else
-        {
-            point.Xt1[0] = LegacyPrecisionMath.Subtract(xtA1Base, xtA1Correction, useLegacyPrecision);
-            point.Xt1[1] = -LegacyPrecisionMath.Multiply(xt2OverZa2, zT1, useLegacyPrecision);
-            point.Xt1[2] = -LegacyPrecisionMath.Multiply(xt2OverZa2, zD1, useLegacyPrecision);
-            point.Xt1[3] = -LegacyPrecisionMath.Multiply(xt2OverZa2, zU1, useLegacyPrecision);
-            point.Xt1[4] = LegacyPrecisionMath.Subtract(point.Xt1[4], LegacyPrecisionMath.Multiply(xt2OverZa2, zX1, useLegacyPrecision), useLegacyPrecision);
-            point.Xt2[1] = -LegacyPrecisionMath.Multiply(xt2OverZa2, zT2, useLegacyPrecision);
-            point.Xt2[2] = -LegacyPrecisionMath.Multiply(xt2OverZa2, zD2, useLegacyPrecision);
-            point.Xt2[3] = -LegacyPrecisionMath.Multiply(xt2OverZa2, zU2, useLegacyPrecision);
-            point.Xt2[4] = point.Xt2[4] - (xt2OverZa2 * zX2);
-        }
+        // Phase 1 strip: float-only TRCHEK2 keeps (XT_A2/Z_A2) inline on every
+        // derivative update. Reusing a cached quotient moved XT_T1 by one ULP
+        // in the iteration-5 direct-seed transition window, so preserve the
+        // literal source-tree staging. The direct-seed station-15 iteration-5
+        // window only matches the legacy packet when the ZX2 correction
+        // product is rounded back to REAL before the final subtraction, just
+        // like the other XT_* updates.
+        float xtA2f = (float)point.Xt2[0];
+        float zA2f = (float)zA2;
+        float xt2OverZa2f = xtA2f / zA2f;
+
+        point.Xt1[0] = (float)((float)point.Xt1[0] - ((xtA2f / zA2f) * (float)zA1));
+        point.Xt1[1] = -((xtA2f / zA2f) * (float)zT1);
+        point.Xt1[2] = -((xtA2f / zA2f) * (float)zD1);
+        point.Xt1[3] = -((xtA2f / zA2f) * (float)zU1);
+        point.Xt1[4] = (float)((float)point.Xt1[4] - ((xtA2f / zA2f) * (float)zX1));
+        point.Xt2[1] = -((xtA2f / zA2f) * (float)zT2);
+        point.Xt2[2] = -((xtA2f / zA2f) * (float)zD2);
+        point.Xt2[3] = -((xtA2f / zA2f) * (float)zU2);
+        point.Xt2[4] = (float)((float)point.Xt2[4] - (xt2OverZa2f * (float)zX2));
 
 
 

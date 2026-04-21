@@ -11798,7 +11798,7 @@ public sealed class PredictedEdgeVelocityMicroParityTests
             panelCount: definition.PanelCount,
             reynoldsNumber: definition.ReynoldsNumber,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,
@@ -12584,7 +12584,7 @@ public sealed class PredictedEdgeVelocityMicroParityTests
 
     private static KinematicTraceResult InvokeKinematic(ParityTraceRecord blkinInputs)
     {
-        BoundaryLayerSystemAssembler.KinematicResult result = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
+        KinematicResult result = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
             GetFloatValue(blkinInputs, "u2"),
             GetFloatValue(blkinInputs, "t2"),
             GetFloatValue(blkinInputs, "d2"),

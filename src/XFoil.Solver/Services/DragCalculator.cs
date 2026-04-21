@@ -196,24 +196,18 @@ public static class DragCalculator
             : dsWake / thwake;
 
         // Squire-Young: CD = 2 * THWAKE * (UEWAKE/QINF)^(0.5*(5+SHWAKE))
-        double cd;
-        if (useLegacyPrecision)
-        {
-            // Fortran: CD = 2.0*THWAKE * (UEWAKE/QINF)**(0.5*(5.0+SHWAKE))
-            // All REAL (float) arithmetic including the power function.
-            float fThw = (float)thwake;
-            float fUew = (float)uewake;
-            float fQinf2 = (float)qinf;
-            float fShw = (float)shwake;
-            float fBase = fUew / fQinf2;
-            float fExp = 0.5f * (5.0f + fShw);
-            float fPow = LegacyPrecisionMath.PowF(fBase, fExp);
-            cd = 2.0f * fThw * fPow;
-        }
-        else
-        {
-            cd = 2.0 * thwake * Math.Pow(uewake / qinf, 0.5 * (5.0 + shwake));
-        }
+        // Phase 1 strip: float-only path. The doubled tree (auto-generated
+        // *.Double.cs twin via gen-double.py) gets the double-precision mirror.
+        // Fortran: CD = 2.0*THWAKE * (UEWAKE/QINF)**(0.5*(5.0+SHWAKE))
+        // All REAL (float) arithmetic including the power function.
+        float fThw = (float)thwake;
+        float fUew = (float)uewake;
+        float fQinf2 = (float)qinf;
+        float fShw = (float)shwake;
+        float fBase = fUew / fQinf2;
+        float fExp = 0.5f * (5.0f + fShw);
+        float fPow = LegacyPrecisionMath.PowF(fBase, fExp);
+        double cd = 2.0f * fThw * fPow;
 
         
 
@@ -299,64 +293,32 @@ public static class DragCalculator
         // Legacy mapping: f_xfoil/src/xfoil.f :: CDCALC skin-friction integration
         // CDF = sum_sides sum_IBL=3..IBLTE: 0.5*(TAU[IBL]+TAU[IBL-1])*DX * 2/QINF^2
         // where DX = (X(I)-X(IM))*cos(alfa) + (Y(I)-Y(IM))*sin(alfa)
-        if (useLegacyPrecision)
-        {
-            // Fortran CDCALC: sequential REAL accumulation
-            float fSa = MathF.Sin((float)alfa);
-            float fCa = MathF.Cos((float)alfa);
-            float fCdf = 0.0f;
-            float fQinf = (float)qinf;
-            float fQinf2 = fQinf * fQinf;
-
-            for (int side = 0; side < 2; side++)
-            {
-                int iblte = blState.IBLTE[side];
-                for (int ibl = 2; ibl <= iblte && ibl < blState.MaxStations; ibl++)
-                {
-                    int iPan = blState.IPAN[ibl, side];
-                    int iPanPrev = blState.IPAN[ibl - 1, side];
-                    if (iPan < 0 || iPanPrev < 0) continue;
-                    if (iPan >= panel.NodeCount || iPanPrev >= panel.NodeCount) continue;
-                    float fDx = ((float)panel.X[iPan] - (float)panel.X[iPanPrev]) * fCa
-                              + ((float)panel.Y[iPan] - (float)panel.Y[iPanPrev]) * fSa;
-                    float fTau = (float)blState.TAU[ibl, side];
-                    float fTauPrev = (float)blState.TAU[ibl - 1, side];
-                    fCdf = fCdf + 0.5f * (fTau + fTauPrev) * fDx * 2.0f / fQinf2;
-                }
-            }
-            return Math.Max(fCdf, 0.0);
-        }
-
-        double sa = Math.Sin(alfa);
-        double ca = Math.Cos(alfa);
-        double cdf = 0.0;
-        double qinf2 = qinf * qinf;
+        // Phase 1 strip: float-only sequential REAL accumulation. The doubled
+        // tree (auto-generated *.Double.cs twin via gen-double.py) gets the
+        // double-precision mirror.
+        float fSa = MathF.Sin((float)alfa);
+        float fCa = MathF.Cos((float)alfa);
+        float fCdf = 0.0f;
+        float fQinf = (float)qinf;
+        float fQinf2 = fQinf * fQinf;
 
         for (int side = 0; side < 2; side++)
         {
             int iblte = blState.IBLTE[side];
-
-            // Fortran loops IBL=3..IBLTE (1-based), C# ibl=2..iblte (0-based)
             for (int ibl = 2; ibl <= iblte && ibl < blState.MaxStations; ibl++)
             {
                 int iPan = blState.IPAN[ibl, side];
                 int iPanPrev = blState.IPAN[ibl - 1, side];
-
                 if (iPan < 0 || iPanPrev < 0) continue;
                 if (iPan >= panel.NodeCount || iPanPrev >= panel.NodeCount) continue;
-
-                // Physical panel distance projected in freestream direction
-                double dx = (panel.X[iPan] - panel.X[iPanPrev]) * ca
-                          + (panel.Y[iPan] - panel.Y[iPanPrev]) * sa;
-
-                double tau_ibl = blState.TAU[ibl, side];
-                double tau_prev = blState.TAU[ibl - 1, side];
-
-                cdf += 0.5 * (tau_ibl + tau_prev) * dx * 2.0 / qinf2;
+                float fDx = ((float)panel.X[iPan] - (float)panel.X[iPanPrev]) * fCa
+                          + ((float)panel.Y[iPan] - (float)panel.Y[iPanPrev]) * fSa;
+                float fTau = (float)blState.TAU[ibl, side];
+                float fTauPrev = (float)blState.TAU[ibl - 1, side];
+                fCdf = fCdf + 0.5f * (fTau + fTauPrev) * fDx * 2.0f / fQinf2;
             }
         }
-
-        return Math.Max(cdf, 0.0);
+        return Math.Max(fCdf, 0.0);
     }
 
     // ================================================================

@@ -386,7 +386,7 @@ public sealed class StreamfunctionMicroFortranParityTests
         }
 
         panel = new LinearVortexPanelState(definition.PanelCount + 40);
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             x,
             y,
             x.Length,

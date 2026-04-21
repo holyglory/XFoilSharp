@@ -252,7 +252,7 @@ files:
       standard_verdict: clean
       top_findings:
         - "Resize() never actually resizes arrays - it only updates NodeCount. Name is misleading."
-        - "Verified call sites: CosineClusteringPanelDistributor.cs:636 (called during panel generation, once per case), plus InitializeForNodeCount chain in PolarSweepRunner, LinearVortexInviscidSolver, ViscousSolverEngine. NOT called per-station or per-Newton-iter - safe."
+        - "Verified call sites: CurvatureAdaptivePanelDistributor.cs:636 (called during panel generation, once per case), plus InitializeForNodeCount chain in PolarSweepRunner, LinearVortexInviscidSolver, ViscousSolverEngine. NOT called per-station or per-Newton-iter - safe."
         - "No float usage, no I/O, no locks. Pure double arrays."
         - "Allocated per-case at PolarSweepRunner.cs:52/148/234, LinearVortexInviscidSolver.cs:1075, ViscousSolverEngine.cs:180/208. Default maxNodes=360 -> 8 doubles * 360 = ~23 kB per instance. Negligible."
       estimated_fix_effort: "0 hours (rename Resize -> SetActiveNodeCount is cosmetic)"

@@ -602,7 +602,7 @@ ranked_fix_recommendations:
     recommended_gate: "Add `useLegacyPrecision` parameter plumbing in existing signatures; default preserves parity path."
 
   - rank: 9
-    title: "Replace PanelMeshGenerator with CosineClusteringPanelDistributor call (port PANGEN)"
+    title: "Replace PanelMeshGenerator with CurvatureAdaptivePanelDistributor call (port PANGEN)"
     tag: parity-breaking
     affected_cluster: RC6
     effort_estimate: "3-5 days"
@@ -806,11 +806,11 @@ modernization_roadmap:
       for polar parity.
 
   - id: M11
-    title: "Port PANGEN into PanelMeshGenerator (or redirect to CosineClusteringPanelDistributor)"
+    title: "Port PANGEN into PanelMeshGenerator (or redirect to CurvatureAdaptivePanelDistributor)"
     depends_on: []
     affected_files:
       - PanelMeshGenerator.cs
-      - CosineClusteringPanelDistributor.cs
+      - CurvatureAdaptivePanelDistributor.cs
     effort_estimate: "1 week"
     validation_plan: |
       Node-placement bit-comparison at NACA 0012/4412/23012 vs Fortran
@@ -837,7 +837,7 @@ parity_branch_verdict:
     # C1 WakeGapProfile, WakeSpacing, ViscousStateSeedBuilder, ViscousLaminarCorrector,
     # StagnationPointTracker, BoundaryLayerTopologyBuilder, WakeGeometryGenerator,
     # EdgeVelocityCalculator, B4 all three files, B3 PanelGeometryBuilder +
-    # CosineClusteringPanelDistributor, B2 HessSmithInviscidSolver (parity N/A),
+    # CurvatureAdaptivePanelDistributor, B2 HessSmithInviscidSolver (parity N/A),
     # B2 LinearVortexInviscidSolver (clean for parity).
   minor_files: 24
     # A1, A3, A5, A6, B5 ParametricSpline, C2 BlockTridiagonalSolver, C2 TridiagonalSolver,

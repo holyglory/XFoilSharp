@@ -20,7 +20,7 @@ Orchestrates all previously built components (geometry, influence coefficients, 
 
 - `StreamfunctionInfluenceCalculator` -- influence matrix rows
 - `PanelGeometryBuilder` -- normals, angles, TE geometry, compressibility
-- `CosineClusteringPanelDistributor` -- panel distribution
+- `CurvatureAdaptivePanelDistributor` -- panel distribution
 - `ScaledPivotLuSolver` -- LU decomposition and back-substitution
 
 ## Key Design Decisions

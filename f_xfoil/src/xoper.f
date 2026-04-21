@@ -3293,19 +3293,9 @@ C---- parity trace: per-iter station 67,68,69 side 2 BL state
         WRITE(0,'(A,I3,A,Z8.8)')
      &   'F_RLX_ITER it=',ITER,' rlx=',TRANSFER(RLX,1)
 C---- dump ALL stations both sides at iter 32 to find state-divergence origin
-        IF(ITER.EQ.32 .OR. ITER.EQ.33) THEN
-          DO 7877 ISD=1,2
-          DO 7878 IBD=2,NBL(ISD)
-            WRITE(0,'(A,I3,A,I1,A,I4,A,Z8.8,A,Z8.8,A,Z8.8,A,Z8.8,A,Z8.8)')
-     &        'F_FULLBL it=',ITER,' s=',ISD,' i=',IBD,
-     &        ' T=',TRANSFER(THET(IBD,ISD),1),
-     &        ' D=',TRANSFER(DSTR(IBD,ISD),1),
-     &        ' U=',TRANSFER(UEDG(IBD,ISD),1),
-     &        ' C=',TRANSFER(CTAU(IBD,ISD),1),
-     &        ' M=',TRANSFER(MASS(IBD,ISD),1)
- 7878     CONTINUE
- 7877     CONTINUE
-        ENDIF
+C---- (disabled: format spec too long for fixed-form Fortran)
+C       IF(ITER.EQ.32 .OR. ITER.EQ.33) THEN
+C       ENDIF
          CDP = CD - CDF
          WRITE(*,2020) ALFA/DTOR, CL, CM, CD, CDF, CDP
 C

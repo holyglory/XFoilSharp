@@ -91,7 +91,7 @@ public sealed class SimilaritySeedFinalAndHandoffMicroParityTests
             AssertHex(GetSingleHex(inputRecord, "d1"), ToHex((float)dstar), $"iter={iterationIndex + 1} input d1");
             AssertHex(GetSingleHex(inputRecord, "ampl1"), ToHex((float)ampl), $"iter={iterationIndex + 1} input ampl1");
 
-            BoundaryLayerSystemAssembler.BlsysResult result = BoundaryLayerSystemAssembler.AssembleStationSystem(
+            BlsysResult result = BoundaryLayerSystemAssembler.AssembleStationSystem(
                 isWake: false,
                 isTurbOrTran: false,
                 isTran: false,

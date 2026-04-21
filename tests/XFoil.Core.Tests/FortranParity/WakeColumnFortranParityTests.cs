@@ -439,7 +439,7 @@ public sealed class WakeColumnFortranParityTests
         }
 
         var panel = new LinearVortexPanelState(definition.PanelCount + 40);
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             x,
             y,
             x.Length,
@@ -1214,7 +1214,7 @@ public sealed class WakeColumnFortranParityTests
             panelCount: definition.PanelCount,
             reynoldsNumber: definition.ReynoldsNumber,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,
@@ -1240,7 +1240,7 @@ public sealed class WakeColumnFortranParityTests
         var panel = new LinearVortexPanelState(maxNodes);
         var state = new InviscidSolverState(maxNodes);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             x,
             y,
             x.Length,

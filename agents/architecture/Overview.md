@@ -2,10 +2,18 @@
 
 ## System intent
 
-The managed codebase is a layered rewrite of XFoil that separates domain data, aerodynamic solution logic, design and inverse workflows, persistence, and command dispatch. The solver layer now has two materially different paths:
+The managed codebase is a layered rewrite of XFoil that separates domain data, aerodynamic solution logic, design and inverse workflows, persistence, and command dispatch. The solver layer has a single linear-vortex inviscid path coupled to a Newton-iterated viscous boundary-layer stack, faithfully porting Fortran XFoil's algorithm. The Hess-Smith alternative path and the surrogate viscous pipeline were removed in Phase 3 cleanup; only the parity-validated linear-vortex + Newton-coupled stack remains.
 
-- A Hess-Smith prepared-system path that still backs the public inviscid sweep APIs.
-- A linear-vortex plus Newton-coupled viscous path that drives `AnalyzeViscous`, the viscous polar runners, and most parity work.
+The Solver also has two precision twins:
+
+- The **float-parity tree** (default `XFoil.Solver.Services.AirfoilAnalysisService`) — `float`-based, byte-for-byte equivalent to the Fortran reference (4455/4455 = 100% bit-exact on the NACA polar gate).
+- The **doubled tree** (`XFoil.Solver.Double.Services.AirfoilAnalysisService`) — auto-generated `double`-based twin produced by `tools/gen-double/gen-double.py` text substitution. Same algorithm, native double precision throughout. Validation: ~98% convergence on a 5k random Selig sample, ~86% within 1% CD of the float tree.
+
+The doubled tree is exposed via three CLI modes in `tools/fortran-debug/ParallelPolarCompare`:
+
+- `--double-polar NACA Re Nc panelCount αStart αEnd αStep` — generates a complete viscous polar through the doubled tree.
+- `--mesh-study NACA Re Alpha Nc` — runs both facades at panels = {80, 120, 160, 200, 240, 320}; reports CL/CD trajectory.
+- `--double-sweep <vectors-file> [--sample N]` — runs both facades on every (subset of) reference vectors, reports per-vector agreement plus a top-10 worst-CD-disagreement reporter (gated by `Plausible()`: |CL|≤5, 0≤CD≤1; worst-case rows include iteration count and final RMS residual to distinguish "convergence-edge noise" from "multi-attractor sensitivity").
 
 ## Documentation policy
 
@@ -52,9 +60,8 @@ The managed codebase is a layered rewrite of XFoil that separates domain data, a
   - Boundary-layer and Newton-system state containers.
 - `XFoil.Solver.Services`
   - Public façade in `AirfoilAnalysisService`.
-  - Hess-Smith path: `PanelMeshGenerator`, `HessSmithInviscidSolver`, `WakeGeometryGenerator`.
-  - Linear-vortex and viscous path: `CosineClusteringPanelDistributor`, `PanelGeometryBuilder`, `StreamfunctionInfluenceCalculator`, `LinearVortexInviscidSolver`, `ViscousSolverEngine`, `PolarSweepRunner`.
-  - Newton helpers: `BoundaryLayerSystemAssembler`, `BoundaryLayerCorrelations`, `EdgeVelocityCalculator`, `InfluenceMatrixBuilder`, `TransitionModel`, `ViscousNewtonAssembler`, `ViscousNewtonUpdater`, `DragCalculator`, `StagnationPointTracker`, `PostStallExtrapolator`.
+  - Linear-vortex inviscid + Newton-coupled viscous path: `CurvatureAdaptivePanelDistributor`, `PanelGeometryBuilder`, `StreamfunctionInfluenceCalculator`, `LinearVortexInviscidSolver`, `ViscousSolverEngine`, `PolarSweepRunner`.
+  - Newton helpers: `BoundaryLayerSystemAssembler`, `BoundaryLayerCorrelations`, `EdgeVelocityCalculator`, `InfluenceMatrixBuilder`, `TransitionModel`, `ViscousNewtonAssembler`, `ViscousNewtonUpdater`, `DragCalculator`, `StagnationPointTracker`, `PostStallExtrapolator`, `WakeGapProfile`, `WakeSpacing`.
 - `XFoil.Solver.Diagnostics`
   - `JsonlTraceWriter`, `MultiplexTextWriter`, and ambient `SolverTrace`.
   - Supports env-driven trace filtering and trigger-gated ring-buffer capture used by the parity harness.
@@ -145,14 +152,10 @@ The managed codebase is a layered rewrite of XFoil that separates domain data, a
 ## Current architectural weaknesses
 
 - `Program.cs` is still a very large single-file command dispatcher.
-- `AirfoilAnalysisService` mixes current APIs with obsolete compatibility methods.
-- Public inviscid sweep APIs still route only through Hess-Smith even though single-point analysis can select the linear-vortex solver.
 - Several CLI viscous parameters are compatibility-only and currently ignored by `CreateViscousSettings`.
-- The viscous Newton stack exists, but the current reference tests still show convergence to a non-physical fixed point.
+- The viscous Newton stack exists, but the current reference tests still show convergence to a non-physical fixed point on a small set of cases.
 
 ## TODO
 
 - Break `XFoil.Cli/Program.cs` into command handlers so the code shape matches this map.
-- Decide whether obsolete surrogate APIs and CLI shims should be removed after callers migrate.
-- Either wire public inviscid sweeps to `InviscidSolverType` or keep the Hess-Smith-only behavior explicit.
 - Keep the Newton-solver docs aligned with what the parity tests actually demonstrate.

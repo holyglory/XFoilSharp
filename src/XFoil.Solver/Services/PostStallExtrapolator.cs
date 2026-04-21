@@ -51,10 +51,17 @@ public static class PostStallExtrapolator
         double lastConvergedCD,
         double aspectRatio)
     {
-        // Protect against invalid inputs
+        // Protect against invalid inputs — the engine's self-anchor can
+        // hand us NaN/Inf CL/CD from a divergent Newton trajectory
+        // (convergenceHistory entries are written from each failing
+        // iteration, so lastCL/lastCD can be non-finite). Substitute
+        // bounded defaults so the fallback still produces usable numbers.
         if (double.IsNaN(alpha) || double.IsInfinity(alpha))
-            return (0.0, lastConvergedCD);
+            return (0.0, double.IsFinite(lastConvergedCD) ? lastConvergedCD : 0.01);
         if (aspectRatio < 0.1) aspectRatio = 2.0 * Math.PI;
+        if (!double.IsFinite(lastConvergedAlpha)) lastConvergedAlpha = alpha * 0.5;
+        if (!double.IsFinite(lastConvergedCL)) lastConvergedCL = 0.0;
+        if (!double.IsFinite(lastConvergedCD) || lastConvergedCD < 0) lastConvergedCD = 0.01;
 
         double sinA = Math.Sin(alpha);
         double cosA = Math.Cos(alpha);

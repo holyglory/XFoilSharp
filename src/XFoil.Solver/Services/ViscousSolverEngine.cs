@@ -255,28 +255,28 @@ public static class ViscousSolverEngine
     // overwrites the pooled storage slot in place. A dedicated
     // ThreadStatic preservation buffer lets us copy fields out without
     // allocating per call.
-    [ThreadStatic] private static BoundaryLayerSystemAssembler.SecondaryStationResult? s_preservedLegacySecondary;
+    [ThreadStatic] private static SecondaryStationResult? s_preservedLegacySecondary;
 
-    private static BoundaryLayerSystemAssembler.SecondaryStationResult? PreserveLegacySecondary(
-        BoundaryLayerSystemAssembler.SecondaryStationResult? source)
+    private static SecondaryStationResult? PreserveLegacySecondary(
+        SecondaryStationResult? source)
     {
         if (source is null)
         {
             return null;
         }
-        var slot = s_preservedLegacySecondary ??= new BoundaryLayerSystemAssembler.SecondaryStationResult();
+        var slot = s_preservedLegacySecondary ??= new SecondaryStationResult();
         slot.CopyFrom(source);
         return slot;
     }
 
     // Same pattern for PrimaryStationState — ResolveLegacyPrimaryStationStateOverride
     // wants to return a snapshot value that survives downstream pool overwrites.
-    [ThreadStatic] private static BoundaryLayerSystemAssembler.PrimaryStationState? s_resolvedLegacyPrimary;
+    [ThreadStatic] private static PrimaryStationState? s_resolvedLegacyPrimary;
 
-    private static BoundaryLayerSystemAssembler.PrimaryStationState CopyLegacyPrimaryIntoResolvedScratch(
-        BoundaryLayerSystemAssembler.PrimaryStationState source)
+    private static PrimaryStationState CopyLegacyPrimaryIntoResolvedScratch(
+        PrimaryStationState source)
     {
-        var slot = s_resolvedLegacyPrimary ??= new BoundaryLayerSystemAssembler.PrimaryStationState();
+        var slot = s_resolvedLegacyPrimary ??= new PrimaryStationState();
         slot.CopyFrom(source);
         return slot;
     }
@@ -288,30 +288,30 @@ public static class ViscousSolverEngine
     // simultaneously: "A" is the typical use; "B" pairs with A when a
     // function computes two kinematics in sequence (upstream + current);
     // "C" covers deeper nested cases (e.g. seed probes inside MRCHUE).
-    [ThreadStatic] private static BoundaryLayerSystemAssembler.KinematicResult? s_engineKinematicA;
-    [ThreadStatic] private static BoundaryLayerSystemAssembler.KinematicResult? s_engineKinematicB;
-    [ThreadStatic] private static BoundaryLayerSystemAssembler.KinematicResult? s_engineKinematicC;
+    [ThreadStatic] private static KinematicResult? s_engineKinematicA;
+    [ThreadStatic] private static KinematicResult? s_engineKinematicB;
+    [ThreadStatic] private static KinematicResult? s_engineKinematicC;
 
-    private static BoundaryLayerSystemAssembler.KinematicResult GetEngineKinematicScratchA()
-        => s_engineKinematicA ??= new BoundaryLayerSystemAssembler.KinematicResult();
-    private static BoundaryLayerSystemAssembler.KinematicResult GetEngineKinematicScratchB()
-        => s_engineKinematicB ??= new BoundaryLayerSystemAssembler.KinematicResult();
-    private static BoundaryLayerSystemAssembler.KinematicResult GetEngineKinematicScratchC()
-        => s_engineKinematicC ??= new BoundaryLayerSystemAssembler.KinematicResult();
+    private static KinematicResult GetEngineKinematicScratchA()
+        => s_engineKinematicA ??= new KinematicResult();
+    private static KinematicResult GetEngineKinematicScratchB()
+        => s_engineKinematicB ??= new KinematicResult();
+    private static KinematicResult GetEngineKinematicScratchC()
+        => s_engineKinematicC ??= new KinematicResult();
 
     // Shared SecondaryStationResult scratch for the engine's
     // `new SecondaryStationResult { ... }` snapshot sites that feed
     // StoreLegacyCarrySnapshots. The snapshot is CopyFromed into blState's
     // per-slot pool and then discarded by the caller.
-    [ThreadStatic] private static BoundaryLayerSystemAssembler.SecondaryStationResult? s_engineSecondaryA;
+    [ThreadStatic] private static SecondaryStationResult? s_engineSecondaryA;
 
-    private static BoundaryLayerSystemAssembler.SecondaryStationResult GetEngineSecondaryScratchA()
-        => s_engineSecondaryA ??= new BoundaryLayerSystemAssembler.SecondaryStationResult();
+    private static SecondaryStationResult GetEngineSecondaryScratchA()
+        => s_engineSecondaryA ??= new SecondaryStationResult();
 
     /// <summary>Clear every field on a scratch SecondaryStationResult so
     /// callers can fill only the fields they care about without leaking
     /// stale data from a prior use of the same pool slot.</summary>
-    private static void ResetEngineSecondaryScratch(BoundaryLayerSystemAssembler.SecondaryStationResult s)
+    private static void ResetEngineSecondaryScratch(SecondaryStationResult s)
     {
         s.Hc = 0; s.Hc_T = 0; s.Hc_D = 0; s.Hc_U = 0; s.Hc_MS = 0;
         s.Hs = 0; s.Hs_T = 0; s.Hs_D = 0; s.Hs_U = 0; s.Hs_MS = 0;
@@ -330,10 +330,10 @@ public static class ViscousSolverEngine
 
     private static double GetHvRat(bool useLegacyPrecision)
     {
-        // Classic XFoil's main viscous solve effectively runs with HVRAT=0 in the
-        // live BL path. Keep the modern 0.35 default, but route parity mode onto
-        // the legacy value so COMSET/BLKIN see the same viscosity law.
-        return useLegacyPrecision ? LegacyHvRat : DefaultHvRat;
+        // Phase 1 strip: classic XFoil's main viscous solve runs with HVRAT=0
+        // in the live BL path; the float tree always uses the legacy value so
+        // COMSET/BLKIN see the same viscosity law as Fortran.
+        return LegacyHvRat;
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: XIFSET
@@ -385,7 +385,7 @@ public static class ViscousSolverEngine
         var panel = GetPooledPanelState(maxNodes);
         var inviscidState = GetPooledInviscidSolverState(maxNodes);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
             panel, settings.PanelCount,
             useLegacyPrecision: settings.UseLegacyPanelingPrecision);
@@ -413,7 +413,7 @@ public static class ViscousSolverEngine
         var panel = GetPooledPanelState(maxNodes);
         var inviscidState = GetPooledInviscidSolverState(maxNodes);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
             panel, settings.PanelCount,
             useLegacyPrecision: settings.UseLegacyPanelingPrecision);
@@ -495,7 +495,83 @@ public static class ViscousSolverEngine
         LinearVortexInviscidResult inviscidResult,
         AnalysisSettings settings,
         double alphaRadians,
-        TextWriter? debugWriter = null)
+        TextWriter? debugWriter = null,
+        ViscousBLSeed? blSeed = null)
+    {
+        return SolveViscousFromInviscidCapturing(
+            panel, inviscidState, inviscidResult, settings, alphaRadians,
+            out _, debugWriter, blSeed);
+    }
+
+    /// <summary>
+    /// Viscous solve variant that also exposes the converged BL state so a
+    /// caller can capture it as a warm-start seed for a subsequent α.
+    /// Used by polar-sweep harnesses and PolarSweepRunner to implement
+    /// Fortran-style sequential-α BL state threading.
+    /// </summary>
+    public static ViscousAnalysisResult SolveViscousFromInviscidCapturing(
+        LinearVortexPanelState panel,
+        InviscidSolverState inviscidState,
+        LinearVortexInviscidResult inviscidResult,
+        AnalysisSettings settings,
+        double alphaRadians,
+        out BoundaryLayerSystemState? finalBLState,
+        TextWriter? debugWriter = null,
+        ViscousBLSeed? blSeed = null)
+    {
+        // B3 warm-start safety net: seeded Newton can drive ISP to the
+        // trailing edge, producing a degenerate station distribution
+        // (IBLTE=[n-1, 1]) that later code can't handle. Wrap with a
+        // catch so the experimental ramp path fails gracefully rather
+        // than propagating IndexOutOfRangeException. Only active when
+        // the caller explicitly provided a seed — cold-start and normal
+        // analysis continue to throw on unexpected internal errors.
+        if (blSeed is not null)
+        {
+            try
+            {
+                return SolveViscousFromInviscidCapturingImpl(
+                    panel, inviscidState, inviscidResult, settings, alphaRadians,
+                    out finalBLState, debugWriter, blSeed);
+            }
+            catch (System.IndexOutOfRangeException)
+            {
+                finalBLState = null;
+                return new ViscousAnalysisResult
+                {
+                    LiftCoefficient = double.NaN,
+                    MomentCoefficient = double.NaN,
+                    DragDecomposition = new DragDecomposition
+                    {
+                        CD = double.NaN, CDF = 0d, CDP = 0d,
+                        CDSurfaceCrossCheck = 0d, DiscrepancyMetric = 0d,
+                        TEBaseDrag = 0d, WaveDrag = null,
+                    },
+                    Converged = false,
+                    Iterations = 0,
+                    ConvergenceHistory = new List<ViscousConvergenceInfo>(),
+                    UpperProfiles = System.Array.Empty<BoundaryLayerProfile>(),
+                    LowerProfiles = System.Array.Empty<BoundaryLayerProfile>(),
+                    WakeProfiles = System.Array.Empty<BoundaryLayerProfile>(),
+                    UpperTransition = default,
+                    LowerTransition = default,
+                };
+            }
+        }
+        return SolveViscousFromInviscidCapturingImpl(
+            panel, inviscidState, inviscidResult, settings, alphaRadians,
+            out finalBLState, debugWriter, blSeed);
+    }
+
+    private static ViscousAnalysisResult SolveViscousFromInviscidCapturingImpl(
+        LinearVortexPanelState panel,
+        InviscidSolverState inviscidState,
+        LinearVortexInviscidResult inviscidResult,
+        AnalysisSettings settings,
+        double alphaRadians,
+        out BoundaryLayerSystemState? finalBLState,
+        TextWriter? debugWriter,
+        ViscousBLSeed? blSeed)
     {
 
         PreNewtonSetupContext preNewton = PreparePreNewtonSetupFromInviscid(
@@ -505,6 +581,28 @@ public static class ViscousSolverEngine
             settings,
             alphaRadians,
             debugWriter);
+
+        // B3 warm-start (2026-04-20): if a previously-converged BL state was
+        // captured at a nearby α, overwrite the Thwaites-initialized primary
+        // unknowns with the seed. The seed must have matching NBL counts —
+        // the BL discretization is panel-count-dependent and mixing grids
+        // would produce garbage. Transition indices are copied but the
+        // first Newton iteration re-runs the transition check and will
+        // update them if the flow state has moved.
+        //
+        // This replicates Fortran XFoil's sequential-`alfa` behavior where
+        // the BL state persists in shared COMMON blocks across calls — the
+        // initial guess is the previous solve's converged state rather
+        // than Thwaites' laminar integration from the stagnation point.
+        //
+        // Diagnostic finding: NACA 4412 Re=3e6 α=14° cold-started with
+        // Thwaites lands Newton in a linear-regime attractor (CL=2.188);
+        // warm-started from α=12° converged state, Newton escapes to the
+        // physical stall state matching Fortran (CL=1.74).
+        if (blSeed is not null)
+        {
+            ApplyBLSeed(preNewton.BoundaryLayerState, blSeed, preNewton.Isp, settings.UseLegacyBoundaryLayerInitialization);
+        }
         int n = preNewton.NodeCount;
         int nWake = preNewton.WakeCount;
         double[] qinv = preNewton.QInv;
@@ -934,6 +1032,7 @@ public static class ViscousSolverEngine
             };
         }
 
+        finalBLState = blState;
         return new ViscousAnalysisResult
         {
             LiftCoefficient = finalCL,
@@ -970,78 +1069,45 @@ public static class ViscousSolverEngine
         out double reybl, out double reybl_re, out double reybl_ms,
         bool useLegacyPrecision = false)
     {
-        if (useLegacyPrecision)
-        {
-            // COMSET is part of the legacy data pipeline, so parity mode must build
-            // it entirely in REAL, including GAMM1 = GAMMA - 1.0. Rounding the
-            // double result afterward leaves HSTINV_MS/REYBL_MS one ULP away.
-            float machf = (float)mach;
-            float qinff = (float)qinf;
-            float reinff = (float)reinf;
-            float hvratf = (float)hvrat;
-            float gm1f = (float)LegacyPrecisionMath.GammaMinusOne(true);
+        // Phase 1 strip: float-only COMSET. REAL throughout, including
+        // GAMM1 = GAMMA - 1.0. The doubled tree (auto-generated *.Double.cs
+        // twin via gen-double.py) replaces these floats with doubles.
+        float machf = (float)mach;
+        float qinff = (float)qinf;
+        float reinff = (float)reinf;
+        float hvratf = (float)hvrat;
+        float gm1f = (float)LegacyPrecisionMath.GammaMinusOne(true);
 
-            qinfbl = qinff;
+        qinfbl = qinff;
 
-            float msqf = machf * machf;
-            float betaf = MathF.Sqrt(1.0f - msqf);
-            float betaMsqf = -0.5f / betaf;
-            float betaOnef = 1.0f + betaf;
-            tkbl = msqf / (betaOnef * betaOnef);
-            tkbl_ms = (1.0f / (betaOnef * betaOnef))
-                - ((2.0f * (float)tkbl / betaOnef) * betaMsqf);
+        float msqf = machf * machf;
+        float betaf = MathF.Sqrt(1.0f - msqf);
+        float betaMsqf = -0.5f / betaf;
+        float betaOnef = 1.0f + betaf;
+        tkbl = msqf / (betaOnef * betaOnef);
+        tkbl_ms = (1.0f / (betaOnef * betaOnef))
+            - ((2.0f * (float)tkbl / betaOnef) * betaMsqf);
 
-            float gm1hf = 0.5f * gm1f;
-            float denf = 1.0f + (gm1hf * msqf);
-            rstbl = LegacyLibm.Pow(denf, 1.0f / gm1f);
-            rstbl_ms = 0.5f * (float)rstbl / denf;
+        float gm1hf = 0.5f * gm1f;
+        float denf = 1.0f + (gm1hf * msqf);
+        rstbl = LegacyLibm.Pow(denf, 1.0f / gm1f);
+        rstbl_ms = 0.5f * (float)rstbl / denf;
 
-            // Classic COMSET keeps the derivative channels alive in the
-            // incompressible limit. HSTINV itself goes to zero at MINF = 0, but
-            // HSTINV_MS, RSTBL_MS, and REYBL_MS do not, and BLKIN/BLVAR depend on
-            // those nonzero sensitivities even for nominally incompressible cases.
-            float qinfSqInvf = LegacyLibm.Pow(1.0f / qinff, 2.0f);
-            hstinv = gm1f * LegacyLibm.Pow(machf / qinff, 2.0f) / denf;
-            hstinv_ms = (gm1f * qinfSqInvf / denf)
-                - ((0.5f * gm1f * (float)hstinv) / denf);
+        // Classic COMSET keeps the derivative channels alive in the
+        // incompressible limit. HSTINV itself goes to zero at MINF = 0, but
+        // HSTINV_MS, RSTBL_MS, and REYBL_MS do not, and BLKIN/BLVAR depend on
+        // those nonzero sensitivities even for nominally incompressible cases.
+        float qinfSqInvf = LegacyLibm.Pow(1.0f / qinff, 2.0f);
+        hstinv = gm1f * LegacyLibm.Pow(machf / qinff, 2.0f) / denf;
+        hstinv_ms = (gm1f * qinfSqInvf / denf)
+            - ((0.5f * gm1f * (float)hstinv) / denf);
 
-            float heratf = 1.0f - (0.5f * qinff * qinff * (float)hstinv);
-            float heratMsf = -0.5f * qinff * qinff * (float)hstinv_ms;
-            float reyScalef = MathF.Sqrt(heratf * heratf * heratf) * (1.0f + hvratf) / (heratf + hvratf);
-            reybl = reinff * reyScalef;
-            reybl_re = reyScalef;
-            reybl_ms = (float)reybl * ((1.5f / heratf) - (1.0f / (heratf + hvratf))) * heratMsf;
-        }
-        else
-        {
-            double gm1 = LegacyPrecisionMath.GammaMinusOne(false);
-            qinfbl = qinf;
-            double msq = mach * mach;
-            double beta = Math.Sqrt(1.0 - msq);
-            double betaMsq = -0.5 / beta;
-            double betaOne = 1.0 + beta;
-            tkbl = msq / (betaOne * betaOne);
-            tkbl_ms = (1.0 / (betaOne * betaOne))
-                - ((2.0 * tkbl / betaOne) * betaMsq);
-
-            double gm1h = 0.5 * gm1;
-            double den = 1.0 + (gm1h * msq);
-            rstbl = Math.Pow(den, 1.0 / gm1);
-            rstbl_ms = 0.5 * rstbl / den;
-
-            double qinfSqInv = Math.Pow(1.0 / qinfbl, 2.0);
-            hstinv = gm1 * Math.Pow(mach / qinfbl, 2.0) / den;
-            hstinv_ms = (gm1 * qinfSqInv / den)
-                - ((0.5 * gm1 * hstinv) / den);
-
-            double herat = 1.0 - (0.5 * qinfbl * qinfbl * hstinv);
-            double herat_ms = -0.5 * qinfbl * qinfbl * hstinv_ms;
-            double reyScale = Math.Sqrt(herat * herat * herat) * (1.0 + hvrat) / (herat + hvrat);
-            reybl = reinf * reyScale;
-            reybl_re = reyScale;
-            reybl_ms = reybl * ((1.5 / herat) - (1.0 / (herat + hvrat))) * herat_ms;
-        }
-
+        float heratf = 1.0f - (0.5f * qinff * qinff * (float)hstinv);
+        float heratMsf = -0.5f * qinff * qinff * (float)hstinv_ms;
+        float reyScalef = MathF.Sqrt(heratf * heratf * heratf) * (1.0f + hvratf) / (heratf + hvratf);
+        reybl = reinff * reyScalef;
+        reybl_re = reyScalef;
+        reybl_ms = (float)reybl * ((1.5f / heratf) - (1.0f / (heratf + hvratf))) * heratMsf;
     }
 
     // Legacy mapping: none
@@ -1054,11 +1120,7 @@ public static class ViscousSolverEngine
         ref double dstar,
         ref double shearLikeState)
     {
-        if (!useLegacyPrecision)
-        {
-            return;
-        }
-
+        // Phase 1 strip: float-only path always rounds to single.
         uei = LegacyPrecisionMath.RoundToSingle(uei);
         theta = LegacyPrecisionMath.RoundToSingle(theta);
         dstar = LegacyPrecisionMath.RoundToSingle(dstar);
@@ -1561,82 +1623,47 @@ public static class ViscousSolverEngine
             useLegacyPrecision,
             destination: SolverBuffers.PanelScratch3(n));
 
-        if (useLegacyPrecision)
-        {
-            // Fortran CLCALC uses REAL (float) arithmetic throughout.
-            // For M=0: CPG = CGINC = 1.0 - (GAM/QINF)^2
-            float fCa = LegacyPrecisionMath.CosF((float)alphaRadians);
-            float fSa = LegacyPrecisionMath.SinF((float)alphaRadians);
-            float fQinf = (float)Math.Max(qinf, 1e-10);
-            float fCl = 0.0f;
+        // Phase 1 strip: float-only Fortran CLCALC with REAL arithmetic
+        // throughout. The doubled tree (auto-generated *.Double.cs twin via
+        // gen-double.py) gets the double-precision mirror.
+        // For M=0: CPG = CGINC = 1.0 - (GAM/QINF)^2.
+        float fCa = LegacyPrecisionMath.CosF((float)alphaRadians);
+        float fSa = LegacyPrecisionMath.SinF((float)alphaRadians);
+        float fQinf = (float)Math.Max(qinf, 1e-10);
+        float fCl = 0.0f;
 
-            // Fortran CLCALC: initialize CPG1 at node 1 (index 0)
-            float q1 = (float)qvis[0];
-            float cginc1 = 1.0f - (q1 / fQinf) * (q1 / fQinf);
-            float cpg1 = cginc1; // For M=0: BETA=1, BFAC=0 -> CPG = CGINC
-            
+        // Fortran CLCALC: initialize CPG1 at node 1 (index 0).
+        float q1 = (float)qvis[0];
+        float cginc1 = 1.0f - (q1 / fQinf) * (q1 / fQinf);
+        float cpg1 = cginc1; // For M=0: BETA=1, BFAC=0 -> CPG = CGINC
 
-            for (int i = 0; i < n; i++)
-            {
-                int ip = i + 1;
-                if (ip == n) ip = 0;
-
-                float qip = (float)qvis[ip];
-                float cginc2 = 1.0f - (qip / fQinf) * (qip / fQinf);
-                float cpg2 = cginc2;
-
-                // Fortran CLCALC: DX = (X(IP)-X(I))*CA + (Y(IP)-Y(I))*SA
-                // With -ffp-contract=off each multiply and add rounds separately.
-                // Use RoundBarrier to prevent JIT from fusing to FMA.
-                float dxTerm = LegacyPrecisionMath.RoundBarrier(
-                    ((float)panel.X[ip] - (float)panel.X[i]) * fCa);
-                float dyTerm = LegacyPrecisionMath.RoundBarrier(
-                    ((float)panel.Y[ip] - (float)panel.Y[i]) * fSa);
-                float dx = LegacyPrecisionMath.RoundBarrier(dxTerm + dyTerm);
-                float ag = LegacyPrecisionMath.RoundBarrier(0.5f * (cpg2 + cpg1));
-
-                // Fortran: CL = CL + DX*AG (separate multiply then add)
-                float dxAg = LegacyPrecisionMath.RoundBarrier(dx * ag);
-                fCl = LegacyPrecisionMath.RoundBarrier(fCl + dxAg);
-
-                
-                
-                cpg1 = cpg2;
-            }
-
-            return fCl;
-        }
-
-        double[] cp = SolverBuffers.PanelScratch4(n);
         for (int i = 0; i < n; i++)
         {
-            double qByQinf = qvis[i] / Math.Max(qinf, 1e-10);
-            cp[i] = 1.0 - qByQinf * qByQinf;
-        }
-
-        double cosa = Math.Cos(alphaRadians);
-        double sina = Math.Sin(alphaRadians);
-        double cl = 0.0;
-
-        for (int i = 0; i < n - 1; i++)
-        {
             int ip = i + 1;
-            double dxPhys = panel.X[ip] - panel.X[i];
-            double dyPhys = panel.Y[ip] - panel.Y[i];
-            double dx = dxPhys * cosa + dyPhys * sina;
-            double avgCp = 0.5 * (cp[ip] + cp[i]);
-            cl += dx * avgCp;
+            if (ip == n) ip = 0;
+
+            float qip = (float)qvis[ip];
+            float cginc2 = 1.0f - (qip / fQinf) * (qip / fQinf);
+            float cpg2 = cginc2;
+
+            // Fortran CLCALC: DX = (X(IP)-X(I))*CA + (Y(IP)-Y(I))*SA. With
+            // -ffp-contract=off each multiply and add rounds separately. Use
+            // RoundBarrier to prevent JIT from fusing to FMA.
+            float dxTerm = LegacyPrecisionMath.RoundBarrier(
+                ((float)panel.X[ip] - (float)panel.X[i]) * fCa);
+            float dyTerm = LegacyPrecisionMath.RoundBarrier(
+                ((float)panel.Y[ip] - (float)panel.Y[i]) * fSa);
+            float dx = LegacyPrecisionMath.RoundBarrier(dxTerm + dyTerm);
+            float ag = LegacyPrecisionMath.RoundBarrier(0.5f * (cpg2 + cpg1));
+
+            // Fortran: CL = CL + DX*AG (separate multiply then add).
+            float dxAg = LegacyPrecisionMath.RoundBarrier(dx * ag);
+            fCl = LegacyPrecisionMath.RoundBarrier(fCl + dxAg);
+
+            cpg1 = cpg2;
         }
 
-        {
-            double dxPhys = panel.X[0] - panel.X[n - 1];
-            double dyPhys = panel.Y[0] - panel.Y[n - 1];
-            double dx = dxPhys * cosa + dyPhys * sina;
-            double avgCp = 0.5 * (cp[0] + cp[n - 1]);
-            cl += dx * avgCp;
-        }
-
-        return cl;
+        return fCl;
     }
 
     /// <summary>
@@ -1723,7 +1750,12 @@ public static class ViscousSolverEngine
         int n = panel.NodeCount;
         // Legacy reduced-panel traces (for example alpha-0 P12) prove that the
         // parity path should allow a 3-station wake seed instead of forcing 4.
-        int nWake = Math.Max((n / 8) + 2, 3);
+        // Phase 2: WakeStationMultiplier > 1 extends the wake; default is 1.0
+        // which preserves the Fortran-parity `(n/8)+2` length.
+        int nWakeBase = Math.Max((n / 8) + 2, 3);
+        int nWake = settings.WakeStationMultiplier <= 1.0d
+            ? nWakeBase
+            : Math.Max((int)Math.Round(nWakeBase * settings.WakeStationMultiplier), 3);
 
         double[] qinv = XFoil.Solver.Numerics.SolverBuffers.QinvScratch(n);
         Array.Copy(inviscidState.InviscidSpeed, qinv, n);
@@ -2000,16 +2032,8 @@ public static class ViscousSolverEngine
                 int iPan = blState.IPAN[ibl, side];
                 if (iPan >= 0 && iPan < n)
                 {
-                    // Fortran QVFUE: GAM(I) = VTI(IBL,IS) * UEDG(IBL,IS) — REAL multiply
-                    // In legacy precision mode, match Fortran's float arithmetic.
-                    if (useLegacyPrecision)
-                    {
-                        speeds[iPan] = (float)blState.VTI[ibl, side] * (float)blState.UEDG[ibl, side];
-                    }
-                    else
-                    {
-                        speeds[iPan] = blState.VTI[ibl, side] * blState.UEDG[ibl, side];
-                    }
+                    // Phase 1 strip: Fortran QVFUE GAM(I) = VTI(IBL,IS) * UEDG(IBL,IS) — REAL multiply.
+                    speeds[iPan] = (float)blState.VTI[ibl, side] * (float)blState.UEDG[ibl, side];
                 }
             }
         }
@@ -2040,36 +2064,20 @@ public static class ViscousSolverEngine
         // at the TE nodes due to the zero-gap trailing edge singularity.
         // Select the sign change with the smallest combined magnitude,
         // which corresponds to the true stagnation point (near-zero crossing).
+        // Phase 1 strip: classic XFoil STFIND accepts the FIRST sign change
+        // and evaluates the interpolation entirely in single precision.
         int ist = -1;
-        double bestMag = double.MaxValue;
         for (int i = 0; i < n - 1; i++)
         {
             if (qinv[i] >= 0.0 && qinv[i + 1] < 0.0)
             {
-                double mag = Math.Abs(qinv[i]) + Math.Abs(qinv[i + 1]);
-
-                if (useLegacyPrecision)
-                {
-                    // Classic XFoil accepts the first sign change and evaluates the
-                    // interpolation entirely in single precision. Keep that only in
-                    // the parity path; the default managed branch keeps the more robust
-                    // smallest-magnitude scan and double-precision interpolation.
-                    ist = i;
-                    bestMag = mag;
-                    break;
-                }
-
-                if (mag < bestMag)
-                {
-                    bestMag = mag;
-                    ist = i;
-                }
+                ist = i;
+                break;
             }
         }
         if (ist < 0) ist = n / 2;
 
         double sst;
-        if (useLegacyPrecision)
         {
             float gammaLeft = (float)qinv[ist];
             float gammaRight = (float)qinv[ist + 1];
@@ -2079,58 +2087,27 @@ public static class ViscousSolverEngine
             float ds = panelArcRight - panelArcLeft;
             bool usedLeftNode = gammaLeft < -gammaRight;
 
-
             if (usedLeftNode)
                 sst = panelArcLeft - ds * (gammaLeft / dgam);
             else
                 sst = panelArcRight - ds * (gammaRight / dgam);
 
-            // Trace STFIND inputs and result
-            
-
             if (sst <= panelArcLeft) sst = panelArcLeft + 1.0e-7f;
             if (sst >= panelArcRight) sst = panelArcRight - 1.0e-7f;
         }
-        else
-        {
-            double dgam = qinv[ist + 1] - qinv[ist];
-            double ds = panel.ArcLength[ist + 1] - panel.ArcLength[ist];
-            bool usedLeftNode = qinv[ist] < -qinv[ist + 1];
 
-
-            if (usedLeftNode)
-                sst = panel.ArcLength[ist] - ds * (qinv[ist] / dgam);
-            else
-                sst = panel.ArcLength[ist + 1] - ds * (qinv[ist + 1] / dgam);
-
-            if (sst <= panel.ArcLength[ist]) sst = panel.ArcLength[ist] + 1.0e-7;
-            if (sst >= panel.ArcLength[ist + 1]) sst = panel.ArcLength[ist + 1] - 1.0e-7;
-        }
-
-        // Compute SST_GO/SST_GP using Fortran XICALC formula (xpanel.f line 2263):
+        // Compute SST_GO/SST_GP using Fortran XICALC formula (xpanel.f:2263):
         //   SST_GO = (SST - S(I+1)) / DGAM
         //   SST_GP = (S(I) - SST) / DGAM
         // where DGAM = GAM(I+1) - GAM(I) (same dgam used for SST interpolation).
         double sstGo = 0.0, sstGp = 0.0;
         if (ist >= 0 && ist + 1 < n)
         {
-            if (useLegacyPrecision)
+            float dgamF = (float)qinv[ist + 1] - (float)qinv[ist];
+            if (MathF.Abs(dgamF) > 1e-30f)
             {
-                float dgamF = (float)qinv[ist + 1] - (float)qinv[ist];
-                if (MathF.Abs(dgamF) > 1e-30f)
-                {
-                    sstGo = ((float)sst - (float)panel.ArcLength[ist + 1]) / dgamF;
-                    sstGp = ((float)panel.ArcLength[ist] - (float)sst) / dgamF;
-                }
-            }
-            else
-            {
-                double dgamD = qinv[ist + 1] - qinv[ist];
-                if (Math.Abs(dgamD) > 1e-30)
-                {
-                    sstGo = (sst - panel.ArcLength[ist + 1]) / dgamD;
-                    sstGp = (panel.ArcLength[ist] - sst) / dgamD;
-                }
+                sstGo = ((float)sst - (float)panel.ArcLength[ist + 1]) / dgamF;
+                sstGp = ((float)panel.ArcLength[ist] - (float)sst) / dgamF;
             }
         }
 
@@ -2548,19 +2525,16 @@ public static class ViscousSolverEngine
             return gapProfile;
         }
 
-        bool useLegacy = inviscidState.UseLegacyKernelPrecision
-            || inviscidState.UseLegacyPanelingPrecision;
-
+        // Phase 1 strip: float-only path. The doubled tree (auto-generated
+        // *.Double.cs twin via gen-double.py) gets the double-precision mirror.
+        //
         // Fortran xpanel.f:2483-2490 — DWDXTE comes from the AIRFOIL TE panel
         // derivatives XP/YP at nodes 1 and N, not from the wake segment tangent:
         //   CROSP = (XP(1)*YP(N) - YP(1)*XP(N))
         //         / SQRT((XP(1)^2 + YP(1)^2) * (XP(N)^2 + YP(N)^2))
-        //   DWDXTE = CROSP / SQRT(1 - CROSP^2)
-        //   clamp DWDXTE to [-3/TELRAT, +3/TELRAT]
-        // The earlier C# port used the wake segment's tangent dy/ds, which
-        // gives a completely different (and wrong) value for DWDXTE.
+        //   DWDXTE = CROSP / SQRT(1 - CROSP^2), clamped to [-3/TELRAT, +3/TELRAT].
         double wakeGapDerivative;
-        if (useLegacy && panel.NodeCount >= 2)
+        if (panel.NodeCount >= 2)
         {
             int nLast = panel.NodeCount - 1;
             float xp1 = (float)panel.XDerivative[0];
@@ -2577,72 +2551,40 @@ public static class ViscousSolverEngine
         }
         else
         {
-            double tangentY = 0.0;
-            if (wakeGeometry.Count > 1)
-            {
-                double dx = wakeGeometry.X[1] - wakeGeometry.X[0];
-                double dy = wakeGeometry.Y[1] - wakeGeometry.Y[0];
-                double ds = Math.Sqrt((dx * dx) + (dy * dy));
-                if (ds > 1e-12)
-                {
-                    tangentY = dy / ds;
-                }
-            }
-            wakeGapDerivative = WakeGapProfile.ComputeDerivativeFromTangentY(tangentY);
+            wakeGapDerivative = 0.0;
         }
-        
+
         // Fortran XICALC (xpanel.f:2468-2473) accumulates XSSI in REAL*4:
         //   DXSSI = SQRT((X(I)-X(I-1))**2 + (Y(I)-Y(I-1))**2)
         //   XSSI(IBL) = XSSI(IBL-1) + DXSSI
-        // XYWAKE (xpanel.f:2504) uses `XSSI(IBL,IS) - XSSI(IBLTE(IS),IS)` as the
-        // distance argument. Critical precision detail: adding small DXSSI to
-        // the LARGE airfoil XSSI (= full perimeter arc length) and subtracting
-        // back is NOT a no-op — float-rounding the sum loses ~4-5 low mantissa
-        // bits, so the subtraction yields a slightly smaller distance than the
-        // direct DXSSI accumulation. C# must mimic this round-trip to match
-        // Fortran exactly. `baseArcF` approximates Fortran's XSSI[IBLTE,2].
-        double distance = 0.0;
+        // XYWAKE (xpanel.f:2504) uses `XSSI(IBL,IS) - XSSI(IBLTE(IS),IS)` as
+        // the distance argument. Critical precision detail: adding small DXSSI
+        // to the LARGE airfoil XSSI (= full perimeter arc length) and
+        // subtracting back is NOT a no-op — float-rounding the sum loses ~4-5
+        // low mantissa bits, so the subtraction yields a slightly smaller
+        // distance than the direct DXSSI accumulation. `baseArcF` approximates
+        // Fortran's XSSI[IBLTE,2].
+        int panelLastIdx = panel.NodeCount - 1;
+        float baseArcF = (float)panel.ArcLength[panelLastIdx] - (float)panel.LeadingEdgeArcLength;
+        float accumArcF = baseArcF;
         float distanceF = 0f;
-        float baseArcF = 0f;
-        float accumArcF = 0f;
-        if (useLegacy)
-        {
-            // Lower-side arc length from stagnation (Fortran S(I)-SST for IS=2)
-            int panelLast = panel.NodeCount - 1;
-            float panelLastArc = (float)panel.ArcLength[panelLast];
-            float leArcF = (float)panel.LeadingEdgeArcLength;
-            baseArcF = panelLastArc - leArcF;
-            accumArcF = baseArcF;
-        }
 
         for (int iw = 0; iw < wakeGeometry.Count; iw++)
         {
             if (iw > 0)
             {
-                double dx = wakeGeometry.X[iw] - wakeGeometry.X[iw - 1];
-                double dy = wakeGeometry.Y[iw] - wakeGeometry.Y[iw - 1];
-                distance += Math.Sqrt((dx * dx) + (dy * dy));
-                if (useLegacy)
-                {
-                    float dxF = (float)wakeGeometry.X[iw] - (float)wakeGeometry.X[iw - 1];
-                    float dyF = (float)wakeGeometry.Y[iw] - (float)wakeGeometry.Y[iw - 1];
-                    float dxssi = MathF.Sqrt((dxF * dxF) + (dyF * dyF));
-                    // Fortran: XSSI(IBL) = XSSI(IBL-1) + DXSSI  -- accumulated
-                    // into the large-magnitude base arc, losing low mantissa bits.
-                    accumArcF += dxssi;
-                    // Fortran: XSSI(IBL) - XSSI(IBLTE)  -- subtraction recovers
-                    // a distance that differs slightly from the raw accumulation.
-                    distanceF = accumArcF - baseArcF;
-                }
+                float dxF = (float)wakeGeometry.X[iw] - (float)wakeGeometry.X[iw - 1];
+                float dyF = (float)wakeGeometry.Y[iw] - (float)wakeGeometry.Y[iw - 1];
+                float dxssi = MathF.Sqrt((dxF * dxF) + (dyF * dyF));
+                accumArcF += dxssi;
+                distanceF = accumArcF - baseArcF;
             }
 
             gapProfile[iw] = WakeGapProfile.Evaluate(
                 normalGap,
-                useLegacy ? distanceF : distance,
+                distanceF,
                 wakeGapDerivative,
-                sharpTrailingEdge,
-                useLegacy);
-            
+                sharpTrailingEdge);
         }
 
         return gapProfile;
@@ -2660,23 +2602,15 @@ public static class ViscousSolverEngine
     {
         if (wakeSeed?.Geometry.Count > wakeIndex)
         {
-            if (useLegacyPrecision)
-            {
-                // Fortran XICALC computes DXSSI entirely in REAL (single precision):
-                //   DXSSI = SQRT((X(I)-X(I-1))**2 + (Y(I)-Y(I-1))**2)
-                // Match by doing the distance computation in float.
-                float xCurr = (float)wakeSeed.Geometry.X[wakeIndex];
-                float xPrev = (float)wakeSeed.Geometry.X[wakeIndex - 1];
-                float yCurr = (float)wakeSeed.Geometry.Y[wakeIndex];
-                float yPrev = (float)wakeSeed.Geometry.Y[wakeIndex - 1];
-                float dxf = xCurr - xPrev;
-                float dyf = yCurr - yPrev;
-                return MathF.Sqrt(dxf * dxf + dyf * dyf);
-            }
-
-            double dx = wakeSeed.Geometry.X[wakeIndex] - wakeSeed.Geometry.X[wakeIndex - 1];
-            double dy = wakeSeed.Geometry.Y[wakeIndex] - wakeSeed.Geometry.Y[wakeIndex - 1];
-            return Math.Sqrt((dx * dx) + (dy * dy));
+            // Phase 1 strip: float-only Fortran XICALC DXSSI.
+            //   DXSSI = SQRT((X(I)-X(I-1))**2 + (Y(I)-Y(I-1))**2)
+            float xCurr = (float)wakeSeed.Geometry.X[wakeIndex];
+            float xPrev = (float)wakeSeed.Geometry.X[wakeIndex - 1];
+            float yCurr = (float)wakeSeed.Geometry.Y[wakeIndex];
+            float yPrev = (float)wakeSeed.Geometry.Y[wakeIndex - 1];
+            float dxf = xCurr - xPrev;
+            float dyf = yCurr - yPrev;
+            return MathF.Sqrt(dxf * dxf + dyf * dyf);
         }
 
         return blState.XSSI[iblteLower, 1] / Math.Max(iblteLower, 1) * 2.0;
@@ -2700,11 +2634,105 @@ public static class ViscousSolverEngine
         return 0.5 * (Math.Abs(blState.UEDG[upperTe, 0]) + Math.Abs(blState.UEDG[lowerTe, 1]));
     }
 
-    private static double ComputeMassDefect(double dstar, double ue, bool useLegacyPrecision)
+    private static double ComputeMassDefect(double dstar, double ue, bool useLegacyPrecision = false)
     {
         return useLegacyPrecision
             ? LegacyPrecisionMath.Multiply(dstar, ue, useLegacyPrecision: true)
             : dstar * ue;
+    }
+
+    // ================================================================
+    // B3 warm-start seed application
+    // ================================================================
+
+    /// <summary>
+    /// Overwrites the Thwaites-initialized BL primary unknowns with a seed
+    /// from a previously-converged operating point at a nearby α.
+    /// NBL mismatch silently skips the seed — mixing BL grids produces
+    /// invalid state. Only THET/DSTR/CTAU/UEDG/ITRAN are seeded; secondary
+    /// fields (MASS, TAU, wake continuity) regenerate from the first
+    /// Newton pass.
+    /// </summary>
+    private static void ApplyBLSeed(
+        BoundaryLayerSystemState blState,
+        ViscousBLSeed seed,
+        int currentISP,
+        bool useLegacyPrecision)
+    {
+        if (seed.NBL.Length < 2) return;
+
+        // Phase 1: drop seed arrays into blState using the seed's
+        // (pre-shift) NBL extents. Temporarily restore blState.NBL so
+        // MoveStagnationPoint sees the old grid in seed-indexed form.
+        int[] newNBL = new[] { blState.NBL[0], blState.NBL[1] };
+        for (int side = 0; side < 2; side++)
+        {
+            int seedN = System.Math.Min(seed.NBL[side], blState.THET.GetLength(0));
+            for (int ibl = 0; ibl < seedN; ibl++)
+            {
+                blState.THET[ibl, side] = seed.THET[ibl, side];
+                blState.DSTR[ibl, side] = seed.DSTR[ibl, side];
+                blState.CTAU[ibl, side] = seed.CTAU[ibl, side];
+                blState.UEDG[ibl, side] = seed.UEDG[ibl, side];
+                // Iter 46: e-n amplification carry seeding. Fortran XFoil
+                // inherits this field across sequential `alfa` calls via
+                // COMMON blocks — it sets the amplification factor at
+                // each station that determines transition location.
+                // Seeding it should narrow the 4× CL gap at mid-stall
+                // cases (Fortran CL=1.55 vs my ramp 1.11 at α=14.2°
+                // M=0.15).
+                if (seed.AmplificationCarry is not null
+                    && ibl < seed.AmplificationCarry.GetLength(0))
+                {
+                    blState.LegacyAmplificationCarry[ibl, side] =
+                        seed.AmplificationCarry[ibl, side];
+                }
+            }
+            if (side < seed.ITRAN.Length)
+            {
+                blState.ITRAN[side] = seed.ITRAN[side];
+            }
+            // Iter 56: also seed TINDEX (fractional transition xi
+            // within ITRAN's station). Paired with ITRAN gives
+            // Fortran-style transition continuity.
+            if (seed.TIndex is not null && side < seed.TIndex.Length)
+            {
+                blState.TINDEX[side] = seed.TIndex[side];
+            }
+        }
+
+        // Phase 2: if ISP shifted between seed α and current α, invoke
+        // STMOVE (StagnationPointTracker.MoveStagnationPoint) to remap
+        // the seed's state onto the new grid. The tracker needs the
+        // NEW NBL in blState.NBL but also the OLD (seed) NBL as counts.
+        if (seed.ISP != currentISP)
+        {
+            // blState.NBL already holds the new (current α) values from
+            // the Thwaites setup; MoveStagnationPoint reads them via
+            // blState.NBL[0/1] and needs the old counts as params.
+            StagnationPointTracker.MoveStagnationPoint(
+                blState,
+                oldISP: seed.ISP,
+                newISP: currentISP,
+                oldUpperCount: seed.NBL[0],
+                oldLowerCount: seed.NBL[1],
+                useLegacyPrecision);
+        }
+
+        // MoveStagnationPoint remaps THET/DSTR/CTAU/UEDG but does NOT touch
+        // MASS. After seeding DSTR and UEDG, MASS = DSTR·UEDG is stale
+        // (still reflects Thwaites init). Recompute for consistency —
+        // Newton's BL equations treat MASS as an independent unknown but
+        // they're coupled via this algebraic identity at convergence, so
+        // starting with the correct value is a better initial guess.
+        for (int side = 0; side < 2; side++)
+        {
+            int nbl = blState.NBL[side];
+            for (int ibl = 0; ibl < nbl; ibl++)
+            {
+                blState.MASS[ibl, side] = blState.DSTR[ibl, side] * blState.UEDG[ibl, side];
+            }
+        }
     }
 
     // ================================================================
@@ -3595,7 +3623,7 @@ public static class ViscousSolverEngine
                 double[] delta;
                 try
                 {
-                    delta = SolveSeedLinearSystem(solver, matrix, rhs, useLegacyPrecision: true);
+                    delta = SolveSeedLinearSystem(solver, matrix, rhs);
                 }
                 catch (InvalidOperationException)
                 {
@@ -3834,7 +3862,7 @@ public static class ViscousSolverEngine
                 double finalDsw = dstar - wakeGap;
                 
                 var (finalU2, finalU2Uei, finalU2Ms) = BoundaryLayerSystemAssembler.ConvertToCompressible(
-                    uei, tkbl, qinfbl, tkbl_ms, useLegacyPrecision: true);
+                    uei, tkbl, qinfbl, tkbl_ms);
                 
                 var finalKin = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                     finalU2, theta, finalDsw, wakeGap,
@@ -4056,12 +4084,11 @@ public static class ViscousSolverEngine
             // giving fresh HK2/RT2 from the CURRENT iterate state. The transition
             // check (TRCHEK) then uses this fresh kinematic. Compute fresh kinematic
             // here to match, instead of using the stale blState.LegacyKinematic.
-            BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride;
+            KinematicResult? station2KinematicOverride;
             if (settings.UseLegacyBoundaryLayerInitialization)
             {
                 var (iterU2, _, _) = BoundaryLayerSystemAssembler.ConvertToCompressible(
-                    uei2, tkbl, qinfbl, tkbl_ms,
-                    useLegacyPrecision: true);
+                    uei2, tkbl, qinfbl, tkbl_ms);
                 station2KinematicOverride = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                     iterU2, theta2, dstar2, 0.0,
                     hstinv, hstinv_ms, gm1, rstbl, rstbl_ms,
@@ -4073,7 +4100,7 @@ public static class ViscousSolverEngine
             {
                 station2KinematicOverride = null;
             }
-            BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride =
+            PrimaryStationState? station2PrimaryOverride =
                 ResolveLegacyPrimaryStationStateOverride(
                     blState,
                     ibl,
@@ -4085,7 +4112,7 @@ public static class ViscousSolverEngine
                     theta2,
                     dstar2,
                     settings.UseLegacyBoundaryLayerInitialization);
-            BoundaryLayerSystemAssembler.SecondaryStationResult? station2SecondaryOverride = null;
+            SecondaryStationResult? station2SecondaryOverride = null;
             int currentTransitionStation = blState.ITRAN[side];
             bool carriedTurbulentInterval = ibl >= currentTransitionStation;
             double intervalAmpl2 = ampl2;
@@ -4182,7 +4209,7 @@ public static class ViscousSolverEngine
             usesShearState = ibl >= currentTransitionStation;
 
 
-            BoundaryLayerSystemAssembler.BlsysResult localResult;
+            BlsysResult localResult;
             if (transitionInterval)
             {
                 localResult = BoundaryLayerSystemAssembler.AssembleStationSystem(
@@ -4414,7 +4441,7 @@ public static class ViscousSolverEngine
             double[] delta;
             try
             {
-                delta = SolveSeedLinearSystem(solver, matrix, rhs, useLegacyPrecision: true);
+                delta = SolveSeedLinearSystem(solver, matrix, rhs);
             }
             catch (InvalidOperationException)
             {
@@ -4710,11 +4737,9 @@ public static class ViscousSolverEngine
             && ibl > 0) // not similarity station (Fortran: .NOT.SIMI)
         {
             var (postU1, _, _) = BoundaryLayerSystemAssembler.ConvertToCompressible(
-                uei1, tkbl, qinfbl, tkbl_ms,
-                useLegacyPrecision: true);
+                uei1, tkbl, qinfbl, tkbl_ms);
             var (postU2, _, _) = BoundaryLayerSystemAssembler.ConvertToCompressible(
-                uei2, tkbl, qinfbl, tkbl_ms,
-                useLegacyPrecision: true);
+                uei2, tkbl, qinfbl, tkbl_ms);
             var postKin2 = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                 postU2, theta2, dstar2, 0.0,
                 hstinv, hstinv_ms, gm1, rstbl, rstbl_ms,
@@ -4974,36 +4999,23 @@ public static class ViscousSolverEngine
             return hkPrev - (0.15 * (x2 - x1) / Math.Max(prevTheta, 1.0e-30));
         }
 
-        if (useLegacyPrecision)
-        {
-            // Fortran MRCHUE backward-Euler: all REAL (float) arithmetic
-            float hkPrevF = (float)hkPrev;
-            float x1F = (float)x1;
-            float x2F = (float)x2;
-            float t1F = (float)prevTheta;
-            float constF = 0.03f * (x2F - x1F) / t1F;
-            float hk2F = hkPrevF;
-            for (int iter = 0; iter < 3; iter++)
-            {
-                float hkm1 = hk2F - 1.0f;
-                float hkm1sq = hkm1 * hkm1;
-                float hkm1cu = hkm1sq * hkm1;
-                float denom = 1.0f + 3.0f * constF * hkm1sq;
-                hk2F = hk2F - (hk2F + constF * hkm1cu - hkPrevF) / denom;
-            }
-
-            return hk2F;
-        }
-
-        double hkWake = hkPrev;
-        double constant = 0.03 * (x2 - x1) / Math.Max(prevTheta, 1.0e-30);
+        // Phase 1 strip: float-only Fortran MRCHUE backward-Euler.
+        float hkPrevF = (float)hkPrev;
+        float x1F = (float)x1;
+        float x2F = (float)x2;
+        float t1F = (float)prevTheta;
+        float constF = 0.03f * (x2F - x1F) / t1F;
+        float hk2F = hkPrevF;
         for (int iter = 0; iter < 3; iter++)
         {
-            double denom = 1.0 + (3.0 * constant * Math.Pow(hkWake - 1.0, 2.0));
-            hkWake -= (hkWake + (constant * Math.Pow(hkWake - 1.0, 3.0)) - hkPrev) / Math.Max(denom, 1.0e-30);
+            float hkm1 = hk2F - 1.0f;
+            float hkm1sq = hkm1 * hkm1;
+            float hkm1cu = hkm1sq * hkm1;
+            float denom = 1.0f + 3.0f * constF * hkm1sq;
+            hk2F = hk2F - (hk2F + constF * hkm1cu - hkPrevF) / denom;
         }
 
-        return hkWake;
+        return hk2F;
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHUE similarity-station refinement
@@ -6396,8 +6408,7 @@ public static class ViscousSolverEngine
                             characteristicDelta = SolveSeedLinearSystem(
                                 solver,
                                 characteristicMatrix,
-                                characteristicRhs,
-                                useLegacyPrecision: true);
+                                characteristicRhs);
                         }
                         catch (InvalidOperationException)
                         {
@@ -6495,212 +6506,6 @@ public static class ViscousSolverEngine
 
                     // Hex patches disabled — they were calibrated for a lost code state.
                     // Fix the root cause (BLDIF expression ordering) instead.
-                    bool enableHexPatches = false;
-                    if (enableHexPatches && settings.UseLegacyBoundaryLayerInitialization
-                        && side == 0
-                        && ibl == 3
-                        && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 1]) == 0x448B105A
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 2]) == unchecked((int)0xC32A4473u)
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 3]) == 0x40C92670
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 1]) == 0x44100441
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 2]) == unchecked((int)0xC1F5B12Eu)
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 3]) == unchecked((int)0xC015D792u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[1]) == 0x35500000
-                        && BitConverter.SingleToInt32Bits((float)rhs[2]) == 0x367A8000)
-                    {
-                        // Alpha-0 full-trace upper station-4 MRCHDU parity isolates
-                        // the remaining predicted-edge drift to the first accepted
-                        // inverse remarch final-system packet. The iterate state is
-                        // already exact there; replay the exact legacy REAL system
-                        // words so the accepted update matches the Fortran packet
-                        // instead of carrying a synthetic row23/row32-34 drift into
-                        // the final theta/dstar/mass state.
-                        matrix[1, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC32A4472u));
-                        matrix[2, 1] = BitConverter.Int32BitsToSingle(0x44100440);
-                        matrix[2, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC1F5B125u));
-                        matrix[2, 3] = BitConverter.Int32BitsToSingle(unchecked((int)0xC015D791u));
-                        rhs[1] = BitConverter.Int32BitsToSingle(0x35300000);
-                        rhs[2] = BitConverter.Int32BitsToSingle(0x36768000);
-                    }
-                    if (enableHexPatches && settings.UseLegacyBoundaryLayerInitialization
-                        && side == 1
-                        && ibl == 3
-                        && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 1]) == 0x448B1148
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 2]) == unchecked((int)0xC32A44EFu)
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 3]) == 0x40C925E5
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 1]) == 0x44100571
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 2]) == unchecked((int)0xC1F5BB36u)
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 3]) == unchecked((int)0xC015D6F9u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[1]) == 0x35500000
-                        && BitConverter.SingleToInt32Bits((float)rhs[2]) == 0x37008000
-                        && BitConverter.SingleToInt32Bits((float)rhs[3]) == 0x00000000)
-                    {
-                        // Alpha-0 full-trace lower station-4 mirrors the
-                        // upper-side station-4 remarch family with its own
-                        // exact legacy REAL packet.
-                        matrix[1, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC32A44EDu));
-                        matrix[2, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC1F5BB46u));
-                        matrix[2, 3] = BitConverter.Int32BitsToSingle(unchecked((int)0xC015D6F6u));
-                        rhs[1] = BitConverter.Int32BitsToSingle(0x35400000);
-                        rhs[2] = BitConverter.Int32BitsToSingle(0x37032000);
-                        rhs[3] = BitConverter.Int32BitsToSingle(0x00000000);
-                    }
-                    if (enableHexPatches && settings.UseLegacyBoundaryLayerInitialization
-                        && side == 0
-                        && ibl == 4
-                        && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 1]) == 0x43EAFA14
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 2]) == 0x44C05348
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 3]) == 0x406A5264
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 1]) == 0x457B46FC
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 2]) == unchecked((int)0xC55A0F05u)
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 3]) == unchecked((int)0xBF8818BEu)
-                        && BitConverter.SingleToInt32Bits((float)rhs[1]) == 0x35D21B45
-                        && BitConverter.SingleToInt32Bits((float)rhs[2]) == unchecked((int)0xB6210000u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[3]) == 0x00000000)
-                    {
-                        // Alpha-0 full-trace upper station-5 immediately follows the
-                        // repaired station-4 packet and shows the same remaining
-                        // MRCHDU issue class: exact iterate state, slightly drifted
-                        // inverse final-system REAL words. Replaying the legacy
-                        // system packet closes the downstream predicted-edge mass
-                        // term for source station 5.
-                        matrix[1, 1] = BitConverter.Int32BitsToSingle(0x43EAFA18);
-                        matrix[1, 2] = BitConverter.Int32BitsToSingle(0x44C05342);
-                        matrix[1, 3] = BitConverter.Int32BitsToSingle(0x406A5265);
-                        matrix[2, 1] = BitConverter.Int32BitsToSingle(0x457B4701);
-                        matrix[2, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC55A0F03u));
-                        matrix[2, 3] = BitConverter.Int32BitsToSingle(unchecked((int)0xBF8818BFu));
-                        rhs[1] = BitConverter.Int32BitsToSingle(0x35A23E24);
-                        rhs[2] = BitConverter.Int32BitsToSingle(unchecked((int)0xB5E40000u));
-                        rhs[3] = BitConverter.Int32BitsToSingle(unchecked((int)0x80000000u));
-                    }
-                    if (false && settings.UseLegacyBoundaryLayerInitialization
-                        && side == 1
-                        && ibl == 4
-                        && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 1]) == 0x43EAF9C4
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 2]) == 0x44C053C6
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 3]) == 0x406A523D
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 1]) == 0x457B480A
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 2]) == unchecked((int)0xC55A0FA7u)
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 3]) == unchecked((int)0xBF881891u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[1]) == 0x363F0576
-                        && BitConverter.SingleToInt32Bits((float)rhs[2]) == unchecked((int)0xB6190000u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[3]) == 0x00000000)
-                    {
-                        matrix[1, 1] = BitConverter.Int32BitsToSingle(0x43EAF9B8);
-                        matrix[1, 2] = BitConverter.Int32BitsToSingle(0x44C053C5);
-                        matrix[1, 3] = BitConverter.Int32BitsToSingle(0x406A523D);
-                        matrix[2, 1] = BitConverter.Int32BitsToSingle(0x457B4811);
-                        matrix[2, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC55A0FA6u));
-                        matrix[2, 3] = BitConverter.Int32BitsToSingle(unchecked((int)0xBF881891u));
-                        rhs[1] = BitConverter.Int32BitsToSingle(0x362FA1B4);
-                        rhs[2] = BitConverter.Int32BitsToSingle(unchecked((int)0xB6230000u));
-                        rhs[3] = BitConverter.Int32BitsToSingle(unchecked((int)0x80000000u));
-                    }
-                    if (false && settings.UseLegacyBoundaryLayerInitialization
-                        && side == 1
-                        && ibl == 5
-                        && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 1]) == 0x4413EEFB
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 2]) == 0x4382140F
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 3]) == 0x4057C693
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 1]) == 0x44271B73
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 2]) == unchecked((int)0xC3E00B3Cu)
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 3]) == unchecked((int)0xBEEAB188u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[1]) == 0x3539CFC8
-                        && BitConverter.SingleToInt32Bits((float)rhs[2]) == unchecked((int)0xB50FC000u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[3]) == 0x00000000)
-                    {
-                        matrix[1, 1] = BitConverter.Int32BitsToSingle(0x4413EEF8);
-                        matrix[1, 2] = BitConverter.Int32BitsToSingle(0x4382140A);
-                        matrix[1, 3] = BitConverter.Int32BitsToSingle(0x4057C694);
-                        matrix[2, 1] = BitConverter.Int32BitsToSingle(0x44271B74);
-                        matrix[2, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC3E00B38u));
-                        matrix[2, 3] = BitConverter.Int32BitsToSingle(unchecked((int)0xBEEAB191u));
-                        rhs[1] = BitConverter.Int32BitsToSingle(0x3491B426);
-                        rhs[2] = BitConverter.Int32BitsToSingle(unchecked((int)0xB4808000u));
-                        rhs[3] = BitConverter.Int32BitsToSingle(0x00000000);
-                    }
-                    if (false && settings.UseLegacyBoundaryLayerInitialization
-                        && side == 1
-                        && ibl == 6
-                        && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 1]) == 0x43939986
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 2]) == unchecked((int)0xC1BDA849u)
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 3]) == 0x409A4525
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 1]) == 0x4236493E
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 2]) == unchecked((int)0xC114060Bu)
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 3]) == unchecked((int)0xBF89E7C1u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[1]) == 0x348DA5ED
-                        && BitConverter.SingleToInt32Bits((float)rhs[2]) == unchecked((int)0xB4780000u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[3]) == 0x00000000)
-                    {
-                        matrix[1, 1] = BitConverter.Int32BitsToSingle(0x43939984);
-                        matrix[1, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC1BDA84Bu));
-                        matrix[1, 3] = BitConverter.Int32BitsToSingle(0x409A4526);
-                        matrix[2, 1] = BitConverter.Int32BitsToSingle(0x42364932);
-                        matrix[2, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC11405E6u));
-                        matrix[2, 3] = BitConverter.Int32BitsToSingle(unchecked((int)0xBF89E7C4u));
-                        rhs[1] = BitConverter.Int32BitsToSingle(0x33244A19);
-                        rhs[2] = BitConverter.Int32BitsToSingle(unchecked((int)0xB4280000u));
-                        rhs[3] = BitConverter.Int32BitsToSingle(0x00000000);
-                    }
-                    if (enableHexPatches && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 0
-                    && ibl == 5
-                        && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 1]) == 0x4413EEE5
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 2]) == 0x4382141C
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 3]) == 0x4057C68F
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 1]) == 0x44271BB3
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 2]) == unchecked((int)0xC3E00BACu)
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 3]) == unchecked((int)0xBEEAB147u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[1]) == 0x345C7EA8
-                        && BitConverter.SingleToInt32Bits((float)rhs[2]) == unchecked((int)0xB4FC8000u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[3]) == 0x00000000)
-                    {
-                        // Alpha-0 full-trace upper station-6 is the next MRCHDU
-                        // inverse final-system packet in the same parity family.
-                        matrix[1, 1] = BitConverter.Int32BitsToSingle(0x4413EEE4);
-                        matrix[1, 2] = BitConverter.Int32BitsToSingle(0x43821416);
-                        matrix[1, 3] = BitConverter.Int32BitsToSingle(0x4057C68F);
-                        matrix[2, 1] = BitConverter.Int32BitsToSingle(0x44271BBA);
-                        matrix[2, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC3E00BACu));
-                        matrix[2, 3] = BitConverter.Int32BitsToSingle(unchecked((int)0xBEEAB150u));
-                        rhs[1] = BitConverter.Int32BitsToSingle(unchecked((int)0xB31D606Cu));
-                        rhs[2] = BitConverter.Int32BitsToSingle(unchecked((int)0xB4530000u));
-                        rhs[3] = BitConverter.Int32BitsToSingle(0x00000000);
-                    }
-                    if (enableHexPatches && settings.UseLegacyBoundaryLayerInitialization
-                        && side == 0
-                        && ibl == 6
-                        && iter == 0
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 1]) == 0x43939986
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 2]) == unchecked((int)0xC1BDA824u)
-                        && BitConverter.SingleToInt32Bits((float)matrix[1, 3]) == 0x409A451C
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 1]) == 0x423649CE
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 2]) == unchecked((int)0xC1140782u)
-                        && BitConverter.SingleToInt32Bits((float)matrix[2, 3]) == unchecked((int)0xBF89E79Cu)
-                        && BitConverter.SingleToInt32Bits((float)rhs[1]) == unchecked((int)0xB3F05BA5u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[2]) == unchecked((int)0xB4880000u)
-                        && BitConverter.SingleToInt32Bits((float)rhs[3]) == 0x00000000)
-                    {
-                        // Alpha-0 full-trace upper station-7 is the next
-                        // accepted inverse remarch packet in the same family.
-                        matrix[1, 1] = BitConverter.Int32BitsToSingle(0x43939988);
-                        matrix[1, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC1BDA82Bu));
-                        matrix[1, 3] = BitConverter.Int32BitsToSingle(0x409A451E);
-                        matrix[2, 1] = BitConverter.Int32BitsToSingle(0x423649B3);
-                        matrix[2, 2] = BitConverter.Int32BitsToSingle(unchecked((int)0xC1140736u));
-                        matrix[2, 3] = BitConverter.Int32BitsToSingle(unchecked((int)0xBF89E7A3u));
-                        rhs[1] = BitConverter.Int32BitsToSingle(unchecked((int)0xB2D7CFF4u));
-                        rhs[2] = BitConverter.Int32BitsToSingle(unchecked((int)0xB3C00000u));
-                        rhs[3] = BitConverter.Int32BitsToSingle(0x00000000);
-                    }
 
                     double[] delta;
                     try
@@ -6713,7 +6518,7 @@ public static class ViscousSolverEngine
                         
                         // Iter 12 station 66 matrix + RHS trace (NACA 0021 α=10 Nc=12 debug)
                         
-                        delta = SolveSeedLinearSystem(solver, matrix, rhs, useLegacyPrecision: true);
+                        delta = SolveSeedLinearSystem(solver, matrix, rhs);
                         
                         // Guard: if MRCHDU local Newton produces non-finite delta,
                         // abort iteration for this station. Keep previous finite
@@ -7131,183 +6936,6 @@ public static class ViscousSolverEngine
                     }
                 }
 
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 0
-                    && ibl == 4
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F8E88A4
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3A20A1B2
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3A5B006B
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3D204F8C)
-                {
-                    // Alpha-0 full-trace upper station-5 still lands one final
-                    // accepted write-back packet below the legacy REAL state after
-                    // the corrected inverse system solve. Replay the exact legacy
-                    // endpoint words before MRCHDU stores the final station state.
-                    theta = BitConverter.Int32BitsToSingle(0x3A20A1B3);
-                    dstar = BitConverter.Int32BitsToSingle(0x3A5B006A);
-                    ctau = BitConverter.Int32BitsToSingle(0x3D204F8E);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 3
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F427D7F
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3AD72F36
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3B867D11
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3DB7EB19)
-                {
-                    uei = BitConverter.Int32BitsToSingle(0x3F427D7A);
-                    theta = BitConverter.Int32BitsToSingle(0x3AD72F73);
-                    dstar = BitConverter.Int32BitsToSingle(0x3B867D55);
-                    ctau = BitConverter.Int32BitsToSingle(0x3DB7EB39);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 4
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F8E88B3
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3A20A17B
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3A5B0044
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3D204F95)
-                {
-                    theta = BitConverter.Int32BitsToSingle(0x3A20A17D);
-                    dstar = BitConverter.Int32BitsToSingle(0x3A5B0045);
-                    ctau = BitConverter.Int32BitsToSingle(0x3D204F98);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 5
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F85D374
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3AB77CF0
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3B0A7AA4
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3D1FBA8C)
-                {
-                    theta = BitConverter.Int32BitsToSingle(0x3AB77CF1);
-                    dstar = BitConverter.Int32BitsToSingle(0x3B0A7AA4);
-                    ctau = BitConverter.Int32BitsToSingle(0x3D1FBA8E);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 6
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F4D12AA
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3B8B3DFA
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3C1929EB
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3D614079)
-                {
-                    theta = BitConverter.Int32BitsToSingle(0x3B8B3DFC);
-                    dstar = BitConverter.Int32BitsToSingle(0x3C1929F4);
-                    ctau = BitConverter.Int32BitsToSingle(0x3D61407C);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 7
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F4D12AA
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3C0B3DF6
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3C9929DE
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3D61406C)
-                {
-                    theta = BitConverter.Int32BitsToSingle(0x3C0B3DF6);
-                    dstar = BitConverter.Int32BitsToSingle(0x3CADB315);
-                    ctau = BitConverter.Int32BitsToSingle(0x3D61406B);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 0
-                    && ibl == 5
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F85D371
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3AB77CF9
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3B0A7AA2
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3D1FBA7A)
-                {
-                    theta = BitConverter.Int32BitsToSingle(0x3AB77CF9);
-                    dstar = BitConverter.Int32BitsToSingle(0x3B0A7AA3);
-                    ctau = BitConverter.Int32BitsToSingle(0x3D1FBA7F);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 0
-                    && ibl == 6
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F4D12AA
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3B8B3DEF
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3C1929C5
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3D614058)
-                {
-                    theta = BitConverter.Int32BitsToSingle(0x3B8B3DEF);
-                    dstar = BitConverter.Int32BitsToSingle(0x3C1929C8);
-                    ctau = BitConverter.Int32BitsToSingle(0x3D61405C);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 35
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F586717
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3BDE30D9
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3C2503C4
-                    && BitConverter.SingleToInt32Bits((float)ctau) == 0x3D58CED4)
-                {
-                    // Alpha-10 panel-80 lower station-36 is the remaining wake
-                    // pre-SETBL parity holdout after the wake-aware BLKIN refresh:
-                    // the accepted inverse writeback still lands two ULP below the
-                    // focused dump on DSTAR, which in turn leaves the station-2
-                    // wake term mass one bit low. Replay the final legacy REAL DSTAR
-                    // word here so the carried wake mass packet matches the focused
-                    // dump and UESET witness trace exactly.
-                    dstar = BitConverter.Int32BitsToSingle(0x3C2503C6);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 37
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F66F6F4
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3BB1FC96
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3BEC3053)
-                {
-                    // Alpha-10 panel-80 lower station-38 is the next downstream
-                    // wake carry holdout after the station-36 replay. The accepted
-                    // inverse writeback lands a few legacy REAL words high on DSTAR,
-                    // which in turn lifts the station-2 wake term mass for source
-                    // station 38. Replay the focused dump word here so the fourth
-                    // wake station carry matches the authoritative pre-Newton state.
-                    dstar = BitConverter.Int32BitsToSingle(0x3BEC303E);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 42
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F7819E8
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3B8D5804
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3B9B4FEA)
-                {
-                    // Alpha-10 panel-80 lower station-43 is the next accepted
-                    // wake-state packet still landing a few REAL words off in the
-                    // pre-Newton dump. Replay the focused Ue/theta/dstar words so
-                    // the late wake mass packet feeding UESET/USAV stays aligned.
-                    uei = BitConverter.Int32BitsToSingle(0x3F7819E9);
-                    theta = BitConverter.Int32BitsToSingle(0x3B8D5801);
-                    dstar = BitConverter.Int32BitsToSingle(0x3B9B4FE7);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 43
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F7A2492
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3B89D0D7
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3B9370BB)
-                {
-                    // Alpha-10 panel-80 lower station-44 is the next late wake
-                    // packet still landing a couple of legacy REAL words high in
-                    // the accepted remarch/state snapshot. Replay the focused
-                    // theta/dstar words so the carried station-44 mass matches the
-                    // authoritative dump and the upper station-2 wake term 89.
-                    theta = BitConverter.Int32BitsToSingle(0x3B89D0D6);
-                    dstar = BitConverter.Int32BitsToSingle(0x3B9370B9);
-                }
-                if (false && settings.UseLegacyBoundaryLayerInitialization
-                    && side == 1
-                    && ibl == 45
-                    && BitConverter.SingleToInt32Bits((float)uei) == 0x3F7D188B
-                    && BitConverter.SingleToInt32Bits((float)theta) == 0x3B84F7AF
-                    && BitConverter.SingleToInt32Bits((float)dstar) == 0x3B89890B)
-                {
-                    // Alpha-10 panel-80 lower station-46 is the last wake-state
-                    // packet still two REAL words high on DSTAR after the earlier
-                    // late-tail replays. Replay the focused DSTAR word so the
-                    // final wake mass packet matches the authoritative dump and
-                    // closes the last station-2 wake contributor in UESET.
-                    dstar = BitConverter.Int32BitsToSingle(0x3B898909);
-                }
 
                 // MRCHDU final-store trace
                 
@@ -7593,7 +7221,7 @@ public static class ViscousSolverEngine
                 double[] delta;
                 try
                 {
-                    delta = SolveSeedLinearSystem(solver, matrix, rhs, useLegacyPrecision: true);
+                    delta = SolveSeedLinearSystem(solver, matrix, rhs);
                 }
                 catch (InvalidOperationException)
                 {
@@ -7739,7 +7367,7 @@ public static class ViscousSolverEngine
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHUE similarity-station BLSYS call
     // Difference from legacy: This helper packages the fixed laminar shear seed and forwards to the shared `BLSYS` port instead of keeping a duplicated inline call sequence.
     // Decision: Keep the helper and preserve the original station inputs.
-    private static BoundaryLayerSystemAssembler.BlsysResult AssembleSimilarityStation(
+    private static BlsysResult AssembleSimilarityStation(
         double xsi,
         double uei,
         double theta,
@@ -7800,7 +7428,7 @@ public static class ViscousSolverEngine
     // Legacy mapping: f_xfoil/src/xbl.f :: MRCHUE laminar-station BLSYS call
     // Difference from legacy: This helper centralizes the laminar station call pattern and threads the carried COM1 snapshots explicitly in parity mode.
     // Decision: Keep the helper and preserve the original laminar station inputs and parity overrides.
-    private static BoundaryLayerSystemAssembler.BlsysResult AssembleLaminarStation(
+    private static BlsysResult AssembleLaminarStation(
         double x1,
         double x2,
         double uei1,
@@ -7822,11 +7450,11 @@ public static class ViscousSolverEngine
         double reybl,
         double reybl_re,
         double reybl_ms,
-        BoundaryLayerSystemAssembler.KinematicResult? station1KinematicOverride = null,
-        BoundaryLayerSystemAssembler.SecondaryStationResult? station1SecondaryOverride = null,
-        BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride = null,
-        BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride = null,
-        BoundaryLayerSystemAssembler.SecondaryStationResult? station2SecondaryOverride = null,
+        KinematicResult? station1KinematicOverride = null,
+        SecondaryStationResult? station1SecondaryOverride = null,
+        KinematicResult? station2KinematicOverride = null,
+        PrimaryStationState? station2PrimaryOverride = null,
+        SecondaryStationResult? station2SecondaryOverride = null,
         int? traceSide = null,
         int? traceStation = null,
         int? traceIteration = null,
@@ -7882,7 +7510,7 @@ public static class ViscousSolverEngine
     // Decision: Keep the helper so parity mode can thread the exact carried
     // station-2 primary state through localized transition probes without
     // obscuring the default managed path.
-    private static BoundaryLayerSystemAssembler.PrimaryStationState? ResolveLegacyPrimaryStationStateOverride(
+    private static PrimaryStationState? ResolveLegacyPrimaryStationStateOverride(
         BoundaryLayerSystemState blState,
         int ibl,
         int side,
@@ -7894,11 +7522,7 @@ public static class ViscousSolverEngine
         double dstar,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return null;
-        }
-
+        // Phase 1 strip: float-only path always returns the legacy primary.
         var live = blState.LegacyPrimary[ibl, side];
         if (live is not null)
         {
@@ -7917,7 +7541,7 @@ public static class ViscousSolverEngine
             useLegacyPrecision);
     }
 
-    private static BoundaryLayerSystemAssembler.PrimaryStationState? CreateLegacyPrimaryStationStateOverride(
+    private static PrimaryStationState? CreateLegacyPrimaryStationStateOverride(
         BoundaryLayerSystemState blState,
         int ibl,
         int side,
@@ -7927,22 +7551,17 @@ public static class ViscousSolverEngine
         double uei,
         double theta,
         double dstar,
-        bool useLegacyPrecision)
+        bool useLegacyPrecision = false)
     {
-        if (!useLegacyPrecision)
-        {
-            return null;
-        }
-
+        // Phase 1 strip: float-only path always builds the legacy carry state.
         double carriedUei = Math.Max(Math.Abs(uei), 1.0e-10);
         var (carriedU, _, _) = BoundaryLayerSystemAssembler.ConvertToCompressible(
             carriedUei,
             tkbl,
             qinfbl,
-            tkbl_ms,
-            useLegacyPrecision: true);
+            tkbl_ms);
 
-        return new BoundaryLayerSystemAssembler.PrimaryStationState
+        return new PrimaryStationState
         {
             U = carriedU,
             T = LegacyPrecisionMath.RoundToSingle(theta, true),
@@ -7954,9 +7573,9 @@ public static class ViscousSolverEngine
         BoundaryLayerSystemState blState,
         int ibl,
         int side,
-        BoundaryLayerSystemAssembler.PrimaryStationState? primary,
-        BoundaryLayerSystemAssembler.KinematicResult? kinematic,
-        BoundaryLayerSystemAssembler.SecondaryStationResult? secondary,
+        PrimaryStationState? primary,
+        KinematicResult? kinematic,
+        SecondaryStationResult? secondary,
         string? traceLabel = null)
     {
         if (!string.IsNullOrEmpty(traceLabel))
@@ -7997,7 +7616,7 @@ public static class ViscousSolverEngine
         double reybl_ms,
         double wakeGap = 0.0,
         double prevWakeGap = 0.0,
-        BoundaryLayerSystemAssembler.SecondaryStationResult? preservedSecondary = null)
+        SecondaryStationResult? preservedSecondary = null)
     {
         if (!settings.UseLegacyBoundaryLayerInitialization)
         {
@@ -8069,8 +7688,7 @@ public static class ViscousSolverEngine
                 tkbl_ms,
                 uei,
                 theta,
-                dstar,
-                useLegacyPrecision: true);
+                dstar);
         blState.SetLegacyPrimary(ibl, side, sourcePrimary);
         if (hadSavedPreUpdate && blState.LegacyPrimary[ibl, side] is { } newPrimary)
         {
@@ -8116,8 +7734,7 @@ public static class ViscousSolverEngine
             uei,
             tkbl,
             qinfbl,
-            tkbl_ms,
-            useLegacyPrecision: true);
+            tkbl_ms);
         var kinematic = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
             u2,
             theta,
@@ -8143,8 +7760,7 @@ public static class ViscousSolverEngine
             tkbl_ms,
             uei,
             theta,
-            dForSystem,
-            useLegacyPrecision: true);
+            dForSystem);
 
         blState.SetLegacyPrimary(ibl, side, primary);
         blState.SetLegacyKinematic(ibl, side, kinematic);
@@ -8158,17 +7774,10 @@ public static class ViscousSolverEngine
         DenseLinearSystemSolver solver,
         double[,] matrix,
         double[] rhs,
-        bool useLegacyPrecision)
+        bool useLegacyPrecision = false)
     {
         int n = rhs.Length;
-        if (!useLegacyPrecision)
-        {
-            // In-place double solve: rhs is mutated into the solution.
-            solver.SolveInPlace(matrix, rhs);
-            return rhs;
-        }
-
-        // The parity seed path follows classic XFoil's single-precision solves.
+        // Phase 1 strip: float-only path follows classic XFoil's single-precision solves.
         // ThreadStatic scratch buffers eliminate the three per-call allocations
         // (singleMatrix, singleRhs, singleDelta) that the 4x4 Newton hot path
         // otherwise triggers on every station/iteration.
@@ -8222,8 +7831,8 @@ public static class ViscousSolverEngine
         double reybl,
         double reybl_re,
         double reybl_ms,
-        BoundaryLayerSystemAssembler.KinematicResult? station1KinematicOverride = null,
-        BoundaryLayerSystemAssembler.SecondaryStationResult? station1SecondaryOverride = null)
+        KinematicResult? station1KinematicOverride = null,
+        SecondaryStationResult? station1SecondaryOverride = null)
     {
         var localResult = AssembleLaminarStation(
             x1, x2, uei1, uei2, theta1, theta2, dstar1, dstar2, ampl1, ampl2, settings,
@@ -8353,11 +7962,7 @@ public static class ViscousSolverEngine
     // Decision: Keep the helper, but preserve the classic REAL comparison and division in parity mode so the accepted seed step matches Fortran exactly.
     private static double ComputeLegacySeedRelaxation(double dmax, bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (dmax > 0.3) ? 0.3 / dmax : 1.0;
-        }
-
+        // Phase 1 strip: float-only relaxation limiter.
         float dmaxf = (float)dmax;
         return dmaxf > 0.3f ? 0.3f / dmaxf : 1.0f;
     }

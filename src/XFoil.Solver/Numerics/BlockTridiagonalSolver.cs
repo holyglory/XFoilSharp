@@ -1,13 +1,15 @@
 using System;
-using System.Numerics;
 using XFoil.Solver.Models;
 
 // Legacy audit:
 // Primary legacy source: f_xfoil/src/xsolve.f :: BLSOLV
 // Secondary legacy source(s): none
 // Role in port: Coupled block-tridiagonal Newton solve for the viscous system.
-// Differences: The C# version splits the legacy monolith into a generic core and a parity-only float workspace; the Fortran routine is a single REAL kernel.
-// Decision: Keep the managed structure but preserve the float workspace path when parity mode needs the legacy REAL solve.
+// Differences: Float-only after the Phase 1 strip — the legacy REAL workspace
+// is the only path. The doubled tree (auto-generated *.Double.cs twin via
+// gen-double.py) holds the algorithmic-parity double-precision mirror.
+// Decision: Match the Fortran REAL kernel arithmetic exactly; let gen-double
+// produce the wider-precision twin without hand-edit.
 
 namespace XFoil.Solver.Numerics;
 
@@ -17,19 +19,20 @@ namespace XFoil.Solver.Numerics;
 /// </summary>
 public static class BlockTridiagonalSolver
 {
-    private const double PivotFloor = 1e-30;
+    private const float PivotFloor = 1e-30f;
 
     /// <summary>
     /// Solves the coupled Newton system in place. The factored solution overwrites
     /// <see cref="ViscousNewtonSystem.VDEL"/>.
     /// </summary>
     // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV
-    // Difference from legacy: The top-level entry point is managed-only structure around the same elimination algorithm, with an explicit parity switch that chooses a float workspace instead of mutating one shared REAL array set.
-    // Decision: Keep the managed split so default execution stays readable while parity mode can still replay the legacy kernel.
+    // Difference from legacy: Float workspace mirrors the Fortran REAL kernel
+    // exactly. The doubled tree drops the float casts and runs the same
+    // algorithm in double.
     public static void Solve(
         ViscousNewtonSystem system,
         double vaccel = 0.01,
-        bool useLegacyPrecision = false)
+        bool useLegacyPrecision = true)
     {
         int nsys = system.NSYS;
         if (nsys <= 0)
@@ -37,89 +40,69 @@ public static class BlockTridiagonalSolver
             return;
         }
 
-        // Legacy block: xsolve.f BLSOLV REAL workspace path.
-        // Difference from legacy: The Fortran routine always runs in REAL; the managed solver keeps double as the default and enters this branch only for parity replay.
-        // Decision: Keep the explicit parity branch because it isolates the legacy arithmetic without degrading the default solver.
-        if (useLegacyPrecision)
-        {
-            // Classic XFoil's BLSOLV runs in REAL. Keep the parity path on a
-            // dedicated float workspace so the control flow stays identical to
-            // the default solver while the arithmetic matches the legacy kernel.
-            // NOTE: VA/VB/VDEL are [3, 2, nsysMax] but VM is [3, nsysMax, nsysMax].
-            // Each buffer must be sized from its own source's dims.
-            float[,,] va = CopyToSingleInto(
-                SolverBuffers.BtVaFloat(system.VA.GetLength(0), system.VA.GetLength(1), system.VA.GetLength(2)),
-                system.VA, nsys);
-            float[,,] vb = CopyToSingleInto(
-                SolverBuffers.BtVbFloat(system.VB.GetLength(0), system.VB.GetLength(1), system.VB.GetLength(2)),
-                system.VB, nsys);
-            float[,,] vm = CopyToSingleInto(
-                SolverBuffers.BtVmFloat(system.VM.GetLength(0), system.VM.GetLength(1), system.VM.GetLength(2)),
-                system.VM, nsys);
-            float[,,] vdel = CopyToSingleInto(
-                SolverBuffers.BtVdelFloat(system.VDEL.GetLength(0), system.VDEL.GetLength(1), system.VDEL.GetLength(2)),
-                system.VDEL, nsys);
-            float[,] vz = CopyToSingleInto(
-                SolverBuffers.BtVzFloat(system.VZ.GetLength(0), system.VZ.GetLength(1)),
-                system.VZ);
+        // Classic XFoil's BLSOLV runs in REAL. Keep the workspace on float so
+        // arithmetic matches the legacy kernel. NOTE: VA/VB/VDEL are
+        // [3, 2, nsysMax] but VM is [3, nsysMax, nsysMax]. Each buffer must
+        // be sized from its own source's dims.
+        float[,,] va = CopyToSingleInto(
+            SolverBuffers.BtVaFloat(system.VA.GetLength(0), system.VA.GetLength(1), system.VA.GetLength(2)),
+            system.VA, nsys);
+        float[,,] vb = CopyToSingleInto(
+            SolverBuffers.BtVbFloat(system.VB.GetLength(0), system.VB.GetLength(1), system.VB.GetLength(2)),
+            system.VB, nsys);
+        float[,,] vm = CopyToSingleInto(
+            SolverBuffers.BtVmFloat(system.VM.GetLength(0), system.VM.GetLength(1), system.VM.GetLength(2)),
+            system.VM, nsys);
+        float[,,] vdel = CopyToSingleInto(
+            SolverBuffers.BtVdelFloat(system.VDEL.GetLength(0), system.VDEL.GetLength(1), system.VDEL.GetLength(2)),
+            system.VDEL, nsys);
+        float[,] vz = CopyToSingleInto(
+            SolverBuffers.BtVzFloat(system.VZ.GetLength(0), system.VZ.GetLength(1)),
+            system.VZ);
 
-            SolveCore(
-                va,
-                vb,
-                vm,
-                vdel,
-                vz,
-                nsys,
-                system.UpperTeLine,
-                system.FirstWakeLine,
-                system.ArcLengthSpan,
-                (float)vaccel);
+        SolveCore(
+            va,
+            vb,
+            vm,
+            vdel,
+            vz,
+            nsys,
+            system.UpperTeLine,
+            system.FirstWakeLine,
+            system.ArcLengthSpan,
+            (float)vaccel);
 
-            CopySolutionToDouble(vdel, system.VDEL, nsys);
-        }
-        else
-        {
-            SolveCore(
-                system.VA,
-                system.VB,
-                system.VM,
-                system.VDEL,
-                system.VZ,
-                nsys,
-                system.UpperTeLine,
-                system.FirstWakeLine,
-                system.ArcLengthSpan,
-                vaccel);
-        }
+        CopySolutionToDouble(vdel, system.VDEL, nsys);
     }
 
     // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV
-    // Difference from legacy: This is the same elimination and back-substitution algorithm expressed as a generic core so the managed solver can share control flow across double and parity-float execution.
-    // Decision: Keep the generic core and audit parity through the arithmetic type and helper selection rather than duplicating the whole solver.
-    private static void SolveCore<T>(
-        T[,,] va,
-        T[,,] vb,
-        T[,,] vm,
-        T[,,] vdel,
-        T[,] vz,
+    // Difference from legacy: Same elimination and back-substitution algorithm
+    // expressed as a non-generic float-only core. Replaces the prior
+    // SolveCore<T> generic; the doubled tree gets its own SolveCore via
+    // gen-double.py textual substitution.
+    private static void SolveCore(
+        float[,,] va,
+        float[,,] vb,
+        float[,,] vm,
+        float[,,] vdel,
+        float[,] vz,
         int nsys,
         int ivte1,
         int ivz,
         double arcLengthSpan,
-        T vaccel)
-        where T : struct, IFloatingPointIeee754<T>
+        float vaccel)
     {
-        T span = T.Max(T.CreateChecked(arcLengthSpan), T.CreateChecked(1e-12));
-        T vacc1 = vaccel;
-        T vacc2 = (vaccel * T.CreateChecked(2.0)) / span;
-        T vacc3 = (vaccel * T.CreateChecked(2.0)) / span;
+        float span = MathF.Max((float)arcLengthSpan, 1e-12f);
+        float vacc1 = vaccel;
+        float vacc2 = (vaccel * 2f) / span;
+        float vacc3 = (vaccel * 2f) / span;
 
         // Legacy block: xsolve.f BLSOLV forward elimination sweep.
         for (int iv = 0; iv < nsys; iv++)
         {
             int ivp = iv + 1;
 
-            T pivot = SafeReciprocal(va[0, 0, iv]);
+            float pivot = SafeReciprocal(va[0, 0, iv]);
             va[0, 1, iv] *= pivot;
             for (int l = iv; l < nsys; l++)
             {
@@ -131,7 +114,7 @@ public static class BlockTridiagonalSolver
 
             for (int k = 1; k < 3; k++)
             {
-                T vtmp = va[k, 0, iv];
+                float vtmp = va[k, 0, iv];
                 va[k, 1, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, va[0, 1, iv], va[k, 1, iv]);
                 for (int l = iv; l < nsys; l++)
                 {
@@ -152,7 +135,7 @@ public static class BlockTridiagonalSolver
             vdel[1, 1, iv] *= pivot;
 
             {
-                T vtmp = va[2, 1, iv];
+                float vtmp = va[2, 1, iv];
                 for (int l = iv; l < nsys; l++)
                 {
                     vm[2, l, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vm[1, l, iv], vm[2, l, iv]);
@@ -172,8 +155,8 @@ public static class BlockTridiagonalSolver
             vdel[2, 1, iv] *= pivot;
 
             {
-                T vtmp1 = vm[0, iv, iv];
-                T vtmp2 = vm[1, iv, iv];
+                float vtmp1 = vm[0, iv, iv];
+                float vtmp2 = vm[1, iv, iv];
                 for (int l = ivp; l < nsys; l++)
                 {
                     vm[0, l, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp1, vm[2, l, iv], vm[0, l, iv]);
@@ -187,7 +170,7 @@ public static class BlockTridiagonalSolver
             }
 
             {
-                T vtmp = va[0, 1, iv];
+                float vtmp = va[0, 1, iv];
                 for (int l = ivp; l < nsys; l++)
                 {
                     vm[0, l, iv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp, vm[1, l, iv], vm[0, l, iv]);
@@ -204,23 +187,23 @@ public static class BlockTridiagonalSolver
 
             for (int k = 0; k < 3; k++)
             {
-                T vtmp1 = vb[k, 0, ivp];
-                T vtmp2 = vb[k, 1, ivp];
-                T vtmp3 = vm[k, iv, ivp];
+                float vtmp1 = vb[k, 0, ivp];
+                float vtmp2 = vb[k, 1, ivp];
+                float vtmp3 = vm[k, iv, ivp];
                 for (int l = ivp; l < nsys; l++)
                 {
-                    T reduction = LegacyPrecisionMath.SeparateSumOfProducts(
+                    float reduction = LegacyPrecisionMath.SeparateSumOfProducts(
                         vtmp1, vm[0, l, iv],
                         vtmp2, vm[1, l, iv],
                         vtmp3, vm[2, l, iv]);
                     vm[k, l, ivp] -= reduction;
                 }
 
-                T delta0 = LegacyPrecisionMath.SeparateSumOfProducts(
+                float delta0 = LegacyPrecisionMath.SeparateSumOfProducts(
                     vtmp1, vdel[0, 0, iv],
                     vtmp2, vdel[1, 0, iv],
                     vtmp3, vdel[2, 0, iv]);
-                T delta1 = LegacyPrecisionMath.SeparateSumOfProducts(
+                float delta1 = LegacyPrecisionMath.SeparateSumOfProducts(
                     vtmp1, vdel[0, 1, iv],
                     vtmp2, vdel[1, 1, iv],
                     vtmp3, vdel[2, 1, iv]);
@@ -233,16 +216,16 @@ public static class BlockTridiagonalSolver
             {
                 for (int k = 0; k < 3; k++)
                 {
-                    T vtmp1 = vz[k, 0];
-                    T vtmp2 = vz[k, 1];
+                    float vtmp1 = vz[k, 0];
+                    float vtmp2 = vz[k, 1];
                     for (int l = ivp; l < nsys; l++)
                     {
-                        T reduction = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vm[0, l, iv], vtmp2, vm[1, l, iv]);
+                        float reduction = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vm[0, l, iv], vtmp2, vm[1, l, iv]);
                         vm[k, l, ivz] -= reduction;
                     }
 
-                    T delta0 = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vdel[0, 0, iv], vtmp2, vdel[1, 0, iv]);
-                    T delta1 = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vdel[0, 1, iv], vtmp2, vdel[1, 1, iv]);
+                    float delta0 = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vdel[0, 0, iv], vtmp2, vdel[1, 0, iv]);
+                    float delta1 = LegacyPrecisionMath.SeparateSumOfProducts(vtmp1, vdel[0, 1, iv], vtmp2, vdel[1, 1, iv]);
                     vdel[k, 0, ivz] -= delta0;
                     vdel[k, 1, ivz] -= delta1;
                 }
@@ -255,11 +238,11 @@ public static class BlockTridiagonalSolver
 
             for (int kv = iv + 2; kv < nsys; kv++)
             {
-                T vtmp1 = vm[0, iv, kv];
-                T vtmp2 = vm[1, iv, kv];
-                T vtmp3 = vm[2, iv, kv];
+                float vtmp1 = vm[0, iv, kv];
+                float vtmp2 = vm[1, iv, kv];
+                float vtmp3 = vm[2, iv, kv];
 
-                if (T.Abs(vtmp1) > vacc1)
+                if (MathF.Abs(vtmp1) > vacc1)
                 {
                     for (int l = ivp; l < nsys; l++)
                     {
@@ -270,7 +253,7 @@ public static class BlockTridiagonalSolver
                     vdel[0, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp1, vdel[2, 1, iv], vdel[0, 1, kv]);
                 }
 
-                if (T.Abs(vtmp2) > vacc2)
+                if (MathF.Abs(vtmp2) > vacc2)
                 {
                     for (int l = ivp; l < nsys; l++)
                     {
@@ -281,7 +264,7 @@ public static class BlockTridiagonalSolver
                     vdel[1, 1, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vtmp2, vdel[2, 1, iv], vdel[1, 1, kv]);
                 }
 
-                if (T.Abs(vtmp3) > vacc3)
+                if (MathF.Abs(vtmp3) > vacc3)
                 {
                     for (int l = ivp; l < nsys; l++)
                     {
@@ -295,11 +278,9 @@ public static class BlockTridiagonalSolver
         }
 
         // Legacy block: xsolve.f BLSOLV back substitution.
-        // Difference from legacy: Same reverse sweep using helper-based multiply-subtract updates instead of inlined REAL statements.
-        // Decision: Keep the reverse sweep structure and helper calls because they make parity mismatches auditable without changing the algorithm.
         for (int iv = nsys - 1; iv >= 1; iv--)
         {
-            T vtmp = vdel[2, 0, iv];
+            float vtmp = vdel[2, 0, iv];
             for (int kv = iv - 1; kv >= 0; kv--)
             {
                 vdel[0, 0, kv] = LegacyPrecisionMath.SeparateMultiplySubtract(vm[0, iv, kv], vtmp, vdel[0, 0, kv]);
@@ -318,27 +299,25 @@ public static class BlockTridiagonalSolver
     }
 
     // Legacy mapping: f_xfoil/src/xsolve.f :: BLSOLV pivot handling
-    // Difference from legacy: The managed solver makes the pivot clamp explicit instead of relying on raw reciprocal behavior when a pivot approaches zero.
-    // Decision: Keep the explicit guard because it improves robustness without changing valid-pivot behavior.
-    private static T SafeReciprocal<T>(T value)
-        where T : struct, IFloatingPointIeee754<T>
+    // Difference from legacy: Explicit pivot clamp instead of relying on raw
+    // reciprocal behavior near zero.
+    private static float SafeReciprocal(float value)
     {
-        T pivotFloor = T.CreateChecked(PivotFloor);
-        if (T.IsFinite(value) && T.Abs(value) >= pivotFloor)
+        if (float.IsFinite(value) && MathF.Abs(value) >= PivotFloor)
         {
-            return T.One / value;
+            return 1f / value;
         }
 
-        T signValue = value == T.Zero || T.IsNaN(value) ? T.One : value;
-        T safeValue = T.CopySign(pivotFloor, signValue);
-        return T.One / safeValue;
+        float signValue = value == 0f || float.IsNaN(value) ? 1f : value;
+        float safeValue = MathF.CopySign(PivotFloor, signValue);
+        return 1f / safeValue;
     }
 
-    // ThreadStatic buffer pool for the parity float workspace. The per-solve
-    // allocation of 4×float[,,] + 1×float[,] was ~5 MB of GC pressure per
-    // Newton iteration on 160-panel cases; routing through SolverBuffers
-    // removes that from the hot path while preserving the exact copy
-    // semantics (only indices [*,*,0..nsys) are consumed by the solver).
+    // ThreadStatic buffer pool for the float workspace. The per-solve allocation
+    // of 4×float[,,] + 1×float[,] was ~5 MB of GC pressure per Newton iteration
+    // on 160-panel cases; routing through SolverBuffers removes that from the
+    // hot path while preserving the exact copy semantics (only indices
+    // [*,*,0..nsys) are consumed by the solver).
     private static float[,,] CopyToSingleInto(float[,,] result, double[,,] source, int nsys)
     {
         for (int i = 0; i < source.GetLength(0); i++)
@@ -367,8 +346,9 @@ public static class BlockTridiagonalSolver
     }
 
     // Legacy mapping: none
-    // Difference from legacy: Managed-only copy-back helper that writes the parity float solution into the default double storage expected by the rest of the managed solver.
-    // Decision: Keep the helper because it keeps the parity path isolated while leaving the public solver state in double precision.
+    // Difference from legacy: Managed-only copy-back helper that writes the
+    // float solution into the public double storage expected by the rest of
+    // the managed solver.
     private static void CopySolutionToDouble(float[,,] source, double[,,] destination, int nsys)
     {
         for (int eq = 0; eq < source.GetLength(0); eq++)

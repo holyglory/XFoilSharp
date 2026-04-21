@@ -13164,7 +13164,7 @@
           "pangen_newton_state"
         ],
         "owning_scopes": [
-          "CosineClusteringPanelDistributor.DistributeCore"
+          "CurvatureAdaptivePanelDistributor.DistributeCore"
         ],
         "report_keywords": [
           "pangen",
@@ -13175,7 +13175,7 @@
         "priority": 52
       },
       "coverage_targets": [
-        "src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs"
+        "src/XFoil.Solver/Services/CurvatureAdaptivePanelDistributor.cs"
       ],
       "refresh_cases": [
         {

@@ -9,7 +9,7 @@ namespace XFoil.Solver.Models;
 public sealed class InviscidAnalysisResult
 {
     public InviscidAnalysisResult(
-        PanelMesh mesh,
+        int panelCount,
         double angleOfAttackDegrees,
         double machNumber,
         double circulation,
@@ -25,7 +25,7 @@ public sealed class InviscidAnalysisResult
         IReadOnlyList<PressureCoefficientSample> pressureSamples,
         WakeGeometry wake)
     {
-        Mesh = mesh;
+        PanelCount = panelCount;
         AngleOfAttackDegrees = angleOfAttackDegrees;
         MachNumber = machNumber;
         Circulation = circulation;
@@ -42,7 +42,7 @@ public sealed class InviscidAnalysisResult
         Wake = wake;
     }
 
-    public PanelMesh Mesh { get; }
+    public int PanelCount { get; }
 
     public double AngleOfAttackDegrees { get; }
 

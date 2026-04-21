@@ -22,7 +22,7 @@
 
 ### Linear-vortex branch
 
-1. `CosineClusteringPanelDistributor.Distribute`
+1. `CurvatureAdaptivePanelDistributor.Distribute`
 2. `LinearVortexInviscidSolver` assembles or reuses the streamfunction system
 3. `PanelGeometryBuilder` and `StreamfunctionInfluenceCalculator` provide geometry and influence data
 4. `ScaledPivotLuSolver` solves the factored system
@@ -47,7 +47,7 @@ Current behavior:
 
 1. `AirfoilAnalysisService.AnalyzeViscous`
 2. `ViscousSolverEngine.SolveViscous`
-3. `CosineClusteringPanelDistributor.Distribute`
+3. `CurvatureAdaptivePanelDistributor.Distribute`
 4. `LinearVortexInviscidSolver.SolveAtAngleOfAttack`
 5. `EdgeVelocityCalculator.SetInviscidSpeeds`
 6. `InfluenceMatrixBuilder.BuildAnalyticalDIJ`

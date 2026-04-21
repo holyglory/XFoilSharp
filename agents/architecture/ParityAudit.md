@@ -94,7 +94,7 @@
   - `src/XFoil.Solver/Services/AirfoilAnalysisService.cs`
   - `src/XFoil.Solver/Services/BoundaryLayerCorrelations.cs`
   - `src/XFoil.Solver/Services/BoundaryLayerSystemAssembler.cs`
-  - `src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs`
+  - `src/XFoil.Solver/Services/CurvatureAdaptivePanelDistributor.cs`
   - `src/XFoil.Solver/Services/DragCalculator.cs`
   - `src/XFoil.Solver/Services/EdgeVelocityCalculator.cs`
   - `src/XFoil.Solver/Services/InfluenceMatrixBuilder.cs`
@@ -125,7 +125,7 @@
 - Audited no runtime parity action:
   - `tests/XFoil.Core.Tests/AirfoilAnalysisServiceTests.cs`, `tests/XFoil.Core.Tests/AirfoilDatExporterTests.cs`, `tests/XFoil.Core.Tests/AirfoilParserTests.cs`, `tests/XFoil.Core.Tests/AnalysisSessionRunnerTests.cs`
   - `tests/XFoil.Core.Tests/BasicGeometryTransformServiceTests.cs`, `tests/XFoil.Core.Tests/BlockTridiagonalSolverTests.cs`, `tests/XFoil.Core.Tests/BoundaryLayerCorrelationsTests.cs`, `tests/XFoil.Core.Tests/BoundaryLayerSystemAssemblerTests.cs`, `tests/XFoil.Core.Tests/BoundaryLayerTopologyTests.cs`
-  - `tests/XFoil.Core.Tests/CompressibilityTests.cs`, `tests/XFoil.Core.Tests/ConformalMapgenServiceTests.cs`, `tests/XFoil.Core.Tests/ContourEditServiceTests.cs`, `tests/XFoil.Core.Tests/ContourModificationServiceTests.cs`, `tests/XFoil.Core.Tests/CosineClusteringPanelDistributorTests.cs`
+  - `tests/XFoil.Core.Tests/CompressibilityTests.cs`, `tests/XFoil.Core.Tests/ConformalMapgenServiceTests.cs`, `tests/XFoil.Core.Tests/ContourEditServiceTests.cs`, `tests/XFoil.Core.Tests/ContourModificationServiceTests.cs`, `tests/XFoil.Core.Tests/CurvatureAdaptivePanelDistributorTests.cs`
   - `tests/XFoil.Core.Tests/DiagnosticDumpTests.cs`, `tests/XFoil.Core.Tests/DragCalculatorTests.cs`
   - `tests/XFoil.Core.Tests/EdgeVelocityCalculatorTests.cs`, `tests/XFoil.Core.Tests/FlapDeflectionServiceTests.cs`
   - `tests/XFoil.Core.Tests/GeometryScalingServiceTests.cs`

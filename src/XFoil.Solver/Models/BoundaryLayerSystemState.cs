@@ -81,9 +81,9 @@ public sealed class BoundaryLayerSystemState
         // Classic XFoil carries BLVAR/BLMID data derived from this snapshot forward,
         // so parity mode must not silently rebuild station-1 secondary variables
         // from the later accepted primary state.
-        LegacyPrimary = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState?[maxStations, 2];
-        LegacyKinematic = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult?[maxStations, 2];
-        LegacySecondary = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult?[maxStations, 2];
+        LegacyPrimary = new XFoil.Solver.Services.PrimaryStationState?[maxStations, 2];
+        LegacyKinematic = new XFoil.Solver.Services.KinematicResult?[maxStations, 2];
+        LegacySecondary = new XFoil.Solver.Services.SecondaryStationResult?[maxStations, 2];
         LegacyAmplificationCarry = new double[maxStations, 2];
         LegacySetblLaminarShearCarry = 0.0;
 
@@ -91,23 +91,23 @@ public sealed class BoundaryLayerSystemState
         // corresponding pool slots (or null when the slot is inactive). Pre-
         // allocating here turns per-Newton-iter `?.Clone()` stores into
         // field-copy writes with zero per-call heap churn.
-        _primaryStorage = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState[maxStations, 2];
-        _kinematicStorage = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult[maxStations, 2];
-        _secondaryStorage = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult[maxStations, 2];
+        _primaryStorage = new XFoil.Solver.Services.PrimaryStationState[maxStations, 2];
+        _kinematicStorage = new XFoil.Solver.Services.KinematicResult[maxStations, 2];
+        _secondaryStorage = new XFoil.Solver.Services.SecondaryStationResult[maxStations, 2];
         for (int ibl = 0; ibl < maxStations; ibl++)
         {
             for (int side = 0; side < 2; side++)
             {
-                _primaryStorage[ibl, side] = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState();
-                _kinematicStorage[ibl, side] = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult();
-                _secondaryStorage[ibl, side] = new XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult();
+                _primaryStorage[ibl, side] = new XFoil.Solver.Services.PrimaryStationState();
+                _kinematicStorage[ibl, side] = new XFoil.Solver.Services.KinematicResult();
+                _secondaryStorage[ibl, side] = new XFoil.Solver.Services.SecondaryStationResult();
             }
         }
     }
 
-    private readonly XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState[,] _primaryStorage;
-    private readonly XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult[,] _kinematicStorage;
-    private readonly XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult[,] _secondaryStorage;
+    private readonly XFoil.Solver.Services.PrimaryStationState[,] _primaryStorage;
+    private readonly XFoil.Solver.Services.KinematicResult[,] _kinematicStorage;
+    private readonly XFoil.Solver.Services.SecondaryStationResult[,] _secondaryStorage;
 
     /// <summary>
     /// Assigns the Legacy*[ibl, side] snapshot from <paramref name="source"/>.
@@ -116,7 +116,7 @@ public sealed class BoundaryLayerSystemState
     /// is null. Replaces `LegacyPrimary[i, s] = source?.Clone()` without
     /// allocating a fresh instance per call.
     /// </summary>
-    public void SetLegacyPrimary(int ibl, int side, XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState? source)
+    public void SetLegacyPrimary(int ibl, int side, XFoil.Solver.Services.PrimaryStationState? source)
     {
         if (source is null)
         {
@@ -129,7 +129,7 @@ public sealed class BoundaryLayerSystemState
     }
 
     /// <summary>Snapshot assignment for <see cref="LegacyKinematic"/>.</summary>
-    public void SetLegacyKinematic(int ibl, int side, XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult? source)
+    public void SetLegacyKinematic(int ibl, int side, XFoil.Solver.Services.KinematicResult? source)
     {
         if (source is null)
         {
@@ -142,7 +142,7 @@ public sealed class BoundaryLayerSystemState
     }
 
     /// <summary>Snapshot assignment for <see cref="LegacySecondary"/>.</summary>
-    public void SetLegacySecondary(int ibl, int side, XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult? source)
+    public void SetLegacySecondary(int ibl, int side, XFoil.Solver.Services.SecondaryStationResult? source)
     {
         if (source is null)
         {
@@ -163,7 +163,7 @@ public sealed class BoundaryLayerSystemState
     /// Used by caller-in-place mutation paths that previously did
     /// `LegacySecondary[i,s] ?? new SecondaryStationResult()`.
     /// </summary>
-    public XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult GetOrActivateLegacySecondary(int ibl, int side)
+    public XFoil.Solver.Services.SecondaryStationResult GetOrActivateLegacySecondary(int ibl, int side)
     {
         var slot = _secondaryStorage[ibl, side];
         LegacySecondary[ibl, side] = slot;
@@ -219,19 +219,19 @@ public sealed class BoundaryLayerSystemState
     /// Parity-only carried COM2 primary packets, indexed [station, side].
     /// Legacy transition replay consumes these live U/T/D values directly.
     /// </summary>
-    public XFoil.Solver.Services.BoundaryLayerSystemAssembler.PrimaryStationState?[,] LegacyPrimary { get; }
+    public XFoil.Solver.Services.PrimaryStationState?[,] LegacyPrimary { get; }
 
     /// <summary>
     /// Parity-only pre-accept BLKIN snapshots, indexed [station, side].
     /// The default managed path does not use these.
     /// </summary>
-    public XFoil.Solver.Services.BoundaryLayerSystemAssembler.KinematicResult?[,] LegacyKinematic { get; }
+    public XFoil.Solver.Services.KinematicResult?[,] LegacyKinematic { get; }
 
     /// <summary>
     /// Parity-only pre-accept BLVAR/BLMID secondary snapshots, indexed [station, side].
     /// Classic XFoil carries these COM1 values into the next BLSYS interval.
     /// </summary>
-    public XFoil.Solver.Services.BoundaryLayerSystemAssembler.SecondaryStationResult?[,] LegacySecondary { get; }
+    public XFoil.Solver.Services.SecondaryStationResult?[,] LegacySecondary { get; }
 
     /// <summary>
     /// Parity-only live amplification carry, indexed [station, side].

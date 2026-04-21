@@ -38,7 +38,7 @@ endif()
 include(CTest)
 
 if(CMAKE_Fortran_COMPILER_ID STREQUAL GNU)
-  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -std=legacy")
+  set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -std=legacy -ffixed-line-length-none")
 endif()
 
 option(DOUBLE_PRECISION

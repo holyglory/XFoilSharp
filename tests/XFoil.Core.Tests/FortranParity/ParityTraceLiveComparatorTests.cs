@@ -102,7 +102,7 @@ public sealed class ParityTraceLiveComparatorTests
 
             managedWriter.WriteEvent(
                 "pangen_newton_state",
-                "CosineClusteringPanelDistributor.DistributeCore",
+                "CurvatureAdaptivePanelDistributor.DistributeCore",
                 new
                 {
                     iteration = 1,
@@ -597,7 +597,7 @@ public sealed class ParityTraceLiveComparatorTests
                 serializedRecordObserver: comparator.ObserveSerializedRecord);
 
             managedWriter.WriteEvent("arc_length_step", "ParametricSpline", new { index = 2, dx = -0.2f });
-            managedWriter.WriteEvent("pangen_snew_node", "CosineClusteringPanelDistributor.DistributeCore", new { stage = "initial", iteration = 0, index = 1 });
+            managedWriter.WriteEvent("pangen_snew_node", "CurvatureAdaptivePanelDistributor.DistributeCore", new { stage = "initial", iteration = 0, index = 1 });
             managedWriter.WriteEvent("arc_length_step", "ParametricSpline", new { index = 2, dx = -0.0019f });
             managedWriter.WriteEvent("spline_eval", "ParametricSpline", new { index = 2, lowerIndex = 1 });
 
@@ -694,7 +694,7 @@ public sealed class ParityTraceLiveComparatorTests
                 serializedRecordObserver: comparator.ObserveSerializedRecord);
 
             managedWriter.WriteEvent("spline_eval", "ParametricSpline", new { lowerIndex = 120, accumulator = 0.0f });
-            managedWriter.WriteEvent("pangen_newton_state", "CosineClusteringPanelDistributor.DistributeCore", new { iteration = 1, index = 12 });
+            managedWriter.WriteEvent("pangen_newton_state", "CurvatureAdaptivePanelDistributor.DistributeCore", new { iteration = 1, index = 12 });
             managedWriter.WriteEvent("spline_eval", "ParametricSpline", new { lowerIndex = 47, accumulator = -8.679932079758146e-07f });
 
             Exception? exception = Record.Exception(comparator.AssertCompleted);

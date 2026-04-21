@@ -26,7 +26,7 @@ public sealed class SimilaritySeedSystemMicroParityTests
 
         foreach (SimilaritySeedVector vector in vectors)
         {
-            BoundaryLayerSystemAssembler.BlsysResult result = BoundaryLayerSystemAssembler.AssembleStationSystem(
+            BlsysResult result = BoundaryLayerSystemAssembler.AssembleStationSystem(
                 isWake: false,
                 isTurbOrTran: false,
                 isTran: false,

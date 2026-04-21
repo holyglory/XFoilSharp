@@ -69,7 +69,7 @@ public sealed class PolarSweepDiagnosticsTests
         var panel = new LinearVortexPanelState(maxNodes);
         var inviscidState = new InviscidSolverState(maxNodes);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
             panel, settings.PanelCount,
             useLegacyPrecision: settings.UseLegacyPanelingPrecision);
@@ -185,7 +185,7 @@ public sealed class PolarSweepDiagnosticsTests
             panelCount: 160,
             reynoldsNumber: reynoldsNumber,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,

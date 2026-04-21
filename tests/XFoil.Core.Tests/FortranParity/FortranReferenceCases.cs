@@ -589,7 +589,7 @@ public static class FortranReferenceCases
             panelCount: definition.PanelCount,
             reynoldsNumber: definition.ReynoldsNumber,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,

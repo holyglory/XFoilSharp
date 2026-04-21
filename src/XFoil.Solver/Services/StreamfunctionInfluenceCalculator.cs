@@ -392,10 +392,10 @@ public static class StreamfunctionInfluenceCalculator
 
         // ThreadStatic scratch — zero-cleared on reuse; filled via += then
         // copied to state.{Stream,Velocity}{Vortex,Source}Sensitivity at end.
-        var dzdg = XFoil.Solver.Numerics.SolverBuffers.SfDzdg(n);
-        var dzdm = XFoil.Solver.Numerics.SolverBuffers.SfDzdm(n);
-        var dqdg = XFoil.Solver.Numerics.SolverBuffers.SfDqdg(n);
-        var dqdm = XFoil.Solver.Numerics.SolverBuffers.SfDqdm(n);
+        var dzdg = XFoil.Solver.Numerics.SolverBuffers.SfDzdgFloat(n);
+        var dzdm = XFoil.Solver.Numerics.SolverBuffers.SfDzdmFloat(n);
+        var dqdg = XFoil.Solver.Numerics.SolverBuffers.SfDqdgFloat(n);
+        var dqdm = XFoil.Solver.Numerics.SolverBuffers.SfDqdmFloat(n);
 
         float psi = 0f;
         float psiNi = 0f;

@@ -160,7 +160,9 @@ internal static class SolverBuffers
     internal static float[,] Matrix4x4Float => _matrix4x4Float ??= new float[4, 4];
     internal static float[] Vector4Float => _vector4Float ??= new float[4];
 
-    internal static float[,] LegacyWakeLuFactors(int size) => EnsureFloat2D(ref _legacyWakeLuFactors, size, size);
+    internal static float[,] LegacyWakeLuFactorsFloat(int size) => EnsureFloat2D(ref _legacyWakeLuFactors, size, size);
+    [ThreadStatic] private static double[,]? _legacyWakeLuFactorsDouble;
+    internal static double[,] LegacyWakeLuFactorsDouble(int size) => EnsureDouble2D(ref _legacyWakeLuFactorsDouble, size, size);
     internal static int[] LegacyWakePivots(int size)
     {
         var buffer = _legacyWakePivots;
@@ -177,14 +179,29 @@ internal static class SolverBuffers
     internal static double[] BasisRhs1(int n) => EnsureVector(ref _basisRhs1, n);
     internal static float[] BasisRhs0Single(int n) => EnsureFloatVector(ref _basisRhs0Single, n);
     internal static float[] BasisRhs1Single(int n) => EnsureFloatVector(ref _basisRhs1Single, n);
+    // Phase 1 doubled-tree aliases — gen-double rewrites `BasisRhs0Single` →
+    // `BasisRhs0Double` etc., so the doubled tree calls these canonical names
+    // (which forward to the underlying double pool).
+    internal static double[] BasisRhs0Double(int n) => BasisRhs0(n);
+    internal static double[] BasisRhs1Double(int n) => BasisRhs1(n);
     internal static double[] CpInviscid(int n) => EnsureVector(ref _cpInviscid, n);
     internal static double[] CpAlpha(int n) => EnsureVector(ref _cpAlpha, n);
     internal static double[] CpM2(int n) => EnsureVector(ref _cpM2, n);
 
-    internal static float[] SfDzdg(int n) => EnsureFloatVector(ref _sfDzdg, n);
-    internal static float[] SfDzdm(int n) => EnsureFloatVector(ref _sfDzdm, n);
-    internal static float[] SfDqdg(int n) => EnsureFloatVector(ref _sfDqdg, n);
-    internal static float[] SfDqdm(int n) => EnsureFloatVector(ref _sfDqdm, n);
+    internal static float[] SfDzdgFloat(int n) => EnsureFloatVector(ref _sfDzdg, n);
+    internal static float[] SfDzdmFloat(int n) => EnsureFloatVector(ref _sfDzdm, n);
+    internal static float[] SfDqdgFloat(int n) => EnsureFloatVector(ref _sfDqdg, n);
+    internal static float[] SfDqdmFloat(int n) => EnsureFloatVector(ref _sfDqdm, n);
+    // Phase 1 doubled-tree counterparts. Double[] pool slots paralleling the
+    // float Sf* family above.
+    [ThreadStatic] private static double[]? _sfDzdgD;
+    [ThreadStatic] private static double[]? _sfDzdmD;
+    [ThreadStatic] private static double[]? _sfDqdgD;
+    [ThreadStatic] private static double[]? _sfDqdmD;
+    internal static double[] SfDzdgDouble(int n) => EnsureVector(ref _sfDzdgD, n);
+    internal static double[] SfDzdmDouble(int n) => EnsureVector(ref _sfDzdmD, n);
+    internal static double[] SfDqdgDouble(int n) => EnsureVector(ref _sfDqdgD, n);
+    internal static double[] SfDqdmDouble(int n) => EnsureVector(ref _sfDqdmD, n);
 
     private static float[] EnsureFloatVector(ref float[]? slot, int count)
     {
@@ -297,6 +314,9 @@ internal static class SolverBuffers
     internal static float[] WakeDijRhsSingle(int n) => EnsureFloatVector(ref _wakeDijRhsSingle, n);
     internal static double[] AirfoilDijRhs(int n) => EnsureVector(ref _airfoilDijRhs, n);
     internal static float[] AirfoilDijRhsSingle(int n) => EnsureFloatVector(ref _airfoilDijRhsSingle, n);
+    // Phase 1 doubled-tree aliases for the *Single → *Double substitution.
+    internal static double[] WakeDijRhsDouble(int n) => WakeDijRhs(n);
+    internal static double[] AirfoilDijRhsDouble(int n) => AirfoilDijRhs(n);
     internal static double[] CijRow(int n) => EnsureVector(ref _cijRow, n);
     internal static double[] AirfoilSourceRow(int n) => EnsureVector(ref _airfoilSourceRow, n);
     internal static double[] WakeSrcDzdmDouble(int n) => EnsureVector(ref _wakeSrcDzdmDouble, n);
@@ -515,6 +535,54 @@ internal static class SolverBuffers
     internal static float[,,] BtVmFloat(int d0, int d1, int d2) => EnsureFloat3D(ref _btVmFloat, d0, d1, d2);
     internal static float[,,] BtVdelFloat(int d0, int d1, int d2) => EnsureFloat3D(ref _btVdelFloat, d0, d1, d2);
     internal static float[,] BtVzFloat(int d0, int d1) => EnsureFloat2D(ref _btVzFloat, d0, d1);
+
+    // Phase 1 doubled-tree counterparts. Same shape as the *Float slots above
+    // but storing double[,,] / double[,]. The doubled BlockTridiagonalSolver
+    // (auto-generated *.Double.cs twin via gen-double.py) calls these via the
+    // gen-double SolverBuffers `*Float` → `*Double` rewrite.
+    [ThreadStatic] private static double[,,]? _btVaDouble;
+    [ThreadStatic] private static double[,,]? _btVbDouble;
+    [ThreadStatic] private static double[,,]? _btVmDouble;
+    [ThreadStatic] private static double[,,]? _btVdelDouble;
+    [ThreadStatic] private static double[,]? _btVzDouble;
+
+    internal static double[,,] BtVaDouble(int d0, int d1, int d2) => EnsureDouble3D(ref _btVaDouble, d0, d1, d2);
+    internal static double[,,] BtVbDouble(int d0, int d1, int d2) => EnsureDouble3D(ref _btVbDouble, d0, d1, d2);
+    internal static double[,,] BtVmDouble(int d0, int d1, int d2) => EnsureDouble3D(ref _btVmDouble, d0, d1, d2);
+    internal static double[,,] BtVdelDouble(int d0, int d1, int d2) => EnsureDouble3D(ref _btVdelDouble, d0, d1, d2);
+    internal static double[,] BtVzDouble(int d0, int d1) => EnsureDouble2D(ref _btVzDouble, d0, d1);
+
+    private static double[,,] EnsureDouble3D(ref double[,,]? slot, int d0, int d1, int d2)
+    {
+        var buffer = slot;
+        if (buffer is null
+            || buffer.GetLength(0) < d0
+            || buffer.GetLength(1) < d1
+            || buffer.GetLength(2) < d2)
+        {
+            int nd0 = buffer is null ? d0 : Math.Max(buffer.GetLength(0), d0);
+            int nd1 = buffer is null ? d1 : Math.Max(buffer.GetLength(1), d1);
+            int nd2 = buffer is null ? d2 : Math.Max(buffer.GetLength(2), d2);
+            buffer = new double[nd0, nd1, nd2];
+            slot = buffer;
+        }
+        return buffer;
+    }
+
+    private static double[,] EnsureDouble2D(ref double[,]? slot, int d0, int d1)
+    {
+        var buffer = slot;
+        if (buffer is null
+            || buffer.GetLength(0) < d0
+            || buffer.GetLength(1) < d1)
+        {
+            int nd0 = buffer is null ? d0 : Math.Max(buffer.GetLength(0), d0);
+            int nd1 = buffer is null ? d1 : Math.Max(buffer.GetLength(1), d1);
+            buffer = new double[nd0, nd1];
+            slot = buffer;
+        }
+        return buffer;
+    }
 
     private static float[,,] EnsureFloat3D(ref float[,,]? slot, int d0, int d1, int d2)
     {

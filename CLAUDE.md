@@ -23,6 +23,14 @@ dotnet test src/XFoil.CSharp.slnx --filter "FullyQualifiedName~ViscousParityTest
 
 # Run parity matrix harness (requires Fortran reference build)
 python3 tools/fortran-debug/run_micro_rig_matrix.py
+
+# Run Phase 2 doubled-tree (native double precision) viscous polar
+dotnet run --project src/XFoil.Cli -c Release -- viscous-polar-naca-double 0012 0 8 2
+
+# Phase 2 doubled-tree vs float-parity sweep with envelope guard + worst-case reporter
+dotnet build tools/fortran-debug/ParallelPolarCompare/ParallelPolarCompare.csproj -c Release
+XFOIL_DISABLE_FMA=1 dotnet run --project tools/fortran-debug/ParallelPolarCompare -c Release --no-build -- \
+    --double-sweep tools/fortran-debug/reference/selig_passing.txt --sample 5000
 ```
 
 No separate lint command — warnings are treated as errors via `Directory.Build.props` (`TreatWarningsAsErrors`). The build itself enforces lint.
@@ -45,7 +53,7 @@ Single test project: `tests/XFoil.Core.Tests/` covers all managed projects. Test
 
 ## Architecture Notes
 
-- **Two inviscid paths**: Hess-Smith (prepared-system) and linear-vortex (Newton-coupled). Public sweeps currently use Hess-Smith only.
+- **Single inviscid path**: linear-vortex (Newton-coupled), the same algorithm as Fortran XFoil. The Hess-Smith alternative was removed in Phase 3 cleanup along with the surrogate viscous pipeline.
 - **Viscous solver**: `ViscousSolverEngine` + `PolarSweepRunner` implement Newton-coupled boundary-layer analysis. `AirfoilAnalysisService` is the main solver facade.
 - **Explicit service composition**: no hidden DI container. Services are wired manually.
 - **Array-heavy internals** isolated behind typed models at public boundaries.

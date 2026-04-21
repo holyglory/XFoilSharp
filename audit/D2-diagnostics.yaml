@@ -489,7 +489,7 @@ files:
           call_site_lines: [215, 217, 219, 221, 452, 454, 456, 458, 679, 681, 683, 685, 832, 834, 836, 838, 889, 891, 893, 895]
           guarded_with_isactive: yes
           note: "Note the double-guard pattern `if (IsActive) { if (IsActive) { SolverTrace.Event(...) } }` — defensive but effectively single-guarded."
-        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs
+        - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/CurvatureAdaptivePanelDistributor.cs
           call_site_lines: [86, 951, 952, 974, 975, 999, 1000, 1027, 1028, 1055, 1056, 1073, 1074, 1096, 1097, 1140, 1141, 1176, 1177, 1201, 1202, 1222, 1223, 1265, 1267, 1269]
           guarded_with_isactive: yes
         - path: /home/holyglory/XFoilSharp/src/XFoil.Solver/Numerics/BlockTridiagonalSolver.cs

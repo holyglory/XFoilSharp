@@ -44,35 +44,17 @@ public static class LinearVortexInviscidSolver
         int n = panel.NodeCount;
         int systemSize = AssembleSystem(panel, state, freestreamSpeed, angleOfAttackRadians);
 
-        // Step 5: LU-factor the influence matrix. The parity-only legacy path
-        // reproduces XFoil's single-precision factorization and backsolve.
-        if (state.UseLegacyKernelPrecision)
-        {
-            CopyMatrixToSingle(state.StreamfunctionInfluence, state.LegacyStreamfunctionInfluenceFactors, systemSize);
-            // GDB: dump AIJ row 32 (0-indexed = Fortran row 33) before LU
-            
-            ScaledPivotLuSolver.Decompose(
-                state.LegacyStreamfunctionInfluenceFactors,
-                state.LegacyPivotIndices,
-                systemSize,
-                traceContext: "basis_aij_single");
-            // GDB: dump FULL LU matrix to binary file
-            
-            TraceFactoredMatrix("basis_lu_aij", state.LegacyStreamfunctionInfluenceFactors, systemSize, "SingleKernel");
-            TracePivotEntries("basis_lu_pivot", state.LegacyPivotIndices, systemSize, "SingleKernel");
-            
-            
-        }
-        else
-        {
-            ScaledPivotLuSolver.Decompose(
-                state.StreamfunctionInfluence,
-                state.PivotIndices,
-                systemSize,
-                traceContext: "basis_aij_double");
-            TraceFactoredMatrix("basis_lu_aij", state.StreamfunctionInfluence, systemSize, "Double");
-            TracePivotEntries("basis_lu_pivot", state.PivotIndices, systemSize, "Double");
-        }
+        // Phase 1 strip: float-only path reproduces XFoil's single-precision LU.
+        // The doubled tree (auto-generated *.Double.cs twin via gen-double.py)
+        // rewrites `LegacyStreamfunctionInfluenceFactors`/`LegacyPivotIndices`
+        // to their non-Legacy double counterparts, plus `CopyMatrixToSingle` to
+        // a no-op identity copy.
+        CopyMatrixToSingle(state.StreamfunctionInfluence, state.LegacyStreamfunctionInfluenceFactors, systemSize);
+        ScaledPivotLuSolver.Decompose(
+            state.LegacyStreamfunctionInfluenceFactors,
+            state.LegacyPivotIndices,
+            systemSize,
+            traceContext: "basis_aij_single");
 
         state.IsInfluenceMatrixFactored = true;
 
@@ -220,73 +202,40 @@ public static class LinearVortexInviscidSolver
     // Decision: Keep the helper because it isolates the basis solve stage cleanly.
     private static void SolveBasisRightHandSides(InviscidSolverState state, int systemSize)
     {
-        // ThreadStatic pool — zero-cleared on reuse via EnsureVector.
+        // Phase 1 strip: float-only path uses the parity float backsolve.
+        // The doubled tree (auto-generated *.Double.cs twin via gen-double.py)
+        // rewrites BasisRhs0Single → BasisRhs0 and the LegacyXxx fields to
+        // their non-Legacy double counterparts.
         var rhs0 = XFoil.Solver.Numerics.SolverBuffers.BasisRhs0(systemSize);
         var rhs1 = XFoil.Solver.Numerics.SolverBuffers.BasisRhs1(systemSize);
-        if (state.UseLegacyKernelPrecision)
+        var rhs0Single = XFoil.Solver.Numerics.SolverBuffers.BasisRhs0Single(systemSize);
+        var rhs1Single = XFoil.Solver.Numerics.SolverBuffers.BasisRhs1Single(systemSize);
+        for (int i = 0; i < systemSize; i++)
         {
-            var rhs0Single = XFoil.Solver.Numerics.SolverBuffers.BasisRhs0Single(systemSize);
-            var rhs1Single = XFoil.Solver.Numerics.SolverBuffers.BasisRhs1Single(systemSize);
-            for (int i = 0; i < systemSize; i++)
-            {
-                rhs0Single[i] = (float)state.BasisVortexStrength[i, 0];
-                rhs1Single[i] = (float)state.BasisVortexStrength[i, 1];
-            }
-
-            
-            ScaledPivotLuSolver.BackSubstitute(
-                state.LegacyStreamfunctionInfluenceFactors,
-                state.LegacyPivotIndices,
-                rhs0Single,
-                systemSize,
-                traceContext: "basis_gamma_alpha0_single");
-            
-            ScaledPivotLuSolver.BackSubstitute(
-                state.LegacyStreamfunctionInfluenceFactors,
-                state.LegacyPivotIndices,
-                rhs1Single,
-                systemSize,
-                traceContext: "basis_gamma_alpha90_single");
-            
-
-            for (int i = 0; i < systemSize; i++)
-            {
-                rhs0[i] = rhs0Single[i];
-                rhs1[i] = rhs1Single[i];
-                state.BasisVortexStrength[i, 0] = rhs0Single[i];
-                state.BasisVortexStrength[i, 1] = rhs1Single[i];
-            }
-
-            
-        }
-        else
-        {
-            for (int i = 0; i < systemSize; i++)
-            {
-                rhs0[i] = state.BasisVortexStrength[i, 0];
-                rhs1[i] = state.BasisVortexStrength[i, 1];
-            }
-
-            ScaledPivotLuSolver.BackSubstitute(
-                state.StreamfunctionInfluence,
-                state.PivotIndices,
-                rhs0,
-                systemSize,
-                traceContext: "basis_gamma_alpha0_double");
-            ScaledPivotLuSolver.BackSubstitute(
-                state.StreamfunctionInfluence,
-                state.PivotIndices,
-                rhs1,
-                systemSize,
-                traceContext: "basis_gamma_alpha90_double");
-
-            for (int i = 0; i < systemSize; i++)
-            {
-                state.BasisVortexStrength[i, 0] = rhs0[i];
-                state.BasisVortexStrength[i, 1] = rhs1[i];
-            }
+            rhs0Single[i] = (float)state.BasisVortexStrength[i, 0];
+            rhs1Single[i] = (float)state.BasisVortexStrength[i, 1];
         }
 
+        ScaledPivotLuSolver.BackSubstitute(
+            state.LegacyStreamfunctionInfluenceFactors,
+            state.LegacyPivotIndices,
+            rhs0Single,
+            systemSize,
+            traceContext: "basis_gamma_alpha0_single");
+        ScaledPivotLuSolver.BackSubstitute(
+            state.LegacyStreamfunctionInfluenceFactors,
+            state.LegacyPivotIndices,
+            rhs1Single,
+            systemSize,
+            traceContext: "basis_gamma_alpha90_single");
+
+        for (int i = 0; i < systemSize; i++)
+        {
+            rhs0[i] = rhs0Single[i];
+            rhs1[i] = rhs1Single[i];
+            state.BasisVortexStrength[i, 0] = rhs0Single[i];
+            state.BasisVortexStrength[i, 1] = rhs1Single[i];
+        }
     }
 
     // Legacy mapping: managed-only parity storage helper corresponding to legacy REAL matrix state.
@@ -303,29 +252,7 @@ public static class LinearVortexInviscidSolver
         }
     }
 
-    private static void TraceFactoredMatrix(
-        string name,
-        float[,] values,
-        int size,
-        string precision)
-    {
-    }
-
-    private static void TraceFactoredMatrix(
-        string name,
-        double[,] values,
-        int size,
-        string precision)
-    {
-    }
-
-    private static void TracePivotEntries(
-        string name,
-        IReadOnlyList<int> pivotIndices,
-        int size,
-        string precision)
-    {
-    }
+    // Trace helper no-ops fully removed as part of the Phase 1 strip.
 
     /// <summary>
     /// Superimposes basis solutions for a given angle of attack, computes surface speeds,
@@ -439,8 +366,19 @@ public static class LinearVortexInviscidSolver
     {
         bool useLegacyPrecision = state.UseLegacyKernelPrecision || state.UseLegacyPanelingPrecision;
 
-        // Initial guess: alpha = targetCl / (2*pi)
-        double alpha = LegacyPrecisionMath.Divide(targetCl, TwoPi, useLegacyPrecision);
+        // Phase 2 iter 89: shift initial guess by zero-lift CL so cambered
+        // airfoils start near the true root. Call SolveAtAngleOfAttack(0)
+        // first to derive CL_0 (zero-lift CL = camber contribution), then
+        // estimate α = (targetCl - CL_0) / (2π). This costs one extra inviscid
+        // solve but makes the Newton converge reliably for cambered airfoils
+        // (NACA 4412 zero-lift α≈-4°, so the previous guess α=targetCl/2π
+        // started ~4° off, often outside the Newton's basin of attraction).
+        var zeroResult = SolveAtAngleOfAttack(0d, panel, state, freestreamSpeed, machNumber);
+        double cl0 = zeroResult.LiftCoefficient;
+        double alpha = LegacyPrecisionMath.Divide(
+            LegacyPrecisionMath.Subtract(targetCl, cl0, useLegacyPrecision),
+            TwoPi,
+            useLegacyPrecision);
 
         LinearVortexInviscidResult result = null!;
 
@@ -508,21 +446,17 @@ public static class LinearVortexInviscidSolver
         double basisAlpha90,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (cosa * basisAlpha0) + (sina * basisAlpha90);
-        }
-
+        // Phase 1 strip: float-only path. The doubled tree (auto-generated
+        // *.Double.cs twin via gen-double.py) gets the double-precision mirror.
+        // Fortran: GAM(I) = COSA*GAMU(I,1) + SINA*GAMU(I,2). With
+        // -ffp-contract=off all variables are REAL, so each multiply rounds to
+        // float before the add. The wide-accumulation form (double products +
+        // single rounding) gave 1 ULP drift at asymmetric alpha, propagating
+        // to 128 ULP in PSILIN at wake node 6 and 3125 ULP in final CD.
         float cosaSingle = (float)cosa;
         float basisAlpha0Single = (float)basisAlpha0;
         float sinaSingle = (float)sina;
         float basisAlpha90Single = (float)basisAlpha90;
-        // Fortran: GAM(I) = COSA*GAMU(I,1) + SINA*GAMU(I,2)
-        // With -ffp-contract=off all variables are REAL, so each multiply
-        // rounds to float before the add. The previous wide-accumulation
-        // form (double products + single rounding) gave 1 ULP drift at
-        // asymmetric alpha, propagating to 128 ULP in PSILIN at wake
-        // node 6 and 3125 ULP in final CD.
         float product1 = LegacyPrecisionMath.RoundBarrier(cosaSingle * basisAlpha0Single);
         float product2 = LegacyPrecisionMath.RoundBarrier(sinaSingle * basisAlpha90Single);
         return LegacyPrecisionMath.RoundBarrier(product1 + product2);
@@ -535,16 +469,13 @@ public static class LinearVortexInviscidSolver
         double basisAlpha90,
         bool useLegacyPrecision)
     {
-        if (!useLegacyPrecision)
-        {
-            return (cosa * basisAlpha90) - (sina * basisAlpha0);
-        }
-
+        // Phase 1 strip: float-only path. The doubled tree (auto-generated
+        // *.Double.cs twin via gen-double.py) gets the double-precision mirror.
+        // Fortran: GAMU_A(I) = COSA*GAMU(I,2) - SINA*GAMU(I,1)
         float cosaSingle = (float)cosa;
         float basisAlpha0Single = (float)basisAlpha0;
         float sinaSingle = (float)sina;
         float basisAlpha90Single = (float)basisAlpha90;
-        // Fortran: GAMU_A(I) = COSA*GAMU(I,2) - SINA*GAMU(I,1)
         float product1 = LegacyPrecisionMath.RoundBarrier(cosaSingle * basisAlpha90Single);
         float product2 = LegacyPrecisionMath.RoundBarrier(sinaSingle * basisAlpha0Single);
         return LegacyPrecisionMath.RoundBarrier(product1 - product2);
@@ -588,7 +519,22 @@ public static class LinearVortexInviscidSolver
         double[] cp = XFoil.Solver.Numerics.SolverBuffers.CpInviscid(n);
         ComputePressureCoefficients(state.InviscidSpeed, freestreamSpeed, machNumber, cp, n, useLegacyPrecision);
 
-        // Cp derivatives for CL_alpha and CL_M^2
+        // Cp derivatives for CL_alpha and CL_M^2.
+        //
+        // dCp/dM² comes from dKT/dM² on the KT-corrected pressure formula:
+        //   CPG     = CGINC / (BETA + BFAC*CGINC)
+        //   CPG_MSQ = -CPG / (BETA + BFAC*CGINC) * (BETA_MSQ + BFAC_MSQ*CGINC)
+        // where BETA_MSQ = -0.5/BETA, BFAC_MSQ = 0.5/(1+BETA) - BFAC/(1+BETA)*BETA_MSQ.
+        // Previously this block left `cpM2` unpopulated and `clMach2` hardcoded
+        // to 0.0 at line 551 — restoring the Fortran CLCALC computation so
+        // `LiftCoefficientMachSquaredDerivative` on the result carries a
+        // meaningful value at M > 0 (needed by Tier B4 compressibility work).
+        // At M=0: BETA=1, BFAC=0, BETA_MSQ=-0.5, BFAC_MSQ=0.25 → CPG_MSQ =
+        // 0.5·CGINC − 0.25·CGINC², non-zero but only enters CL_MSQ which is
+        // not compared by parity tests (NACA 4455 bit-exact on CL/CD/CM).
+        double betaMsq = -0.5 / Math.Max(beta, 1e-12);
+        double bFacMsq = 0.5 / (1.0 + beta) - bFac / (1.0 + beta) * betaMsq;
+
         double[] cpAlpha = XFoil.Solver.Numerics.SolverBuffers.CpAlpha(n);
         double[] cpM2 = XFoil.Solver.Numerics.SolverBuffers.CpM2(n);
         for (int i = 0; i < n; i++)
@@ -605,10 +551,15 @@ public static class LinearVortexInviscidSolver
                 double denom = LegacyPrecisionMath.MultiplyAdd(bFac, cpInc, beta, useLegacyPrecision);
                 double denomSq = LegacyPrecisionMath.Square(denom, useLegacyPrecision);
                 cpAlpha[i] = LegacyPrecisionMath.Divide(LegacyPrecisionMath.Multiply(dcpInc_da, beta, useLegacyPrecision), denomSq, useLegacyPrecision);
+                // CPG_MSQ = -CPG/DEN * (BETA_MSQ + BFAC_MSQ*CGINC)
+                double cpg = cp[i];
+                cpM2[i] = -cpg / denom * (betaMsq + bFacMsq * cpInc);
             }
             else
             {
                 cpAlpha[i] = dcpInc_da;
+                // At M=0: DEN=1, so CPG_MSQ reduces to -CGINC * (−0.5 + 0.25·CGINC).
+                cpM2[i] = -cpInc * (betaMsq + bFacMsq * cpInc);
             }
         }
 
@@ -639,6 +590,8 @@ public static class LinearVortexInviscidSolver
             double avgCpAlpha = LegacyPrecisionMath.Multiply(0.5, LegacyPrecisionMath.Add(cpAlpha[ip], cpAlpha[i], useLegacyPrecision), useLegacyPrecision);
             double deltaCpAlpha = LegacyPrecisionMath.Subtract(cpAlpha[ip], cpAlpha[i], useLegacyPrecision);
 
+            double avgCpMsq = 0.5 * (cpM2[ip] + cpM2[i]);
+
             // CL accumulation (trapezoidal)
             cl = LegacyPrecisionMath.MultiplyAdd(dx, avgCp, cl, useLegacyPrecision);
 
@@ -647,6 +600,13 @@ public static class LinearVortexInviscidSolver
 
             // CL_alpha
             clAlpha = LegacyPrecisionMath.MultiplyAdd(dx, avgCpAlpha, clAlpha, useLegacyPrecision);
+
+            // CL_MSQ (Fortran CLCALC line CL_MSQ = CL_MSQ + DX*AG_MSQ). Not a
+            // parity-sensitive path — the result field is unused by callers
+            // today, but populating it correctly unlocks B4 compressibility
+            // work. Kept outside the LegacyPrecisionMath staging since this
+            // didn't exist in the earlier port (no parity baseline to match).
+            clMach2 += dx * avgCpMsq;
 
             // Moment arm from reference point to panel midpoint
             double xMid = LegacyPrecisionMath.Multiply(0.5, LegacyPrecisionMath.Add(panel.X[ip], panel.X[i], useLegacyPrecision), useLegacyPrecision);
@@ -676,10 +636,12 @@ public static class LinearVortexInviscidSolver
             double deltaCp = LegacyPrecisionMath.Subtract(cp[ip], cp[i], useLegacyPrecision);
 
             double avgCpAlpha = LegacyPrecisionMath.Multiply(0.5, LegacyPrecisionMath.Add(cpAlpha[ip], cpAlpha[i], useLegacyPrecision), useLegacyPrecision);
+            double avgCpMsq = 0.5 * (cpM2[ip] + cpM2[i]);
 
             cl = LegacyPrecisionMath.MultiplyAdd(dx, avgCp, cl, useLegacyPrecision);
             cdp = LegacyPrecisionMath.MultiplySubtract(dy, avgCp, cdp, useLegacyPrecision);
             clAlpha = LegacyPrecisionMath.MultiplyAdd(dx, avgCpAlpha, clAlpha, useLegacyPrecision);
+            clMach2 += dx * avgCpMsq;
 
             double xMid = LegacyPrecisionMath.Multiply(0.5, LegacyPrecisionMath.Add(panel.X[ip], panel.X[i], useLegacyPrecision), useLegacyPrecision);
             double yMid = LegacyPrecisionMath.Multiply(0.5, LegacyPrecisionMath.Add(panel.Y[ip], panel.Y[i], useLegacyPrecision), useLegacyPrecision);
@@ -775,7 +737,7 @@ public static class LinearVortexInviscidSolver
         var state = new InviscidSolverState(maxNodes);
 
         // Step 1: Distribute panels using cosine clustering
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             inputX, inputY, inputCount, panel, panelCount, useLegacyPrecision: useLegacyPanelingPrecision);
 
         // Step 2: Initialize solver state for this node count

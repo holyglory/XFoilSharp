@@ -340,7 +340,7 @@ public static class ViscousNewtonAssembler
                 }
 
                 // Assemble local BL system
-                BoundaryLayerSystemAssembler.BlsysResult localResult;
+                BlsysResult localResult;
 
                 if (wake && ibl == blState.IBLTE[side] + 1)
                 {
@@ -391,7 +391,7 @@ public static class ViscousNewtonAssembler
                         dswaki,
                         useLegacyPrecision);
 
-                    localResult = new BoundaryLayerSystemAssembler.BlsysResult
+                    localResult = new BlsysResult
                     {
                         Residual = teResult.Residual,
                         VS1 = teResult.VS1,
@@ -550,19 +550,12 @@ public static class ViscousNewtonAssembler
                         ? -LegacyPrecisionMath.Divide(blState.DSTR[blState.IBLTE[1], 1], uete2, useLegacyPrecision)
                         : 0.0;
                     due1 = 0.0;
-                    if (useLegacyPrecision)
-                    {
-                        // Fortran SETBL: DDS1 = DTE_UTE1*(UEDG(IBLTE1)-USAV(IBLTE1))
-                        //                     + DTE_UTE2*(UEDG(IBLTE2)-USAV(IBLTE2))
-                        // ALL REAL per-operation arithmetic.
-                        float term1 = (float)dteUte1 * ((float)uete1 - (float)usavTe1);
-                        float term2 = (float)dteUte2 * ((float)uete2 - (float)usavTe2);
-                        dds1 = term1 + term2;
-                    }
-                    else
-                    {
-                        dds1 = dteUte1 * (uete1 - usavTe1) + dteUte2 * (uete2 - usavTe2);
-                    }
+                    // Phase 1 strip: float-only path. Fortran SETBL: DDS1 =
+                    // DTE_UTE1*(UEDG(IBLTE1)-USAV(IBLTE1)) + DTE_UTE2*...
+                    // ALL REAL per-operation arithmetic.
+                    float term1 = (float)dteUte1 * ((float)uete1 - (float)usavTe1);
+                    float term2 = (float)dteUte2 * ((float)uete2 - (float)usavTe2);
+                    dds1 = term1 + term2;
                 }
 
                 double xiUle1 = (side == 0) ? sstGo : -sstGo;
@@ -583,49 +576,25 @@ public static class ViscousNewtonAssembler
                 // Fortran 1-based: col 3=D*, col 4=Ue => C# col 2=D*, col 3=Ue
                 for (int k = 0; k < 3; k++)
                 {
-                    if (useLegacyPrecision)
-                    {
-                        // Fortran SETBL: VSREZ(K) = VSREZ(K) + (VS1(K,4)*DUE1 + VS1(K,3)*DDS1
-                        //                                      + VS2(K,4)*DUE2 + VS2(K,3)*DDS2)
-                        // ALL REAL per-operation arithmetic.
-                        float res = (float)localResult.Residual[k];
-                        float vs1Due = (float)localResult.VS1[k, 3] * (float)due1;
-                        float vs1Dds = (float)localResult.VS1[k, 2] * (float)dds1;
-                        float vs2Due = (float)localResult.VS2[k, 3] * (float)due2;
-                        float vs2Dds = (float)localResult.VS2[k, 2] * (float)dds2;
-                        // Fortran: (VS1(K,5) + VS2(K,5) + VSX(K)) * XI_FORCING
-                        float xiCoeff = (float)localResult.VS1[k, 4] + (float)localResult.VS2[k, 4] + (float)localResult.VSX[k];
-                        float xiTerm = xiCoeff * (float)xiForcing;
-                        // Fortran parenthesization:
-                        //   VSREZ + (VS1_DUE + VS1_DDS) + (VS2_DUE + VS2_DDS) + xiTerm
-                        // The paired grouping matters because float is not associative.
-                        float duePair1 = vs1Due + vs1Dds; // (VS1(K,4)*DUE1 + VS1(K,3)*DDS1)
-                        float duePair2 = vs2Due + vs2Dds; // (VS2(K,4)*DUE2 + VS2(K,3)*DDS2)
-                        float acc = res + duePair1;
-                        acc += duePair2;
-                        acc += xiTerm;
-                        vdel[k, 0, iv] = acc;
-                        // Per-term VDEL assembly trace at station 5 side 2 (k=0 only)
-                        
-                        
-                    }
-                    else
-                    {
-                    double vs1DueTerm = localResult.VS1[k, 3] * due1;
-                    double vs1DdsTerm = localResult.VS1[k, 2] * dds1;
-                    double vs2DueTerm = localResult.VS2[k, 3] * due2;
-                    double vs2DdsTerm = localResult.VS2[k, 2] * dds2;
-                    double xiCoeffBase = localResult.VS1[k, 4] + localResult.VS2[k, 4] + localResult.VSX[k];
-                    double xiBaseTerm = xiCoeffBase * xiForcing;
-                    vdel[k, 0, iv] = localResult.Residual[k]
-                                   + vs1DueTerm
-                                   + vs1DdsTerm
-                                   + vs2DueTerm
-                                   + vs2DdsTerm
-                                   + xiBaseTerm;
-                    }
+                    // Phase 1 strip: float-only path. Fortran SETBL:
+                    //   VSREZ(K) = VSREZ(K) + (VS1(K,4)*DUE1 + VS1(K,3)*DDS1
+                    //                        + VS2(K,4)*DUE2 + VS2(K,3)*DDS2)
+                    // ALL REAL per-operation arithmetic. Paired grouping
+                    // matters because float is not associative.
+                    float res = (float)localResult.Residual[k];
+                    float vs1Due = (float)localResult.VS1[k, 3] * (float)due1;
+                    float vs1Dds = (float)localResult.VS1[k, 2] * (float)dds1;
+                    float vs2Due = (float)localResult.VS2[k, 3] * (float)due2;
+                    float vs2Dds = (float)localResult.VS2[k, 2] * (float)dds2;
+                    float xiCoeff = (float)localResult.VS1[k, 4] + (float)localResult.VS2[k, 4] + (float)localResult.VSX[k];
+                    float xiTerm = xiCoeff * (float)xiForcing;
+                    float duePair1 = vs1Due + vs1Dds;
+                    float duePair2 = vs2Due + vs2Dds;
+                    float acc = res + duePair1;
+                    acc += duePair2;
+                    acc += xiTerm;
+                    vdel[k, 0, iv] = acc;
                     vdel[k, 1, iv] = 0.0;
-
                 }
 
                 // Diagnostic dump: station BL state, VA/VB blocks, VDEL residuals
@@ -655,22 +624,12 @@ public static class ViscousNewtonAssembler
                     if (iPanCur >= 0 && iPanCur < dij.GetLength(0))
                     {
                         double vtiI = GetVTI(ibl, side, blState);
-                        if (useLegacyPrecision)
-                        {
-                            // Fortran computes U2_M and D2_M in REAL (float)
-                            float u2f = (float)(-(float)vtiI * (float)vtiJ * (float)dij[iPanCur, jPan]);
-                            u2_mj = u2f;
-                            float d2f = (float)((float)d2_u2 * u2f);
-                            if (jv == iv) d2f = (float)(d2f + (float)d2_m2);
-                            d2_mj_local = d2f;
-                            // removed debug trace
-                        }
-                        else
-                        {
-                            u2_mj = -vtiI * vtiJ * dij[iPanCur, jPan];
-                            d2_mj_local = d2_u2 * u2_mj;
-                            if (jv == iv) d2_mj_local += d2_m2;
-                        }
+                        // Phase 1 strip: Fortran computes U2_M and D2_M in REAL (float)
+                        float u2f = (float)(-(float)vtiI * (float)vtiJ * (float)dij[iPanCur, jPan]);
+                        u2_mj = u2f;
+                        float d2f = (float)((float)d2_u2 * u2f);
+                        if (jv == iv) d2f = (float)(d2f + (float)d2_m2);
+                        d2_mj_local = d2f;
                     }
 
                     // U1_M(JV) = -VTI(IBM,IS)*VTI(JBL,JS)*DIJ(I_prev,J)
@@ -732,20 +691,12 @@ public static class ViscousNewtonAssembler
                     else if (iPanPrev >= 0 && iPanPrev < dij.GetLength(0))
                     {
                         double vtiPrev = GetVTI(ibl > 0 ? ibl - 1 : 0, side, blState);
-                        if (useLegacyPrecision)
-                        {
-                            float u1f = (float)(-(float)vtiPrev * (float)vtiJ * (float)dij[iPanPrev, jPan]);
-                            u1_mj = u1f;
-                            float d1f = (float)((float)d1_u1 * u1f);
-                            if (jv == ivPrev) d1f = (float)(d1f + (float)d1_m2Prev);
-                            d1_mj = d1f;
-                        }
-                        else
-                        {
-                            u1_mj = -vtiPrev * vtiJ * dij[iPanPrev, jPan];
-                            d1_mj = d1_u1 * u1_mj;
-                            if (jv == ivPrev) d1_mj += d1_m2Prev;
-                        }
+                        // Phase 1 strip: float-only path.
+                        float u1f = (float)(-(float)vtiPrev * (float)vtiJ * (float)dij[iPanPrev, jPan]);
+                        u1_mj = u1f;
+                        float d1f = (float)((float)d1_u1 * u1f);
+                        if (jv == ivPrev) d1f = (float)(d1f + (float)d1_m2Prev);
+                        d1_mj = d1f;
                     }
 
                     // ULE1_M(JV) = -VTI(2,1)*VTI(JBL,JS)*DIJ(ILE1,J)
@@ -777,66 +728,41 @@ public static class ViscousNewtonAssembler
                         double xiUle1Vm = (side == 0) ? sstGo : -sstGo;
                         double xiUle2Vm = (side == 0) ? -sstGp : sstGp;
 
-                        if (useLegacyPrecision)
-                        {
-                            // Fortran: VM(k,JV,IV) = VS1*D1_M + VS1*U1_M + VS2*D2_M + VS2*U2_M
-                            //   + (VS1(k,5)+VS2(k,5)+VSX(k)) * (XI_ULE1*ULE1_M + XI_ULE2*ULE2_M)
-                            // ALL REAL arithmetic — compute xiTerm in float
-                            float vs1d = (float)localResult.VS1[k, 2];
-                            float vs1u = (float)localResult.VS1[k, 3];
-                            float vs2d = (float)localResult.VS2[k, 2];
-                            float vs2u = (float)localResult.VS2[k, 3];
-                            // Trace VM inputs at iv=76 k=2 jv=0 iter 5 (case 188 NACA 0009 side 1 station 78 row 3 jv=1)
-                            
-                            // Fortran: (VS1(K,5) + VS2(K,5) + VSX(K))
-                            // Must match Fortran evaluation order: (VS1+VS2)+VSX
-                            // Use RoundBarrier guards to prevent JIT FMA fusion
-                            float xiCoeffF = 0.0f;
-                            if (localResult.VS1.GetLength(1) > 4)
-                                xiCoeffF = (float)localResult.VS1[k, 4];
-                            if (localResult.VS2.GetLength(1) > 4)
-                                xiCoeffF = LegacyPrecisionMath.RoundBarrier(
-                                    LegacyPrecisionMath.RoundBarrier(xiCoeffF)
-                                    + (float)localResult.VS2[k, 4]);
+                        // Phase 1 strip: float-only path. Fortran:
+                        //   VM(k,JV,IV) = VS1*D1_M + VS1*U1_M + VS2*D2_M + VS2*U2_M
+                        //     + (VS1(k,5)+VS2(k,5)+VSX(k)) * (XI_ULE1*ULE1_M + XI_ULE2*ULE2_M)
+                        // ALL REAL arithmetic — compute xiTerm in float; sequential
+                        // accumulation with RoundBarrier matches Fortran left-to-right
+                        // REAL*4 evaluation; (VS1+VS2)+VSX paren order matters.
+                        float vs1d = (float)localResult.VS1[k, 2];
+                        float vs1u = (float)localResult.VS1[k, 3];
+                        float vs2d = (float)localResult.VS2[k, 2];
+                        float vs2u = (float)localResult.VS2[k, 3];
+                        float xiCoeffF = 0.0f;
+                        if (localResult.VS1.GetLength(1) > 4)
+                            xiCoeffF = (float)localResult.VS1[k, 4];
+                        if (localResult.VS2.GetLength(1) > 4)
                             xiCoeffF = LegacyPrecisionMath.RoundBarrier(
                                 LegacyPrecisionMath.RoundBarrier(xiCoeffF)
-                                + (float)localResult.VSX[k]);
-                            // xiTermF = xiCoeffF * (xiUle1Vm*ule1_mj + xiUle2Vm*ule2_mj)
-                            // Fortran evaluates the inner sum left-to-right: (a*b) + (c*d)
-                            float ule1Prod = LegacyPrecisionMath.RoundBarrier(
-                                (float)xiUle1Vm * (float)ule1_mj);
-                            float ule2Prod = LegacyPrecisionMath.RoundBarrier(
-                                (float)xiUle2Vm * (float)ule2_mj);
-                            float uleSum = LegacyPrecisionMath.RoundBarrier(ule1Prod + ule2Prod);
-                            float xiTermF = LegacyPrecisionMath.RoundBarrier(xiCoeffF * uleSum);
-                            // vmVal = vs1d*d1_mj + vs1u*u1_mj + vs2d*d2_mj + vs2u*u2_mj + xiTermF
-                            // Fortran evaluates left-to-right with each product+add in REAL*4.
-                            // Use sequential accumulation with RoundBarrier to match.
-                            float p1 = LegacyPrecisionMath.RoundBarrier(vs1d * (float)d1_mj);
-                            float p2 = LegacyPrecisionMath.RoundBarrier(vs1u * (float)u1_mj);
-                            float p3 = LegacyPrecisionMath.RoundBarrier(vs2d * (float)d2_mj_local);
-                            float p4 = LegacyPrecisionMath.RoundBarrier(vs2u * (float)u2_mj);
-                            float acc = LegacyPrecisionMath.RoundBarrier(p1 + p2);
-                            acc = LegacyPrecisionMath.RoundBarrier(acc + p3);
-                            acc = LegacyPrecisionMath.RoundBarrier(acc + p4);
-                            float vmVal = LegacyPrecisionMath.RoundBarrier(acc + xiTermF);
-                            vm[k, jv, iv] = vmVal;
-                            
-                        }
-                        else
-                        {
-                            double xiCoeff = localResult.VSX[k];
-                            if (localResult.VS1.GetLength(1) > 4)
-                                xiCoeff += localResult.VS1[k, 4];
-                            if (localResult.VS2.GetLength(1) > 4)
-                                xiCoeff += localResult.VS2[k, 4];
-                            double xiTerm = xiCoeff * (xiUle1Vm * ule1_mj + xiUle2Vm * ule2_mj);
-                            vm[k, jv, iv] = localResult.VS1[k, 2] * d1_mj
-                                          + localResult.VS1[k, 3] * u1_mj
-                                          + localResult.VS2[k, 2] * d2_mj_local
-                                          + localResult.VS2[k, 3] * u2_mj
-                                          + xiTerm;
-                        }
+                                + (float)localResult.VS2[k, 4]);
+                        xiCoeffF = LegacyPrecisionMath.RoundBarrier(
+                            LegacyPrecisionMath.RoundBarrier(xiCoeffF)
+                            + (float)localResult.VSX[k]);
+                        float ule1Prod = LegacyPrecisionMath.RoundBarrier(
+                            (float)xiUle1Vm * (float)ule1_mj);
+                        float ule2Prod = LegacyPrecisionMath.RoundBarrier(
+                            (float)xiUle2Vm * (float)ule2_mj);
+                        float uleSum = LegacyPrecisionMath.RoundBarrier(ule1Prod + ule2Prod);
+                        float xiTermF = LegacyPrecisionMath.RoundBarrier(xiCoeffF * uleSum);
+                        float p1 = LegacyPrecisionMath.RoundBarrier(vs1d * (float)d1_mj);
+                        float p2 = LegacyPrecisionMath.RoundBarrier(vs1u * (float)u1_mj);
+                        float p3 = LegacyPrecisionMath.RoundBarrier(vs2d * (float)d2_mj_local);
+                        float p4 = LegacyPrecisionMath.RoundBarrier(vs2u * (float)u2_mj);
+                        float vmAcc = LegacyPrecisionMath.RoundBarrier(p1 + p2);
+                        vmAcc = LegacyPrecisionMath.RoundBarrier(vmAcc + p3);
+                        vmAcc = LegacyPrecisionMath.RoundBarrier(vmAcc + p4);
+                        float vmVal = LegacyPrecisionMath.RoundBarrier(vmAcc + xiTermF);
+                        vm[k, jv, iv] = vmVal;
                     }
                 }
 
@@ -898,10 +824,8 @@ public static class ViscousNewtonAssembler
             }
         }
 
-        if (useLegacyPrecision)
-        {
-            blState.LegacySetblLaminarShearCarry = legacySetblLaminarShearCarry;
-        }
+        // Phase 1 strip: always-legacy path persists laminar-shear carry.
+        blState.LegacySetblLaminarShearCarry = legacySetblLaminarShearCarry;
 
         // Compute RMS
         if (nResiduals > 0)
@@ -1020,16 +944,6 @@ public static class ViscousNewtonAssembler
         }
 
         return usav;
-    }
-
-    private static string FormatDebugSingle(double value)
-    {
-        float single = (float)value;
-        return string.Format(
-            CultureInfo.InvariantCulture,
-            "{0,15:E8} [{1:X8}]",
-            single,
-            BitConverter.SingleToInt32Bits(single));
     }
 
     // Legacy mapping: f_xfoil/src/xbl.f :: SETBL stagnation forcing terms

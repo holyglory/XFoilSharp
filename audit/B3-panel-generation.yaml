@@ -3,7 +3,7 @@ ledger_path: audit/B3-panel-generation.yaml
 audit_started: 2026-04-17T12:45:00Z
 audit_completed: 2026-04-17T12:50:00Z
 files:
-  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs
+  - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/CurvatureAdaptivePanelDistributor.cs
     lines: 1311
     branch_relevance: both
     methods:
@@ -229,7 +229,7 @@ files:
             note: "Gaussian LE/TE weighting replaces Fortran curvature-diffusion smoother + Newton redistribution. Fundamentally different algorithm."
         modernization_candidates:
           - kind: [new_algorithm]
-            summary: "Replace with a thin wrapper around CosineClusteringPanelDistributor (the real PANGEN port) so standard branch uses the parity distributor with double throughout."
+            summary: "Replace with a thin wrapper around CurvatureAdaptivePanelDistributor (the real PANGEN port) so standard branch uses the parity distributor with double throughout."
             rationale: "Two paneling algorithms produce two different meshes; downstream solver cannot match Fortran on the non-parity path as long as this approximate distribution exists."
             risk: medium
       - name: BuildWeightedDistribution
@@ -284,7 +284,7 @@ files:
         modernization_candidates:
           - kind: [updated_correlation]
             summary: "Replace with spline-derivative-based curvature via CubicSpline second derivatives."
-            rationale: "Spline CURV is already implemented in CosineClusteringPanelDistributor.ComputeCurvature."
+            rationale: "Spline CURV is already implemented in CurvatureAdaptivePanelDistributor.ComputeCurvature."
             risk: low
       - name: Gaussian
         signature: "private static double Gaussian(double value, double mean, double sigma)"
@@ -343,12 +343,12 @@ files:
       parity_verdict: clean
       standard_verdict: major
       top_findings:
-        - "S4-major: Generate() is a managed-only approximation of PANGEN, not a port. As long as Hess-Smith/default paths route here, the standard branch meshes will never agree with Fortran. Strong candidate for deletion and replacement by a call into CosineClusteringPanelDistributor."
+        - "S4-major: Generate() is a managed-only approximation of PANGEN, not a port. As long as Hess-Smith/default paths route here, the standard branch meshes will never agree with Fortran. Strong candidate for deletion and replacement by a call into CurvatureAdaptivePanelDistributor."
         - "EstimateCurvature uses polyline finite differences instead of spline curvature — noisier and biased."
         - "Hard-coded Gaussian sigma (0.06, 0.035) and LE/TE weights hide behind PanelingOptions."
         - "All allocations are per-analysis (no per-station call). No P1 hot-path violations."
         - "No float/MathF usage anywhere. Clean on S1-S3."
-      estimated_fix_effort: "1-2 days (rewire to CosineClusteringPanelDistributor) OR 0.5 days (parameterize existing weights)"
+      estimated_fix_effort: "1-2 days (rewire to CurvatureAdaptivePanelDistributor) OR 0.5 days (parameterize existing weights)"
 
   - file: /home/holyglory/XFoilSharp/src/XFoil.Solver/Services/PanelGeometryBuilder.cs
     lines: 368
@@ -626,7 +626,7 @@ ledger_summary:
     achieve parity. Likely contributes to the 1.8M% standard-branch CD
     divergence for runs that enter via AirfoilAnalysisService with the
     Hess-Smith default mesh path. Recommendation: replace with a thin
-    wrapper over CosineClusteringPanelDistributor in a future phase.
+    wrapper over CurvatureAdaptivePanelDistributor in a future phase.
 
     Secondary standard-branch finding: ComputeCompressibilityParameters
     uses M^2/(2(1+beta)) (Karman-Tsien/Laitone linearization form) while

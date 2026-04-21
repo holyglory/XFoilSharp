@@ -125,6 +125,93 @@ public sealed class AirfoilAnalysisServiceTests
     // Legacy mapping: f_xfoil/src/xfoil.f :: CSEQ / CLI.
     // Difference from legacy: The test checks the managed lift-sweep wrapper rather than the legacy command sequence, but it preserves the expected solved-alpha ordering.
     // Decision: Keep the managed wrapper test because the production entry point is intentionally higher level than the legacy UI.
+    public void SweepInviscidLiftCoefficient_ForHighCamberAirfoil_HitsTargetCLs()
+    {
+        // Phase 2 iter 93: validate iter-89 fix on aggressive camber.
+        // NACA 6409 has 6% camber (vs 4412's 4%) and zero-lift α≈-7°.
+        // The previous initial guess α=targetCl/(2π) was even more wrong on
+        // this airfoil; iter-89 zero-lift shift must still nail the targets.
+        var generator = new NacaAirfoilGenerator();
+        var service = new AirfoilAnalysisService();
+        var geometry = generator.Generate4DigitClassic("6409", 161);
+
+        var sweep = service.SweepInviscidLiftCoefficient(
+            geometry,
+            0.5d,
+            1.0d,
+            0.1d,
+            new AnalysisSettings(panelCount: 160));
+
+        Assert.Equal(6, sweep.Points.Count);
+        for (int i = 0; i < sweep.Points.Count; i++)
+        {
+            double target = sweep.Points[i].TargetLiftCoefficient;
+            double actual = sweep.Points[i].OperatingPoint.LiftCoefficient;
+            Assert.True(System.Math.Abs(actual - target) < 0.05,
+                $"NACA 6409 (6% camber) CL-target finder missed: target={target} actual={actual:F4}");
+        }
+    }
+
+    [Fact]
+    public void SweepInviscidLiftCoefficient_ForCamberedAirfoil_HitsTargetCLsAcrossWideRange()
+    {
+        // Phase 2 iter 92: extended iter-89 fix validation. Sweep CL=-0.2..1.2
+        // step 0.1 (15 points) on cambered NACA 4412. The iter-89 zero-lift
+        // shift must work across the full linear lift range, including
+        // negative CL (below zero-lift α≈-4°).
+        var generator = new NacaAirfoilGenerator();
+        var service = new AirfoilAnalysisService();
+        var geometry = generator.Generate4DigitClassic("4412", 161);
+
+        var sweep = service.SweepInviscidLiftCoefficient(
+            geometry,
+            -0.2d,
+            1.2d,
+            0.1d,
+            new AnalysisSettings(panelCount: 160));
+
+        Assert.Equal(15, sweep.Points.Count);
+        for (int i = 0; i < sweep.Points.Count; i++)
+        {
+            double target = sweep.Points[i].TargetLiftCoefficient;
+            double actual = sweep.Points[i].OperatingPoint.LiftCoefficient;
+            Assert.True(System.Math.Abs(actual - target) < 0.05,
+                $"Wide-range cambered CL-target finder missed: target={target} actual={actual:F4}");
+        }
+    }
+
+    [Fact]
+    public void SweepInviscidLiftCoefficient_ForCamberedAirfoil_HitsTargetCLs()
+    {
+        // Phase 2 iter 90: pins the iter-89 SolveAtLiftCoefficient fix.
+        // NACA 4412 (cambered, zero-lift α≈-4°) with target CL=0.3..0.9. Pre-
+        // iter-89 the initial guess α=targetCL/(2π) was off by 4° and Newton
+        // often converged to wrong CL. Iter 89 added the zero-lift shift so
+        // the initial guess lands near the true α for any airfoil.
+        var generator = new NacaAirfoilGenerator();
+        var service = new AirfoilAnalysisService();
+        var geometry = generator.Generate4DigitClassic("4412", 161);
+
+        var sweep = service.SweepInviscidLiftCoefficient(
+            geometry,
+            0.3d,
+            0.9d,
+            0.2d,
+            new AnalysisSettings(panelCount: 160));
+
+        Assert.Equal(4, sweep.Points.Count);
+        for (int i = 0; i < sweep.Points.Count; i++)
+        {
+            double target = 0.3d + i * 0.2d;
+            Assert.Equal(target, sweep.Points[i].TargetLiftCoefficient, precision: 6);
+            // Newton's default tolerance is 0.01 absolute; allow 0.05 leeway.
+            double actual = sweep.Points[i].OperatingPoint.LiftCoefficient;
+            Assert.True(System.Math.Abs(actual - target) < 0.05,
+                $"Cambered CL-target finder missed: target={target} actual={actual:F4} (iter-89 fix regression?)");
+        }
+    }
+
+    [Fact]
     public void SweepInviscidLiftCoefficient_ForSymmetricAirfoil_ShowsIncreasingSolvedAlphaTrend()
     {
         var generator = new NacaAirfoilGenerator();
@@ -147,17 +234,12 @@ public sealed class AirfoilAnalysisServiceTests
     }
 
     [Fact]
-    // Legacy mapping: none.
-    // Difference from legacy: Linear-vortex solver selection is a managed-only extension beyond the original single inviscid legacy path.
-    // Decision: Keep this managed-only test because it validates new solver-selection functionality with no direct Fortran analogue.
-    public void AnalyzeInviscid_WithLinearVortexSolverType_ProducesValidResult()
+    public void AnalyzeInviscid_OnCamberedAirfoil_ProducesValidResult()
     {
         var generator = new NacaAirfoilGenerator();
         var service = new AirfoilAnalysisService();
         var geometry = generator.Generate4Digit("2412", 161);
-        var settings = new AnalysisSettings(
-            panelCount: 120,
-            inviscidSolverType: InviscidSolverType.LinearVortex);
+        var settings = new AnalysisSettings(panelCount: 120);
 
         var result = service.AnalyzeInviscid(geometry, 3.0, settings);
 
@@ -165,50 +247,5 @@ public sealed class AirfoilAnalysisServiceTests
         Assert.Equal(3.0, result.AngleOfAttackDegrees);
         Assert.True(result.LiftCoefficient > 0, "CL should be positive for cambered airfoil at positive alpha.");
         Assert.True(double.IsFinite(result.MomentCoefficientQuarterChord), "CM should be finite.");
-    }
-
-    [Fact]
-    // Legacy mapping: none.
-    // Difference from legacy: Comparing Hess-Smith and linear-vortex managed backends is unique to the C# port and has no single legacy counterpart.
-    // Decision: Keep the managed comparison because it protects the intentional multi-solver design added by the port.
-    public void AnalyzeInviscid_LinearVortexVsHessSmith_ProduceDifferentResults()
-    {
-        var generator = new NacaAirfoilGenerator();
-        var service = new AirfoilAnalysisService();
-        var geometry = generator.Generate4Digit("0012", 161);
-
-        var hessSmithSettings = new AnalysisSettings(
-            panelCount: 120,
-            inviscidSolverType: InviscidSolverType.HessSmith);
-        var linearVortexSettings = new AnalysisSettings(
-            panelCount: 120,
-            inviscidSolverType: InviscidSolverType.LinearVortex);
-
-        var hessSmithResult = service.AnalyzeInviscid(geometry, 5.0, hessSmithSettings);
-        var linearVortexResult = service.AnalyzeInviscid(geometry, 5.0, linearVortexSettings);
-
-        Assert.True(hessSmithResult.LiftCoefficient > 0, "Hess-Smith CL should be positive at alpha=5.");
-        Assert.True(linearVortexResult.LiftCoefficient > 0, "Linear-vortex CL should be positive at alpha=5.");
-        Assert.NotEqual(
-            Math.Round(hessSmithResult.LiftCoefficient, 3),
-            Math.Round(linearVortexResult.LiftCoefficient, 3));
-    }
-
-    [Fact]
-    // Legacy mapping: f_xfoil/src/xfoil.f :: OPER default inviscid operating point path.
-    // Difference from legacy: The managed default selection is asserted explicitly instead of being implied by the legacy command environment.
-    // Decision: Keep the managed default-contract test because the public API must document and preserve its default solver choice.
-    public void AnalyzeInviscid_DefaultSettings_UsesHessSmith()
-    {
-        var generator = new NacaAirfoilGenerator();
-        var service = new AirfoilAnalysisService();
-        var geometry = generator.Generate4Digit("0012", 161);
-
-        var defaultResult = service.AnalyzeInviscid(geometry, 5.0);
-        var explicitHessSmithResult = service.AnalyzeInviscid(
-            geometry, 5.0,
-            new AnalysisSettings(inviscidSolverType: InviscidSolverType.HessSmith));
-
-        Assert.Equal(defaultResult.LiftCoefficient, explicitHessSmithResult.LiftCoefficient, 10);
     }
 }

@@ -56,7 +56,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
 
         foreach (DirectSeedStation15Vector vector in vectors)
         {
-            BoundaryLayerSystemAssembler.BlsysResult result;
+            BlsysResult result;
             if (vector.Iteration == 4)
             {
                 Station15CarryOverrides carryOverrides = CachedStation15CarryOverrides.Value;
@@ -71,7 +71,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             {
                 Station15CarryOverrides carryOverrides = CachedStation15CarryOverrides.Value;
                 DirectSeedStation15Vector sourceVector = vectors.Single(static candidate => candidate.Iteration == 4);
-                (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+                (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
                     LoadTransitionCarriedVector(sourceVector, 5);
                 result = AssembleVector(
                     windowVector,
@@ -139,7 +139,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .OrderBy(static record => record.Sequence)
             .Last();
 
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 5);
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTraceCore(
             windowVector,
@@ -293,17 +293,17 @@ public sealed class DirectSeedStation15SystemMicroParityTests
         Station15CarryOverrides carryOverrides = CachedStation15CarryOverrides.Value;
         (ParityTraceRecord liveSystem, ParityTraceRecord liveInput) = LoadLiveIterationHandoff(iteration: 5);
 
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 5);
 
-        BoundaryLayerSystemAssembler.BlsysResult carriedResult = AssembleVector(
+        BlsysResult carriedResult = AssembleVector(
             windowVector,
             includeTraceContext: false,
             station1KinematicOverride: carryOverrides.Station1Kinematic,
             station1SecondaryOverride: carryOverrides.Station1Secondary,
             station2KinematicOverride: carriedStation2Kinematic,
             useDefaultStation1Carry: false);
-        BoundaryLayerSystemAssembler.BlsysResult rebuiltResult = AssembleVector(
+        BlsysResult rebuiltResult = AssembleVector(
             windowVector,
             includeTraceContext: false,
             station1KinematicOverride: carryOverrides.Station1Kinematic,
@@ -316,13 +316,13 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             LegacyIncompressibleParityConstants.Qinfbl,
             LegacyIncompressibleParityConstants.TkblMs,
             useLegacyPrecision: true);
-        var rebuiltStation2Primary = new BoundaryLayerSystemAssembler.PrimaryStationState
+        var rebuiltStation2Primary = new PrimaryStationState
         {
             U = station2U,
             T = windowVector.T2,
             D = windowVector.D2
         };
-        BoundaryLayerSystemAssembler.BlsysResult primaryOnlyResult = AssembleVector(
+        BlsysResult primaryOnlyResult = AssembleVector(
             windowVector,
             includeTraceContext: false,
             station1KinematicOverride: carryOverrides.Station1Kinematic,
@@ -330,7 +330,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             station2KinematicOverride: null,
             station2PrimaryOverride: rebuiltStation2Primary,
             useDefaultStation1Carry: false);
-        BoundaryLayerSystemAssembler.KinematicResult rebuiltStation2Kinematic = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
+        KinematicResult rebuiltStation2Kinematic = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
             station2U,
             windowVector.T2,
             windowVector.D2,
@@ -345,7 +345,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             LegacyIncompressibleParityConstants.ReyblRe,
             LegacyIncompressibleParityConstants.ReyblMs,
             useLegacyPrecision: true);
-        BoundaryLayerSystemAssembler.BlsysResult rebuiltBothResult = AssembleVector(
+        BlsysResult rebuiltBothResult = AssembleVector(
             windowVector,
             includeTraceContext: false,
             station1KinematicOverride: carryOverrides.Station1Kinematic,
@@ -937,7 +937,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             if (vector.Iteration == 5)
             {
                 DirectSeedStation15Vector sourceVector = vectors.Single(static candidate => candidate.Iteration == 4);
-                (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+                (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
                     LoadTransitionCarriedVector(sourceVector, 5);
                 managedRecords = RunManagedTrace(
                     windowVector,
@@ -1067,7 +1067,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             if (vector.Iteration == 5)
             {
                 DirectSeedStation15Vector sourceVector = vectors.Single(static candidate => candidate.Iteration == 4);
-                (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+                (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
                     LoadTransitionCarriedVector(sourceVector, 5);
                 managedRecords = RunManagedTrace(
                     windowVector,
@@ -1181,7 +1181,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .OrderBy(static record => record.Sequence)
             .Last();
 
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 5);
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTraceCore(
             windowVector,
@@ -1274,7 +1274,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             if (vector.Iteration == 5)
             {
                 DirectSeedStation15Vector sourceVector = vectors.Single(static candidate => candidate.Iteration == 4);
-                (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+                (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
                     LoadTransitionCarriedVector(sourceVector, 5);
                 managedRecords = RunManagedTrace(
                     windowVector,
@@ -1369,7 +1369,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             if (vector.Iteration == 5)
             {
                 DirectSeedStation15Vector sourceVector = vectors.Single(static candidate => candidate.Iteration == 4);
-                (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+                (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
                     LoadTransitionCarriedVector(sourceVector, 5);
                 managedRecords = RunManagedTrace(
                     windowVector,
@@ -1443,7 +1443,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .OrderBy(static record => record.Sequence)
             .Last();
 
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 5);
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTraceCore(
             windowVector,
@@ -1706,7 +1706,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             else if (vector.Iteration == 5)
             {
                 DirectSeedStation15Vector sourceVector = vectors.Single(static candidate => candidate.Iteration == 4);
-                (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+                (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
                     LoadTransitionCarriedVector(sourceVector, 5);
                 managedRecords = RunManagedTrace(
                     windowVector,
@@ -1775,7 +1775,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .OrderBy(static record => record.Sequence)
             .Last();
 
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 5);
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTrace(
             windowVector,
@@ -1856,7 +1856,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             else if (vector.Iteration == 5)
             {
                 DirectSeedStation15Vector sourceVector = vectors.Single(static candidate => candidate.Iteration == 4);
-                (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+                (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
                     LoadTransitionCarriedVector(sourceVector, 5);
                 managedRecords = RunManagedTrace(
                     windowVector,
@@ -2318,7 +2318,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
         {
             ParityTraceRecord referenceInput = referenceInputs[index];
             int ityp = ReadRequiredInt(referenceInput, "ityp");
-            BoundaryLayerSystemAssembler.BldifLogTerms managedTerms = BoundaryLayerSystemAssembler.ComputeBldifLogTerms(
+            BldifLogTerms managedTerms = BoundaryLayerSystemAssembler.ComputeBldifLogTerms(
                 ityp,
                 isSimilarityStation: false,
                 ReadRequiredDouble(referenceInput, "x1"),
@@ -2367,7 +2367,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
                              record.Sequence < referenceSystem.Sequence)
             .OrderBy(static record => record.Sequence)
             .Last();
-        BoundaryLayerSystemAssembler.BldifLogTerms managedTerms = BoundaryLayerSystemAssembler.ComputeBldifLogTerms(
+        BldifLogTerms managedTerms = BoundaryLayerSystemAssembler.ComputeBldifLogTerms(
             bldifType: 2,
             isSimilarityStation: false,
             ReadRequiredDouble(referenceInput, "x1"),
@@ -2537,7 +2537,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .OrderBy(static record => record.Sequence)
             .Last();
 
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 5);
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTrace(
             windowVector,
@@ -2587,7 +2587,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .OrderBy(static record => record.Sequence)
             .Last();
 
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 5);
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTraceCore(
             windowVector,
@@ -3731,9 +3731,9 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .OrderBy(static record => record.Sequence)
             .Single();
 
-        BoundaryLayerSystemAssembler.KinematicResult carriedKinematicOverride =
+        KinematicResult carriedKinematicOverride =
             ReadKinematicResult(carriedStation2Kinematic);
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2WindowKinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2WindowKinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 7);
 
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTrace(
@@ -4054,9 +4054,9 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .Where(record => record.Sequence > kinematicSystem.Sequence)
             .OrderBy(static record => record.Sequence)
             .First();
-        BoundaryLayerSystemAssembler.KinematicResult carriedKinematicOverride =
+        KinematicResult carriedKinematicOverride =
             ReadKinematicResult(carriedStation2Kinematic);
-        BoundaryLayerSystemAssembler.PrimaryStationState carriedPrimaryOverride =
+        PrimaryStationState carriedPrimaryOverride =
             ReadPrimaryState(carriedStation2Kinematic);
 
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTrace(
@@ -4162,7 +4162,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             if (vector.Iteration is 4 or 5)
             {
                 Station15CarryOverrides carryOverrides = CachedStation15CarryOverrides.Value;
-                (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, BoundaryLayerSystemAssembler.PrimaryStationState? carriedStation2Primary, _) =
+                (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, PrimaryStationState? carriedStation2Primary, _) =
                     LoadTransitionWindowVector(vector, vector.Iteration);
                 managedRecords = RunManagedTrace(
                     windowVector,
@@ -4301,7 +4301,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .ToArray();
 
         Station15CarryOverrides carryOverrides = CachedStation15CarryOverrides.Value;
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, BoundaryLayerSystemAssembler.PrimaryStationState? carriedStation2Primary, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, PrimaryStationState? carriedStation2Primary, _) =
             LoadTransitionWindowVector(vector, 4);
         IReadOnlyList<ParityTraceRecord> managedWindow = RunManagedTrace(
                 windowVector,
@@ -4511,7 +4511,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
                              record.Sequence < referenceSystem.Sequence)
             .OrderBy(static record => record.Sequence)
             .Last();
-        (DirectSeedStation15Vector windowVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation2Kinematic, _) =
+        (DirectSeedStation15Vector windowVector, KinematicResult carriedStation2Kinematic, _) =
             LoadTransitionCarriedVector(sourceVector, 7);
 
         IReadOnlyList<ParityTraceRecord> managedRecords = RunManagedTrace(
@@ -4672,7 +4672,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             ?? throw new InvalidOperationException($"Property '{propertyName}' on {instance.GetType().FullName} evaluated to null.");
     }
 
-    private static (DirectSeedStation15Vector WindowVector, BoundaryLayerSystemAssembler.KinematicResult CarriedStation2Kinematic, BoundaryLayerSystemAssembler.PrimaryStationState? CarriedStation2Primary, ParityTraceRecord CarriedStation2State) LoadTransitionWindowVector(
+    private static (DirectSeedStation15Vector WindowVector, KinematicResult CarriedStation2Kinematic, PrimaryStationState? CarriedStation2Primary, ParityTraceRecord CarriedStation2State) LoadTransitionWindowVector(
         DirectSeedStation15Vector vector,
         int iteration)
     {
@@ -4729,7 +4729,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             S2 = FromSingleHex(GetSingleHex(transitionIntervalInputs, "st"))
         };
 
-        BoundaryLayerSystemAssembler.KinematicResult preBlvarStation2Kinematic =
+        KinematicResult preBlvarStation2Kinematic =
             BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                 windowVector.U2,
                 windowVector.T2,
@@ -4792,7 +4792,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .First();
     }
 
-    private static (DirectSeedStation15Vector WindowVector, BoundaryLayerSystemAssembler.KinematicResult CarriedStation2Kinematic, ParityTraceRecord CarriedStation2State) LoadTransitionCarriedVector(
+    private static (DirectSeedStation15Vector WindowVector, KinematicResult CarriedStation2Kinematic, ParityTraceRecord CarriedStation2State) LoadTransitionCarriedVector(
         DirectSeedStation15Vector vector,
         int iteration)
     {
@@ -4858,7 +4858,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
         return iteration == 3 ? 4 : iteration;
     }
 
-    private static (DirectSeedStation15Vector Vector, BoundaryLayerSystemAssembler.KinematicResult CarriedStation1Kinematic) LoadTransitionFinalVector(
+    private static (DirectSeedStation15Vector Vector, KinematicResult CarriedStation1Kinematic) LoadTransitionFinalVector(
         DirectSeedStation15Vector vector,
         int iteration)
     {
@@ -5001,19 +5001,19 @@ public sealed class DirectSeedStation15SystemMicroParityTests
         }
     }
 
-    private static BoundaryLayerSystemAssembler.BlsysResult AssembleVector(
+    private static BlsysResult AssembleVector(
         DirectSeedStation15Vector vector,
         bool includeTraceContext,
-        BoundaryLayerSystemAssembler.KinematicResult? station1KinematicOverride = null,
-        BoundaryLayerSystemAssembler.SecondaryStationResult? station1SecondaryOverride = null,
-        BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride = null,
-        BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride = null,
+        KinematicResult? station1KinematicOverride = null,
+        SecondaryStationResult? station1SecondaryOverride = null,
+        KinematicResult? station2KinematicOverride = null,
+        PrimaryStationState? station2PrimaryOverride = null,
         bool useDefaultStation1Carry = true)
     {
         DirectSeedStation15Vector resolvedVector = vector;
-        BoundaryLayerSystemAssembler.KinematicResult? resolvedStation1KinematicOverride =
+        KinematicResult? resolvedStation1KinematicOverride =
             station1KinematicOverride?.Clone();
-        BoundaryLayerSystemAssembler.SecondaryStationResult? resolvedStation1SecondaryOverride =
+        SecondaryStationResult? resolvedStation1SecondaryOverride =
             station1SecondaryOverride?.Clone();
 
         if (useDefaultStation1Carry &&
@@ -5022,7 +5022,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
         {
             if (vector.Iteration is 4 or 5)
             {
-                (resolvedVector, BoundaryLayerSystemAssembler.KinematicResult carriedStation1Kinematic) =
+                (resolvedVector, KinematicResult carriedStation1Kinematic) =
                     LoadTransitionFinalVector(vector, vector.Iteration);
                 resolvedStation1KinematicOverride = carriedStation1Kinematic;
                 resolvedStation1SecondaryOverride = null;
@@ -5093,8 +5093,8 @@ public sealed class DirectSeedStation15SystemMicroParityTests
 
     private static IReadOnlyList<ParityTraceRecord> RunManagedTrace(
         DirectSeedStation15Vector vector,
-        BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride,
-        BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride,
+        KinematicResult? station2KinematicOverride,
+        PrimaryStationState? station2PrimaryOverride,
         params string[] kinds)
     {
         Station15CarryOverrides carryOverrides = CachedStation15CarryOverrides.Value;
@@ -5110,10 +5110,10 @@ public sealed class DirectSeedStation15SystemMicroParityTests
 
     private static IReadOnlyList<ParityTraceRecord> RunManagedTrace(
         DirectSeedStation15Vector vector,
-        BoundaryLayerSystemAssembler.KinematicResult? station1KinematicOverride,
-        BoundaryLayerSystemAssembler.SecondaryStationResult? station1SecondaryOverride,
-        BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride,
-        BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride,
+        KinematicResult? station1KinematicOverride,
+        SecondaryStationResult? station1SecondaryOverride,
+        KinematicResult? station2KinematicOverride,
+        PrimaryStationState? station2PrimaryOverride,
         params string[] kinds)
     {
         return RunManagedTraceCore(
@@ -5128,10 +5128,10 @@ public sealed class DirectSeedStation15SystemMicroParityTests
 
     private static IReadOnlyList<ParityTraceRecord> RunManagedTraceCore(
         DirectSeedStation15Vector vector,
-        BoundaryLayerSystemAssembler.KinematicResult? station1KinematicOverride,
-        BoundaryLayerSystemAssembler.SecondaryStationResult? station1SecondaryOverride,
-        BoundaryLayerSystemAssembler.KinematicResult? station2KinematicOverride,
-        BoundaryLayerSystemAssembler.PrimaryStationState? station2PrimaryOverride,
+        KinematicResult? station1KinematicOverride,
+        SecondaryStationResult? station1SecondaryOverride,
+        KinematicResult? station2KinematicOverride,
+        PrimaryStationState? station2PrimaryOverride,
         bool useDefaultStation1Carry,
         params string[] kinds)
     {
@@ -5170,7 +5170,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             panelCount: definition.PanelCount,
             reynoldsNumber: definition.ReynoldsNumber,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,
@@ -5215,9 +5215,9 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             .ToArray();
     }
 
-    private static BoundaryLayerSystemAssembler.KinematicResult ReadKinematicResult(ParityTraceRecord record)
+    private static KinematicResult ReadKinematicResult(ParityTraceRecord record)
     {
-        return new BoundaryLayerSystemAssembler.KinematicResult
+        return new KinematicResult
         {
             M2 = ReadRequiredDouble(record, "m2"),
             M2_U2 = ReadRequiredDouble(record, "m2_u2"),
@@ -5241,9 +5241,9 @@ public sealed class DirectSeedStation15SystemMicroParityTests
         };
     }
 
-    private static BoundaryLayerSystemAssembler.PrimaryStationState ReadPrimaryState(ParityTraceRecord record)
+    private static PrimaryStationState ReadPrimaryState(ParityTraceRecord record)
     {
-        return new BoundaryLayerSystemAssembler.PrimaryStationState
+        return new PrimaryStationState
         {
             U = ReadRequiredDouble(record, "u2"),
             T = ReadRequiredDouble(record, "t2"),
@@ -5258,7 +5258,7 @@ public sealed class DirectSeedStation15SystemMicroParityTests
             panelCount: definition.PanelCount,
             reynoldsNumber: definition.ReynoldsNumber,
             machNumber: 0.0,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             useModernTransitionCorrections: false,
             useExtendedWake: false,
@@ -5283,8 +5283,8 @@ public sealed class DirectSeedStation15SystemMicroParityTests
         }
 
         ViscousSolverEngine.PreNewtonSetupContext context = ViscousSolverEngine.PrepareLegacyPreNewtonContext((x, y), settings, alphaRadians);
-        BoundaryLayerSystemAssembler.KinematicResult? station1Kinematic = context.BoundaryLayerState.LegacyKinematic[13, 0];
-        BoundaryLayerSystemAssembler.SecondaryStationResult? station1Secondary = context.BoundaryLayerState.LegacySecondary[13, 0];
+        KinematicResult? station1Kinematic = context.BoundaryLayerState.LegacyKinematic[13, 0];
+        SecondaryStationResult? station1Secondary = context.BoundaryLayerState.LegacySecondary[13, 0];
 
         Assert.NotNull(station1Kinematic);
         Assert.NotNull(station1Secondary);
@@ -5395,8 +5395,8 @@ public sealed class DirectSeedStation15SystemMicroParityTests
         string ExpectedRow34Hex);
 
     private sealed record Station15CarryOverrides(
-        BoundaryLayerSystemAssembler.KinematicResult Station1Kinematic,
-        BoundaryLayerSystemAssembler.SecondaryStationResult Station1Secondary);
+        KinematicResult Station1Kinematic,
+        SecondaryStationResult Station1Secondary);
 
     private sealed record Iteration7TransitionWindowRecords(
         IReadOnlyList<ParityTraceRecord> ReferencePointIterations,

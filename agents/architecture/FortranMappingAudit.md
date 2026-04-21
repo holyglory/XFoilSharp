@@ -14,7 +14,7 @@ Execution rule for this audit: verified partial batches are not completion. The 
 ## Recent parity tooling notes
 
 - 2026-03-24: Fresh focused `alpha10_p80_trdif_row22_ref` reruns proved the reopened station-15 iter-9 `transition_interval_bt2_terms` row-1/col-3 owner had moved one level earlier again: the final `BT2(1,3)` reduction was already correct, but the packet-local `dtTerm` still landed 2 ULP high for the iter-9 fingerprint. `src/XFoil.Solver/Services/BoundaryLayerSystemAssembler.cs` now replays that traced `dtTerm` word inside `ApplyLegacyTransitionBt22PacketOverrides(...)`, which closes the focused owner, the broad station-15 system-vector witness, and the iter-9 accepted-state carry replay together.
-- 2026-03-18: `src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs` now replays the PANGEN Newton main diagonal `ww2` with a localized mixed-width helper (`AddRoundedBaseWithWideScaledCurvatureTerms`). Focused `pangen_newton_state` traces proved the legacy REAL build rounds `fp + fm` to float first, then evaluates `cc * ((dsp * cavpS2) + (dsm * cavmS2))` wider before the final cast. The fresh focused `pangen_snew_node stage=final` and `pangen_panel_node` references now match bitwise on the 12-panel alpha-0 rung.
+- 2026-03-18: `src/XFoil.Solver/Services/CurvatureAdaptivePanelDistributor.cs` now replays the PANGEN Newton main diagonal `ww2` with a localized mixed-width helper (`AddRoundedBaseWithWideScaledCurvatureTerms`). Focused `pangen_newton_state` traces proved the legacy REAL build rounds `fp + fm` to float first, then evaluates `cc * ((dsp * cavpS2) + (dsm * cavmS2))` wider before the final cast. The fresh focused `pangen_snew_node stage=final` and `pangen_panel_node` references now match bitwise on the 12-panel alpha-0 rung.
 - 2026-03-18: `tests/XFoil.Core.Tests/FortranParity/FortranReferenceCases.cs` now supports per-case `TraceKindAllowList` values and serializes managed artifact refreshes behind `ManagedArtifactRefreshLock`. This keeps focused `run_managed_case` refreshes deterministic even though the capture selectors are process-wide environment variables.
 - 2026-03-18: `tests/XFoil.Core.Tests/FortranParity/PangenParityTests.cs` and `StreamfunctionKernelFortranParityTests.cs` now run against fresh focused `n0012_re1e6_a0_p12_n9_pangen` and `n0012_re1e6_a0_p12_n9_psilin` cases. The earlier `psilin_source_dq_terms` drift on the alpha-0 12-panel rung was traced to the stale `n0012_re1e6_a0_p12_n9_full` reference set, not to a current `StreamfunctionInfluenceCalculator` math bug.
 - 2026-03-17: `tools/fortran-debug/gauss_parity_driver.f90`, `tools/fortran-debug/gauss_trace_stub.f90`, `tests/XFoil.Core.Tests/FortranParity/FortranGaussDriver.cs`, and `DenseLinearSystemFortranParityTests.cs` now form a standalone raw-hex `GAUSS` oracle. It proved `src/XFoil.Solver/Numerics/DenseLinearSystemSolver.cs` must use `LegacyPrecisionMath.SeparateMultiplySubtract(...)` during both forward elimination and back-substitution to replay classic XFoil REAL arithmetic exactly.
@@ -175,9 +175,9 @@ The first reviewed batch is the active legacy solver boundary where current pari
 - Decision: Keep the richer managed post-processing while preserving the Squire-Young total-drag path as the legacy reference component inside it.
 - Status: complete
 
-### `src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs`
+### `src/XFoil.Solver/Services/CurvatureAdaptivePanelDistributor.cs`
 
-- File: `src/XFoil.Solver/Services/CosineClusteringPanelDistributor.cs`
+- File: `src/XFoil.Solver/Services/CurvatureAdaptivePanelDistributor.cs`
 - Category: `legacy-direct`
 - Primary Fortran Reference: `f_xfoil/src/xfoil.f :: PANGEN`
 - Secondary Fortran Reference(s): `f_xfoil/src/xgeom.f :: LEFIND`, `f_xfoil/src/spline.f :: CURV/D2VAL`
@@ -208,7 +208,7 @@ The first reviewed batch is the active legacy solver boundary where current pari
 - Methods Audited: `Generate` (both overloads), `BuildWeightedDistribution`, `EstimateCurvature`, `Gaussian`, `InterpolateParameter`, `BuildArcLengthParameters`, `ComputeSignedArea`
 - Parity-sensitive blocks: `managed curvature sampling`, `Gaussian LE/TE density weighting`, `weighted cumulative redistribution`
 - Differences from legacy: This is an intentional managed approximation of legacy panel bunching rather than a direct PANGEN port; it uses sampled curvature, Gaussian weighting, and cubic-spline interpolation to produce the default mesh used by the Hess-Smith path.
-- Decision: Keep the managed approximation as the default panel mesh builder. The exact legacy paneling path remains in CosineClusteringPanelDistributor for parity and solver-fidelity work.
+- Decision: Keep the managed approximation as the default panel mesh builder. The exact legacy paneling path remains in CurvatureAdaptivePanelDistributor for parity and solver-fidelity work.
 - Status: complete
 
 ### `src/XFoil.Solver/Services/WakeGapProfile.cs`
@@ -2027,9 +2027,9 @@ The first reviewed batch is the active legacy solver boundary where current pari
 - Decision: Keep the managed harness because it protects the refactored API without changing the geometric intent.
 - Status: complete
 
-### `tests/XFoil.Core.Tests/CosineClusteringPanelDistributorTests.cs`
+### `tests/XFoil.Core.Tests/CurvatureAdaptivePanelDistributorTests.cs`
 
-- File: `tests/XFoil.Core.Tests/CosineClusteringPanelDistributorTests.cs`
+- File: `tests/XFoil.Core.Tests/CurvatureAdaptivePanelDistributorTests.cs`
 - Category: `test`
 - Primary Fortran Reference: `f_xfoil/src/xpanel.f :: PANGEN`
 - Secondary Fortran Reference(s): `f_xfoil/src/spline.f`

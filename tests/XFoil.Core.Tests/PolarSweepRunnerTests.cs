@@ -323,7 +323,7 @@ public class PolarSweepRunnerTests
         return new AnalysisSettings(
             panelCount: 120,
             reynoldsNumber: reynoldsNumber,
-            inviscidSolverType: InviscidSolverType.LinearVortex,
+
             viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
             maxViscousIterations: 200,
             viscousConvergenceTolerance: 1e-4);

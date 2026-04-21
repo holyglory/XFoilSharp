@@ -91,7 +91,7 @@ public sealed class BldifLogTermsFortranParityTests
 
                     usedCommonSequences.Add(common.Sequence);
 
-                    BoundaryLayerSystemAssembler.BldifLogTerms managedTerms = BoundaryLayerSystemAssembler.ComputeBldifLogTerms(
+                    BldifLogTerms managedTerms = BoundaryLayerSystemAssembler.ComputeBldifLogTerms(
                         ityp,
                         isSimilarityStation: ityp == 0,
                         ReadRequiredDouble(logInput, "x1"),

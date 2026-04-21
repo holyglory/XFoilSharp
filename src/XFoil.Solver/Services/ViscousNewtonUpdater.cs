@@ -76,7 +76,8 @@ public static class ViscousNewtonUpdater
         if (mode == ViscousSolverMode.XFoilRelaxation)
         {
             var (rlx, normalizedRms, dac) = ApplyXFoilRelaxation(blState, newtonSystem, hstinv, wakeGap, wakeGapCount, dij, isp, nPanel, updateContext, useLegacyPrecision);
-            double rmsbl = useLegacyPrecision ? normalizedRms : ComputeUpdateRms(blState, newtonSystem, useLegacyPrecision);
+            // Phase 1 strip: float-only path uses the in-loop normalized RMS.
+            double rmsbl = normalizedRms;
             return (rlx, rmsbl, trustRadius, true, dac);
         }
 
@@ -132,25 +133,14 @@ public static class ViscousNewtonUpdater
         // MATYP≠1: DCLMIN = MAX(-0.5, -0.9*CL) — not implemented (all test vectors use MATYP=1)
         if (updateContext.HasValue && updateContext.Value.IsAlphaPrescribed)
         {
-            if (useLegacyPrecision)
-            {
-                float fDclMax = 0.5f;
-                float fDclMin = -0.5f;
-                float fRlxDac = (float)rlx * (float)coupling.Dac;
-                if (fRlxDac > fDclMax)
-                    rlx = fDclMax / (float)coupling.Dac;
-                if (fRlxDac < fDclMin)
-                    rlx = fDclMin / (float)coupling.Dac;
-            }
-            else
-            {
-                double dclMax = 0.5;
-                double dclMin = -0.5;
-                if (rlx * coupling.Dac > dclMax)
-                    rlx = dclMax / coupling.Dac;
-                if (rlx * coupling.Dac < dclMin)
-                    rlx = dclMin / coupling.Dac;
-            }
+            // Phase 1 strip: float-only DCL clamp.
+            float fDclMax = 0.5f;
+            float fDclMin = -0.5f;
+            float fRlxDac = (float)rlx * (float)coupling.Dac;
+            if (fRlxDac > fDclMax)
+                rlx = fDclMax / (float)coupling.Dac;
+            if (fRlxDac < fDclMin)
+                rlx = fDclMin / (float)coupling.Dac;
         }
 
         // Legacy block: xbl.f UPDATE relaxation scan.
@@ -204,25 +194,16 @@ public static class ViscousNewtonUpdater
             
             
 
-            if (useLegacyPrecision)
-            {
-                // Fortran: RMSBL = RMSBL + DN1**2 + DN2**2 + DN3**2 + DN4**2
-                // Left-to-right evaluation in REAL (float) arithmetic:
-                // ((((RMSBL + DN1**2) + DN2**2) + DN3**2) + DN4**2)
-                // Each term is added to the accumulator separately, NOT
-                // pre-summed and then added (which would change rounding).
-                float fdn1 = (float)dn1, fdn2 = (float)dn2, fdn3 = (float)dn3, fdn4 = (float)dn4;
-                float fAcc = (float)rmsAccum;
-                fAcc = fAcc + fdn1 * fdn1;
-                fAcc = fAcc + fdn2 * fdn2;
-                fAcc = fAcc + fdn3 * fdn3;
-                fAcc = fAcc + fdn4 * fdn4;
-                rmsAccum = fAcc;
-            }
-            else
-            {
-                rmsAccum += dn1 * dn1 + dn2 * dn2 + dn3 * dn3 + dn4 * dn4;
-            }
+            // Phase 1 strip: float-only RMSBL accumulation. Fortran:
+            //   RMSBL = RMSBL + DN1**2 + DN2**2 + DN3**2 + DN4**2 — REAL,
+            //   left-to-right with each term added separately (NOT pre-summed).
+            float fdn1 = (float)dn1, fdn2 = (float)dn2, fdn3 = (float)dn3, fdn4 = (float)dn4;
+            float fAcc = (float)rmsAccum;
+            fAcc = fAcc + fdn1 * fdn1;
+            fAcc = fAcc + fdn2 * fdn2;
+            fAcc = fAcc + fdn3 * fdn3;
+            fAcc = fAcc + fdn4 * fdn4;
+            rmsAccum = fAcc;
 
 
             // Check each variable against DHI/DLO limits
@@ -255,18 +236,10 @@ public static class ViscousNewtonUpdater
         ApplyRelaxedStep(blState, newtonSystem, rlx, hstinv, wakeGap, wakeGapCount, coupling, useLegacyPrecision);
 
         int totalStations = blState.NBL[0] + blState.NBL[1];
-        double normalizedRmsbl;
-        if (useLegacyPrecision)
-        {
-            // Fortran: RMSBL = SQRT( RMSBL / (4.0*FLOAT(NBL(1)+NBL(2))) )
-            float fRms = (float)rmsAccum;
-            float fDenom = 4.0f * (float)totalStations;
-            normalizedRmsbl = MathF.Sqrt(fRms / fDenom);
-        }
-        else
-        {
-            normalizedRmsbl = totalStations > 0 ? Math.Sqrt(rmsAccum / (4.0 * totalStations)) : 0.0;
-        }
+        // Phase 1 strip: float-only Fortran RMSBL = SQRT( RMSBL / (4.0*FLOAT(NBL(1)+NBL(2))) )
+        float fRms = (float)rmsAccum;
+        float fDenom = 4.0f * (float)totalStations;
+        double normalizedRmsbl = MathF.Sqrt(fRms / fDenom);
         return (rlx, normalizedRmsbl, coupling.Dac);
     }
 
@@ -411,7 +384,7 @@ public static class ViscousNewtonUpdater
                 {
                     ueSum = LegacyPrecisionMath.Add(
                         ueSum,
-                        -LegacyPrecisionMath.Multiply(vtiI, vtiJ, dij[iPan, jPan], useLegacyPrecision) * (useLegacyPrecision ? (float)dMass : dMass),
+                        -LegacyPrecisionMath.Multiply(vtiI, vtiJ, dij[iPan, jPan], useLegacyPrecision) * (float)dMass,
                         useLegacyPrecision);
                 }
             }
@@ -469,34 +442,20 @@ public static class ViscousNewtonUpdater
 
                 double vtiJ = GetVTI(jbl, jside, blState);
                 double ueM = -LegacyPrecisionMath.Multiply(vtiI, vtiJ, dij[iPan, jPan], useLegacyPrecision);
-                double dMassValue;
-                double dMassControl;
-                if (useLegacyPrecision)
-                {
-                    // Fortran UPDATE: MASS + VDEL in REAL
-                    dMassValue = (float)((float)blState.MASS[jbl, jside] + (float)vdel[2, 0, jv]);
-                    dMassControl = (float)(-(float)vdel[2, 1, jv]);
-                }
-                else
-                {
-                    dMassValue = blState.MASS[jbl, jside] + vdel[2, 0, jv];
-                    dMassControl = -vdel[2, 1, jv];
-                }
+                // Phase 1 strip: float-only Fortran UPDATE MASS + VDEL in REAL.
+                double dMassValue = (float)((float)blState.MASS[jbl, jside] + (float)vdel[2, 0, jv]);
+                double dMassControl = (float)(-(float)vdel[2, 1, jv]);
                 ueSum = LegacyPrecisionMath.Add(ueSum, LegacyPrecisionMath.Multiply(ueM, dMassValue, useLegacyPrecision), useLegacyPrecision);
                 ueControl = LegacyPrecisionMath.Add(ueControl, LegacyPrecisionMath.Multiply(ueM, dMassControl, useLegacyPrecision), useLegacyPrecision);
                 // GDB: per-term DUI at TE station side 0 (first 3 + last 2 terms)
                 
             }
 
-            uNew[ibl, iside] = useLegacyPrecision
-                ? (float)((float)context.UeInv[ibl, iside] + (float)ueSum)
-                : context.UeInv[ibl, iside] + ueSum;
-            
-            // In the alpha-prescribed legacy UPDATE path UINV_AC is zero, but the
-            // stored control velocity still passes through REAL assignment rounding.
-            uAc[ibl, iside] = useLegacyPrecision
-                ? (float)ueControl
-                : ueControl;
+            // Phase 1 strip: float-only path. In the alpha-prescribed legacy
+            // UPDATE path UINV_AC is zero, but the stored control velocity
+            // still passes through REAL assignment rounding.
+            uNew[ibl, iside] = (float)((float)context.UeInv[ibl, iside] + (float)ueSum);
+            uAc[ibl, iside] = (float)ueControl;
 
             // Trace UPDATE DUI at station 2 side 1 first iteration
             
@@ -524,9 +483,8 @@ public static class ViscousNewtonUpdater
         double sina = LegacyPrecisionMath.Sin(context.AlphaRadians, useLegacyPrecision);
         double qinfSafe = Math.Max(context.Qinf, 1e-10);
 
-        if (useLegacyPrecision)
+        // Phase 1 strip: float-only Fortran URELAX CL integration.
         {
-            // Fortran URELAX CL integration: ALL REAL
             float fClNew = 0.0f;
             float fClAc = 0.0f;
             float fCa = (float)cosa;
@@ -534,7 +492,7 @@ public static class ViscousNewtonUpdater
             float fQinf = (float)qinfSafe;
             float fQinf2 = fQinf * fQinf;
 
-            // Fortran: initialize CPG1 at node 1
+            // Fortran: initialize CPG1 at node 1.
             float q1 = (float)qNew[0];
             float cginc1 = 1.0f - (q1 / fQinf) * (q1 / fQinf);
             float cpg1 = cginc1; // For M=0: BETA=1, BFAC=0 -> CPG = CGINC
@@ -568,46 +526,15 @@ public static class ViscousNewtonUpdater
             clNew = fClNew;
             clAc = fClAc;
         }
-        else
-        {
-            for (int i = 0; i < n; i++)
-            {
-                int ip = i + 1;
-                if (ip == n) ip = 0;
-
-                double dxPhys = context.Panel.X[ip] - context.Panel.X[i];
-                double dyPhys = context.Panel.Y[ip] - context.Panel.Y[i];
-                double dx = dxPhys * cosa + dyPhys * sina;
-
-                double qByQinfI = qNew[i] / qinfSafe;
-                double qByQinfIp = qNew[ip] / qinfSafe;
-                double cpI = 1.0 - qByQinfI * qByQinfI;
-                double cpIp = 1.0 - qByQinfIp * qByQinfIp;
-                double cpAcI = (-2.0 * qNew[i] / (qinfSafe * qinfSafe)) * qAc[i];
-                double cpAcIp = (-2.0 * qNew[ip] / (qinfSafe * qinfSafe)) * qAc[ip];
-
-                clNew += dx * 0.5 * (cpIp + cpI);
-                clAc += dx * 0.5 * (cpAcIp + cpAcI);
-            }
-        }
 
         // GDB: dump CL coupling details
         
 
-        double dac;
-        if (useLegacyPrecision)
-        {
-            // Fortran: DAC = (CLNEW - CL) / (1.0 - CL_AC) — all REAL
-            float fDenom = 1.0f - (float)clAc;
-            dac = MathF.Abs(fDenom) > 1e-30f
-                ? ((float)clNew - (float)context.CurrentCl) / fDenom
-                : 0.0f;
-        }
-        else
-        {
-            double denom = 1.0 - clAc;
-            dac = Math.Abs(denom) > 1e-30 ? (clNew - context.CurrentCl) / denom : 0.0;
-        }
+        // Phase 1 strip: float-only Fortran DAC = (CLNEW - CL) / (1.0 - CL_AC) — all REAL.
+        float fDacDenom = 1.0f - (float)clAc;
+        double dac = MathF.Abs(fDacDenom) > 1e-30f
+            ? ((float)clNew - (float)context.CurrentCl) / fDacDenom
+            : 0.0f;
         double[] duedg = SolverBuffers.CouplingVector3(nsys);
         for (int jv = 0; jv < nsys; jv++)
         {

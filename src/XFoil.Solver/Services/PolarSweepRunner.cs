@@ -52,7 +52,7 @@ public static class PolarSweepRunner
         var panel = new LinearVortexPanelState(maxNodes);
         var inviscidState = new InviscidSolverState(maxNodes);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
             panel, settings.PanelCount,
             useLegacyPrecision: settings.UseLegacyPanelingPrecision);
@@ -148,7 +148,7 @@ public static class PolarSweepRunner
         var panel = new LinearVortexPanelState(maxNodes);
         var inviscidState = new InviscidSolverState(maxNodes);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
             panel, settings.PanelCount,
             useLegacyPrecision: settings.UseLegacyPanelingPrecision);
@@ -157,17 +157,19 @@ public static class PolarSweepRunner
         inviscidState.UseLegacyKernelPrecision = settings.UseLegacyStreamfunctionKernelPrecision;
         inviscidState.UseLegacyPanelingPrecision = settings.UseLegacyPanelingPrecision;
 
-        LinearVortexInviscidSolver.AssembleAndFactorSystem(
-            panel,
-            inviscidState,
-            settings.FreestreamVelocity,
-            0.0);
-
         var convergedSnapshots = new List<BLSnapshot>();
         int lastConvergedIndex = -1;
 
         for (double targetCL = clStart; ShouldContinue(targetCL, clEnd, step); targetCL += step)
         {
+            // Phase 2 iter 96: re-assemble inviscid basis per iteration (same
+            // warm-start corruption mitigation as iter-94 for SweepRe).
+            LinearVortexInviscidSolver.AssembleAndFactorSystem(
+                panel,
+                inviscidState,
+                settings.FreestreamVelocity,
+                0.0);
+
             // Use SPECCL to find alpha for this target CL
             var inviscidResult = LinearVortexInviscidSolver.SolveAtLiftCoefficient(
                 targetCL, panel, inviscidState,
@@ -234,7 +236,7 @@ public static class PolarSweepRunner
         var panel = new LinearVortexPanelState(maxNodes);
         var inviscidState = new InviscidSolverState(maxNodes);
 
-        CosineClusteringPanelDistributor.Distribute(
+        CurvatureAdaptivePanelDistributor.Distribute(
             geometry.x, geometry.y, geometry.x.Length,
             panel, baseSettings.PanelCount,
             useLegacyPrecision: baseSettings.UseLegacyPanelingPrecision);
@@ -243,17 +245,24 @@ public static class PolarSweepRunner
         inviscidState.UseLegacyKernelPrecision = baseSettings.UseLegacyStreamfunctionKernelPrecision;
         inviscidState.UseLegacyPanelingPrecision = baseSettings.UseLegacyPanelingPrecision;
 
-        LinearVortexInviscidSolver.AssembleAndFactorSystem(
-            panel,
-            inviscidState,
-            baseSettings.FreestreamVelocity,
-            0.0);
-
         var convergedSnapshots = new List<BLSnapshot>();
         int lastConvergedIndex = -1;
 
         for (double re = reStart; ShouldContinue(re, reEnd, step); re += step)
         {
+            // Phase 2 iter 94: re-assemble inviscid basis at the start of each
+            // Re iteration. Iter 91 found viscous Newton failure at one point
+            // can corrupt inviscidState in ways that break the next point's
+            // inviscid CL-target solve (CL flips sign). Re-assembling per
+            // iteration helps but doesn't fully fix — see iter 95: panel
+            // re-distribution didn't help further; iter 107: even fresh
+            // state allocation per iteration didn't help; bug is deeper.
+            LinearVortexInviscidSolver.AssembleAndFactorSystem(
+                panel,
+                inviscidState,
+                baseSettings.FreestreamVelocity,
+                0.0);
+
             // Apply MRCL coupling: create settings with modified Re
             // For Type 3, Re is directly prescribed at each sweep point.
             // The MRCL relation Re = REINF1 * CL^RETYP reduces to Re = prescribed
@@ -269,7 +278,6 @@ public static class PolarSweepRunner
                 paneling: baseSettings.Paneling,
                 transitionReynoldsTheta: baseSettings.TransitionReynoldsTheta,
                 criticalAmplificationFactor: baseSettings.CriticalAmplificationFactor,
-                inviscidSolverType: baseSettings.InviscidSolverType,
                 viscousSolverMode: baseSettings.ViscousSolverMode,
                 forcedTransitionUpper: baseSettings.ForcedTransitionUpper,
                 forcedTransitionLower: baseSettings.ForcedTransitionLower,

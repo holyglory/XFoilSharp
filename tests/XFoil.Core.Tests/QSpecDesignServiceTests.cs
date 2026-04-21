@@ -177,7 +177,7 @@ public sealed class QSpecDesignServiceTests
     private static InviscidAnalysisResult CreateAnalysis(IReadOnlyList<PressureCoefficientSample> samples)
     {
         return new InviscidAnalysisResult(
-            new PanelMesh(Array.Empty<AirfoilPoint>(), Array.Empty<Panel>(), true),
+            0,
             3d,
             0d,
             0.4d,
