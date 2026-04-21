@@ -1532,16 +1532,30 @@ e90c80c → 09b0c56 → 364c4d5:
 | c1b3ca7 (Option A tightened) | 0.329 | 0.03101 | 0.07057 |
 | e90c80c (floor slope 0.05) | 0.329 | 0.02243 | 0.04716 |
 | 09b0c56 (floor slope 0.08) | 0.329 | 0.01630 | 0.03186 |
-| **364c4d5 (floor slope 0.10)** | **0.329** | **0.01385** | **0.02420** |
+| 364c4d5 (floor slope 0.10) | 0.329 | 0.01385 | 0.02420 |
+| b44111b (stall-blindness Viterna, α≥14°) | 0.310 | 0.01271 | 0.02349 |
+| fdbbd91 (permissive anchor for thick) | 0.301 | 0.01223 | 0.02315 |
+| 9ea3fb5 (gate lowered to α≥12°) | 0.292 | 0.01168 | 0.02296 |
+| 588f73b (shape-aware CL_max_est) | 0.292 | 0.01168 | 0.02296 |
+| 4e43570 (cap extrapCL at 1.05·CL_max_est) | 0.266 | 0.01168 | 0.02296 |
+| **addec28 (cap extrapCL at 1.00·CL_max_est)** | **0.251** | **0.01168** | **0.02296** |
 
-Net from f8dd091 committed state: −57.4% on mean|ΔCD|. Net from
-the v7-landed-in-memory baseline: −51.2%.
+Net from f8dd091 committed state: mean|ΔCL| −23.7%, mean|ΔCD| −64.1%.
+Net from the v7-landed-in-memory baseline: mean|ΔCL| −14.3%,
+mean|ΔCD| −58.9%.
 
-CL gap (mean|ΔCL|=0.329) is unchanged — it's a solver-level
-Newton-attractor issue on NACA 44xx α=14-16° rows (see
-memory note `project_b3_cl_gap_root_cause.md`). Facade-layer
-CD work has now reached its ceiling; further gains require the
-MSES-class closure rebuild laid out in `MsesClosurePlan.md`.
+**The CL gap (0.329 → 0.251) broke** via iter-45's stall-blindness
+detector + iter-48/49/50's shape-aware CL_max cap. The remaining
+0.25 comes from:
+
+- M=0.15 Ladson rows where primary under-predicts CL (C# Newton
+  lands on a different attractor than Fortran's — solver-level,
+  `project_b3_compressibility_newton_divergence.md`)
+- Under-floored deep-stall α=19.3° row (WT 0.43 vs our 0.31)
+
+Both remaining classes are documented as solver-level (facade tweaks
+can't fix them). Further aggregate gains need the MSES-class
+closure rebuild laid out in `MsesClosurePlan.md`.
 
 **Parity throughout:** NACA 4455/4455 bit-exact preserved at every
 iter (Modern facade changes are additive — the Float/Double parity
