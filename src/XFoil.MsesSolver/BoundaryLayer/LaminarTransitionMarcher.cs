@@ -68,12 +68,28 @@ public static class LaminarTransitionMarcher
                 continue;
             }
 
-            // Trapezoidal Ñ accumulation.
-            double rate0 = ComputeRate(h[i - 1], theta[i - 1], edgeVelocity[i - 1],
-                kinematicViscosity, machNumberEdge);
-            double rate1 = ComputeRate(h[i], theta[i], edgeVelocity[i],
-                kinematicViscosity, machNumberEdge);
-            NAmp[i] = NAmp[i - 1] + 0.5 * (rate0 + rate1) * dx;
+            // Envelope e^N Ñ accumulation: Ñ grows as
+            //   dÑ = dÑ/dReθ(Hk) · ΔReθ
+            // with Reθ = Ue·θ/ν. Evaluated at the midpoint between
+            // stations for a trapezoid-equivalent step.
+            double reT0 = ReTheta(theta[i - 1], edgeVelocity[i - 1], kinematicViscosity);
+            double reT1 = ReTheta(theta[i], edgeVelocity[i], kinematicViscosity);
+            double dReTheta = reT1 - reT0;
+            double hkMid = 0.5 * (
+                XFoil.MsesSolver.Closure.MsesClosureRelations.ComputeHk(h[i - 1], machNumberEdge)
+                + XFoil.MsesSolver.Closure.MsesClosureRelations.ComputeHk(h[i], machNumberEdge));
+            double hkClamped = System.Math.Min(hkMid, 4.0);
+            double reT0c = AmplificationRateModel.ComputeReThetaCritical(hkClamped);
+            // Only accumulate above the neutral-stability boundary.
+            if (dReTheta > 0 && 0.5 * (reT0 + reT1) > reT0c)
+            {
+                double slope = AmplificationRateModel.ComputeDAmplificationDReTheta(hkClamped);
+                NAmp[i] = NAmp[i - 1] + slope * dReTheta;
+            }
+            else
+            {
+                NAmp[i] = NAmp[i - 1];
+            }
 
             if (transitionIdx < 0 && NAmp[i] >= nCrit)
             {
@@ -94,11 +110,9 @@ public static class LaminarTransitionMarcher
         return new TransitionMarchResult(theta, h, NAmp, transitionIdx, transitionX);
     }
 
-    private static double ComputeRate(double H, double theta, double Ue, double nu, double Me)
+    private static double ReTheta(double theta, double Ue, double nu)
     {
         if (theta < 1e-18 || Ue < 1e-12) return 0.0;
-        double Hk = MsesClosureRelations.ComputeHk(H, Me);
-        double ReTheta = Ue * theta / System.Math.Max(nu, 1e-18);
-        return AmplificationRateModel.ComputeAmplificationRate(Hk, ReTheta, theta);
+        return Ue * theta / System.Math.Max(nu, 1e-18);
     }
 }

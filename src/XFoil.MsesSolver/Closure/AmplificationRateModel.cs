@@ -69,16 +69,18 @@ public static class AmplificationRateModel
     public static double ComputeAmplificationRate(double Hk, double ReTheta, double theta)
     {
         if (theta < 1e-18) return 0.0;
+        // e^N applies to attached laminar BL with Hk ≲ 4. Past the
+        // laminar-separation criterion the flow structure changes
+        // (separation bubble or turbulent reattachment) and the
+        // TS-wave amplification rate is no longer a meaningful
+        // predictor. Freeze Ñ accumulation above Hk=4 — this is
+        // also what Drela's envelope method does in MSES proper.
+        double HkClamped = System.Math.Min(Hk, 4.0);
 
-        double ReθCrit = ComputeReThetaCritical(Hk);
+        double ReθCrit = ComputeReThetaCritical(HkClamped);
         if (ReTheta <= ReθCrit) return 0.0;
 
-        double dNdReθ = ComputeDAmplificationDReTheta(Hk);
-        // Drela's compact-form dÑ/dξ = dÑ/dReθ · dReθ/dθ · dθ/dξ,
-        // approximated as dÑ/dξ ≈ dÑ/dReθ · (2·Reθ/θ)·K(Hk) with
-        // K(Hk) a Hk-dependent scale factor. For the Phase-3 scope
-        // we use the simpler form dÑ/dξ = dÑ/dReθ · (Reθ − Reθ₀)/θ
-        // which reproduces the Drela-AIAA-1987 linear-growth curve.
+        double dNdReθ = ComputeDAmplificationDReTheta(HkClamped);
         return dNdReθ * (ReTheta - ReθCrit) / theta;
     }
 
