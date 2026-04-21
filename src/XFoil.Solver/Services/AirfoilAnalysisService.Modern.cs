@@ -430,10 +430,13 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                     //
                     // For these cases, Viterna extrapolation from a
                     // pre-stall converged anchor gives a far better CL
-                    // than the inflated primary. Only fires at |α| ≥ 14°
-                    // to avoid false positives on mild-stall airfoils
-                    // where CL ≈ invCL is still physical.
-                    if (System.Math.Abs(angleOfAttackDegrees) >= 14.0)
+                    // than the inflated primary. Iter 47: lowered gate
+                    // from 14° → 12° to catch thick/cambered airfoils
+                    // (4412/4415) that stall-blind as early as 12°.
+                    // The 0.95-ratio acceptance check at the end of
+                    // TryStallBlindnessViterna prevents regressing
+                    // cases where primary is already reasonable.
+                    if (System.Math.Abs(angleOfAttackDegrees) >= 12.0)
                     {
                         var viterna = TryStallBlindnessViterna(
                             geometry, angleOfAttackDegrees, settings, primaryCl);
