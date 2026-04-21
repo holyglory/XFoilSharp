@@ -4,5 +4,6 @@
   <Project Path="XFoil.Core/XFoil.Core.csproj" />
   <Project Path="XFoil.Design/XFoil.Design.csproj" />
   <Project Path="XFoil.IO/XFoil.IO.csproj" />
+  <Project Path="XFoil.MsesSolver/XFoil.MsesSolver.csproj" />
   <Project Path="XFoil.Solver/XFoil.Solver.csproj" />
 </Solution>

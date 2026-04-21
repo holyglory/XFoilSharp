@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\src\XFoil.Core\XFoil.Core.csproj" />
     <ProjectReference Include="..\..\src\XFoil.Design\XFoil.Design.csproj" />
     <ProjectReference Include="..\..\src\XFoil.IO\XFoil.IO.csproj" />
+    <ProjectReference Include="..\..\src\XFoil.MsesSolver\XFoil.MsesSolver.csproj" />
     <ProjectReference Include="..\..\src\XFoil.Solver\XFoil.Solver.csproj" />
   </ItemGroup>
 
