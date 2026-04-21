@@ -20,7 +20,7 @@ namespace XFoil.Solver.Double.Services;
 /// (ViscousSolverEngine + PolarSweepRunner). The old surrogate-pipeline methods
 /// now throw NotSupportedException directing callers to the Newton path.
 /// </summary>
-public class AirfoilAnalysisService
+public class AirfoilAnalysisService : XFoil.Solver.Services.IAirfoilAnalysisService
 {
     public AirfoilAnalysisService()
     {
