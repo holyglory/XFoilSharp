@@ -104,6 +104,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             cd = System.Math.Clamp(cd, 0.0, 0.5);
         }
 
+        var upperProfiles = BuildProfiles(upperMarch);
+        var lowerProfiles = BuildProfiles(lowerMarch);
+
         return new ViscousAnalysisResult
         {
             LiftCoefficient = inv.LiftCoefficient,
@@ -122,11 +125,48 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             Iterations = 1,
             AngleOfAttackDegrees = angleOfAttackDegrees,
             ConvergenceHistory = new System.Collections.Generic.List<ViscousConvergenceInfo>(),
-            UpperProfiles = System.Array.Empty<BoundaryLayerProfile>(),
-            LowerProfiles = System.Array.Empty<BoundaryLayerProfile>(),
+            UpperProfiles = upperProfiles,
+            LowerProfiles = lowerProfiles,
             WakeProfiles = System.Array.Empty<BoundaryLayerProfile>(),
-            UpperTransition = default,
-            LowerTransition = default,
+            UpperTransition = BuildTransition(upperMarch),
+            LowerTransition = BuildTransition(lowerMarch),
+        };
+    }
+
+    private static BoundaryLayerProfile[] BuildProfiles(
+        CompositeTransitionMarcher.CompositeResult r)
+    {
+        int n = r.Theta.Length;
+        var profiles = new BoundaryLayerProfile[n];
+        for (int i = 0; i < n; i++)
+        {
+            double h = r.H[i];
+            double theta = r.Theta[i];
+            profiles[i] = new BoundaryLayerProfile
+            {
+                Theta = theta,
+                DStar = h * theta, // δ* = H·θ (incompressible)
+                Ctau = r.CTau[i],
+                EdgeVelocity = r.EdgeVelocity[i],
+                Hk = h, // Me=0 → Hk = H
+                AmplificationFactor = r.N[i],
+            };
+        }
+        return profiles;
+    }
+
+    private static TransitionInfo BuildTransition(
+        CompositeTransitionMarcher.CompositeResult r)
+    {
+        if (r.TransitionIndex < 0)
+        {
+            return default;
+        }
+        return new TransitionInfo
+        {
+            XTransition = r.TransitionX,
+            StationIndex = r.TransitionIndex,
+            Converged = true,
         };
     }
 
