@@ -253,25 +253,25 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         double s, CompositeTransitionMarcher.CompositeResult march)
     {
         // Piecewise-linear interpolation of H·θ on the marcher's
-        // station grid. Clamp to endpoints if s is out of range.
+        // station grid, using the actual station arc-length values
+        // threaded through CompositeResult.
         int n = march.Theta.Length;
         if (n < 2) return 0.0;
-        // We don't have station s-values in CompositeResult; the
-        // marcher assumes stations are the ones the caller passed.
-        // Approximate: s index via linear scan vs. chord fraction.
-        // Since the caller's station arc-length matches the geometry
-        // surface, this is the same arc length.
-        // Fallback: linearly distribute stations over [0, chord-length]
-        // of the surface — close enough for Phase-5-lite.
-        // A cleaner version would thread the station array through
-        // CompositeResult; deferred.
-        if (s <= 0) return march.H[0] * march.Theta[0];
-        if (s >= 1.0) return march.H[n - 1] * march.Theta[n - 1]; // assumes unit chord
-        double frac = s / 1.0;
-        int iLo = System.Math.Clamp((int)(frac * (n - 1)), 0, n - 2);
-        double t = frac * (n - 1) - iLo;
-        double dStarLo = march.H[iLo] * march.Theta[iLo];
-        double dStarHi = march.H[iLo + 1] * march.Theta[iLo + 1];
+        double sMin = march.Stations[0];
+        double sMax = march.Stations[n - 1];
+        if (s <= sMin) return march.H[0] * march.Theta[0];
+        if (s >= sMax) return march.H[n - 1] * march.Theta[n - 1];
+        // Binary search for the station bracket.
+        int lo = 0, hi = n - 1;
+        while (hi - lo > 1)
+        {
+            int mid = (lo + hi) >> 1;
+            if (march.Stations[mid] > s) hi = mid; else lo = mid;
+        }
+        double sL = march.Stations[lo], sH = march.Stations[hi];
+        double t = (sH - sL) > 1e-18 ? (s - sL) / (sH - sL) : 0.0;
+        double dStarLo = march.H[lo] * march.Theta[lo];
+        double dStarHi = march.H[hi] * march.Theta[hi];
         return (1 - t) * dStarLo + t * dStarHi;
     }
 

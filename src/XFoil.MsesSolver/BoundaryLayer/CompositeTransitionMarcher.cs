@@ -24,6 +24,7 @@ public static class CompositeTransitionMarcher
         double[] N,
         double[] CTau,
         double[] EdgeVelocity,
+        double[] Stations,
         int TransitionIndex,
         double TransitionX,
         bool IsTurbulentAtEnd);
@@ -68,6 +69,7 @@ public static class CompositeTransitionMarcher
             // Stayed laminar to the end.
             return new CompositeResult(theta, H, NAmp, cTau,
                 EdgeVelocity: edgeVelocity,
+                Stations: stations,
                 TransitionIndex: -1,
                 TransitionX: double.NaN,
                 IsTurbulentAtEnd: false);
@@ -115,6 +117,7 @@ public static class CompositeTransitionMarcher
 
         return new CompositeResult(theta, H, NAmp, cTau,
             EdgeVelocity: edgeVelocity,
+            Stations: stations,
             TransitionIndex: tIdx,
             TransitionX: lam.TransitionX,
             IsTurbulentAtEnd: true);
