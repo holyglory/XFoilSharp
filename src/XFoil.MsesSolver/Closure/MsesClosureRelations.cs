@@ -119,22 +119,26 @@ public static class MsesClosureRelations
     public static double ComputeCfLaminar(double Hk, double ReTheta)
     {
         // Drela §4.1 correlation: Cf·Reθ/2 = f(Hk).
-        //   Hk ≤ 5.5:  f = -0.07 + 0.0727·(5.5 − Hk)² / (Hk − 1)
-        //   Hk > 5.5:  f = -0.07 + 0.015·(1 − 1/(Hk − 4.5))²
-        // At Hk=5.5 both branches give -0.07 (onset of separation).
+        //   Hk ≤ 7.4:  f = -0.067 + 0.01977·(7.4 − Hk)² / (Hk − 1)
+        //   Hk > 7.4:  f = -0.067 + 0.022·(1 − 1.4/(Hk − 6))²
+        //
+        // Calibrated so Blasius (Hk = 2.59) gives f = 0.220, matching
+        // the canonical Cf·Reθ/2 = 0.664²/2 ≈ 0.220 for flat plate.
+        // The previous constant 0.0727 produced f = 0.315 at Blasius
+        // — off by ~40 % and causing the Phase-2b marcher to
+        // over-shear.
         double f;
-        if (Hk <= 5.5)
+        if (Hk <= 7.4)
         {
-            double term = 5.5 - Hk;
-            f = -0.07 + 0.0727 * term * term / (Hk - 1.0);
+            double term = 7.4 - Hk;
+            f = -0.067 + 0.01977 * term * term / (Hk - 1.0);
         }
         else
         {
-            double term = 1.0 - 1.0 / (Hk - 4.5);
-            f = -0.07 + 0.015 * term * term;
+            double term = 1.0 - 1.4 / (Hk - 6.0);
+            f = -0.067 + 0.022 * term * term;
         }
-        // Cf = 2·f / Reθ. Clamp Reθ away from zero for the laminar
-        // leading-edge neighborhood.
+        // Cf = 2·f / Reθ.
         double reT = System.Math.Max(ReTheta, 1.0);
         return 2.0 * f / reT;
     }

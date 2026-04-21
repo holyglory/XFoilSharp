@@ -94,31 +94,35 @@ public class MsesClosureRelationsTests
     }
 
     [Fact]
-    public void ComputeCfLaminar_AtHk25_ProducesPositiveCf()
+    public void ComputeCfLaminar_AtBlasiusHk_MatchesFlatPlateReference()
     {
-        // Hk=2.5 (attached laminar BL), Reθ=1000.
-        // f = -0.07 + 0.0727·(3)²/1.5 = -0.07 + 0.4362 = 0.3662
-        // Cf = 2·0.3662 / 1000 = 7.32e-4
-        double actual = MsesClosureRelations.ComputeCfLaminar(2.5, 1000.0);
-        Assert.InRange(actual, 7e-4, 7.5e-4);
+        // Blasius flat-plate: Hk=2.59, Cf·Reθ/2 = 0.220 (exact).
+        // f = -0.067 + 0.01977·(7.4-2.59)²/(2.59-1)
+        //   = -0.067 + 0.01977·23.14/1.59
+        //   = -0.067 + 0.287 = 0.220
+        // Cf = 2·0.220/1000 = 4.40e-4
+        double actual = MsesClosureRelations.ComputeCfLaminar(2.59, 1000.0);
+        Assert.InRange(actual, 4.3e-4, 4.5e-4);
     }
 
     [Fact]
-    public void ComputeCfLaminar_AtHk55_ZeroCrossing()
+    public void ComputeCfLaminar_AtHk74_Junction()
     {
-        // Piecewise junction = Drela's laminar-separation criterion.
-        // Both branches give f = -0.07 at Hk=5.5.
-        // Cf = -0.14 / Reθ (negative = separated).
-        double actual = MsesClosureRelations.ComputeCfLaminar(5.5, 1000.0);
-        Assert.Equal(-0.14 / 1000.0, actual, 7);
+        // Piecewise junction at Hk=7.4. Both branches at Hk=7.4:
+        //   Lower branch: f = -0.067 + 0 = -0.067.
+        //   Upper branch (Hk-6=1.4): f = -0.067 + 0.022·(0)² = -0.067.
+        // Cf = -0.134 / Reθ (deeply separated).
+        double actual = MsesClosureRelations.ComputeCfLaminar(7.4, 1000.0);
+        Assert.Equal(-0.134 / 1000.0, actual, 7);
     }
 
     [Fact]
     public void ComputeCfLaminar_SeparatedBranch_IsFiniteAndNegative()
     {
-        // Hk=7 (deep separated laminar): f should be close to -0.07
-        // plus a small positive adjustment, staying finite.
-        double actual = MsesClosureRelations.ComputeCfLaminar(7.0, 1000.0);
+        // Hk=8 (deeply separated laminar, past 7.4 junction): f should
+        // be close to -0.067 plus the (1 - 1.4/2)² = 0.09 · 0.022 ≈ 0.002
+        // positive adjustment, staying finite but negative.
+        double actual = MsesClosureRelations.ComputeCfLaminar(8.0, 1000.0);
         Assert.True(double.IsFinite(actual));
         Assert.True(actual < 0.0, $"Expected negative Cf in separated BL, got {actual}");
     }
