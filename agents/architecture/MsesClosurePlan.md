@@ -144,9 +144,21 @@ within 1e-6 at a sampled grid of (H, Reθ, Me) points.
   unconditionally stable. CD computed via `ComputeCDTurbulent` using
   the carried Cτ (not Cτ_eq), which is the MSES-specific physics that
   enables stable separation.
-- ⏳ **Phase 2e:** Full Drela §4.2 energy integral for dH/dξ (replaces
-  the Clauser relaxation in 2c/2d). Requires thesis primary-source
-  verification of pressure-gradient term signs.
+- ⏳ **Phase 2e:** Full Drela §6.1 shape-parameter equation for
+  dH*/dξ (replaces Clauser-relaxation placeholder). Thesis OCR
+  (Publications/drela_thesis_ocr.md) confirmed the form:
+  `θ·dH*/dξ = 2·CD − H*·Cf/2 − [2·H**/H* + (1−H)]·θ·(dUe/dξ)/Ue`
+  at Me=0 (see §6.1.3 eq. 6.10).
+
+  **Blocker: numerical stiffness.** The equation is
+  near-equilibrium on flat plate (2·CD balances H*·Cf/2), so small
+  H perturbations amplify. Explicit RK2 oscillates (Hk swings
+  2.59 → 2.51 → 2.76 → 2.31 → 2.95 on a favorable-gradient test
+  with dx=0.02). Solution: implicit Newton iteration per step.
+  This is how Drela's own MSES code does it. Scaffolding removed
+  from master (Phase 2e probe 2026-04-21); implicit implementation
+  pending. MSES user manual (Publications/mses_manual.md) confirms
+  the theory is complete — it's purely a numerical-method task.
 
 **Landed in `src/XFoil.MsesSolver/BoundaryLayer/`:**
 
