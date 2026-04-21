@@ -79,6 +79,28 @@ deliverable.
 
 ## Implementation phases
 
+### Session summary — what works end-to-end
+
+As of commit bc7db48, the MSES pipeline can run single-point
+viscous analysis via the CLI:
+
+```
+dotnet run --project src/XFoil.Cli -- viscous-point-mses 0012 2 160 0.0 1000000 9
+```
+
+Output:
+- CL: from inviscid (no viscous feedback yet).
+- CD: Squire-Young far-field from composite laminar→transition→
+  turbulent marcher running on Ue(x) = sqrt(1-Cp) of each surface.
+- CM: from inviscid.
+
+Working benchmarks on NACA 0012/2412/4412 at α ∈ {0, 4}°,
+Re ∈ {1e6, 3e6}: MSES CD within 10× of Modern Newton-coupled CD.
+Typical overshoot is 2-3× on thin airfoils, driven by ~13 %
+Cf_turbulent high vs 1/5-power-law reference plus absence of
+viscous Ue feedback. Phase 5 (Newton coupling) is expected to
+close both of these.
+
 ### Phase 0 — Interface extraction (prep) ✅ LANDED (2026-04-21 commit 34befcb)
 
 - ✅ Extract `IAirfoilAnalysisService` covering AnalyzeInviscid and
