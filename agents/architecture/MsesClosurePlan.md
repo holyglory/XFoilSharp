@@ -121,7 +121,7 @@ regime, and Me-compressibility response.
 **Acceptance:** each closure relation reproduces Drela's reference curves
 within 1e-6 at a sampled grid of (H, Reθ, Me) points.
 
-### Phase 2 — Integral BL march (laminar + turbulent, attached only) — STARTED (2026-04-21, commits d5374bf → 97eec9a)
+### Phase 2 — Integral BL march (laminar + turbulent, attached only) — SUBSTANTIALLY LANDED (2026-04-21, commits d5374bf → 897da58)
 
 - ✅ **Phase 2a:** Thwaites-style laminar reference marcher. Validated
   against Blasius within 2 % (Thwaites' canonical tolerance).
@@ -136,10 +136,17 @@ within 1e-6 at a sampled grid of (H, Reθ, Me) points.
   integral with `ComputeCfTurbulent` and a Clauser-like relaxation for H.
   Validated within 10 % of the 1/5-power-law flat-plate reference over
   Re_x ∈ [3·10⁵, 10⁶].
-- ⏳ **Phase 2d:** Full Drela §4.2 energy integral + Cτ-lag ODE. This is
-  what makes MSES stall-robust; the simpler H relaxations in 2b/2c are
-  placeholders pending the thesis-verified energy equation.
-- ⏳ **Phase 3:** transition.
+- ✅ **Phase 2d:** Cτ-lag turbulent marcher
+  (`ClosureBasedTurbulentLagMarcher`). Carries Cτ as a third state via
+  Drela's lag ODE `dCτ/dξ = (K2/δ)·(Cτ_eq − Cτ)`. K2=5.6. The ODE is
+  stiff (K2/δ ≈ 2000) relative to dx≈0.01 so Cτ integrated
+  analytically per-step via closed-form exponential decay — exact and
+  unconditionally stable. CD computed via `ComputeCDTurbulent` using
+  the carried Cτ (not Cτ_eq), which is the MSES-specific physics that
+  enables stable separation.
+- ⏳ **Phase 2e:** Full Drela §4.2 energy integral for dH/dξ (replaces
+  the Clauser relaxation in 2c/2d). Requires thesis primary-source
+  verification of pressure-gradient term signs.
 
 **Landed in `src/XFoil.MsesSolver/BoundaryLayer/`:**
 
@@ -155,15 +162,31 @@ Phase 2b inherits that (using the same H mapping). The 0.5 % gate will
 apply to Phase 2d when the full energy integral lands — it's there the
 closure relations are exercised in their full form.
 
-### Phase 3 — Transition
+### Phase 3 — Transition — SCAFFOLDING LANDED (2026-04-21, commits 51cc405 → c12beaf)
 
-- Reuse the C# port of XFoil's `TRCHEK` e^n machinery verbatim. Drela's 2003
-  implicit paper documents that it was carried into MSES nearly unchanged.
-- Swap the XFoil turbulent-transition restart with MSES's Cτ-lag ODE
-  (thesis §5.3).
+- ✅ **Phase 3a:** `AmplificationRateModel` — Drela/Giles 1987 TS-wave
+  amplification model as pure functions:
+  - `ComputeReThetaCritical(Hk)`: neutral-stability Reθ₀ from the
+    `log10(Reθ₀) = (1.415/(Hk-1) − 0.489)·tanh(20/(Hk-1) − 12.9) + …`
+    correlation. Drops as Hk rises (adverse destabilizes TS waves).
+  - `ComputeDAmplificationDReTheta(Hk)`: Drela's Hk-dependent dÑ/dReθ.
+  - `ComputeAmplificationRate(Hk, Reθ, θ)`: full dÑ/dξ with
+    sub-critical guard.
+  - Constants: `NCritStandard = 9`, `NCritQuietTunnel = 11`.
+- ✅ **Phase 3a-track:** `LaminarTransitionMarcher` — wraps the
+  Phase-2b marcher with trapezoidal Ñ accumulation and linear
+  interpolation of the transition x where Ñ first reaches n_crit.
+- ✅ **Phase 3b:** `CompositeTransitionMarcher` — end-to-end
+  laminar→transition→turbulent march. Reseeds H = 1.4 and
+  Cτ = 0.3·Cτ_eq at handoff. Outputs full-length (θ, H, Ñ, Cτ)
+  arrays plus TransitionIndex + TransitionX.
+- ⏳ **Phase 3c:** NACA 0012 xtr(α=0, Re=3e6, nCrit=9) parity against
+  XFoil C# baseline. Requires wiring the composite marcher into a
+  real Ue(x) distribution from the inviscid solver. Scope creep into
+  Phase 5 (Newton coupling) — probably bundled there.
 
 **Acceptance:** NACA 0012 xtr(α=0, Re=3e6, nCrit=9) within 1 % of the
-XFoil C# baseline.
+XFoil C# baseline. Not yet run; blocked on Phase 5.
 
 ### Phase 4 — Separation + reattachment (the point)
 
