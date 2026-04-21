@@ -271,8 +271,12 @@ public static class MsesClosureRelations
     public static double ComputeCTauEquilibrium(double Hk, double ReTheta, double Me)
     {
         // Drela thesis eq. 6.39 (OCR'd from Publications/15002356-MIT.pdf):
-        //   Cτ_eq = H* · 0.03 · (Hk − 1)³ / (Hk² · (1 − Us))
-        // where Us is from eq. 6.38 (see ComputeCDTurbulent above).
+        //   Cτ_eq = H* · 0.03 · (Hk − 1)³ / (2 · (1 − Us) · Hk²)
+        // The factor 2 in the denominator was missed in the earlier
+        // implementation — OCR shows "21-Us" which decodes as
+        // "2·(1-Us)". Halves the previous Cτ_eq, which brings the
+        // equilibrium balance 2·CD = H*·Cf/2 (with the corrected
+        // eq. 6.40 CD and thesis 6.17 Cf) much closer.
         double HkM1 = Hk - 1.0;
         double hStar = ComputeHStarTurbulent(Hk, ReTheta, Me);
         double Us = 0.5 * hStar * (1.0 - 4.0 * HkM1 / (3.0 * Hk));
@@ -280,7 +284,7 @@ public static class MsesClosureRelations
         double oneMinusUs = 1.0 - Us;
         if (oneMinusUs < 1e-6) oneMinusUs = 1e-6;
         double HkM1Cubed = HkM1 * HkM1 * HkM1;
-        return hStar * 0.03 * HkM1Cubed / (Hk * Hk * oneMinusUs);
+        return hStar * 0.03 * HkM1Cubed / (2.0 * Hk * Hk * oneMinusUs);
     }
 
     /// <summary>
