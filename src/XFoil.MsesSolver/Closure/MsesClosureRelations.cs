@@ -236,12 +236,14 @@ public static class MsesClosureRelations
         Us = System.Math.Clamp(Us, 0.0, 0.99);
 
         double cf = ComputeCfTurbulent(Hk, ReTheta, Me);
+        // Drela thesis eq. 6.40:
+        //   2·CD/H* = (Cf/H*)·Us + Cτ·(1 − Us)
+        // Rearranging: 2·CD = Cf·Us + H*·Cτ·(1 − Us).
+        // The H* factor on the wake (Cτ) term was missing in the
+        // earlier implementation — a ~H*/2 ≈ 0.9-1.2× multiplicative
+        // error on the outer-layer contribution.
         double wallPart = 0.5 * cf * Us;
-        // Outer-layer term: proportional to the outer-layer shear
-        // stress, approximated as cTau·(1 − Us). cTau is the
-        // lag-equation state variable; near equilibrium cTau ≈
-        // Cτ_eq from ComputeCTauEquilibrium.
-        double outerPart = cTau * (1.0 - Us);
+        double outerPart = 0.5 * hStar * cTau * (1.0 - Us);
         return wallPart + outerPart;
     }
 
