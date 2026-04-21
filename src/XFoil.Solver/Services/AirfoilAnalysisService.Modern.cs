@@ -853,8 +853,15 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
     private static ViscousAnalysisResult ApplySeparationAwareCdBoost(ViscousAnalysisResult r)
     {
         double maxHk = ComputeMaxHk(r);
-        if (maxHk <= 4.0) return r;
-        double boost = System.Math.Min(0.15, 0.08 * (maxHk - 4.0));
+        // Option A iter 2: tightened to maxHk > 5 and cap 0.06. B3 aggregate
+        // run with the initial (maxHk>4, cap 0.15) thresholds regressed
+        // mean|ΔCD| 0.0284 → 0.0325 because moderate-stall rows (Hk≈5-6,
+        // WT CD near 0.02) got boosted into 0.15-0.17 territory —
+        // over-correcting. Raising the activation threshold to 5 excludes
+        // the moderate-stall band entirely, and capping the added CD at
+        // 0.06 keeps deep-stall help without flipping the error sign.
+        if (maxHk <= 5.0) return r;
+        double boost = System.Math.Min(0.06, 0.03 * (maxHk - 5.0));
         var drag = new DragDecomposition
         {
             CD = r.DragDecomposition.CD + boost,
