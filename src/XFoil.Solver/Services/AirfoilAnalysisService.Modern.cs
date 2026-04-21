@@ -391,8 +391,35 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                 {
                     invCL = double.NaN;
                 }
-                if (double.IsFinite(invCL) && invCL != 0d
-                    && System.Math.Abs(primaryCl) / System.Math.Abs(invCL) >= 0.98)
+                // B3 iter 48 — shape-aware stall-blindness signature.
+                //
+                // Previously the detector relied on primaryCl/invCl ≥ 0.98
+                // alone. That's brittle: thick high-camber airfoils can
+                // have primary CL well above the physically-achievable
+                // stall peak yet still be < 0.98·invCl if the inviscid
+                // CL is also absurdly high (2π extrapolation at high α
+                // doesn't stall).
+                //
+                // Additional signature: primary |CL| exceeds the airfoil's
+                // empirically-expected CL_max by a margin. CL_max is
+                // estimated from geometry:
+                //   CL_max_est = 1.3 + 1.5·thickness + 6·|max_camber|
+                // Calibrated on windtunnel.json WT data:
+                //   - 0012 (t=0.12, c=0):    est ≈ 1.48, WT peak ≈ 1.6
+                //   - 0018 (t=0.18, c=0):    est ≈ 1.57, WT peak ≈ 1.3
+                //   - 4412 (t=0.12, c=0.04): est ≈ 1.72, WT peak ≈ 1.62
+                //   - 4415 (t=0.15, c=0.04): est ≈ 1.77, WT peak ≈ 1.52
+                // Est slightly over-shoots because we use a single
+                // universal formula; 1.05× cushion absorbs this.
+                var (tMax, cMaxAbs) = EstimateThicknessCamber(geometry);
+                double clMaxEst = 1.3 + 1.5 * tMax + 6.0 * cMaxAbs;
+                bool shapeAwareStallBlind =
+                    System.Math.Abs(primaryCl) > clMaxEst * 1.05;
+                bool ratioStallBlind =
+                    double.IsFinite(invCL) && invCL != 0d
+                    && System.Math.Abs(primaryCl) / System.Math.Abs(invCL) >= 0.98;
+
+                if (ratioStallBlind || shapeAwareStallBlind)
                 {
                     var ramped = TrySolveViaSeededRamp(geometry, angleOfAttackDegrees, settings);
                     if (ramped is not null
@@ -921,6 +948,31 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
             LowerTransition = r.LowerTransition,
             AngleOfAttackDegrees = r.AngleOfAttackDegrees,
         };
+    }
+
+    // B3 iter 48 — shape-derived CL_max estimator for stall-blindness
+    // signature. Uses the airfoil's max y − min y as a thickness proxy
+    // and (max y + min y)/2 as a camber proxy. The approximation is
+    // exact for symmetric airfoils and within ~5% for standard NACA
+    // 4-digit cambered airfoils (max-upper-y doesn't exactly coincide
+    // with max-camber-x plus thickness-half-max-x, but the error is
+    // small because thickness varies slowly near the max). Returns
+    // (thickness_over_chord, |max_camber|_over_chord). Assumes unit-
+    // chord normalized airfoil (x ∈ [0,1]) — standard in this codebase.
+    private static (double thicknessOverChord, double maxCamberAbsOverChord) EstimateThicknessCamber(
+        AirfoilGeometry geom)
+    {
+        double maxY = double.NegativeInfinity;
+        double minY = double.PositiveInfinity;
+        foreach (var p in geom.Points)
+        {
+            if (p.Y > maxY) maxY = p.Y;
+            if (p.Y < minY) minY = p.Y;
+        }
+        if (!double.IsFinite(maxY) || !double.IsFinite(minY)) return (0.12, 0.0);
+        double thickness = maxY - minY;
+        double camberAbs = System.Math.Abs((maxY + minY) * 0.5);
+        return (thickness, camberAbs);
     }
 
     // B3 iter 45 — stall-blindness Viterna fallback.
