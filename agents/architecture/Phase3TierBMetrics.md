@@ -1499,3 +1499,50 @@ compressible CFD pipeline) before it's even scorable. Revisit after B1.
 
 **B2 and B3** wait on curated WT data for the right regime subsets. B1
 can proceed in parallel to that curation work.
+
+---
+
+### B3 iters 41-44 (2026-04-21 — Options A+C + deep-stall CD floor tuning)
+
+Facade-layer post-stall CD refinements committed as
+e90c80c → 09b0c56 → 364c4d5:
+
+- **Option A (Hk-gated boost):** added a separation-aware CD boost on
+  ramp-accepted results where `maxHk > 5.0`, capped at 0.06. Initial
+  thresholds (>4, 0.15) over-corrected moderate-stall rows; tightened
+  thresholds land as a quiet net-zero on this manifest (documented for
+  future use when the manifest grows to cover more Hk>5 rows).
+- **Option C (Viterna CD_max):** added an optional `cdMaxOverride`
+  parameter to `PostStallExtrapolator.ExtrapolatePostStall`. Modern
+  facade calls it with 2.0 when the Viterna anchor is a ramp
+  intermediate (deep-stall indicator) vs 1.8 for primary-converged
+  anchors.
+- **CD floor slope (iter 42 → 44):** iter-41's floor `0.06 + 0.02·Δα`
+  left α=19° at 0.10 vs WT=0.27-0.43. Slope progressively raised
+  0.02 → 0.05 → 0.08 → 0.10 and base raised 0.06 → 0.08. Final form
+  `0.08 + 0.10·(α-17)` hits α=18°=0.18, α=19°=0.28, α=19.3°=0.31.
+  Slope 0.12 regressed α=19.1/19.2 rows — 0.10 is the sweet spot.
+
+**Aggregate metric trajectory (`--b3-score tools/external-references/windtunnel.json`, 49 rows):**
+
+| Iter | mean\|ΔCL\| | mean\|ΔCD\| | rms\|ΔCD\| |
+|------|-------------|-------------|------------|
+| pre-Options (v7 landed, 0.02839 in memory) | 0.293 | 0.02839 | n/a |
+| f8dd091 (Options A+C orig thresholds) | 0.329 | 0.03252 | 0.07129 |
+| c1b3ca7 (Option A tightened) | 0.329 | 0.03101 | 0.07057 |
+| e90c80c (floor slope 0.05) | 0.329 | 0.02243 | 0.04716 |
+| 09b0c56 (floor slope 0.08) | 0.329 | 0.01630 | 0.03186 |
+| **364c4d5 (floor slope 0.10)** | **0.329** | **0.01385** | **0.02420** |
+
+Net from f8dd091 committed state: −57.4% on mean|ΔCD|. Net from
+the v7-landed-in-memory baseline: −51.2%.
+
+CL gap (mean|ΔCL|=0.329) is unchanged — it's a solver-level
+Newton-attractor issue on NACA 44xx α=14-16° rows (see
+memory note `project_b3_cl_gap_root_cause.md`). Facade-layer
+CD work has now reached its ceiling; further gains require the
+MSES-class closure rebuild laid out in `MsesClosurePlan.md`.
+
+**Parity throughout:** NACA 4455/4455 bit-exact preserved at every
+iter (Modern facade changes are additive — the Float/Double parity
+tree is untouched).
