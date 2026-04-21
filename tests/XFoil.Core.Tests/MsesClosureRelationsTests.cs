@@ -92,4 +92,85 @@ public class MsesClosureRelationsTests
         double h1 = MsesClosureRelations.ComputeHStarTurbulent(1.5, 1000.0, 0.5);
         Assert.True(h1 > h0, $"Expected Me=0.5 H* ({h1}) > Me=0 H* ({h0})");
     }
+
+    [Fact]
+    public void ComputeCfLaminar_AtHk25_ProducesPositiveCf()
+    {
+        // Hk=2.5 (attached laminar BL), Reθ=1000.
+        // f = -0.07 + 0.0727·(3)²/1.5 = -0.07 + 0.4362 = 0.3662
+        // Cf = 2·0.3662 / 1000 = 7.32e-4
+        double actual = MsesClosureRelations.ComputeCfLaminar(2.5, 1000.0);
+        Assert.InRange(actual, 7e-4, 7.5e-4);
+    }
+
+    [Fact]
+    public void ComputeCfLaminar_AtHk55_ZeroCrossing()
+    {
+        // Piecewise junction = Drela's laminar-separation criterion.
+        // Both branches give f = -0.07 at Hk=5.5.
+        // Cf = -0.14 / Reθ (negative = separated).
+        double actual = MsesClosureRelations.ComputeCfLaminar(5.5, 1000.0);
+        Assert.Equal(-0.14 / 1000.0, actual, 7);
+    }
+
+    [Fact]
+    public void ComputeCfLaminar_SeparatedBranch_IsFiniteAndNegative()
+    {
+        // Hk=7 (deep separated laminar): f should be close to -0.07
+        // plus a small positive adjustment, staying finite.
+        double actual = MsesClosureRelations.ComputeCfLaminar(7.0, 1000.0);
+        Assert.True(double.IsFinite(actual));
+        Assert.True(actual < 0.0, $"Expected negative Cf in separated BL, got {actual}");
+    }
+
+    [Fact]
+    public void ComputeCfTurbulent_AttachedBranch_PositiveAndReasonable()
+    {
+        // Hk=1.4 (healthy turbulent), Reθ=5000, Me=0.
+        // Cf should be O(0.003-0.005) per flat-plate correlations.
+        double actual = MsesClosureRelations.ComputeCfTurbulent(1.4, 5000.0, 0.0);
+        Assert.InRange(actual, 1e-4, 1e-2);
+    }
+
+    [Fact]
+    public void ComputeCfTurbulent_DropsWithHk()
+    {
+        // As Hk rises (BL thickening toward separation), Cf should drop.
+        double cfLow = MsesClosureRelations.ComputeCfTurbulent(1.4, 5000.0, 0.0);
+        double cfHigh = MsesClosureRelations.ComputeCfTurbulent(2.5, 5000.0, 0.0);
+        Assert.True(cfHigh < cfLow, $"Expected Cf to drop with Hk: got {cfHigh} ≥ {cfLow}");
+    }
+
+    [Fact]
+    public void ComputeCDLaminar_AtHk25_ProducesPositiveDissipation()
+    {
+        // Typical attached laminar value. Dissipation correlation +
+        // H* factor should give O(1e-4) CD at Reθ=1000.
+        double actual = MsesClosureRelations.ComputeCDLaminar(2.5, 1000.0);
+        Assert.InRange(actual, 1e-4, 5e-4);
+    }
+
+    [Fact]
+    public void ComputeCDLaminar_ContinuousAtHk4()
+    {
+        // Piecewise junction at Hk=4 must be continuous. Both branches
+        // give g = 0.207 at Hk=4.
+        double belowJunction = MsesClosureRelations.ComputeCDLaminar(3.999, 1000.0);
+        double atJunction = MsesClosureRelations.ComputeCDLaminar(4.0, 1000.0);
+        double aboveJunction = MsesClosureRelations.ComputeCDLaminar(4.001, 1000.0);
+        Assert.Equal(belowJunction, atJunction, 4);
+        Assert.Equal(atJunction, aboveJunction, 4);
+    }
+
+    [Fact]
+    public void ComputeCDLaminar_IncreasesWithHk_BeyondSeparation()
+    {
+        // For Hk ∈ [4, 7] dissipation rises monotonically (BL in
+        // separation region dissipates more energy per unit Reθ).
+        double cd4 = MsesClosureRelations.ComputeCDLaminar(4.0, 1000.0);
+        double cd5 = MsesClosureRelations.ComputeCDLaminar(5.0, 1000.0);
+        double cd6 = MsesClosureRelations.ComputeCDLaminar(6.0, 1000.0);
+        Assert.True(cd5 > cd4, $"Expected CD_5 ({cd5}) > CD_4 ({cd4})");
+        Assert.True(cd6 > cd5, $"Expected CD_6 ({cd6}) > CD_5 ({cd5})");
+    }
 }
