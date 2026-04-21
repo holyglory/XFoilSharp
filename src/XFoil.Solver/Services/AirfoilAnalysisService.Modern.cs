@@ -427,10 +427,31 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                 double clMaxEst = 1.3 + 1.5 * tMax + System.Math.Min(6.0 * cMaxAbs, 0.7);
                 bool shapeAwareStallBlind =
                     System.Math.Abs(primaryCl) > clMaxEst * 1.05;
+
+                // Iter 54-55: the ratio-only detector false-fires on
+                // converged M ≥ 0.15 pre-stall cases where viscous CL
+                // naturally runs slightly above inviscid due to the
+                // compressibility Cp adjustment. Iter 54 tried dropping
+                // the ratio detector entirely; aggregate regressed
+                // because most legitimate rescues had Converged=False
+                // primaries that shape-aware alone didn't catch.
+                //
+                // Iter 54-56 probe: attempted to gate the ratio
+                // detector to skip false-positives on converged
+                // M ≥ 0.15 pre-stall rows (NACA 0012 α=8.3° M=0.15
+                // primary=1.002 WT=0.887 → rescue dropped it to
+                // 0.688). Tried dropping the ratio detector (54),
+                // guarding on `!Converged` (55), and on
+                // `primary > 0.7·CL_max_est` (56). All three net-
+                // regressed the aggregate by 0.01-0.02 on mean|ΔCL|
+                // because the guard also dropped the legitimate
+                // rescues that were nearer to the cutoff. Reverted
+                // to the simple ratio ≥ 0.98 trigger — the single
+                // false-positive costs ~0.002 on aggregate, much
+                // less than the rescues it keeps enabled.
                 bool ratioStallBlind =
                     double.IsFinite(invCL) && invCL != 0d
                     && System.Math.Abs(primaryCl) / System.Math.Abs(invCL) >= 0.98;
-
                 if (ratioStallBlind || shapeAwareStallBlind)
                 {
                     var ramped = TrySolveViaSeededRamp(geometry, angleOfAttackDegrees, settings);
