@@ -131,16 +131,31 @@ public static class ClosureBasedLaminarMarcher
             var (dThetaDxMid, HMid) = ComputeMomentumStep(
                 thetaMid, H0, ueMid, dUeDx, kinematicViscosity, machNumberEdge);
 
-            theta[i] = System.Math.Max(theta0 + dx * dThetaDxMid, 1e-12);
+            double thetaCandidate = System.Math.Max(theta0 + dx * dThetaDxMid, 1e-12);
+            // Laminar θ growth clamp: near stagnation Ue→0 makes
+            // dθ/dx = Cf/2 blow up (Cf = 2·f/Reθ with Reθ→0). Cap
+            // per-step growth at 3× to prevent spurious θ jumps
+            // that propagate into Ñ accumulation and produce
+            // sub-Blasius transition positions.
+            if (thetaCandidate > theta0 * 3.0 && theta0 > 1e-18)
+            {
+                thetaCandidate = theta0 * 3.0;
+            }
+            theta[i] = thetaCandidate;
             // Recompute H at the new θ/Ue via Thwaites λ — this is the
             // canonical laminar-H assignment once θ is known.
             var (_, newH) = ComputeMomentumStep(
                 theta[i], HMid, ue1, dUeDx, kinematicViscosity, machNumberEdge);
             H[i] = newH;
 
-            // Separation guard: once H exceeds 6.5, the correlation
-            // is unreliable. Freeze state for remaining stations.
-            if (newH >= 6.5)
+            // Separation guard: once H exceeds 6.5 AND we're past
+            // the stagnation region (Ue > 0.4·U∞ assumed reference),
+            // the correlation is unreliable. Freeze state for
+            // remaining stations. Near-stagnation Hk spikes are
+            // numerical artifacts of Thwaites-λ at small Ue and
+            // should NOT trigger the freeze — they resolve as Ue
+            // rises and θ recovers a normal Blasius growth.
+            if (newH >= 6.5 && ue1 > 0.4)
             {
                 separated = true;
             }

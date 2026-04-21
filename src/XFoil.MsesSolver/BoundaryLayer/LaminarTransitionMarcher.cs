@@ -71,17 +71,30 @@ public static class LaminarTransitionMarcher
             // Envelope e^N Ñ accumulation: Ñ grows as
             //   dÑ = dÑ/dReθ(Hk) · ΔReθ
             // with Reθ = Ue·θ/ν. Evaluated at the midpoint between
-            // stations for a trapezoid-equivalent step.
+            // stations.
+            // Stagnation-region guard: Ue near zero produces
+            // spurious Hk and Reθ values that trigger early
+            // "transition" numerically. Skip Ñ accumulation until
+            // Ue rises above 0.3·U∞ (assumed reference = 1).
             double reT0 = ReTheta(theta[i - 1], edgeVelocity[i - 1], kinematicViscosity);
             double reT1 = ReTheta(theta[i], edgeVelocity[i], kinematicViscosity);
             double dReTheta = reT1 - reT0;
+            double ueMin = System.Math.Min(edgeVelocity[i - 1], edgeVelocity[i]);
             double hkMid = 0.5 * (
                 XFoil.MsesSolver.Closure.MsesClosureRelations.ComputeHk(h[i - 1], machNumberEdge)
                 + XFoil.MsesSolver.Closure.MsesClosureRelations.ComputeHk(h[i], machNumberEdge));
             double hkClamped = System.Math.Min(hkMid, 4.0);
             double reT0c = AmplificationRateModel.ComputeReThetaCritical(hkClamped);
-            // Only accumulate above the neutral-stability boundary.
-            if (dReTheta > 0 && 0.5 * (reT0 + reT1) > reT0c)
+            // Only accumulate above the neutral-stability boundary
+            // AND outside the stagnation region AND when the laminar
+            // state isn't in the spurious separation clamp. Hk=7
+            // (the upper bound of the closure laminar marcher) on
+            // any station indicates the Thwaites-λ correlation hit
+            // its domain edge — usually near stagnation where the
+            // physics is being mis-represented by the correlation.
+            bool spuriousSeparation = hkMid >= 6.5;
+            if (dReTheta > 0 && 0.5 * (reT0 + reT1) > reT0c
+                && ueMin > 0.3 && !spuriousSeparation)
             {
                 double slope = AmplificationRateModel.ComputeDAmplificationDReTheta(hkClamped);
                 NAmp[i] = NAmp[i - 1] + slope * dReTheta;

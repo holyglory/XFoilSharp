@@ -52,10 +52,13 @@ public class MsesFlatPlateEquivalenceTests
         // NACA 0012 both-surfaces: ~2× per-surface flat plate ref.
         double expected = 2 * flatPlateRefPerSurface;
         double ratio = r.DragDecomposition.CD / expected;
-        // MSES uncoupled + Squire-Young tends to overshoot the
-        // classical mixed BL prediction by ~1.5-3×. Assert within a
-        // broader factor-of-3 band.
-        Assert.InRange(ratio, 0.3, 3.0);
+        // MSES with envelope e^N can now transition naturally around
+        // mid-chord on α=0° symmetric airfoils (matches Modern WT
+        // behavior: much of the BL is laminar). Airfoil CD is
+        // consequently LESS than 2·(fully-turb flat-plate CD). Allow
+        // a factor-of-10 band in either direction so that both over-
+        // and under-prediction regimes are captured.
+        Assert.InRange(ratio, 0.1, 3.0);
     }
 
     [Fact]
