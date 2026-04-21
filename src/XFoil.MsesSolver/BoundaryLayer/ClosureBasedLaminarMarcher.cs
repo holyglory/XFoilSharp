@@ -82,8 +82,24 @@ public static class ClosureBasedLaminarMarcher
             startIdx = 2;
         }
 
+        // Laminar separation short-circuit: once H exceeds 6.5 (well
+        // into the laminar-separated regime), the Thwaites-λ
+        // correlation no longer represents the physics and dθ/dx
+        // unbounded growth gives a runaway θ. Freeze both θ and H
+        // at their last-known-good values for all remaining stations.
+        // The composite marcher sees a "still laminar to the end"
+        // result and reports transition-not-found; the caller can
+        // then fall back to forced transition or treat the airfoil
+        // as separated.
+        bool separated = false;
         for (int i = startIdx; i < n; i++)
         {
+            if (separated)
+            {
+                theta[i] = theta[i - 1];
+                H[i] = H[i - 1];
+                continue;
+            }
             double x0 = stations[i - 1];
             double x1 = stations[i];
             double dx = x1 - x0;
@@ -121,6 +137,13 @@ public static class ClosureBasedLaminarMarcher
             var (_, newH) = ComputeMomentumStep(
                 theta[i], HMid, ue1, dUeDx, kinematicViscosity, machNumberEdge);
             H[i] = newH;
+
+            // Separation guard: once H exceeds 6.5, the correlation
+            // is unreliable. Freeze state for remaining stations.
+            if (newH >= 6.5)
+            {
+                separated = true;
+            }
         }
 
         return (theta, H);
