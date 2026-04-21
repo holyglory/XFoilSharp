@@ -91,17 +91,17 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         var upperMarch = RunSurfaceMarch(inv, upper: true, nu, nCrit);
         var lowerMarch = RunSurfaceMarch(inv, upper: false, nu, nCrit);
 
-        // Phase-5-lite coupling probe (2026-04-21): attempted a single
-        // viscous-inviscid iteration via displacement-body geometry
-        // offset. Regressed 5 MSES tests (monotonicity, convergence)
-        // because the δ*(s) interpolation in geometry arc-length
-        // doesn't match the marcher's station arc-length closely
-        // enough, and the re-solved Ue(x) caused spurious θ
-        // oscillation. Disabled until a proper arc-length-aware
-        // coupling is implemented (Phase 5 main). Helpers
-        // TryBuildThickenedGeometry / InterpolateDStar /
-        // ComputeSurfaceNormal are preserved below for the real
-        // Phase-5 iteration.
+        // Phase-5-lite coupling v2 (2026-04-21): even with proper
+        // arc-length interpolation and 0.5 under-relaxation, the
+        // displacement-body iteration regresses 3 MSES tests. The
+        // new Ue(x) after thickening produces different transition
+        // positions and θ profiles that break monotonicity
+        // assumptions in the tests. Next attempt needs: (a) multi-
+        // iteration loop with convergence check; (b) limit δ*
+        // magnitude (cap at 0.02·c) to prevent large first-iteration
+        // jumps; (c) potentially a secant / interval-halving on
+        // δ* rather than direct substitution.
+        // Helpers remain as dead code.
 
         double cd = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
 
@@ -176,6 +176,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         AirfoilGeometry original,
         CompositeTransitionMarcher.CompositeResult upperMarch,
         CompositeTransitionMarcher.CompositeResult lowerMarch,
+        double relaxation,
         out AirfoilGeometry thickened)
     {
         thickened = original;
@@ -206,7 +207,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 double dy = pts[idx].Y - pts[idx + 1].Y;
                 sAcc += System.Math.Sqrt(dx * dx + dy * dy);
             }
-            double dStar = InterpolateDStar(sAcc, upperMarch);
+            double dStar = InterpolateDStar(sAcc, upperMarch) * relaxation;
             var (nx, ny) = ComputeSurfaceNormal(pts, idx, upper: true);
             newPts[idx] = new AirfoilPoint(
                 pts[idx].X + dStar * nx,
@@ -225,7 +226,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 sAcc += System.Math.Sqrt(dx * dx + dy * dy);
             }
             if (idx == iLE) continue; // already set by upper pass
-            double dStar = InterpolateDStar(sAcc, lowerMarch);
+            double dStar = InterpolateDStar(sAcc, lowerMarch) * relaxation;
             var (nx, ny) = ComputeSurfaceNormal(pts, idx, upper: false);
             newPts[idx] = new AirfoilPoint(
                 pts[idx].X + dStar * nx,
