@@ -1538,11 +1538,12 @@ e90c80c → 09b0c56 → 364c4d5:
 | 9ea3fb5 (gate lowered to α≥12°) | 0.292 | 0.01168 | 0.02296 |
 | 588f73b (shape-aware CL_max_est) | 0.292 | 0.01168 | 0.02296 |
 | 4e43570 (cap extrapCL at 1.05·CL_max_est) | 0.266 | 0.01168 | 0.02296 |
-| **addec28 (cap extrapCL at 1.00·CL_max_est)** | **0.251** | **0.01168** | **0.02296** |
+| addec28 (cap extrapCL at 1.00·CL_max_est) | 0.251 | 0.01168 | 0.02296 |
+| **e37b442 (camber cap 0.7 + α≥8° gate)** | **0.220** | **0.01204** | **0.02424** |
 
-Net from f8dd091 committed state: mean|ΔCL| −23.7%, mean|ΔCD| −64.1%.
-Net from the v7-landed-in-memory baseline: mean|ΔCL| −14.3%,
-mean|ΔCD| −58.9%.
+Net from f8dd091 committed state: mean|ΔCL| −33.1%, mean|ΔCD| −63.0%.
+Net from the v7-landed-in-memory baseline: mean|ΔCL| −24.9%,
+mean|ΔCD| −57.6%.
 
 **The CL gap (0.329 → 0.251) broke** via iter-45's stall-blindness
 detector + iter-48/49/50's shape-aware CL_max cap. The remaining
