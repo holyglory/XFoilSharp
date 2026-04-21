@@ -935,7 +935,8 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
         AnalysisSettings? settings,
         double inflatedPrimaryCl)
     {
-        var anchor = FindPostStallAnchor(geometry, targetAlphaDeg, settings);
+        var anchor = FindPostStallAnchor(geometry, targetAlphaDeg, settings)
+            ?? FindPermissiveStallBlindnessAnchor(geometry, targetAlphaDeg, settings, inflatedPrimaryCl);
         if (!anchor.HasValue) return null;
 
         double alphaRad = targetAlphaDeg * System.Math.PI / 180.0;
@@ -980,6 +981,55 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
             LowerTransition = default,
             AngleOfAttackDegrees = targetAlphaDeg,
         };
+    }
+
+    // B3 iter 46 — permissive scan for stall-blindness cases where
+    // every primary within 2° is also CL-inflated (thick/high-camber
+    // airfoils like NACA 4415 where α=14° primary gives CL=2.3-2.5).
+    // When the standard FindPostStallAnchor rejects every candidate,
+    // fall back to the candidate with the LOWEST CL among 2° window
+    // — it's still the "least inflated" which gives a reasonable
+    // Viterna stall-match. Must still be strictly below the inflated
+    // primary CL to avoid a no-op or regression.
+    private (double AlphaDeg, double CL, double CD)? FindPermissiveStallBlindnessAnchor(
+        AirfoilGeometry geometry,
+        double targetAlphaDeg,
+        AnalysisSettings? settings,
+        double inflatedPrimaryCl)
+    {
+        double direction = targetAlphaDeg >= 0 ? -1.0 : +1.0;
+        const double stepDeg = 0.5;
+        const int maxSteps = 4;
+
+        (double AlphaDeg, double CL, double CD)? best = null;
+        double bestAbsCl = System.Math.Abs(inflatedPrimaryCl);
+        for (int step = 1; step <= maxSteps; step++)
+        {
+            double trialAlpha = targetAlphaDeg + direction * stepDeg * step;
+            ViscousAnalysisResult candidate;
+            try
+            {
+                candidate = base.AnalyzeViscous(geometry, trialAlpha, settings);
+            }
+            catch
+            {
+                continue;
+            }
+            if (!PhysicalEnvelope.IsAirfoilResultPhysical(candidate)) continue;
+            double cl = candidate.LiftCoefficient;
+            if (!double.IsFinite(cl)) continue;
+            if (System.Math.Sign(cl) != System.Math.Sign(targetAlphaDeg)) continue;
+
+            // Track candidate with smallest |CL| — least-inflated.
+            // Must be strictly lower than current best.
+            double absCl = System.Math.Abs(cl);
+            if (absCl < bestAbsCl)
+            {
+                best = (trialAlpha, cl, candidate.DragDecomposition.CD);
+                bestAbsCl = absCl;
+            }
+        }
+        return best;
     }
 
     // Scans downward from the target α in 0.5° steps looking for a
