@@ -208,8 +208,8 @@ public class MsesAnalysisService : IAirfoilAnalysisService
 
         var upperProfiles = BuildProfiles(upperMarch, nu);
         var lowerProfiles = BuildProfiles(lowerMarch, nu);
-        var wakeProfiles = wakeMarch.HasValue && wakeUe is not null
-            ? BuildWakeProfiles(wakeMarch.Value, wakeUe, nu)
+        var wakeProfiles = wakeMarch.HasValue && wakeUe is not null && wakeStationX is not null
+            ? BuildWakeProfiles(wakeMarch.Value, wakeStationX, wakeUe, nu)
             : System.Array.Empty<BoundaryLayerProfile>();
 
         // Skin-friction drag: integral of Cf along arc-length of both
@@ -280,7 +280,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     }
 
     private static BoundaryLayerProfile[] BuildWakeProfiles(
-        WakeTurbulentMarcher.MarchResult w, double[] ue, double nu)
+        WakeTurbulentMarcher.MarchResult w, double[] stations, double[] ue, double nu)
     {
         int n = w.Theta.Length;
         var profiles = new BoundaryLayerProfile[n];
@@ -303,6 +303,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 Cf = 0.0,
                 ReTheta = reTheta,
                 AmplificationFactor = 0.0,
+                Xi = stations[i],
             };
         }
         return profiles;
@@ -360,6 +361,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 Cf = cf,
                 ReTheta = reTheta,
                 AmplificationFactor = r.N[i],
+                Xi = r.Stations[i],
             };
         }
         return profiles;

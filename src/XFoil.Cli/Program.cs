@@ -2391,21 +2391,21 @@ static void WriteMsesProfileDump(
     writer.WriteLine($"# airfoil={geometry.Name}, alpha={alphaDegrees}, panels={panelCount}, mach={machNumber}, re={reynoldsNumber}, nCrit={criticalAmplificationFactor}");
     writer.WriteLine($"# CL={r.LiftCoefficient:F6}, CD={r.DragDecomposition.CD:F6}, CM={r.MomentCoefficient:F6}, converged={r.Converged}");
     writer.WriteLine($"# Xtr_U={r.UpperTransition.XTransition:F6}, Xtr_L={r.LowerTransition.XTransition:F6}");
-    writer.WriteLine("surface,station,theta,DStar,H,Cf,Ctau,Ue,Namp");
+    writer.WriteLine("surface,station,s,theta,DStar,H,Cf,Ctau,Ue,Namp");
     for (int i = 0; i < r.UpperProfiles.Length; i++)
     {
         var p = r.UpperProfiles[i];
-        writer.WriteLine($"upper,{i},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
+        writer.WriteLine($"upper,{i},{p.Xi:F6},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
     }
     for (int i = 0; i < r.LowerProfiles.Length; i++)
     {
         var p = r.LowerProfiles[i];
-        writer.WriteLine($"lower,{i},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
+        writer.WriteLine($"lower,{i},{p.Xi:F6},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
     }
     for (int i = 0; i < r.WakeProfiles.Length; i++)
     {
         var p = r.WakeProfiles[i];
-        writer.WriteLine($"wake,{i},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
+        writer.WriteLine($"wake,{i},{p.Xi:F6},{p.Theta:F9},{p.DStar:F9},{p.Hk:F6},{p.Cf:F9},{p.Ctau:F9},{p.EdgeVelocity:F6},{p.AmplificationFactor:F4}");
     }
     Console.WriteLine($"Wrote MSES profile to {csvPath}");
     Console.WriteLine($"Upper stations: {r.UpperProfiles.Length}  Lower stations: {r.LowerProfiles.Length}  Wake stations: {r.WakeProfiles.Length}");
