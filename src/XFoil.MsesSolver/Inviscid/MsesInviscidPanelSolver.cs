@@ -118,10 +118,14 @@ public static class MsesInviscidPanelSolver
         double freestreamSpeed,
         double alphaRadians,
         double chord,
-        double machNumber = 0.0)
+        double machNumber = 0.0,
+        double[]? sources = null)
     {
         if (chord <= 0.0) throw new System.ArgumentException("chord must be > 0", nameof(chord));
         int n = pg.PanelCount;
+        if (sources is not null && sources.Length != n + 1)
+            throw new System.ArgumentException(
+                $"sources must be null or length {n + 1}", nameof(sources));
 
         // BC matrix uses NORMAL-velocity influence (flow-tangency:
         // V_normal_total = 0 at each collocation point).
@@ -129,6 +133,17 @@ public static class MsesInviscidPanelSolver
         // Post-processing uses TANGENT-velocity influence to
         // recover Ue (and hence Cp) at the midpoints.
         var aTangent = BuildVortexInfluenceMatrix(pg);
+        // Source contributions (both tangent and normal) are only
+        // built when σ is actually present; this keeps σ=0 runs
+        // bit-identical to the pure-vortex path (important for P1.5
+        // gate stability).
+        double[,]? aSourceNormal = null;
+        double[,]? aSourceTangent = null;
+        if (sources is not null)
+        {
+            aSourceNormal = BuildSourceNormalInfluenceMatrix(pg);
+            aSourceTangent = BuildSourceTangentInfluenceMatrix(pg);
+        }
 
         var mat = new double[n + 1, n + 1];
         var rhs = new double[n + 1];
@@ -138,11 +153,16 @@ public static class MsesInviscidPanelSolver
         {
             for (int k = 0; k < n + 1; k++) mat[i, k] = aNormal[i, k];
             // Flow tangency: V_normal_induced + V∞·normal = 0.
-            // Whether our normal is inward or outward doesn't
-            // affect the algebra — both sides of the equation
-            // use the same convention. We use the (-ty, tx) normal
-            // defined in DiscretizePanels.
-            rhs[i] = -(vx * pg.NormalX[i] + vy * pg.NormalY[i]);
+            // When σ is known: V_normal_γ_induced = −V∞·normal −
+            // V_normal_σ_induced, so the σ contribution moves to
+            // the RHS.
+            double sourceNormalAtI = 0.0;
+            if (sources is not null)
+            {
+                for (int k = 0; k < n + 1; k++)
+                    sourceNormalAtI += aSourceNormal![i, k] * sources[k];
+            }
+            rhs[i] = -(vx * pg.NormalX[i] + vy * pg.NormalY[i]) - sourceNormalAtI;
         }
         // Kutta row (sharp TE). Panels walk TE→upper→LE→lower→TE so
         // panel 0 starts at upper-TE node (γ_0), panel N-1 ends at
@@ -176,6 +196,11 @@ public static class MsesInviscidPanelSolver
         {
             double ue = vx * pg.TangentX[i] + vy * pg.TangentY[i];
             for (int k = 0; k < n + 1; k++) ue += aTangent[i, k] * gamma[k];
+            if (sources is not null)
+            {
+                for (int k = 0; k < n + 1; k++)
+                    ue += aSourceTangent![i, k] * sources[k];
+            }
             ueMid[i] = ue;
             double cpInc = U2 > 0 ? 1.0 - (ue * ue) / U2 : 0.0;
             cp[i] = m2 > 0
