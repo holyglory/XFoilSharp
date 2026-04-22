@@ -2388,13 +2388,13 @@ static void WriteViscousPolarMses(
         Console.WriteLine($"Name: {geometry.Name} (MSES polar — Phase 5 stub)");
         Console.WriteLine($"Panels: {panelCount}  Mach: {machNumber:F4}  Re: {reynoldsNumber:F0}  nCrit: {criticalAmplificationFactor:F3}");
         Console.WriteLine();
-        Console.WriteLine("AlphaDeg\tCL\t\tCD\t\tCM\t\tConverged");
+        Console.WriteLine("AlphaDeg\tCL\t\tCD\t\tCDF\t\tCDP\t\tCM\t\tConverged");
     }
     else
     {
         writer.WriteLine("# MSES polar export");
         writer.WriteLine($"# airfoil={geometry.Name}, panels={panelCount}, mach={machNumber}, re={reynoldsNumber}, nCrit={criticalAmplificationFactor}");
-        writer.WriteLine("alpha_deg,CL,CD,CM,converged");
+        writer.WriteLine("alpha_deg,CL,CD,CDF,CDP,CM,converged");
     }
 
     double eps = 1e-9;
@@ -2406,11 +2406,15 @@ static void WriteViscousPolarMses(
             ? $"{a.ToString("F4", CultureInfo.InvariantCulture)}\t"
               + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
               + $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}\t"
+              + $"{r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}\t"
+              + $"{r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}\t"
               + $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
               + (r.Converged ? "Y" : "N")
             : $"{a.ToString("F4", CultureInfo.InvariantCulture)},"
               + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)},"
               + $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)},"
+              + $"{r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)},"
+              + $"{r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)},"
               + $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)},"
               + (r.Converged ? "True" : "False");
         emit(line);
