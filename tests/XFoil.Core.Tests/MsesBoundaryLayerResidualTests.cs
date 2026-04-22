@@ -119,6 +119,49 @@ public class MsesBoundaryLayerResidualTests
     }
 
     [Fact]
+    public void SourceConstraintResidual_ExactDerivative_IsZero()
+    {
+        // σ = d(Ue·δ*)/dξ exactly: pick Ue·δ* linearly increasing,
+        // σ = slope. R_σ = σ − slope = 0.
+        double uePrev = 1.0, ue = 1.05;
+        double dStarPrev = 0.001, dStar = 0.0012;
+        double dx = 0.01;
+        double expected = (ue * dStar - uePrev * dStarPrev) / dx;
+        double r = MsesBoundaryLayerResidual.SourceConstraintResidual(
+            sigma: expected,
+            dStarPrev: dStarPrev, dStar: dStar,
+            uePrev: uePrev, ue: ue,
+            dx: dx);
+        Assert.True(System.Math.Abs(r) < 1e-14,
+            $"σ matching exact derivative should zero R_σ; got {r}");
+    }
+
+    [Fact]
+    public void SourceConstraintResidual_OffDerivative_ReturnsOffset()
+    {
+        // R_σ = σ − derivative. If we pass σ = derivative + 0.5,
+        // residual should be exactly 0.5.
+        double uePrev = 1.0, ue = 1.0;
+        double dStarPrev = 0.001, dStar = 0.001;
+        double dx = 0.01;
+        // d(Ue·δ*)/dx = 0 (constant), so σ = 0.5 gives R = 0.5.
+        double r = MsesBoundaryLayerResidual.SourceConstraintResidual(
+            sigma: 0.5,
+            dStarPrev: dStarPrev, dStar: dStar,
+            uePrev: uePrev, ue: ue,
+            dx: dx);
+        Assert.Equal(0.5, r, 12);
+    }
+
+    [Fact]
+    public void SourceConstraintResidual_RejectsNonPositiveStep()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(
+            () => MsesBoundaryLayerResidual.SourceConstraintResidual(
+                0.0, 0.001, 0.001, 1.0, 1.0, dx: 0.0));
+    }
+
+    [Fact]
     public void ShapeParamResidual_IsFiniteAtNominalState()
     {
         double r = MsesBoundaryLayerResidual.ShapeParamResidual(

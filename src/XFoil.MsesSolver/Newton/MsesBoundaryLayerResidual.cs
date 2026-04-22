@@ -90,6 +90,32 @@ public static class MsesBoundaryLayerResidual
     }
 
     /// <summary>
+    /// P5.2 — σ = d(Ue·δ*)/dξ constraint residual (the definition
+    /// of the displacement source strength). Evaluated as a
+    /// first-difference per station:
+    ///   R_σ[i] = σ_i − (Ue_i·δ*_i − Ue_{i−1}·δ*_{i−1}) / dξ
+    /// At a converged state this should vanish — σ becomes the
+    /// exact discrete derivative of the displacement flux.
+    ///
+    /// Note: in the layout where σ is stored at NODES (N+1 values)
+    /// but BL state is at STATIONS, the σ at node i is paired with
+    /// the panel [i−1, i]. Station 0 is the freestream entry where
+    /// no prior exists; its residual convention is "anchor σ[0]=0"
+    /// (or to whatever the user fixes).
+    /// </summary>
+    public static double SourceConstraintResidual(
+        double sigma,
+        double dStarPrev, double dStar,
+        double uePrev, double ue,
+        double dx)
+    {
+        if (dx <= 0.0) throw new System.ArgumentOutOfRangeException(nameof(dx));
+        double flux0 = uePrev * dStarPrev;
+        double flux1 = ue * dStar;
+        return sigma - (flux1 - flux0) / dx;
+    }
+
+    /// <summary>
     /// Cτ lag residual from thesis eq. 6.35 (closed-form decay):
     ///   R_Cτ = Cτ_i − [Cτ_eq + (Cτ_{i−1} − Cτ_eq)·exp(−K2·dξ/δ)]
     /// at equilibrium-midpoint (Hk, Reθ) values. K2 = 4.2.
