@@ -39,7 +39,15 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     /// inviscid displacement-body iterations to perform. Default
     /// 0 = fully uncoupled (inviscid-only CL, uncoupled Squire-Young
     /// CD). Opt-in; raising this beyond 0 enables the experimental
-    /// Phase-5-lite path.</param>
+    /// Phase-5-lite path.
+    ///
+    /// Known limitation: the geometric-offset approach INFLATES CL
+    /// on cambered airfoils because thickening the suction surface
+    /// by δ*_u (larger than δ*_l) adds effective camber. Drela's
+    /// real MSES uses a source-distribution method that avoids this
+    /// sign issue. Phase-5-lite is kept as a diagnostic / stepping
+    /// stone; production users should stick with
+    /// viscousCouplingIterations = 0 for now.</param>
     /// <param name="viscousCouplingRelaxation">Under-relaxation
     /// factor on δ* updates (0..1). Default 0.3 for damping.</param>
     /// <param name="useThesisExactTurbulent">If true, run the
