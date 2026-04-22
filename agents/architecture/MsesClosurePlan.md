@@ -112,20 +112,34 @@ Output schema:
 - Xtr_U / Xtr_L: exact-x where Ñ = n_crit, interpolated.
 - Per-station: θ, δ*, H, Cf, Cτ, Ue, Ñ at each station.
 
-Test coverage: 96 MSES-specific unit tests, 100% pass. Includes:
-- Closure library verification (20+ tests, thesis-calibrated)
-- 6 BL marcher implementations (Thwaites, closure-laminar,
-  closure-turbulent, Cτ-lag, thesis-exact-implicit, composite)
+Test coverage: 126 MSES-specific unit tests, 100% pass. Includes:
+- Closure library verification (22 tests, thesis-calibrated)
+- 7 BL marcher implementations (Thwaites, closure-laminar,
+  closure-turbulent, Cτ-lag, thesis-exact-implicit laminar + turbulent,
+  wake, composite)
 - Integration tests on NACA 0012/2412/4412 polar sweeps
 - Flat-plate and transition-position reference comparisons
-- Infrastructure tests (arc-length, edge velocity, δ* interpolation)
+- Infrastructure tests (arc-length, edge velocity, δ* interpolation,
+  stagnation-point split, stall heuristic, Cf degenerate-BL guard)
+- Compressibility propagation (M=0, 0.2, 0.3)
+- File-input pipeline (Selig .dat)
+- Drag decomposition (CDF/CDP conservation)
 
-Working benchmarks on NACA 0012/2412/4412 at α ∈ {0, 4}°,
-Re ∈ {1e6, 3e6}: MSES CD within 10× of Modern Newton-coupled CD.
-Typical overshoot is 2-3× on thin airfoils, driven by ~13 %
-Cf_turbulent high vs 1/5-power-law reference plus absence of
-viscous Ue feedback. Phase 5 (Newton coupling) is expected to
-close both of these.
+Working benchmarks on NACA 0012 Re=3e6 fully-thesis-exact path
+(XFOIL_MSES_THESIS_EXACT=1 XFOIL_MSES_WAKE=1 XFOIL_MSES_THESIS_LAMINAR=1):
+  α=0°:  CD=0.0054  (WT ~0.007)
+  α=4°:  CD=0.0071  (WT ~0.009)
+  α=8°:  CD=0.0116  (WT ~0.012)
+  α=12°: CD=0.0137  (WT ~0.014)
+
+~10 % of WT across the attached regime after the laminar-θ
+absolute cap landed. CL overpredicts (inviscid) on cambered
+airfoils — Phase 5 coupling would close that.
+
+The θ ≤ 2 % · s_local cap (both Thwaites-λ and implicit-Newton
+laminar marchers) fixed a thin-airfoil runaway: NACA 0006 α=4°
+previously gave CD=0.062 from compound θ growth on the
+under-loaded surface; now CD=0.0071, converged.
 
 Phase-5-lite coupling probes (two attempts: 2ee6455, 5e79ad5)
 failed on test-suite regressions — the displacement-body Ue
