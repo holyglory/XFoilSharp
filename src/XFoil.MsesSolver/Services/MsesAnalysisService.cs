@@ -522,19 +522,24 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         double cTWake = System.Math.Max(cTU, cTL);
         double ueWake = 0.5 * (ueU + ueL);
 
-        // Wake stations: march half a chord downstream at nearly-
-        // constant Ue (linear recovery toward freestream U∞, reaching
-        // 95 % of U∞ at the integration point).
+        // Wake stations: march one chord downstream. Use a physically
+        // motivated Ue profile: exponential approach to freestream U∞
+        //   Ue(s) = U∞ − (U∞ − ueWake)·exp(−k·s)
+        // with k chosen so the BL has "recovered" (Ue > 0.99·U∞) by
+        // mid-wake. k = 8 gives 98.3 % recovery at s = 0.5, 99.97 %
+        // at s = 1.0, consistent with potential-flow decay rates
+        // behind a thin body.
         const int WakeStations = 41;
-        const double WakeLengthChords = 0.5;
+        const double WakeLengthChords = 1.0;
+        const double RecoveryRate = 8.0;
         var s = new double[WakeStations];
         var ue = new double[WakeStations];
         for (int i = 0; i < WakeStations; i++)
         {
             double t = i / (double)(WakeStations - 1);
             s[i] = 0.0 + WakeLengthChords * t;
-            // Blend 90% → 100% of U∞ across the wake length.
-            ue[i] = ueWake + (Uinf - ueWake) * 0.9 * t;
+            double gap = Uinf - ueWake;
+            ue[i] = Uinf - gap * System.Math.Exp(-RecoveryRate * s[i]);
         }
 
         var wake = WakeTurbulentMarcher.March(
