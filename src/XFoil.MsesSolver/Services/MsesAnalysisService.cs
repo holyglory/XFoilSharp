@@ -131,6 +131,17 @@ public class MsesAnalysisService : IAirfoilAnalysisService
 
         // Phase-5-lite opt-in coupling. Only runs if the caller
         // constructed the service with viscousCouplingIterations > 0.
+        // Each iteration: thicken geometry by relaxation·δ*, re-solve
+        // inviscid, re-march BLs, and accept the update only if the
+        // resulting CD stays in a plausible envelope [cdInitial/3 …
+        // cdInitial·3]. The cdInitial envelope guard is tighter than
+        // a static (0, 0.3) check because the thickened-geometry
+        // inviscid can degenerate on cambered airfoils at high α
+        // (geometry self-intersection, collapsed circulation), which
+        // produces low but non-zero cdTry values that were previously
+        // accepted by the (cdTry > 0) gate, then propagated as the
+        // final answer.
+        double cdInitial = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
         for (int k = 0; k < _viscousCouplingIterations; k++)
         {
             if (!TryBuildThickenedGeometry(geometry, upperMarch, lowerMarch,
@@ -143,7 +154,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 var upperK = RunSurfaceMarch(invK, upper: true, nu, nCrit);
                 var lowerK = RunSurfaceMarch(invK, upper: false, nu, nCrit);
                 double cdTry = ComputeSquireYoungCd(upperK, lowerK, Uinf);
-                if (cdTry > 0 && cdTry < 0.3)
+                double envMin = System.Math.Max(cdInitial / 3.0, 1e-5);
+                double envMax = System.Math.Min(cdInitial * 3.0 + 0.01, 0.3);
+                if (cdTry >= envMin && cdTry <= envMax)
                 {
                     inv = invK;
                     upperMarch = upperK;
