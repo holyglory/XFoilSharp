@@ -1662,6 +1662,42 @@ try
                 outputCsvPath: args[2]);
             return 0;
 
+        case "export-polar-mses-file":
+            // MSES polar sweep from arbitrary airfoil .dat → CSV.
+            if (args.Length < 6)
+            {
+                throw new ArgumentException("The export-polar-mses-file command requires a file path, CSV path, alpha start, alpha end, alpha step.");
+            }
+            var exportMsesFileAirfoil = parser.ParseFile(args[1]);
+            WriteViscousPolarMses(
+                exportMsesFileAirfoil,
+                ParseDouble(args[3], "alpha start"),
+                ParseDouble(args[4], "alpha end"),
+                ParseDouble(args[5], "alpha step"),
+                args.Length >= 7 ? ParseInteger(args[6], "panel count") : 160,
+                args.Length >= 8 ? ParseDouble(args[7], "Mach number") : 0d,
+                args.Length >= 9 ? ParseDouble(args[8], "Reynolds number") : 1_000_000d,
+                args.Length >= 10 ? ParseDouble(args[9], "critical amplification factor") : 9d,
+                outputCsvPath: args[2]);
+            return 0;
+
+        case "export-profile-mses-file":
+            // MSES per-station BL profile dump from .dat → CSV.
+            if (args.Length < 4)
+            {
+                throw new ArgumentException("The export-profile-mses-file command requires a file path, alpha, and CSV path.");
+            }
+            var profileMsesFileAirfoil2 = parser.ParseFile(args[1]);
+            WriteMsesProfileDump(
+                profileMsesFileAirfoil2,
+                ParseDouble(args[2], "alpha"),
+                args[3],
+                args.Length >= 5 ? ParseInteger(args[4], "panel count") : 160,
+                args.Length >= 6 ? ParseDouble(args[5], "Mach number") : 0d,
+                args.Length >= 7 ? ParseDouble(args[6], "Reynolds number") : 1_000_000d,
+                args.Length >= 8 ? ParseDouble(args[7], "critical amplification factor") : 9d);
+            return 0;
+
         case "viscous-point-mses-file":
             // MSES-thesis single-point viscous from an airfoil file.
             // Accepts Selig/XFoil .dat format via AirfoilParser.
@@ -2057,6 +2093,8 @@ static void PrintUsage()
     Console.WriteLine("  viscous-polar-mses-file <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep from arbitrary .dat)");
     Console.WriteLine("  export-polar-mses <####> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep → CSV)");
     Console.WriteLine("  export-profile-mses <####> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]   (MSES per-station BL profile → CSV)");
+    Console.WriteLine("  export-polar-mses-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]");
+    Console.WriteLine("  export-profile-mses-file <path> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]");
     Console.WriteLine("    (set XFOIL_MSES_THESIS_EXACT=1 to use the Phase-2e implicit-Newton turbulent marcher instead of the Clauser-placeholder)");
     Console.WriteLine("    (set XFOIL_MSES_WAKE=1 to integrate Squire-Young at the wake far-field via the Phase-2f wake marcher)");
     Console.WriteLine("    (set XFOIL_MSES_THESIS_LAMINAR=1 to use the implicit-Newton ThesisExactLaminarMarcher for the pre-transition leg)");
