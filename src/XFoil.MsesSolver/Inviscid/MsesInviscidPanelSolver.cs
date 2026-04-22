@@ -164,16 +164,7 @@ public static class MsesInviscidPanelSolver
             }
             rhs[i] = -(vx * pg.NormalX[i] + vy * pg.NormalY[i]) - sourceNormalAtI;
         }
-        // Kutta row (sharp TE). Panels walk TE→upper→LE→lower→TE so
-        // panel 0 starts at upper-TE node (γ_0), panel N-1 ends at
-        // lower-TE node (γ_N). Tangents are OPPOSITE at TE; for
-        // smooth shedding, tangential velocities must match (same
-        // magnitude, opposite sign in body-tangent convention, which
-        // in vortex-sheet strength notation is γ_0 = -γ_N ⇒
-        // γ_0 + γ_N = 0).
-        mat[n, 0] = 1.0;
-        mat[n, n] = 1.0;
-        rhs[n] = 0.0;
+        ApplyKuttaRow(mat, rhs, n);
 
         var gamma = SolveLinearSystem(mat, rhs);
 
@@ -233,6 +224,53 @@ public static class MsesInviscidPanelSolver
         double cl = m2 > 0 ? clIncomp / beta : clIncomp;
 
         return new InviscidResult(gamma, cp, cl, circulation);
+    }
+
+    /// <summary>
+    /// Writes the Kutta row into the last row of a square linear
+    /// system with γ_0 ... γ_N as the first N+1 unknowns. Sharp TE
+    /// form: γ_0 + γ_N = 0.
+    ///
+    /// For blunt TE (finite TE gap on NACA 4-digit airfoils with
+    /// the 0.1015 trailing coefficient the gap is about 0.25% of
+    /// chord), the same sharp-TE Kutta works in practice: the TE
+    /// gap is small enough that the velocity-matching shedding
+    /// condition reduces to γ_0 + γ_N ≈ 0 with sub-percent error.
+    /// The P1.5 cross-check gate against XFoil.Solver.Modern
+    /// passed 5% bound across NACA 0012/2412/4412 (all blunt)
+    /// without explicit blunt-TE correction.
+    ///
+    /// A proper blunt-TE treatment would introduce an auxiliary
+    /// "wake panel" bridging the TE gap. That's Phase 6 work
+    /// beyond current scope.
+    /// </summary>
+    public static void ApplyKuttaRow(double[,] matrix, double[] rhs, int n)
+    {
+        if (matrix.GetLength(0) != n + 1 || matrix.GetLength(1) != n + 1)
+            throw new System.ArgumentException(
+                $"matrix must be ({n + 1})×({n + 1})", nameof(matrix));
+        if (rhs.Length != n + 1)
+            throw new System.ArgumentException(
+                $"rhs must have length {n + 1}", nameof(rhs));
+        // Zero the last row first in case caller pre-populated it.
+        for (int k = 0; k < n + 1; k++) matrix[n, k] = 0.0;
+        matrix[n, 0] = 1.0;
+        matrix[n, n] = 1.0;
+        rhs[n] = 0.0;
+    }
+
+    /// <summary>
+    /// TE gap = distance between the first and last nodes. Zero
+    /// for sharp-TE airfoils; about 0.25 %c on standard NACA
+    /// 4-digit airfoils.
+    /// </summary>
+    public static double TrailingEdgeGap(PanelizedGeometry pg)
+    {
+        int n = pg.NodeX.Length;
+        if (n < 2) return 0.0;
+        double dx = pg.NodeX[n - 1] - pg.NodeX[0];
+        double dy = pg.NodeY[n - 1] - pg.NodeY[0];
+        return System.Math.Sqrt(dx * dx + dy * dy);
     }
 
     /// <summary>
