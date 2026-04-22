@@ -2532,6 +2532,7 @@ static void WriteViscousSinglePointMses(
         : "laminar-at-TE";
     Console.WriteLine($"Xtr_U:     {xtrU}");
     Console.WriteLine($"Xtr_L:     {xtrL}");
+    Console.WriteLine($"Iter:      {r.Iterations}  (1 = uncoupled; >1 = Phase-5-lite coupling accepted iterations)");
     Console.WriteLine($"Converged: {r.Converged}");
 }
 
