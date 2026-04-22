@@ -154,6 +154,25 @@ public class MsesPolarSweepRegressionTests
         Assert.InRange(r.DragDecomposition.CD, 0.001, 0.02);
     }
 
+    [Theory]
+    [InlineData(0.0, 0.003, 0.015)]
+    [InlineData(4.0, 0.004, 0.015)]
+    [InlineData(8.0, 0.008, 0.025)]
+    public void Naca4412_FullyThesisExact_CdInPlausibleRange(
+        double alpha, double cdMin, double cdMax)
+    {
+        // Cambered airfoil, fully-thesis-exact path. CDs should be
+        // reasonable across the attached regime (WT CD ≈ 0.009-0.013
+        // at this Re). Loose bounds leave room for future refinement.
+        var svc = new MsesAnalysisService(
+            useThesisExactTurbulent: true,
+            useWakeMarcher: true,
+            useThesisExactLaminar: true);
+        var r = Run(svc, "4412", alpha, 3_000_000);
+        Assert.True(r.Converged);
+        Assert.InRange(r.DragDecomposition.CD, cdMin, cdMax);
+    }
+
     [Fact]
     public void Naca0012_CdDecreasesWithRe()
     {
