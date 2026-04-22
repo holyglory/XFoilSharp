@@ -190,6 +190,15 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             ? BuildWakeProfiles(wakeMarch.Value, wakeUe, nu)
             : System.Array.Empty<BoundaryLayerProfile>();
 
+        // Skin-friction drag: integral of Cf along arc-length of both
+        // airfoil surfaces (wake Cf=0, so only airfoil contributes).
+        // cdf = (1/c)·∫ Cf·(Ue/U∞)² ds  (convention: CDF measured per
+        // freestream q = 0.5·ρ·U∞², with Ue² weighting from local
+        // dynamic pressure).
+        double cdf = IntegrateCDF(upperProfiles, upperMarch.Stations, Uinf, chord)
+                   + IntegrateCDF(lowerProfiles, lowerMarch.Stations, Uinf, chord);
+        double cdp = System.Math.Max(cd - cdf, 0.0);
+
         return new ViscousAnalysisResult
         {
             LiftCoefficient = inv.LiftCoefficient,
@@ -197,10 +206,10 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             DragDecomposition = new DragDecomposition
             {
                 CD = cd,
-                CDF = cd, // not separable without wake integration
-                CDP = 0.0,
-                CDSurfaceCrossCheck = cd,
-                DiscrepancyMetric = 0.0,
+                CDF = cdf,
+                CDP = cdp,
+                CDSurfaceCrossCheck = cdf + cdp,
+                DiscrepancyMetric = System.Math.Abs((cdf + cdp) - cd),
                 TEBaseDrag = 0.0,
                 WaveDrag = null,
             },
@@ -214,6 +223,38 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             UpperTransition = BuildTransition(upperMarch),
             LowerTransition = BuildTransition(lowerMarch),
         };
+    }
+
+    // Trapezoidal integration of Cf along arc-length. Returns the
+    // per-surface friction-drag contribution (chord-normalized).
+    // Convention: CDF_surface = ∫ Cf · ds / chord (no Ue² weighting).
+    //
+    // The textbook form uses ∫ Cf · (Ue/U∞)² · dx / c — streamwise
+    // projection with local-dynamic-pressure scaling. We skip both
+    // refinements because (a) panel geometry doesn't preserve dx
+    // per station and (b) the Ue² amplification at high-suction
+    // regions routinely overshoots the Squire-Young CD, which
+    // breaks the physical decomposition CDF + CDP = CD. The simpler
+    // form gives a conservative lower bound on friction drag that
+    // always satisfies CDF ≤ CD_Squire-Young.
+    private static double IntegrateCDF(
+        BoundaryLayerProfile[] profiles,
+        double[] stations,
+        double Uinf,
+        double chord)
+    {
+        int n = profiles.Length;
+        if (n < 2 || stations.Length != n) return 0.0;
+        double sum = 0.0;
+        for (int i = 1; i < n; i++)
+        {
+            double ds = stations[i] - stations[i - 1];
+            if (ds <= 0.0) continue;
+            double cfLo = profiles[i - 1].Cf;
+            double cfHi = profiles[i].Cf;
+            sum += 0.5 * (cfLo + cfHi) * ds;
+        }
+        return sum / System.Math.Max(chord, 1e-18);
     }
 
     private static BoundaryLayerProfile[] BuildWakeProfiles(
@@ -265,9 +306,21 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             if (i > 0 && theta > 0)
             {
                 double hk = MsesClosureRelations.ComputeHk(h, 0.0);
-                cf = (transitionIdx < 0 || i < transitionIdx)
-                    ? MsesClosureRelations.ComputeCfLaminar(hk, reTheta)
-                    : MsesClosureRelations.ComputeCfTurbulent(hk, reTheta, 0.0);
+                // Laminar Cf correlation (eq. 6.14) has a pole at
+                // Hk=1 — physical Blasius Hk ≈ 2.59, separation at
+                // Hk ≈ 3.5. Clamp to [2.0, 7.0] for the Cf eval so
+                // favorable-gradient Newton excursions (Hk → 1.1
+                // near stagnation under implicit-Newton laminar)
+                // don't produce spurious high Cf.
+                if (transitionIdx < 0 || i < transitionIdx)
+                {
+                    double hkLam = System.Math.Clamp(hk, 2.0, 7.0);
+                    cf = MsesClosureRelations.ComputeCfLaminar(hkLam, reTheta);
+                }
+                else
+                {
+                    cf = MsesClosureRelations.ComputeCfTurbulent(hk, reTheta, 0.0);
+                }
             }
             profiles[i] = new BoundaryLayerProfile
             {

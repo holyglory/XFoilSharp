@@ -116,6 +116,24 @@ public class MsesPolarSweepRegressionTests
     }
 
     [Fact]
+    public void DragDecomposition_CdfAndCdpSumsToCd()
+    {
+        // NACA 0012 α=4° Re=3e6 with the fully-thesis-exact path.
+        // CDF + CDP must equal CD (the physical decomposition
+        // conservation). CDF > 0 (there's friction), CDP >= 0.
+        var svc = new MsesAnalysisService(
+            useThesisExactTurbulent: true,
+            useWakeMarcher: true,
+            useThesisExactLaminar: true);
+        var r = Run(svc, "0012", 4.0, 3_000_000);
+        Assert.True(r.DragDecomposition.CD > 0);
+        Assert.True(r.DragDecomposition.CDF > 0);
+        Assert.True(r.DragDecomposition.CDP >= 0);
+        double sum = r.DragDecomposition.CDF + r.DragDecomposition.CDP;
+        Assert.Equal(r.DragDecomposition.CD, sum, 10);
+    }
+
+    [Fact]
     public void Naca0012_PolarMonotonic_CDRisesWithAlpha()
     {
         // Sanity: on NACA 0012, CD should rise monotonically with α
