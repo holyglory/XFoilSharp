@@ -31,6 +31,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     private readonly bool _useThesisExactTurbulent;
     private readonly bool _useThesisExactLaminar;
     private readonly bool _useWakeMarcher;
+    private readonly bool _useSourceDistributionCoupling;
+    private readonly int _sourceCouplingIterations;
+    private readonly double _sourceCouplingRelaxation;
 
     /// <summary>
     /// Constructs the MSES analyzer with an injected inviscid
@@ -72,7 +75,10 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         double viscousCouplingRelaxation = 0.3,
         bool useThesisExactTurbulent = true,
         bool useWakeMarcher = true,
-        bool useThesisExactLaminar = true)
+        bool useThesisExactLaminar = true,
+        bool useSourceDistributionCoupling = false,
+        int sourceCouplingIterations = 20,
+        double sourceCouplingRelaxation = 0.5)
     {
         _inner = inviscidProvider
             ?? new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
@@ -81,6 +87,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         _useThesisExactTurbulent = useThesisExactTurbulent;
         _useThesisExactLaminar = useThesisExactLaminar;
         _useWakeMarcher = useWakeMarcher;
+        _useSourceDistributionCoupling = useSourceDistributionCoupling;
+        _sourceCouplingIterations = System.Math.Max(0, sourceCouplingIterations);
+        _sourceCouplingRelaxation = System.Math.Clamp(sourceCouplingRelaxation, 0.0, 1.0);
     }
 
     /// <inheritdoc />
@@ -179,6 +188,86 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 else break;
             }
             catch { break; }
+        }
+
+        // F2.2: source-distribution coupling. Uses the Phase-5-proper
+        // model from thesis §6 — compute σ = d(Ue·δ*)/ds on each
+        // surface, integrate the Hilbert-like kernel to get a ΔUe
+        // perturbation, and iterate Ue ← Ue + α·ΔUe until δ* has
+        // converged. Does NOT re-solve the inviscid; only perturbs
+        // the edge velocity the BL marcher sees. This captures the
+        // viscous-deceleration part of the coupling without needing
+        // to modify the inviscid linear-vortex Jacobian. Opt-in via
+        // useSourceDistributionCoupling ctor flag.
+        int sourceCouplingIterationsRun = 0;
+        if (_useSourceDistributionCoupling && _sourceCouplingIterations > 0)
+        {
+            var (sUp, ueUp0) = ExtractSurfaceSamples(inv, upper: true);
+            var (sLo, ueLo0) = ExtractSurfaceSamples(inv, upper: false);
+            double[] ueUp = (double[])ueUp0.Clone();
+            double[] ueLo = (double[])ueLo0.Clone();
+            double prevMaxDStar = double.PositiveInfinity;
+            for (int k = 0; k < _sourceCouplingIterations; k++)
+            {
+                var upperDStar = BuildDStarArray(upperMarch);
+                var lowerDStar = BuildDStarArray(lowerMarch);
+
+                double currMaxDStar = 0.0;
+                for (int i = 0; i < upperDStar.Length; i++)
+                    if (upperDStar[i] > currMaxDStar) currMaxDStar = upperDStar[i];
+                for (int i = 0; i < lowerDStar.Length; i++)
+                    if (lowerDStar[i] > currMaxDStar) currMaxDStar = lowerDStar[i];
+                // Convergence: max δ* stopped changing by more than
+                // 0.5 % of chord between iterations.
+                if (k > 0 && System.Math.Abs(currMaxDStar - prevMaxDStar)
+                        < 0.005 * chord) break;
+                prevMaxDStar = currMaxDStar;
+
+                var sigmaUp = Coupling.SourceDistributionCoupling
+                    .ComputeDisplacementSource(upperMarch.Stations, upperMarch.EdgeVelocity, upperDStar);
+                var sigmaLo = Coupling.SourceDistributionCoupling
+                    .ComputeDisplacementSource(lowerMarch.Stations, lowerMarch.EdgeVelocity, lowerDStar);
+                var dUeUp = Coupling.SourceDistributionCoupling
+                    .IntegrateSourceUeDelta(upperMarch.Stations, sigmaUp);
+                var dUeLo = Coupling.SourceDistributionCoupling
+                    .IntegrateSourceUeDelta(lowerMarch.Stations, sigmaLo);
+
+                // Apply relaxed update against the ORIGINAL inviscid
+                // Ue (ueUp0/ueLo0), not the previous iterate's Ue.
+                // This is Picard-like and damps the fixed-point
+                // oscillation that full ΔUe stacking produces.
+                for (int i = 0; i < ueUp.Length; i++)
+                {
+                    ueUp[i] = System.Math.Max(0.0,
+                        ueUp0[i] + _sourceCouplingRelaxation * dUeUp[i]);
+                }
+                for (int i = 0; i < ueLo.Length; i++)
+                {
+                    ueLo[i] = System.Math.Max(0.0,
+                        ueLo0[i] + _sourceCouplingRelaxation * dUeLo[i]);
+                }
+
+                // Re-march BLs with the perturbed Ue. CD-envelope
+                // sanity: if the update produces a non-finite or
+                // wildly-large θ_TE, accept the previous iterate
+                // and break.
+                CompositeTransitionMarcher.CompositeResult newUpper, newLower;
+                try
+                {
+                    newUpper = RunSurfaceMarchFromArrays(sUp, ueUp, nu, nCrit, mach);
+                    newLower = RunSurfaceMarchFromArrays(sLo, ueLo, nu, nCrit, mach);
+                }
+                catch { break; }
+
+                double newThetaTE = System.Math.Max(
+                    newUpper.Theta.Length > 0 ? newUpper.Theta[newUpper.Theta.Length - 1] : 0.0,
+                    newLower.Theta.Length > 0 ? newLower.Theta[newLower.Theta.Length - 1] : 0.0);
+                if (!double.IsFinite(newThetaTE) || newThetaTE > 0.15 * chord) break;
+
+                upperMarch = newUpper;
+                lowerMarch = newLower;
+                sourceCouplingIterationsRun = k + 1;
+            }
         }
 
         WakeTurbulentMarcher.MarchResult? wakeMarch = null;
@@ -528,6 +617,78 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             StationIndex = r.TransitionIndex,
             Converged = true,
         };
+    }
+
+    /// <summary>
+    /// Builds the per-station δ* = H·θ array from a CompositeResult.
+    /// Used by F2.2 source-distribution coupling.
+    /// </summary>
+    private static double[] BuildDStarArray(
+        CompositeTransitionMarcher.CompositeResult march)
+    {
+        int n = march.Theta.Length;
+        var d = new double[n];
+        for (int i = 0; i < n; i++) d[i] = march.H[i] * march.Theta[i];
+        return d;
+    }
+
+    /// <summary>
+    /// Extracts the (s, Ue) arrays for one surface from the inviscid
+    /// Cp distribution. Shared by RunSurfaceMarch and the
+    /// source-distribution coupling loop (F2.2).
+    /// </summary>
+    private static (double[] stations, double[] ue) ExtractSurfaceSamples(
+        InviscidAnalysisResult inv, bool upper)
+    {
+        var samples = inv.PressureSamples;
+        int iLE = 0;
+        double minX = samples[0].Location.X;
+        for (int i = 1; i < samples.Count; i++)
+        {
+            if (samples[i].Location.X < minX)
+            {
+                minX = samples[i].Location.X;
+                iLE = i;
+            }
+        }
+
+        int start, end, step;
+        if (upper) { start = iLE; end = -1; step = -1; }
+        else { start = iLE; end = samples.Count; step = +1; }
+
+        int count = upper ? iLE + 1 : samples.Count - iLE;
+        var s = new double[count];
+        var ue = new double[count];
+        double sAcc = 0.0;
+        int outIdx = 0;
+        int prev = -1;
+        for (int k = start; k != end; k += step)
+        {
+            if (prev >= 0)
+            {
+                double dx = samples[k].Location.X - samples[prev].Location.X;
+                double dy = samples[k].Location.Y - samples[prev].Location.Y;
+                sAcc += System.Math.Sqrt(dx * dx + dy * dy);
+            }
+            s[outIdx] = sAcc;
+            double cp = samples[k].CorrectedPressureCoefficient;
+            double oneMinusCp = System.Math.Max(0.0, 1.0 - cp);
+            ue[outIdx] = System.Math.Sqrt(oneMinusCp);
+            outIdx++;
+            prev = k;
+        }
+        return (s, ue);
+    }
+
+    private CompositeTransitionMarcher.CompositeResult RunSurfaceMarchFromArrays(
+        double[] stations, double[] edgeVelocity, double nu, double nCrit,
+        double machNumber)
+    {
+        return CompositeTransitionMarcher.March(
+            stations, edgeVelocity, nu, nCrit,
+            cTauInitialFactor: 0.3, machNumberEdge: machNumber,
+            useThesisExactTurbulent: _useThesisExactTurbulent,
+            useThesisExactLaminar: _useThesisExactLaminar);
     }
 
     private CompositeTransitionMarcher.CompositeResult RunSurfaceMarch(
