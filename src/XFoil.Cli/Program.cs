@@ -2536,6 +2536,19 @@ static void WriteViscousSinglePointMses(
         var lTE = r.LowerProfiles[r.LowerProfiles.Length - 1];
         Console.WriteLine($"TE state   δ*_u={uTE.DStar:F6} θ_u={uTE.Theta:F6} H_u={uTE.Hk:F4}");
         Console.WriteLine($"           δ*_l={lTE.DStar:F6} θ_l={lTE.Theta:F6} H_l={lTE.Hk:F4}");
+        // Near-separation fraction: stations in the back half of the
+        // upper surface with Hk > 2.0 (the empirical pre-separation
+        // threshold for turbulent BLs, per Drela thesis §4.2). The
+        // thesis-exact marcher clamps H ≤ ~2.3 so true-separation
+        // (Hk > 3.5) is rarely seen — the 2.0 threshold is more
+        // sensitive to deteriorating BL shape.
+        int backHalf = r.UpperProfiles.Length / 2;
+        int nearSep = 0;
+        int total = r.UpperProfiles.Length - backHalf;
+        for (int i = backHalf; i < r.UpperProfiles.Length; i++)
+            if (r.UpperProfiles[i].Hk > 2.0) nearSep++;
+        double sepFrac = total > 0 ? (double)nearSep / total : 0.0;
+        Console.WriteLine($"           upper back-half near-sep frac: {sepFrac:F2} ({nearSep}/{total} stations with Hk>2.0)");
         if (XFoil.MsesSolver.Services.MsesStallHeuristic.IsLikelyStalled(r.UpperProfiles))
         {
             Console.WriteLine($"WARNING:   upper surface likely stalled (H_u={uTE.Hk:F2}, "
