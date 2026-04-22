@@ -1607,6 +1607,25 @@ try
                 outputCsvPath: null);
             return 0;
 
+        case "viscous-polar-mses-file":
+            // MSES polar sweep from arbitrary airfoil .dat file.
+            if (args.Length < 5)
+            {
+                throw new ArgumentException("The viscous-polar-mses-file command requires a file path, alpha start, alpha end, alpha step.");
+            }
+            var polarMsesFileAirfoil = parser.ParseFile(args[1]);
+            WriteViscousPolarMses(
+                polarMsesFileAirfoil,
+                ParseDouble(args[2], "alpha start"),
+                ParseDouble(args[3], "alpha end"),
+                ParseDouble(args[4], "alpha step"),
+                args.Length >= 6 ? ParseInteger(args[5], "panel count") : 160,
+                args.Length >= 7 ? ParseDouble(args[6], "Mach number") : 0d,
+                args.Length >= 8 ? ParseDouble(args[7], "Reynolds number") : 1_000_000d,
+                args.Length >= 9 ? ParseDouble(args[8], "critical amplification factor") : 9d,
+                outputCsvPath: null);
+            return 0;
+
         case "export-profile-mses":
             // MSES per-station BL profile dump to CSV.
             if (args.Length < 4)
@@ -2035,6 +2054,7 @@ static void PrintUsage()
     Console.WriteLine("  viscous-point-mses <####> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES-thesis closure, Phase-5 stub — inviscid CL + Squire-Young CD)");
     Console.WriteLine("  viscous-point-mses-file <path> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES single-point from arbitrary airfoil .dat)");
     Console.WriteLine("  viscous-polar-mses <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep)");
+    Console.WriteLine("  viscous-polar-mses-file <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep from arbitrary .dat)");
     Console.WriteLine("  export-polar-mses <####> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep → CSV)");
     Console.WriteLine("  export-profile-mses <####> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]   (MSES per-station BL profile → CSV)");
     Console.WriteLine("    (set XFOIL_MSES_THESIS_EXACT=1 to use the Phase-2e implicit-Newton turbulent marcher instead of the Clauser-placeholder)");
