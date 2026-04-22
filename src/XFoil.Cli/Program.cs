@@ -2467,10 +2467,31 @@ static void WriteViscousPolarMses(
 
     double eps = 1e-9;
     if (alphaStep <= 0) alphaStep = 0.5;
+    double clMax = double.NegativeInfinity, alphaAtClMax = 0;
+    double cdMin = double.PositiveInfinity, clAtCdMin = 0, alphaAtCdMin = 0;
+    double firstStallAlpha = double.NaN;
     for (double a = alphaStart; a <= alphaEnd + eps; a += alphaStep)
     {
         var r = mses.AnalyzeViscous(geometry, a, settings);
         bool stall = XFoil.MsesSolver.Services.MsesStallHeuristic.IsLikelyStalled(r.UpperProfiles);
+        if (r.Converged && !stall)
+        {
+            if (r.LiftCoefficient > clMax)
+            {
+                clMax = r.LiftCoefficient;
+                alphaAtClMax = a;
+            }
+            if (r.DragDecomposition.CD > 0 && r.DragDecomposition.CD < cdMin)
+            {
+                cdMin = r.DragDecomposition.CD;
+                clAtCdMin = r.LiftCoefficient;
+                alphaAtCdMin = a;
+            }
+        }
+        if (stall && double.IsNaN(firstStallAlpha))
+        {
+            firstStallAlpha = a;
+        }
         string line = writer is null
             ? $"{a.ToString("F4", CultureInfo.InvariantCulture)}\t"
               + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
@@ -2491,7 +2512,24 @@ static void WriteViscousPolarMses(
         emit(line);
     }
 
-    if (writer is not null)
+    if (writer is null)
+    {
+        // End-of-polar summary on console only.
+        Console.WriteLine();
+        if (clMax > double.NegativeInfinity)
+        {
+            Console.WriteLine($"Pre-stall CL_max: {clMax:F4} at α={alphaAtClMax:F2}°");
+        }
+        if (cdMin < double.PositiveInfinity)
+        {
+            Console.WriteLine($"CD_min: {cdMin:F6} at α={alphaAtCdMin:F2}° (CL={clAtCdMin:F4})");
+        }
+        if (!double.IsNaN(firstStallAlpha))
+        {
+            Console.WriteLine($"First stall signal: α={firstStallAlpha:F2}°");
+        }
+    }
+    else
     {
         Console.WriteLine($"Wrote MSES polar to {outputCsvPath}");
     }
