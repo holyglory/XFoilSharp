@@ -2395,6 +2395,7 @@ static void WriteMsesProfileDump(
         + $"wake_marcher={UseWakeMarcherFromEnv()}");
     writer.WriteLine($"# CL={r.LiftCoefficient:F6}, CD={r.DragDecomposition.CD:F6}, CDF={r.DragDecomposition.CDF:F6}, CDP={r.DragDecomposition.CDP:F6}, CM={r.MomentCoefficient:F6}, converged={r.Converged}");
     writer.WriteLine($"# Xtr_U={r.UpperTransition.XTransition:F6}, Xtr_L={r.LowerTransition.XTransition:F6}");
+    writer.WriteLine($"# stall={XFoil.MsesSolver.Services.MsesStallHeuristic.IsLikelyStalled(r.UpperProfiles)}");
     writer.WriteLine("surface,station,s,theta,DStar,H,Cf,Ctau,Ue,Namp");
     for (int i = 0; i < r.UpperProfiles.Length; i++)
     {
@@ -2460,6 +2461,7 @@ static void WriteViscousPolarMses(
             + $"thesis_turbulent={UseThesisExactTurbulentFromEnv()}, "
             + $"thesis_laminar={UseThesisExactLaminarFromEnv()}, "
             + $"wake_marcher={UseWakeMarcherFromEnv()}");
+        writer.WriteLine("# stall column: heuristic — upper TE H>2.2 OR δ*>4% OR back-half H>3.5");
         writer.WriteLine("alpha_deg,CL,CD,CDF,CDP,CM,converged,stall");
     }
 
