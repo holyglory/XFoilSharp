@@ -325,6 +325,122 @@ public static class MsesInviscidPanelSolver
     /// Formulas: Katz &amp; Plotkin §11.4. Local panel frame has the
     /// panel along the ξ-axis from 0 to L, with η the CCW normal.
     /// </summary>
+    /// <summary>
+    /// P2.1 — Linear-source panel influence. Same structure as
+    /// <see cref="LinearVortexPanelContribution"/> but for σ instead
+    /// of γ. A source panel with linear σ produces induced velocity
+    /// that is the 90° rotation of the equivalent vortex-sheet
+    /// induced velocity (in the opposite direction): if the vortex
+    /// gives (u_γ, v_γ) in panel-local, the source gives
+    /// (v_γ, −u_γ).
+    ///
+    /// Sign: positive σ represents outflow (flow leaving the panel).
+    /// At a point above the panel, a positive uniform σ induces
+    /// velocity in +η (away from the panel).
+    /// </summary>
+    public static (double uA, double vA, double uB, double vB)
+        LinearSourcePanelContribution(
+            double px, double py,
+            double ax, double ay, double bx, double by,
+            double tx, double ty, double L,
+            bool selfPanel)
+    {
+        double dx = px - ax;
+        double dy = py - ay;
+        double xi = dx * tx + dy * ty;
+        double eta = dx * (-ty) + dy * tx;
+
+        double uLocal_A, vLocal_A, uLocal_B, vLocal_B;
+
+        if (selfPanel)
+        {
+            // Closed-form limit at own midpoint (η → 0⁺).
+            // Constant σ=1: u = 0, v = 1/2 (half-source above sheet).
+            // Linear σ = ξ/L: u = -1/(2π), v = 1/4.
+            // (Values derived by swapping (u_γ, v_γ) → (v_γ, -u_γ).)
+            double uConstS = 0.0;
+            double vConstS = 0.5;
+            double uLinS = -1.0 / (2.0 * System.Math.PI);
+            double vLinS = 0.25;
+            uLocal_A = uConstS - uLinS;
+            vLocal_A = vConstS - vLinS;
+            uLocal_B = uLinS;
+            vLocal_B = vLinS;
+        }
+        else
+        {
+            double r1sq = xi * xi + eta * eta;
+            double r2sq = (xi - L) * (xi - L) + eta * eta;
+            double r1 = System.Math.Sqrt(r1sq);
+            double r2 = System.Math.Sqrt(r2sq);
+            double theta1 = System.Math.Atan2(eta, xi);
+            double theta2 = System.Math.Atan2(eta, xi - L);
+            double dTheta21 = theta2 - theta1;
+            double lnR = r1 > 0.0 && r2 > 0.0
+                ? System.Math.Log(r1 / r2) : 0.0;
+
+            // (u_σ, v_σ) = (v_γ, −u_γ) by 90° rotation.
+            double twoPi = 2.0 * System.Math.PI;
+            double uConstS = lnR / twoPi;
+            double vConstS = dTheta21 / twoPi;
+            double uLinS = (xi * lnR - L + eta * dTheta21) / (twoPi * L);
+            double vLinS = (xi * dTheta21 - eta * lnR) / (twoPi * L);
+
+            uLocal_A = uConstS - uLinS;
+            vLocal_A = vConstS - vLinS;
+            uLocal_B = uLinS;
+            vLocal_B = vLinS;
+        }
+
+        // Rotate back to global.
+        double uA_g = uLocal_A * tx + vLocal_A * (-ty);
+        double vA_g = uLocal_A * ty + vLocal_A * tx;
+        double uB_g = uLocal_B * tx + vLocal_B * (-ty);
+        double vB_g = uLocal_B * ty + vLocal_B * tx;
+        return (uA_g, vA_g, uB_g, vB_g);
+    }
+
+    /// <summary>
+    /// Builds the linear-source tangent-velocity influence matrix:
+    /// A_σ_t[i, k] is the tangential velocity at collocation i from
+    /// unit σ at node k.
+    /// </summary>
+    public static double[,] BuildSourceTangentInfluenceMatrix(PanelizedGeometry pg)
+        => BuildSourceInfluenceMatrixInternal(pg, normal: false);
+
+    /// <summary>
+    /// Builds the linear-source normal-velocity influence matrix:
+    /// A_σ_n[i, k] is the normal velocity at collocation i from unit
+    /// σ at node k. Used in the flow-tangency BC when σ is present.
+    /// </summary>
+    public static double[,] BuildSourceNormalInfluenceMatrix(PanelizedGeometry pg)
+        => BuildSourceInfluenceMatrixInternal(pg, normal: true);
+
+    private static double[,] BuildSourceInfluenceMatrixInternal(
+        PanelizedGeometry pg, bool normal)
+    {
+        int n = pg.PanelCount;
+        var a = new double[n, n + 1];
+        for (int i = 0; i < n; i++)
+        {
+            double px = pg.MidX[i];
+            double py = pg.MidY[i];
+            double projX = normal ? pg.NormalX[i] : pg.TangentX[i];
+            double projY = normal ? pg.NormalY[i] : pg.TangentY[i];
+            for (int j = 0; j < n; j++)
+            {
+                var (uA, vA, uB, vB) = LinearSourcePanelContribution(
+                    px, py, pg.NodeX[j], pg.NodeY[j],
+                    pg.NodeX[j + 1], pg.NodeY[j + 1],
+                    pg.TangentX[j], pg.TangentY[j], pg.Length[j],
+                    selfPanel: i == j);
+                a[i, j]     += uA * projX + vA * projY;
+                a[i, j + 1] += uB * projX + vB * projY;
+            }
+        }
+        return a;
+    }
+
     public static (double uA, double vA, double uB, double vB)
         LinearVortexPanelContribution(
             double px, double py,
