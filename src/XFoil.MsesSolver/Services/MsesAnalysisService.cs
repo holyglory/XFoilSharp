@@ -518,8 +518,12 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 System.Array.Empty<double>(), System.Array.Empty<double>());
         double dStarWake = HU * θU + HL * θL;
         double HWake = dStarWake / θWake;
-        // Dominant-stress side seeds Cτ (the more-separated surface).
-        double cTWake = System.Math.Max(cTU, cTL);
+        // Momentum-thickness-weighted Cτ blend — each surface's outer-
+        // layer shear contributes proportionally to its θ share:
+        //   Cτ_wake = (Cτ_u·θ_u + Cτ_l·θ_l) / (θ_u + θ_l).
+        // Previous max() overstated Cτ when one surface was heavily
+        // separated and the other attached (e.g. high-α airfoils).
+        double cTWake = (cTU * θU + cTL * θL) / θWake;
         double ueWake = 0.5 * (ueU + ueL);
 
         // Wake stations: march one chord downstream. Use a physically
