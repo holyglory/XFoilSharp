@@ -342,11 +342,49 @@ without facade-level rescue. **Shipped.** Full table:
 
 ### Phase 5 — Newton coupling to inviscid
 
-- Reuse `XFoil.Solver`'s linear-vortex inviscid solver — the inviscid
-  side is identical in XFoil and MSES for our (incompressible) scope.
-- Re-derive the viscous-inviscid Jacobian blocks from Drela's thesis §6.
-- Integrate into the existing global Newton assembler; keep the same block-
-  tridiagonal solver.
+**Status after P1–P5.3 (2026-04-22, commits 9af0dbd → 722289e):
+scaffolding complete, gate P5.4 BLOCKED on topology.** The
+Phase-5 increments completed so far:
+
+- ✅ P1 — Clean-room linear-vortex inviscid fork
+  (`MsesInviscidPanelSolver`) with Karman-Tsien compressibility.
+  Gate P1.5 passed: fork CL within 5 % of XFoil.Solver.Modern
+  across NACA 0012/2412/4412 × α ∈ {0,4,8}° × M ∈ {0,0.2,0.3}.
+- ✅ P2 — Source-panel influence matrices and combined γ+σ
+  inviscid solve (opt-in `sources` array).
+- ✅ P3 — Sharp-TE Kutta row + TE-gap detection.
+- ✅ P4 — Global Newton framework: `MsesGlobalState` pack/unpack,
+  `MsesGlobalResidual` assembler, FD Jacobian, Newton loop with
+  damping + line search. Gate P4.6 passed: γ-only self-
+  consistency converges to direct inviscid in ≤5 iterations.
+- ✅ P5.1 — Per-station BL residual functions (momentum, shape-
+  param, Cτ-lag) as standalone pure functions.
+- ✅ P5.2 — σ = d(Ue·δ*)/dξ constraint residual.
+- ✅ P5.3 — BL + σ residuals wired into `MsesGlobalResidual`
+  (opt-in `useRealBLResiduals` flag).
+
+**Gate P5.4 BLOCKED:** The full γ+σ+BL Newton does not converge
+on NACA 0012 α=4° Re=3e6. Root cause: P5.3's simplified forward-
+march BL topology walks the panel order TE→upper→LE→lower→TE
+as a single continuous sequence, but physical BLs march from
+the stagnation point (near LE) downstream to TE separately on
+upper and lower surfaces. The simplified path does not
+correspond to any physical flow, so the BL residuals cannot
+zero there.
+
+Unblocking requires P6/P7 work:
+- Split the panel grid into upper and lower surfaces at the
+  stagnation point (which varies with α).
+- March each surface from stagnation to TE independently.
+- Connect via TE-merge (thesis eq. 6.63) to the wake.
+- Then wake marches half-chord downstream with Squire-Young
+  far-field CD.
+
+These are the P6.1–P6.4 tasks. The original plan had P5 deliver
+airfoil-coupling convergence and P6 add the wake on top. With
+the topology lesson learned, the more honest ordering is:
+airfoil topology + BL marching + wake topology must all be built
+together before any Newton convergence is testable.
 
 **Phase-5-lite status (2026-04-21, probe commit df5a13e):** the opt-in
 displacement-thickening iteration path has a known sign limitation —
