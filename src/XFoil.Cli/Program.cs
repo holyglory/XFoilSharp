@@ -36,6 +36,12 @@ var modalInverseDesignService = new ModalInverseDesignService();
 var conformalMapgenService = new ConformalMapgenService();
 var airfoilDatExporter = new AirfoilDatExporter();
 
+// Extract MSES opt-in flags (--thesis-exact, --wake, --thesis-laminar)
+// into the static MsesCliFlags scope so downstream env-var helpers
+// can see them. Flags are OR-ed with the corresponding env vars so
+// the old invocation style still works for one release cycle.
+args = MsesCliFlags.ConsumeFlags(args);
+
 if (args.Length == 0)
 {
     PrintUsage();
@@ -2113,9 +2119,11 @@ static void PrintUsage()
     Console.WriteLine("  export-profile-mses <####> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]   (MSES per-station BL profile → CSV)");
     Console.WriteLine("  export-polar-mses-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]");
     Console.WriteLine("  export-profile-mses-file <path> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]");
-    Console.WriteLine("    (set XFOIL_MSES_THESIS_EXACT=1 to use the Phase-2e implicit-Newton turbulent marcher instead of the Clauser-placeholder)");
-    Console.WriteLine("    (set XFOIL_MSES_WAKE=1 to integrate Squire-Young at the wake far-field via the Phase-2f wake marcher)");
-    Console.WriteLine("    (set XFOIL_MSES_THESIS_LAMINAR=1 to use the implicit-Newton ThesisExactLaminarMarcher for the pre-transition leg)");
+    Console.WriteLine("    MSES opt-in flags (any MSES command accepts these, position-independent):");
+    Console.WriteLine("      --thesis-exact     Phase-2e implicit-Newton turbulent marcher (vs Clauser placeholder)");
+    Console.WriteLine("      --wake             Phase-2f wake marcher; integrates Squire-Young at wake far-field");
+    Console.WriteLine("      --thesis-laminar   Phase-2e implicit-Newton laminar marcher (vs Thwaites-λ)");
+    Console.WriteLine("    Env-var equivalents (deprecated, will be removed): XFOIL_MSES_THESIS_EXACT, XFOIL_MSES_WAKE, XFOIL_MSES_THESIS_LAMINAR");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2351,37 +2359,32 @@ static void WriteViscousPolarSummaryDouble(
     }
 }
 
-// MSES Phase-2e opt-in: setting XFOIL_MSES_THESIS_EXACT=1 switches
-// all MSES CLI commands to run the implicit-Newton turbulent marcher
-// (thesis eq. 6.10) instead of the Clauser-placeholder lag marcher.
+static bool BoolEnv(string name)
+{
+    string? v = Environment.GetEnvironmentVariable(name);
+    if (string.IsNullOrEmpty(v)) return false;
+    return v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
+}
+
+// MSES Phase-2e opt-in. Enable via --thesis-exact or
+// XFOIL_MSES_THESIS_EXACT=1: switches the turbulent marcher to the
+// implicit-Newton (thesis eq. 6.10) form instead of the Clauser
+// placeholder.
 static bool UseThesisExactTurbulentFromEnv()
-{
-    string? v = Environment.GetEnvironmentVariable("XFOIL_MSES_THESIS_EXACT");
-    if (string.IsNullOrEmpty(v)) return false;
-    return v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
-}
+    => MsesCliFlags.ThesisExactFlag || BoolEnv("XFOIL_MSES_THESIS_EXACT");
 
-// MSES Phase-2f opt-in: setting XFOIL_MSES_WAKE=1 switches the
-// Squire-Young CD integration from the airfoil TE to the wake
-// far-field (half-chord downstream), using the wake marcher to
-// relax the merged-TE state.
+// MSES Phase-2f opt-in. Enable via --wake or XFOIL_MSES_WAKE=1:
+// moves the Squire-Young CD integration from the airfoil TE to
+// the wake far-field (half-chord downstream) with a wake marcher.
 static bool UseWakeMarcherFromEnv()
-{
-    string? v = Environment.GetEnvironmentVariable("XFOIL_MSES_WAKE");
-    if (string.IsNullOrEmpty(v)) return false;
-    return v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
-}
+    => MsesCliFlags.WakeFlag || BoolEnv("XFOIL_MSES_WAKE");
 
-// MSES Phase-2e laminar opt-in: setting XFOIL_MSES_THESIS_LAMINAR=1
-// drives the pre-transition (θ, H) through the implicit-Newton
-// ThesisExactLaminarMarcher instead of the Thwaites-λ marcher.
-// Ñ tracking uses the same envelope e^N logic regardless.
+// MSES Phase-2e laminar opt-in. Enable via --thesis-laminar or
+// XFOIL_MSES_THESIS_LAMINAR=1: drives the pre-transition (θ, H)
+// through the implicit-Newton ThesisExactLaminarMarcher instead
+// of the Thwaites-λ marcher.
 static bool UseThesisExactLaminarFromEnv()
-{
-    string? v = Environment.GetEnvironmentVariable("XFOIL_MSES_THESIS_LAMINAR");
-    if (string.IsNullOrEmpty(v)) return false;
-    return v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
-}
+    => MsesCliFlags.ThesisLaminarFlag || BoolEnv("XFOIL_MSES_THESIS_LAMINAR");
 
 static void WriteMsesProfileDump(
     AirfoilGeometry geometry,
@@ -4020,4 +4023,30 @@ static string EscapeCsv(string value)
     }
 
     return value;
+}
+
+// MSES CLI opt-in flags. Preferred form is --thesis-exact / --wake /
+// --thesis-laminar passed anywhere in the arg list; XFOIL_MSES_* env
+// vars remain as a fallback for one release cycle.
+static class MsesCliFlags
+{
+    public static bool ThesisExactFlag { get; private set; }
+    public static bool WakeFlag { get; private set; }
+    public static bool ThesisLaminarFlag { get; private set; }
+
+    public static string[] ConsumeFlags(string[] args)
+    {
+        var kept = new System.Collections.Generic.List<string>(args.Length);
+        foreach (var a in args)
+        {
+            switch (a)
+            {
+                case "--thesis-exact":   ThesisExactFlag = true; break;
+                case "--wake":           WakeFlag = true; break;
+                case "--thesis-laminar": ThesisLaminarFlag = true; break;
+                default: kept.Add(a); break;
+            }
+        }
+        return kept.ToArray();
+    }
 }
