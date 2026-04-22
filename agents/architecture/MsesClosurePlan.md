@@ -314,6 +314,17 @@ XFoil C# baseline. Not yet run; blocked on Phase 5.
 - Integrate into the existing global Newton assembler; keep the same block-
   tridiagonal solver.
 
+**Phase-5-lite status (2026-04-21, probe commit df5a13e):** the opt-in
+displacement-thickening iteration path has a known sign limitation —
+on cambered airfoils, thickening the suction surface by δ*_u (larger
+than δ*_l) adds effective camber, which INFLATES CL instead of
+reducing it. NACA 4412 α=4° Re=3e6: uncoupled CL=0.99, 2-iter
+coupled CL=1.05 (wrong direction).
+
+Drela's real MSES avoids this via a source-distribution method
+(Phase 5 proper). Phase-5-lite is retained as a stepping stone but
+production users should stick with `viscousCouplingIterations=0`.
+
 **Acceptance:** full airfoil polars on NACA 0012 / 4412 / 23012 within
 reasonable agreement (mean |ΔCL| < 0.05, mean |ΔCD| < 0.002 vs WT) in the
 α-range where MSES is expected to be state-of-the-art.
