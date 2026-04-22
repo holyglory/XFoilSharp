@@ -197,18 +197,20 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         }
 
         // Sanity envelope: airfoil CD past stall tops out around 0.3,
-        // and θ at TE shouldn't exceed ~3 % of chord for an attached
-        // case. Values outside these envelopes indicate the BL
-        // marcher blew up (common on thin/symmetric airfoils at
-        // positive α where Thwaites-λ near-stagnation artifacts
-        // cascade into unphysical θ growth on the under-loaded
-        // surface). Signal via non-Converged + clamp CD so
-        // downstream consumers don't propagate nonsense.
+        // and θ at TE shouldn't exceed ~6 % of chord even in deep
+        // stall (typical fully-separated airfoil θ_TE is 3–8 % chord
+        // — Abbott & Von Doenhoff Fig 131). Values outside these
+        // envelopes indicate the BL marcher blew up (common on
+        // thin/symmetric airfoils at positive α where Thwaites-λ
+        // near-stagnation artifacts cascade into unphysical θ
+        // growth on the under-loaded surface). Signal via
+        // non-Converged + clamp CD so downstream consumers don't
+        // propagate nonsense.
         double thetaMaxTE = System.Math.Max(
             upperMarch.Theta.Length > 0 ? upperMarch.Theta[upperMarch.Theta.Length - 1] : 0.0,
             lowerMarch.Theta.Length > 0 ? lowerMarch.Theta[lowerMarch.Theta.Length - 1] : 0.0);
         bool cdConverged = cd >= 0.0 && cd <= 0.5;
-        bool thetaConverged = thetaMaxTE <= 0.03 * chord;
+        bool thetaConverged = thetaMaxTE <= 0.06 * chord;
         bool converged = cdConverged && thetaConverged;
         if (!cdConverged)
         {
