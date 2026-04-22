@@ -2531,6 +2531,16 @@ static void WriteViscousSinglePointMses(
         var lTE = r.LowerProfiles[r.LowerProfiles.Length - 1];
         Console.WriteLine($"TE state   δ*_u={uTE.DStar:F6} θ_u={uTE.Theta:F6} H_u={uTE.Hk:F4}");
         Console.WriteLine($"           δ*_l={lTE.DStar:F6} θ_l={lTE.Theta:F6} H_l={lTE.Hk:F4}");
+        // Heuristic stall detection: upper TE H > 2.2 OR δ* > 5 %
+        // chord indicates heavy separation. Either condition alone
+        // signals that viscous feedback on CL would be significant.
+        // Since MSES here has no viscous feedback, the inviscid CL
+        // over-predicts in this regime.
+        if (uTE.Hk > 2.2 || uTE.DStar > 0.05)
+        {
+            Console.WriteLine($"WARNING:   upper surface likely stalled (H_u={uTE.Hk:F2}, "
+                + $"δ*_u={uTE.DStar:F4}). CL overpredicts — no viscous feedback.");
+        }
     }
     string xtrU = r.UpperTransition.StationIndex > 0
         ? r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)
