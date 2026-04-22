@@ -36,10 +36,8 @@ var modalInverseDesignService = new ModalInverseDesignService();
 var conformalMapgenService = new ConformalMapgenService();
 var airfoilDatExporter = new AirfoilDatExporter();
 
-// Extract MSES opt-in flags (--thesis-exact, --wake, --thesis-laminar)
-// into the static MsesCliFlags scope so downstream env-var helpers
-// can see them. Flags are OR-ed with the corresponding env vars so
-// the old invocation style still works for one release cycle.
+// Extract MSES closure flag (--legacy-closure) into the static
+// MsesCliFlags scope so downstream helpers can see it.
 args = MsesCliFlags.ConsumeFlags(args);
 
 if (args.Length == 0)
@@ -2120,11 +2118,9 @@ static void PrintUsage()
     Console.WriteLine("  export-polar-mses-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]");
     Console.WriteLine("  export-profile-mses-file <path> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]");
     Console.WriteLine("    MSES default path: implicit-Newton laminar + turbulent + wake marcher (thesis-exact).");
-    Console.WriteLine("    MSES closure flags (any MSES command accepts these, position-independent):");
+    Console.WriteLine("    MSES closure flag (any MSES command accepts it, position-independent):");
     Console.WriteLine("      --legacy-closure   Opts out of all three thesis-exact marchers (Thwaites-λ laminar");
     Console.WriteLine("                         + Clauser-placeholder turbulent + TE Squire-Young). For comparison only.");
-    Console.WriteLine("      --thesis-exact, --wake, --thesis-laminar   Redundant under new defaults; retained for scripts.");
-    Console.WriteLine("    Env-var XFOIL_MSES_THESIS_EXACT/WAKE/THESIS_LAMINAR are now no-ops (deprecated, scheduled for removal).");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2362,9 +2358,7 @@ static void WriteViscousPolarSummaryDouble(
 
 // All three thesis-exact marchers default to ON (the MSES-class
 // finalization path). --legacy-closure forces them OFF for
-// comparative/parity-debug runs; --thesis-exact / --wake /
-// --thesis-laminar (and the XFOIL_MSES_* env vars) are retained
-// as no-ops under the new defaults but still recognized.
+// comparative/parity-debug runs.
 static bool UseThesisExactTurbulentFromEnv()
     => !MsesCliFlags.LegacyClosureFlag;
 
@@ -4013,15 +4007,9 @@ static string EscapeCsv(string value)
     return value;
 }
 
-// MSES CLI opt-in flags. Preferred form is --thesis-exact / --wake /
-// --thesis-laminar passed anywhere in the arg list; XFOIL_MSES_* env
-// vars remain as a fallback for one release cycle.
+// MSES CLI closure flag. Passed anywhere in the arg list.
 static class MsesCliFlags
 {
-    public static bool ThesisExactFlag { get; private set; }
-    public static bool WakeFlag { get; private set; }
-    public static bool ThesisLaminarFlag { get; private set; }
-
     // --legacy-closure opts OUT of the thesis-exact defaults on all
     // three knobs, reverting to Thwaites-λ laminar + Clauser-
     // placeholder turbulent + TE Squire-Young. Intended for
@@ -4035,10 +4023,20 @@ static class MsesCliFlags
         {
             switch (a)
             {
-                case "--thesis-exact":   ThesisExactFlag = true; break;
-                case "--wake":           WakeFlag = true; break;
-                case "--thesis-laminar": ThesisLaminarFlag = true; break;
-                case "--legacy-closure": LegacyClosureFlag = true; break;
+                case "--legacy-closure":
+                    LegacyClosureFlag = true;
+                    break;
+                // Removed in F3.2. These are now no-ops (the closures
+                // they enabled are the default). We consume them here
+                // so scripts passing them don't crash with a positional-
+                // parse error, and emit a one-line deprecation notice.
+                case "--thesis-exact":
+                case "--wake":
+                case "--thesis-laminar":
+                    Console.Error.WriteLine(
+                        $"note: {a} is a no-op; the closure it enabled is now default. "
+                        + "Pass --legacy-closure to opt out.");
+                    break;
                 default: kept.Add(a); break;
             }
         }

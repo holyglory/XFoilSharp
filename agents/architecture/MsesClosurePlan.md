@@ -100,8 +100,9 @@ dotnet run --project src/XFoil.Cli -- export-polar-mses 4412 /tmp/polar.csv 0 8 
 # per-station BL profile → CSV
 dotnet run --project src/XFoil.Cli -- export-profile-mses 4412 4 /tmp/profile.csv ...
 
-# Phase-2e implicit-Newton turbulent marcher opt-in (any MSES command)
-XFOIL_MSES_THESIS_EXACT=1 dotnet run --project src/XFoil.Cli -- viscous-point-mses 4412 12 161 0.0 3000000 9
+# MSES default path is fully thesis-exact (laminar + turbulent + wake)
+# since F1.4. Pass --legacy-closure to opt out for A/B studies.
+dotnet run --project src/XFoil.Cli -- viscous-point-mses 4412 12 --legacy-closure
 ```
 
 Output schema:
@@ -126,7 +127,7 @@ Test coverage: 126 MSES-specific unit tests, 100% pass. Includes:
 - Drag decomposition (CDF/CDP conservation)
 
 Working benchmarks on NACA 0012 Re=3e6 fully-thesis-exact path
-(XFOIL_MSES_THESIS_EXACT=1 XFOIL_MSES_WAKE=1 XFOIL_MSES_THESIS_LAMINAR=1):
+(now the CLI default — see F1.4):
   α=0°:  CD=0.0054  (WT ~0.007)
   α=4°:  CD=0.0071  (WT ~0.009)
   α=8°:  CD=0.0116  (WT ~0.012)
@@ -238,10 +239,9 @@ within 1e-6 at a sampled grid of (H, Reθ, Me) points.
   5 + 5 pin tests confirm no-oscillation on flat plate and bounded
   response under favorable/adverse gradients.
 
-  **Wired via opt-in:** CompositeTransitionMarcher takes
-  `useThesisExactTurbulent` (default false). MsesAnalysisService
-  surfaces it as a ctor flag. CLI env var
-  `XFOIL_MSES_THESIS_EXACT=1` enables it on all five MSES commands.
+  **Default after F1.4:** `useThesisExactTurbulent = true`.
+  `MsesAnalysisService` surfaces it as a ctor flag; pass
+  `--legacy-closure` on the CLI to opt out.
 
 ### Phase 2f — Wake marcher ✅ LANDED (2026-04-21)
 
@@ -256,8 +256,7 @@ within 1e-6 at a sampled grid of (H, Reθ, Me) points.
   wake half a chord downstream at a linear-recovery Ue profile
   (90% recovery toward U∞), then integrates Squire-Young at the
   wake far-field.
-- ✅ CLI env var `XFOIL_MSES_WAKE=1`, composable with
-  `XFOIL_MSES_THESIS_EXACT=1`.
+- ✅ Default after F1.4: `useWakeMarcher = true`.
 
 Validation: 4 standalone marcher tests (constant-Ue θ conservation,
 H relaxation under recovery, θ shrinkage under favorable wake,

@@ -41,11 +41,12 @@ All MSES commands accept these position-independent flags:
 |------|--------|
 | *(none)* | Default path: thesis-exact laminar + turbulent + wake |
 | `--legacy-closure` | Opt out: Thwaites-λ laminar + Clauser placeholder + TE Squire-Young (for comparison studies only) |
-| `--thesis-exact`, `--wake`, `--thesis-laminar` | No-ops under the current defaults; retained so existing scripts don't break |
 
-Env-var equivalents (`XFOIL_MSES_THESIS_EXACT`, `XFOIL_MSES_WAKE`,
-`XFOIL_MSES_THESIS_LAMINAR`) are deprecated and scheduled for
-removal.
+The old `--thesis-exact`, `--wake`, `--thesis-laminar` flags and
+their `XFOIL_MSES_*` env-var equivalents were removed in F3.2.
+The CLI still recognizes the old flags and prints a one-line
+"no-op" notice so scripts that pass them keep working, but they
+have no effect (the closures they enabled are the default).
 
 ## Ctor knobs
 
