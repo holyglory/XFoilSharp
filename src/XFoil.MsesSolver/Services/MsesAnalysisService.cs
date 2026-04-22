@@ -325,7 +325,13 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             // Pre-transition: laminar Cf from closure.
             // Post-transition: turbulent Cf from closure.
             double cf = 0.0;
-            if (i > 0 && theta > 0)
+            // Skip Cf reporting when the BL is effectively degenerate:
+            // - θ below 1e-10 (either Thwaites-λ collapsed or a
+            //   numerical-clamp artifact near stagnation), or
+            // - Reθ below 10 (correlation range-of-validity is Reθ ≳
+            //   100 for laminar, ≳ 200 for turbulent — below that the
+            //   Cf expressions produce unphysical values).
+            if (i > 0 && theta > 1e-10 && reTheta > 10.0)
             {
                 double hk = MsesClosureRelations.ComputeHk(h, 0.0);
                 // Laminar Cf correlation (eq. 6.14) has a pole at
