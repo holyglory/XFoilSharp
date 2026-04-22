@@ -96,6 +96,25 @@ public class MsesPolarSweepRegressionTests
             + $"Wake={rWake.DragDecomposition.CD}");
     }
 
+    [Theory]
+    [InlineData(0.0, 0.002, 0.025)]
+    [InlineData(4.0, 0.005, 0.025)]
+    [InlineData(8.0, 0.008, 0.03)]
+    public void Naca0012_FullyThesisExact_RemainsPlausible(
+        double alpha, double cdMin, double cdMax)
+    {
+        // Most-thesis-exact configuration: implicit-Newton laminar +
+        // implicit-Newton turbulent + wake far-field Squire-Young.
+        // This is the MSES-class path end-to-end.
+        var svc = new MsesAnalysisService(
+            useThesisExactTurbulent: true,
+            useWakeMarcher: true,
+            useThesisExactLaminar: true);
+        var r = Run(svc, "0012", alpha, 3_000_000);
+        Assert.True(r.Converged);
+        Assert.InRange(r.DragDecomposition.CD, cdMin, cdMax);
+    }
+
     [Fact]
     public void Naca0012_PolarMonotonic_CDRisesWithAlpha()
     {
