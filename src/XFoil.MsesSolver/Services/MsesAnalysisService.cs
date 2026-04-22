@@ -196,14 +196,21 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             cd = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
         }
 
-        // Sanity clamp. Airfoil CD past stall tops out around 0.3.
-        // Anything larger indicates the BL marcher blew up (θ
-        // diverged under severe adverse gradient — common on
-        // high-camber Selig airfoils with coarse panel distributions).
-        // Signal the non-physical output via non-Converged + an
-        // explicit CD cap, rather than propagate nonsense downstream.
-        bool converged = cd >= 0.0 && cd <= 0.5;
-        if (!converged)
+        // Sanity envelope: airfoil CD past stall tops out around 0.3,
+        // and θ at TE shouldn't exceed ~3 % of chord for an attached
+        // case. Values outside these envelopes indicate the BL
+        // marcher blew up (common on thin/symmetric airfoils at
+        // positive α where Thwaites-λ near-stagnation artifacts
+        // cascade into unphysical θ growth on the under-loaded
+        // surface). Signal via non-Converged + clamp CD so
+        // downstream consumers don't propagate nonsense.
+        double thetaMaxTE = System.Math.Max(
+            upperMarch.Theta.Length > 0 ? upperMarch.Theta[upperMarch.Theta.Length - 1] : 0.0,
+            lowerMarch.Theta.Length > 0 ? lowerMarch.Theta[lowerMarch.Theta.Length - 1] : 0.0);
+        bool cdConverged = cd >= 0.0 && cd <= 0.5;
+        bool thetaConverged = thetaMaxTE <= 0.03 * chord;
+        bool converged = cdConverged && thetaConverged;
+        if (!cdConverged)
         {
             cd = System.Math.Clamp(cd, 0.0, 0.5);
         }

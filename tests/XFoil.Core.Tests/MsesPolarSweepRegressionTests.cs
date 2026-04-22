@@ -134,6 +134,27 @@ public class MsesPolarSweepRegressionTests
     }
 
     [Fact]
+    public void ThinSymmetricAirfoil_ThetaBlowup_FlaggedNonConverged()
+    {
+        // NACA 0006 α=4° Re=3e6: Thwaites-λ near-stagnation on the
+        // under-loaded lower surface cascades into non-physical θ
+        // growth (TE θ ≈ 4 % chord). The θ ≤ 3 % chord envelope
+        // should flag this as non-converged — so downstream
+        // consumers aren't misled into trusting a CD=0.062 output.
+        var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
+        var geom = gen.Generate4DigitClassic("0006", pointCount: 161);
+        var settings = new AnalysisSettings(
+            panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
+            reynoldsNumber: 3_000_000);
+        var svc = new MsesAnalysisService(
+            useThesisExactTurbulent: true, useWakeMarcher: true,
+            useThesisExactLaminar: true);
+        var r = svc.AnalyzeViscous(geom, 4.0, settings);
+        Assert.False(r.Converged,
+            $"NACA 0006 α=4° should be flagged non-converged, but Converged={r.Converged}");
+    }
+
+    [Fact]
     public void Naca0012_PolarMonotonic_CDRisesWithAlpha()
     {
         // Sanity: on NACA 0012, CD should rise monotonically with α
