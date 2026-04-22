@@ -117,7 +117,8 @@ public static class MsesInviscidPanelSolver
         PanelizedGeometry pg,
         double freestreamSpeed,
         double alphaRadians,
-        double chord)
+        double chord,
+        double machNumber = 0.0)
     {
         if (chord <= 0.0) throw new System.ArgumentException("chord must be > 0", nameof(chord));
         int n = pg.PanelCount;
@@ -158,6 +159,16 @@ public static class MsesInviscidPanelSolver
 
         // Surface Ue (signed, along tangent) at each midpoint =
         // V∞·tangent + Σ_k aTangent[i,k]·γ[k]. Cp = 1 - (Ue/U∞)².
+        // Apply Karman-Tsien compressibility correction to Cp when
+        // M > 0 (XFoil's CPCALC form):
+        //     β = √(1-M²), Bfac = M² / (2·(1+β))
+        //     Cp_KT = Cp_inc / (β + Bfac · Cp_inc)
+        // Valid up to the critical Mach; we stay subcritical here.
+        double machClamped = System.Math.Max(0.0, System.Math.Min(machNumber, 0.95));
+        double m2 = machClamped * machClamped;
+        double beta = System.Math.Sqrt(System.Math.Max(1.0 - m2, 0.0));
+        double bfac = beta > 0 ? 0.5 * m2 / (1.0 + beta) : 0.0;
+
         var cp = new double[n];
         var ueMid = new double[n];
         double U2 = freestreamSpeed * freestreamSpeed;
@@ -166,7 +177,10 @@ public static class MsesInviscidPanelSolver
             double ue = vx * pg.TangentX[i] + vy * pg.TangentY[i];
             for (int k = 0; k < n + 1; k++) ue += aTangent[i, k] * gamma[k];
             ueMid[i] = ue;
-            cp[i] = U2 > 0 ? 1.0 - (ue * ue) / U2 : 0.0;
+            double cpInc = U2 > 0 ? 1.0 - (ue * ue) / U2 : 0.0;
+            cp[i] = m2 > 0
+                ? cpInc / (beta + bfac * cpInc)
+                : cpInc;
         }
 
         // Contour integral ∮_CCW V_outside · dl taken along the
@@ -184,8 +198,14 @@ public static class MsesInviscidPanelSolver
             contourIntegral += ueMid[j] * pg.Length[j];
         }
         double circulation = -contourIntegral;
-        double cl = freestreamSpeed > 0
+        double clIncomp = freestreamSpeed > 0
             ? 2.0 * circulation / (freestreamSpeed * chord) : 0.0;
+        // Prandtl-Glauert compressibility correction on CL. Cp is
+        // already Karman-Tsien corrected above; applying P-G to CL
+        // rather than re-integrating the K-T Cp keeps things
+        // simple and agrees with K-T integration to within a few
+        // percent up to M ≈ 0.3 (our designed operating envelope).
+        double cl = m2 > 0 ? clIncomp / beta : clIncomp;
 
         return new InviscidResult(gamma, cp, cl, circulation);
     }
