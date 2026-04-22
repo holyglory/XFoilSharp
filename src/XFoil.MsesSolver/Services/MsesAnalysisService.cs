@@ -26,6 +26,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     private readonly int _viscousCouplingIterations;
     private readonly double _viscousCouplingRelaxation;
     private readonly bool _useThesisExactTurbulent;
+    private readonly bool _useThesisExactLaminar;
     private readonly bool _useWakeMarcher;
 
     /// <summary>
@@ -50,18 +51,24 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     /// Young at the wake far-field rather than at the TE. Default
     /// false. Produces a tighter CD estimate when the wake's H has
     /// relaxed by the integration point.</param>
+    /// <param name="useThesisExactLaminar">If true, the laminar
+    /// pre-transition marcher uses the Phase-2e implicit-Newton
+    /// solver (thesis eq. 6.10 laminar closure). Default false
+    /// (Thwaites-λ marcher as baseline).</param>
     public MsesAnalysisService(
         IAirfoilAnalysisService? inviscidProvider = null,
         int viscousCouplingIterations = 0,
         double viscousCouplingRelaxation = 0.3,
         bool useThesisExactTurbulent = false,
-        bool useWakeMarcher = false)
+        bool useWakeMarcher = false,
+        bool useThesisExactLaminar = false)
     {
         _inner = inviscidProvider
             ?? new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
         _viscousCouplingIterations = System.Math.Max(0, viscousCouplingIterations);
         _viscousCouplingRelaxation = System.Math.Clamp(viscousCouplingRelaxation, 0.0, 1.0);
         _useThesisExactTurbulent = useThesisExactTurbulent;
+        _useThesisExactLaminar = useThesisExactLaminar;
         _useWakeMarcher = useWakeMarcher;
     }
 
@@ -469,7 +476,8 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         return CompositeTransitionMarcher.March(
             s, ue, nu, nCrit,
             cTauInitialFactor: 0.3, machNumberEdge: 0.0,
-            useThesisExactTurbulent: _useThesisExactTurbulent);
+            useThesisExactTurbulent: _useThesisExactTurbulent,
+            useThesisExactLaminar: _useThesisExactLaminar);
     }
 
     // Phase-2f: marches the merged wake behind the TE for half a chord

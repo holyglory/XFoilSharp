@@ -36,12 +36,19 @@ public static class LaminarTransitionMarcher
     /// <param name="kinematicViscosity">ν.</param>
     /// <param name="nCrit">Critical n-factor. Default 9.0 (standard tunnel).</param>
     /// <param name="machNumberEdge">Edge Mach. Default 0.</param>
+    /// <param name="useThesisExactLaminar">If true, drive (θ, H) from
+    /// <see cref="ThesisExactLaminarMarcher"/> (implicit-Newton on
+    /// eq. 6.10 laminar closure) instead of the Phase-2b Thwaites-λ
+    /// marcher. Ñ accumulation uses the resulting (θ, H) exactly the
+    /// same way regardless. Default false (preserves existing
+    /// behavior).</param>
     public static TransitionMarchResult March(
         double[] stations,
         double[] edgeVelocity,
         double kinematicViscosity,
         double nCrit = 9.0,
-        double machNumberEdge = 0.0)
+        double machNumberEdge = 0.0,
+        bool useThesisExactLaminar = false)
     {
         if (stations is null) throw new System.ArgumentNullException(nameof(stations));
         if (edgeVelocity is null) throw new System.ArgumentNullException(nameof(edgeVelocity));
@@ -50,9 +57,23 @@ public static class LaminarTransitionMarcher
         if (stations.Length < 2)
             throw new System.ArgumentException("need ≥2 stations");
 
-        // Run the Phase-2b closure-based laminar marcher for θ/H.
-        var (theta, h) = ClosureBasedLaminarMarcher.March(
-            stations, edgeVelocity, kinematicViscosity, machNumberEdge);
+        // Run the Phase-2b (default) or Phase-2e (implicit-Newton)
+        // laminar marcher for θ/H.
+        double[] theta, h;
+        if (useThesisExactLaminar)
+        {
+            var mr = ThesisExactLaminarMarcher.March(
+                stations, edgeVelocity, kinematicViscosity, machNumberEdge);
+            theta = mr.Theta;
+            h = mr.H;
+        }
+        else
+        {
+            var (t, hh) = ClosureBasedLaminarMarcher.March(
+                stations, edgeVelocity, kinematicViscosity, machNumberEdge);
+            theta = t;
+            h = hh;
+        }
 
         int n = stations.Length;
         var NAmp = new double[n];

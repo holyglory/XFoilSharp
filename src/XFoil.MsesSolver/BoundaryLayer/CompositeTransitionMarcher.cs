@@ -48,6 +48,11 @@ public static class CompositeTransitionMarcher
     /// via eq. 6.10) for the turbulent leg instead of the Clauser-
     /// placeholder <see cref="ClosureBasedTurbulentLagMarcher"/>.
     /// Default false (keeps the existing uncoupled baseline).</param>
+    /// <param name="useThesisExactLaminar">If true, drive the laminar
+    /// leg's (θ, H) through <see cref="ThesisExactLaminarMarcher"/>
+    /// (implicit-Newton on the laminar closure) instead of the
+    /// Phase-2b Thwaites-λ marcher. Ñ tracking uses the same envelope
+    /// e^N logic regardless. Default false.</param>
     public static CompositeResult March(
         double[] stations,
         double[] edgeVelocity,
@@ -55,10 +60,12 @@ public static class CompositeTransitionMarcher
         double nCrit = 9.0,
         double cTauInitialFactor = 0.3,
         double machNumberEdge = 0.0,
-        bool useThesisExactTurbulent = false)
+        bool useThesisExactTurbulent = false,
+        bool useThesisExactLaminar = false)
     {
         var lam = LaminarTransitionMarcher.March(
-            stations, edgeVelocity, kinematicViscosity, nCrit, machNumberEdge);
+            stations, edgeVelocity, kinematicViscosity, nCrit, machNumberEdge,
+            useThesisExactLaminar: useThesisExactLaminar);
 
         int n = stations.Length;
         var theta = new double[n];
