@@ -134,8 +134,9 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             ? settings.NCritUpper!.Value
             : 9.0;
 
-        var upperMarch = RunSurfaceMarch(inv, upper: true, nu, nCrit);
-        var lowerMarch = RunSurfaceMarch(inv, upper: false, nu, nCrit);
+        double mach = System.Math.Max(settings.MachNumber, 0.0);
+        var upperMarch = RunSurfaceMarch(inv, upper: true, nu, nCrit, mach);
+        var lowerMarch = RunSurfaceMarch(inv, upper: false, nu, nCrit, mach);
 
         // Phase-5-lite opt-in coupling. Only runs if the caller
         // constructed the service with viscousCouplingIterations > 0.
@@ -159,8 +160,8 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             {
                 var invK = AnalyzeInviscid(thickened, angleOfAttackDegrees, settings);
                 if (!double.IsFinite(invK.LiftCoefficient)) break;
-                var upperK = RunSurfaceMarch(invK, upper: true, nu, nCrit);
-                var lowerK = RunSurfaceMarch(invK, upper: false, nu, nCrit);
+                var upperK = RunSurfaceMarch(invK, upper: true, nu, nCrit, mach);
+                var lowerK = RunSurfaceMarch(invK, upper: false, nu, nCrit, mach);
                 double cdTry = ComputeSquireYoungCd(upperK, lowerK, Uinf);
                 double envMin = System.Math.Max(cdInitial / 3.0, 1e-5);
                 double envMax = System.Math.Min(cdInitial * 3.0 + 0.01, 0.3);
@@ -499,7 +500,8 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     }
 
     private CompositeTransitionMarcher.CompositeResult RunSurfaceMarch(
-        InviscidAnalysisResult inv, bool upper, double nu, double nCrit)
+        InviscidAnalysisResult inv, bool upper, double nu, double nCrit,
+        double machNumber = 0.0)
     {
         var samples = inv.PressureSamples;
         // Find LE as the min-x sample.
@@ -547,9 +549,15 @@ public class MsesAnalysisService : IAirfoilAnalysisService
             prev = k;
         }
 
+        // Pass M∞ as the edge Mach — the closure relations use this
+        // only for the compressibility correction Hk = (H−0.290·M²)/
+        // (1+0.113·M²) and a few Me² terms in turbulent H*/Cτ_eq.
+        // Low-mach airfoil analysis: M_local ≈ M∞·Ue/U∞, but since Me
+        // only enters as Me² in small correction terms, using M∞ is
+        // within a few % even at Mach 0.3.
         return CompositeTransitionMarcher.March(
             s, ue, nu, nCrit,
-            cTauInitialFactor: 0.3, machNumberEdge: 0.0,
+            cTauInitialFactor: 0.3, machNumberEdge: machNumber,
             useThesisExactTurbulent: _useThesisExactTurbulent,
             useThesisExactLaminar: _useThesisExactLaminar);
     }
