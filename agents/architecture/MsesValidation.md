@@ -118,10 +118,33 @@ The XFoil.Solver legacy path remains `4455/4455 bit-exact` on the
 `AnalysisSessionRunner` (header prefix unchanged so legacy parsers
 keep working).
 
+## F2 — Source-distribution coupling (opt-in, one-way)
+
+Regression tests: `tests/XFoil.Core.Tests/SourceCouplingSmokeTests.cs`
+and `MsesSourceCouplingSignTests.cs`. Opt-in via
+`useSourceDistributionCoupling: true`.
+
+Behavior pinned:
+
+- NACA 4412 α=4° coupled vs uncoupled: `|ΔCL| < 1e-6` (inviscid
+  unchanged by design — see plan), `|ΔCD| > 1e-5` (BL responds
+  to perturbed Ue, so CD shifts observably).
+- NACA 0012 α=0° under coupling: Xtr_U ≈ Xtr_L within 0.02·c
+  (symmetric input → symmetric output).
+- 7-case deep-stall subset: coupled convergence count ≥ uncoupled
+  count (coupling can only help or be neutral — never break a
+  previously converging case).
+
+**What's not validated:** CL correction on cambered airfoils.
+One-way coupling doesn't re-solve inviscid; full two-way
+(CL-modifying) coupling is deferred.
+
 ## What's explicitly not validated here
 
-- **CL viscous feedback** — Phase 5 (source-distribution coupling).
-  Inviscid-only CL overpredicts 5–15 % on cambered airfoils.
+- **CL viscous feedback on cambered airfoils** — deferred to
+  future "Phase 5 proper" (two-way coupling). Inviscid-only CL
+  overpredicts 5–15 %; F2's one-way source-distribution coupling
+  does not address CL (by design, not by bug).
 - **Compressibility at M > 0.3** — untested; compressibility couples
   through `ComputeHk` and Prandtl-Glauert on the inviscid side, both
   verified at M ≤ 0.3 but not at transonic.

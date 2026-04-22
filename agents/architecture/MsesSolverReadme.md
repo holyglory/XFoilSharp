@@ -56,11 +56,46 @@ new MsesAnalysisService(
     viscousCouplingRelaxation: 0.3,
     useThesisExactTurbulent: true,               // default
     useWakeMarcher: true,                        // default
-    useThesisExactLaminar: true);                // default
+    useThesisExactLaminar: true,                 // default
+    useSourceDistributionCoupling: false,        // F2, experimental
+    sourceCouplingIterations: 20,
+    sourceCouplingRelaxation: 0.5);
 ```
 
 Pass `false` on the three marcher flags to revert to the pre-F1
 baseline for A/B studies.
+
+### Source-distribution coupling (experimental, opt-in)
+
+Setting `useSourceDistributionCoupling: true` enables a one-way
+Picard iteration:
+
+```text
+1. Solve inviscid → Ue₀ on each surface.
+2. Run BL → δ*.
+3. Compute σ = d(Ue·δ*)/ds; integrate Hilbert kernel → ΔUe.
+4. Re-march BL on Ue₀ + α·ΔUe (α = sourceCouplingRelaxation).
+5. Repeat until max δ* stops changing by > 0.5 %c.
+```
+
+**What it does:** the BL responds to the perturbed edge
+velocity. Changes CD and δ*/θ distributions; improves deep-stall
+convergence because aft-surface ΔUe > 0 relieves adverse gradient
+growth on the upper surface.
+
+**What it does NOT do:** the inviscid system is not re-solved,
+so CL is unchanged (still the inviscid value). Full MSES-style
+two-way coupling would modify CL by injecting σ back into the
+linear-vortex Jacobian — that requires a non-parity inviscid
+path and is deferred to a future phase.
+
+Use this flag for:
+
+- Better CD estimates past the attached regime.
+- Higher deep-stall convergence rate on cambered airfoils.
+- Diagnostic comparison against the uncoupled pipeline.
+
+Don't rely on it for cambered-airfoil CL accuracy.
 
 ## What works today (F1 finalized)
 

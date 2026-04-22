@@ -356,13 +356,50 @@ than δ*_l) adds effective camber, which INFLATES CL instead of
 reducing it. NACA 4412 α=4° Re=3e6: uncoupled CL=0.99, 2-iter
 coupled CL=1.05 (wrong direction).
 
-Drela's real MSES avoids this via a source-distribution method
-(Phase 5 proper). Phase-5-lite is retained as a stepping stone but
-production users should stick with `viscousCouplingIterations=0`.
+**Phase-5 one-way source-distribution status (F2, commits 64aeb85,
+a9b1441, eb40797):** a source-distribution coupling landed via the
+`useSourceDistributionCoupling` ctor flag (default OFF,
+experimental):
+
+- `SourceDistributionCoupling.ComputeDisplacementSource` computes
+  σ(s) = d(Ue·δ*)/ds on each surface via finite difference.
+- `SourceDistributionCoupling.IntegrateSourceUeDelta` integrates
+  the Hilbert-like kernel ΔUe(s) = (1/π) PV ∫ σ(ξ)/(s−ξ) dξ.
+- `MsesAnalysisService.AnalyzeViscous` runs a Picard iteration:
+  perturb Ue ← Ue₀ + α·ΔUe, re-march BL, repeat until max δ*
+  stops changing by > 0.5 % chord (or 20 iterations).
+
+**Scope of what shipped:** the coupling is **one-way** — it
+perturbs the edge velocity the BL marcher sees but does NOT
+re-solve the inviscid system. Therefore:
+
+- CL is invariant under the coupling (still from the uncoupled
+  inviscid).
+- CD and δ*/θ change because the BL responds to perturbed Ue.
+- Deep-stall convergence can improve because aft-surface ΔUe > 0
+  relieves adverse gradient growth.
+
+**Why only one-way:** full two-way coupling requires injecting
+the σ distribution into the linear-vortex Jacobian of
+`XFoil.Solver`. That file is gated by the 4455/4455 bit-exact
+parity test and cannot be modified without breaking the XFoil
+parity path. A proper two-way coupling would need either (a) a
+separate non-parity linear-vortex solver in `XFoil.MsesSolver`
+that accepts source contributions, or (b) a facade that injects
+σ-induced velocity into the existing solver's output without
+re-solving — neither of which fits the F2 bounded scope.
+
+**F2.4 decision:** ship the one-way coupling as an opt-in (not
+default). Document the one-way scope. Defer full two-way
+coupling to a future phase ("Phase 5 proper") that either
+forks a non-parity inviscid assembly or builds a source-contribution
+facade around the parity-gated one.
 
 **Acceptance:** full airfoil polars on NACA 0012 / 4412 / 23012 within
 reasonable agreement (mean |ΔCL| < 0.05, mean |ΔCD| < 0.002 vs WT) in the
-α-range where MSES is expected to be state-of-the-art.
+α-range where MSES is expected to be state-of-the-art. **Partial:**
+CD within ~10 % of WT on attached NACA 0012; CL still overpredicted
+on cambered airfoils pending true two-way coupling.
 
 ### Phase 6 — Parity with MSES (stretch)
 
