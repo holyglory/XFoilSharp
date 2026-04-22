@@ -89,9 +89,21 @@ public static class CompositeTransitionMarcher
         }
 
         // Hand off at the transition station. Build a turbulent
-        // sub-sweep covering [transitionIdx … n-1].
+        // sub-sweep covering [transitionIdx … n-1]. If transition
+        // happened at the very last station, there's no tail to
+        // march (tailLen < 2 would break the turbulent marcher's
+        // "need ≥2 stations" guard), so degrade to laminar-to-TE.
         int tIdx = lam.TransitionIndex;
         int tailLen = n - tIdx;
+        if (tailLen < 2)
+        {
+            return new CompositeResult(theta, H, NAmp, cTau,
+                EdgeVelocity: edgeVelocity,
+                Stations: stations,
+                TransitionIndex: -1,
+                TransitionX: double.NaN,
+                IsTurbulentAtEnd: false);
+        }
         var tailStations = new double[tailLen];
         var tailUe = new double[tailLen];
         for (int k = 0; k < tailLen; k++)

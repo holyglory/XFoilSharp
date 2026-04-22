@@ -523,7 +523,14 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         double machNumber = 0.0)
     {
         var samples = inv.PressureSamples;
-        // Find LE as the min-x sample.
+        // Find LE as the min-x sample. NOTE: at high α the stagnation
+        // point is offset from the geometric LE, which can cause a
+        // spurious early-transition artifact on the "wrong" side
+        // (see e.g. NACA 4412 α=8° lower surface Xtr_L=0.008). A
+        // stagnation-based split was tried and regressed other cases,
+        // so we keep geometric LE for now. Proper fix would be to
+        // partition the airfoil via the actual Ue=0 point with
+        // smooth Ue sign detection — left for Phase 5.
         int iLE = 0;
         double minX = samples[0].Location.X;
         for (int i = 1; i < samples.Count; i++)
