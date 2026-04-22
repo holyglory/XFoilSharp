@@ -151,6 +151,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
         // accepted by the (cdTry > 0) gate, then propagated as the
         // final answer.
         double cdInitial = ComputeSquireYoungCd(upperMarch, lowerMarch, Uinf);
+        int couplingIterationsRun = 0;
         for (int k = 0; k < _viscousCouplingIterations; k++)
         {
             if (!TryBuildThickenedGeometry(geometry, upperMarch, lowerMarch,
@@ -170,6 +171,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                     inv = invK;
                     upperMarch = upperK;
                     lowerMarch = lowerK;
+                    couplingIterationsRun = k + 1;
                 }
                 else break;
             }
@@ -236,7 +238,7 @@ public class MsesAnalysisService : IAirfoilAnalysisService
                 WaveDrag = null,
             },
             Converged = converged,
-            Iterations = 1,
+            Iterations = 1 + couplingIterationsRun,
             AngleOfAttackDegrees = angleOfAttackDegrees,
             ConvergenceHistory = new System.Collections.Generic.List<ViscousConvergenceInfo>(),
             UpperProfiles = upperProfiles,

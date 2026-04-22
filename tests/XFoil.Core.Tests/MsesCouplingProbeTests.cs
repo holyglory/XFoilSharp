@@ -40,6 +40,32 @@ public class MsesCouplingProbeTests
     }
 
     [Fact]
+    public void IterationsField_ReflectsActualCouplingIterations()
+    {
+        // Uncoupled (viscousCouplingIterations=0): Iterations = 1
+        // (the single uncoupled pass).
+        // Coupled (viscousCouplingIterations=2): Iterations should be
+        // between 1 (zero accepted) and 3 (both accepted).
+        var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
+        var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
+        var settings = new AnalysisSettings(
+            panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
+            reynoldsNumber: 3_000_000);
+
+        var svcBase = new MsesAnalysisService(useThesisExactTurbulent: true);
+        var svcCoup = new MsesAnalysisService(
+            viscousCouplingIterations: 2,
+            viscousCouplingRelaxation: 0.1,
+            useThesisExactTurbulent: true);
+
+        var rBase = svcBase.AnalyzeViscous(geom, 2.0, settings);
+        var rCoup = svcCoup.AnalyzeViscous(geom, 2.0, settings);
+
+        Assert.Equal(1, rBase.Iterations);
+        Assert.InRange(rCoup.Iterations, 1, 3);
+    }
+
+    [Fact]
     public void Coupling_DoesntChangeResultOnVeryLowRelaxation()
     {
         // With relaxation = 0 (no geometric offset), coupling should
