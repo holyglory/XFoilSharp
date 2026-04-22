@@ -2456,6 +2456,10 @@ static void WriteViscousPolarMses(
     {
         writer.WriteLine("# MSES polar export");
         writer.WriteLine($"# airfoil={geometry.Name}, panels={panelCount}, mach={machNumber}, re={reynoldsNumber}, nCrit={criticalAmplificationFactor}");
+        writer.WriteLine("# opt-ins: "
+            + $"thesis_turbulent={UseThesisExactTurbulentFromEnv()}, "
+            + $"thesis_laminar={UseThesisExactLaminarFromEnv()}, "
+            + $"wake_marcher={UseWakeMarcherFromEnv()}");
         writer.WriteLine("alpha_deg,CL,CD,CDF,CDP,CM,converged");
     }
 
