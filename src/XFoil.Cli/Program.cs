@@ -2452,6 +2452,8 @@ static void WriteViscousSinglePointMses(
     Console.WriteLine();
     Console.WriteLine($"CL:        {r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
     Console.WriteLine($"CD:        {r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)}");
+    Console.WriteLine($"  CDF:     {r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}  (skin friction)");
+    Console.WriteLine($"  CDP:     {r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}  (pressure / form)");
     Console.WriteLine($"CM:        {r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
     string xtrU = r.UpperTransition.StationIndex > 0
         ? r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)
