@@ -2450,7 +2450,7 @@ static void WriteViscousPolarMses(
         Console.WriteLine($"Name: {geometry.Name} (MSES polar — Phase 5 stub)");
         Console.WriteLine($"Panels: {panelCount}  Mach: {machNumber:F4}  Re: {reynoldsNumber:F0}  nCrit: {criticalAmplificationFactor:F3}");
         Console.WriteLine();
-        Console.WriteLine("AlphaDeg\tCL\t\tCD\t\tCDF\t\tCDP\t\tCM\t\tConverged");
+        Console.WriteLine("AlphaDeg\tCL\t\tCD\t\tCDF\t\tCDP\t\tCM\t\tConverged\tStall");
     }
     else
     {
@@ -2460,7 +2460,7 @@ static void WriteViscousPolarMses(
             + $"thesis_turbulent={UseThesisExactTurbulentFromEnv()}, "
             + $"thesis_laminar={UseThesisExactLaminarFromEnv()}, "
             + $"wake_marcher={UseWakeMarcherFromEnv()}");
-        writer.WriteLine("alpha_deg,CL,CD,CDF,CDP,CM,converged");
+        writer.WriteLine("alpha_deg,CL,CD,CDF,CDP,CM,converged,stall");
     }
 
     double eps = 1e-9;
@@ -2468,6 +2468,13 @@ static void WriteViscousPolarMses(
     for (double a = alphaStart; a <= alphaEnd + eps; a += alphaStep)
     {
         var r = mses.AnalyzeViscous(geometry, a, settings);
+        // Heuristic stall detection: upper TE H > 2.2 OR δ* > 5%.
+        bool stall = false;
+        if (r.UpperProfiles.Length > 0)
+        {
+            var uTE = r.UpperProfiles[r.UpperProfiles.Length - 1];
+            stall = uTE.Hk > 2.2 || uTE.DStar > 0.04;
+        }
         string line = writer is null
             ? $"{a.ToString("F4", CultureInfo.InvariantCulture)}\t"
               + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
@@ -2475,14 +2482,16 @@ static void WriteViscousPolarMses(
               + $"{r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}\t"
               + $"{r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}\t"
               + $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}\t"
-              + (r.Converged ? "Y" : "N")
+              + (r.Converged ? "Y" : "N") + "\t"
+              + (stall ? "Y" : "N")
             : $"{a.ToString("F4", CultureInfo.InvariantCulture)},"
               + $"{r.LiftCoefficient.ToString("F6", CultureInfo.InvariantCulture)},"
               + $"{r.DragDecomposition.CD.ToString("F6", CultureInfo.InvariantCulture)},"
               + $"{r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)},"
               + $"{r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)},"
               + $"{r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)},"
-              + (r.Converged ? "True" : "False");
+              + (r.Converged ? "True" : "False") + ","
+              + (stall ? "True" : "False");
         emit(line);
     }
 
@@ -2536,7 +2545,7 @@ static void WriteViscousSinglePointMses(
         // signals that viscous feedback on CL would be significant.
         // Since MSES here has no viscous feedback, the inviscid CL
         // over-predicts in this regime.
-        if (uTE.Hk > 2.2 || uTE.DStar > 0.05)
+        if (uTE.Hk > 2.2 || uTE.DStar > 0.04)
         {
             Console.WriteLine($"WARNING:   upper surface likely stalled (H_u={uTE.Hk:F2}, "
                 + $"δ*_u={uTE.DStar:F4}). CL overpredicts — no viscous feedback.");
