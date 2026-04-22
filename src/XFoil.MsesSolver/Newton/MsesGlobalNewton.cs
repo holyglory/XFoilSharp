@@ -29,13 +29,25 @@ public static class MsesGlobalNewton
     /// Drives the Newton iteration from an initial guess to
     /// convergence (or the iteration cap).
     /// </summary>
+    /// <param name="maxStepNorm">Cap on ‖Δ‖_∞ per step. If the
+    /// natural Newton step exceeds this, it's scaled down (damped).
+    /// Default = no cap (∞). Typical viscous-inviscid systems
+    /// benefit from 0.1–0.5 (scaled-unknown units).</param>
+    /// <param name="lineSearch">If true, halve the step up to
+    /// <paramref name="maxLineSearchTrials"/> times whenever the
+    /// post-step residual is larger than pre-step. Default true.</param>
+    /// <param name="maxLineSearchTrials">Max halvings per outer
+    /// step. Default 3.</param>
     public static Result Solve(
         double[] initialState,
         System.Func<double[], double[]> residualFunc,
         System.Func<double[], System.Func<double[], double[]>, double[,]> jacobianFunc,
         int maxIterations = 30,
         double resTol = 1e-8,
-        double stepTol = 1e-8)
+        double stepTol = 1e-8,
+        double maxStepNorm = double.PositiveInfinity,
+        bool lineSearch = true,
+        int maxLineSearchTrials = 3)
     {
         if (initialState is null) throw new System.ArgumentNullException(nameof(initialState));
         if (residualFunc is null) throw new System.ArgumentNullException(nameof(residualFunc));
@@ -75,16 +87,38 @@ public static class MsesGlobalNewton
                 // non-converged and return.
                 break;
             }
-            stepNorm = InfinityNorm(delta);
-            for (int i = 0; i < n; i++) state[i] += delta[i];
-            if (resNorm < resTol && stepNorm < stepTol)
+            double deltaNorm = InfinityNorm(delta);
+
+            // Damping: scale Δ down if it exceeds the configured cap.
+            double damping = 1.0;
+            if (deltaNorm > maxStepNorm && maxStepNorm > 0)
+            {
+                damping = maxStepNorm / deltaNorm;
+            }
+
+            // Trial step + optional line search.
+            double[] trialState = new double[n];
+            double trialResNorm = double.PositiveInfinity;
+            double appliedDamping = damping;
+            for (int trial = 0; trial <= maxLineSearchTrials; trial++)
+            {
+                for (int i = 0; i < n; i++)
+                    trialState[i] = state[i] + appliedDamping * delta[i];
+                var rTrial = residualFunc(trialState);
+                trialResNorm = InfinityNorm(rTrial);
+                if (!lineSearch || trialResNorm <= resNorm || trial == maxLineSearchTrials)
+                    break;
+                // Overshoot: halve and retry.
+                appliedDamping *= 0.5;
+            }
+            stepNorm = deltaNorm * appliedDamping;
+            for (int i = 0; i < n; i++) state[i] = trialState[i];
+
+            if (trialResNorm < resTol && stepNorm < stepTol)
             {
                 converged = true;
-                // Force one more residual evaluation so history ends
-                // on the converged value.
-                var rFinal = residualFunc(state);
-                resHist.Add(InfinityNorm(rFinal));
-                resNorm = InfinityNorm(rFinal);
+                resHist.Add(trialResNorm);
+                resNorm = trialResNorm;
                 iter++;
                 break;
             }
