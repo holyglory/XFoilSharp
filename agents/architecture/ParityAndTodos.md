@@ -1,5 +1,17 @@
 # Managed-vs-Legacy Parity And TODOs
 
+## MSES sub-project
+
+`XFoil.MsesSolver` is a separate clean-room port of Drela's 1986
+thesis closure, parallel to (not replacing) `XFoil.Solver`. Its
+parity target is the thesis correlations, not Fortran XFoil.
+Current state: Phase 0–2f complete end-to-end (closure library,
+laminar/turbulent BL marchers, wake marcher, Squire-Young drag,
+transition detection, CDF/CDP decomposition, compressibility
+propagation, full CLI surface with opt-in env vars). Phase 5
+Newton coupling is the remaining major piece. Details in
+`MsesClosurePlan.md`.
+
 ## Status summary
 
 The codebase is ahead of the stale docs that were left behind, but it is still behind original XFoil on fidelity. The managed solver now contains a real Newton-coupled viscous stack:
