@@ -2119,11 +2119,12 @@ static void PrintUsage()
     Console.WriteLine("  export-profile-mses <####> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]   (MSES per-station BL profile → CSV)");
     Console.WriteLine("  export-polar-mses-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]");
     Console.WriteLine("  export-profile-mses-file <path> <alpha> <outputCsvPath> [panels=160] [mach] [reynolds] [criticalN]");
-    Console.WriteLine("    MSES opt-in flags (any MSES command accepts these, position-independent):");
-    Console.WriteLine("      --thesis-exact     Phase-2e implicit-Newton turbulent marcher (vs Clauser placeholder)");
-    Console.WriteLine("      --wake             Phase-2f wake marcher; integrates Squire-Young at wake far-field");
-    Console.WriteLine("      --thesis-laminar   Phase-2e implicit-Newton laminar marcher (vs Thwaites-λ)");
-    Console.WriteLine("    Env-var equivalents (deprecated, will be removed): XFOIL_MSES_THESIS_EXACT, XFOIL_MSES_WAKE, XFOIL_MSES_THESIS_LAMINAR");
+    Console.WriteLine("    MSES default path: implicit-Newton laminar + turbulent + wake marcher (thesis-exact).");
+    Console.WriteLine("    MSES closure flags (any MSES command accepts these, position-independent):");
+    Console.WriteLine("      --legacy-closure   Opts out of all three thesis-exact marchers (Thwaites-λ laminar");
+    Console.WriteLine("                         + Clauser-placeholder turbulent + TE Squire-Young). For comparison only.");
+    Console.WriteLine("      --thesis-exact, --wake, --thesis-laminar   Redundant under new defaults; retained for scripts.");
+    Console.WriteLine("    Env-var XFOIL_MSES_THESIS_EXACT/WAKE/THESIS_LAMINAR are now no-ops (deprecated, scheduled for removal).");
     Console.WriteLine("  viscous-polar-file-double <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 2: doubled tree, arbitrary .dat)");
     Console.WriteLine("  viscous-polar-file-modern <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree from .dat, v7 auto-ramp for stall rescue)");
     Console.WriteLine("  export-viscous-polar-file <path> <outputCsvPath> <alphaStart> <alphaEnd> <alphaStep> [panels] [mach] [reynolds] [couplingIterations] [viscousIterations] [residualTolerance] [displacementRelaxation] [transitionReTheta] [criticalN]");
@@ -2359,32 +2360,19 @@ static void WriteViscousPolarSummaryDouble(
     }
 }
 
-static bool BoolEnv(string name)
-{
-    string? v = Environment.GetEnvironmentVariable(name);
-    if (string.IsNullOrEmpty(v)) return false;
-    return v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase);
-}
-
-// MSES Phase-2e opt-in. Enable via --thesis-exact or
-// XFOIL_MSES_THESIS_EXACT=1: switches the turbulent marcher to the
-// implicit-Newton (thesis eq. 6.10) form instead of the Clauser
-// placeholder.
+// All three thesis-exact marchers default to ON (the MSES-class
+// finalization path). --legacy-closure forces them OFF for
+// comparative/parity-debug runs; --thesis-exact / --wake /
+// --thesis-laminar (and the XFOIL_MSES_* env vars) are retained
+// as no-ops under the new defaults but still recognized.
 static bool UseThesisExactTurbulentFromEnv()
-    => MsesCliFlags.ThesisExactFlag || BoolEnv("XFOIL_MSES_THESIS_EXACT");
+    => !MsesCliFlags.LegacyClosureFlag;
 
-// MSES Phase-2f opt-in. Enable via --wake or XFOIL_MSES_WAKE=1:
-// moves the Squire-Young CD integration from the airfoil TE to
-// the wake far-field (half-chord downstream) with a wake marcher.
 static bool UseWakeMarcherFromEnv()
-    => MsesCliFlags.WakeFlag || BoolEnv("XFOIL_MSES_WAKE");
+    => !MsesCliFlags.LegacyClosureFlag;
 
-// MSES Phase-2e laminar opt-in. Enable via --thesis-laminar or
-// XFOIL_MSES_THESIS_LAMINAR=1: drives the pre-transition (θ, H)
-// through the implicit-Newton ThesisExactLaminarMarcher instead
-// of the Thwaites-λ marcher.
 static bool UseThesisExactLaminarFromEnv()
-    => MsesCliFlags.ThesisLaminarFlag || BoolEnv("XFOIL_MSES_THESIS_LAMINAR");
+    => !MsesCliFlags.LegacyClosureFlag;
 
 static void WriteMsesProfileDump(
     AirfoilGeometry geometry,
@@ -4034,6 +4022,12 @@ static class MsesCliFlags
     public static bool WakeFlag { get; private set; }
     public static bool ThesisLaminarFlag { get; private set; }
 
+    // --legacy-closure opts OUT of the thesis-exact defaults on all
+    // three knobs, reverting to Thwaites-λ laminar + Clauser-
+    // placeholder turbulent + TE Squire-Young. Intended for
+    // comparative studies and parity debug, not production use.
+    public static bool LegacyClosureFlag { get; private set; }
+
     public static string[] ConsumeFlags(string[] args)
     {
         var kept = new System.Collections.Generic.List<string>(args.Length);
@@ -4044,6 +4038,7 @@ static class MsesCliFlags
                 case "--thesis-exact":   ThesisExactFlag = true; break;
                 case "--wake":           WakeFlag = true; break;
                 case "--thesis-laminar": ThesisLaminarFlag = true; break;
+                case "--legacy-closure": LegacyClosureFlag = true; break;
                 default: kept.Add(a); break;
             }
         }

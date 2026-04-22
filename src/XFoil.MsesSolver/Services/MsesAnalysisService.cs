@@ -9,16 +9,19 @@ namespace XFoil.MsesSolver.Services;
 /// <summary>
 /// MSES-thesis-based implementation of <see cref="IAirfoilAnalysisService"/>.
 ///
-/// Phase-0 scaffolding: right now the service delegates inviscid to
-/// the existing linear-vortex solver (via the Modern tree) and
-/// returns a minimal viscous stub. The real value-add lands in
-/// later phases, when the closure library + BL marchers plug into
-/// a proper Newton-coupled global solve (Phase 5 per
-/// <c>agents/architecture/MsesClosurePlan.md</c>).
+/// Default configuration (Phase 1 finalization):
+///   implicit-Newton laminar marcher + implicit-Newton turbulent
+///   marcher + wake marcher with Squire-Young far-field CD. This
+///   is the MSES-class path through the closure.
 ///
-/// Consumers can already target <see cref="IAirfoilAnalysisService"/>
-/// and swap this implementation in for the Modern facade once the
-/// viscous path is fleshed out.
+/// Opt-out flags on the ctor preserve the pre-thesis-exact baseline
+/// (Thwaites-λ laminar + Clauser-placeholder turbulent + TE
+/// Squire-Young) for comparative studies.
+///
+/// What's still missing vs full MSES: Newton-coupled viscous-
+/// inviscid system via source distribution (Phase 5). CL currently
+/// comes from the inviscid path with no viscous feedback; see
+/// <c>agents/architecture/MsesClosurePlan.md</c>.
 /// </summary>
 public class MsesAnalysisService : IAirfoilAnalysisService
 {
@@ -51,25 +54,25 @@ public class MsesAnalysisService : IAirfoilAnalysisService
     /// <param name="viscousCouplingRelaxation">Under-relaxation
     /// factor on δ* updates (0..1). Default 0.3 for damping.</param>
     /// <param name="useThesisExactTurbulent">If true, run the
-    /// Phase-2e implicit-Newton turbulent marcher (thesis eq. 6.10)
-    /// instead of the Clauser-placeholder lag marcher. Default
-    /// false (keeps the existing uncoupled baseline bit-exact).</param>
+    /// Phase-2e implicit-Newton turbulent marcher (thesis eq. 6.10).
+    /// Default true (the MSES-class path). Pass false to opt into
+    /// the Clauser-placeholder lag marcher that predates Phase 2e.</param>
     /// <param name="useWakeMarcher">If true, march the turbulent
     /// wake downstream from the TE (Drela §6.5) and apply Squire-
     /// Young at the wake far-field rather than at the TE. Default
-    /// false. Produces a tighter CD estimate when the wake's H has
+    /// true. Produces a tighter CD estimate when the wake's H has
     /// relaxed by the integration point.</param>
     /// <param name="useThesisExactLaminar">If true, the laminar
     /// pre-transition marcher uses the Phase-2e implicit-Newton
-    /// solver (thesis eq. 6.10 laminar closure). Default false
-    /// (Thwaites-λ marcher as baseline).</param>
+    /// solver (thesis eq. 6.10 laminar closure). Default true.
+    /// Pass false to revert to the Thwaites-λ marcher.</param>
     public MsesAnalysisService(
         IAirfoilAnalysisService? inviscidProvider = null,
         int viscousCouplingIterations = 0,
         double viscousCouplingRelaxation = 0.3,
-        bool useThesisExactTurbulent = false,
-        bool useWakeMarcher = false,
-        bool useThesisExactLaminar = false)
+        bool useThesisExactTurbulent = true,
+        bool useWakeMarcher = true,
+        bool useThesisExactLaminar = true)
     {
         _inner = inviscidProvider
             ?? new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
