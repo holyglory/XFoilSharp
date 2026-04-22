@@ -155,6 +155,28 @@ public class MsesPolarSweepRegressionTests
     }
 
     [Fact]
+    public void Naca0012_CdDecreasesWithRe()
+    {
+        // Physical expectation: CD ~ Re^(-0.2) (1/5 power law for
+        // turbulent BL). Pin monotonic decrease in CD as Re grows
+        // for NACA 0012 α=4° fully-thesis-exact across Re ∈
+        // {1e5, 5e5, 3e6, 1e7}.
+        double[] reynolds = { 100_000, 500_000, 3_000_000, 10_000_000 };
+        var svc = new MsesAnalysisService(
+            useThesisExactTurbulent: true, useWakeMarcher: true,
+            useThesisExactLaminar: true);
+        double prevCd = double.PositiveInfinity;
+        foreach (var re in reynolds)
+        {
+            var r = Run(svc, "0012", 4.0, re);
+            Assert.True(r.Converged);
+            Assert.True(r.DragDecomposition.CD < prevCd + 1e-6,
+                $"CD(Re={re}) = {r.DragDecomposition.CD} > CD(prev Re) = {prevCd}");
+            prevCd = r.DragDecomposition.CD;
+        }
+    }
+
+    [Fact]
     public void Naca0012_PolarMonotonic_CDRisesWithAlpha()
     {
         // Sanity: on NACA 0012, CD should rise monotonically with α
