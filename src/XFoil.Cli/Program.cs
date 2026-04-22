@@ -2469,6 +2469,7 @@ static void WriteViscousPolarMses(
     if (alphaStep <= 0) alphaStep = 0.5;
     double clMax = double.NegativeInfinity, alphaAtClMax = 0;
     double cdMin = double.PositiveInfinity, clAtCdMin = 0, alphaAtCdMin = 0;
+    double ldMax = double.NegativeInfinity, clAtLDMax = 0, alphaAtLDMax = 0;
     double firstStallAlpha = double.NaN;
     for (double a = alphaStart; a <= alphaEnd + eps; a += alphaStep)
     {
@@ -2486,6 +2487,16 @@ static void WriteViscousPolarMses(
                 cdMin = r.DragDecomposition.CD;
                 clAtCdMin = r.LiftCoefficient;
                 alphaAtCdMin = a;
+            }
+            if (r.DragDecomposition.CD > 0)
+            {
+                double ld = r.LiftCoefficient / r.DragDecomposition.CD;
+                if (ld > ldMax)
+                {
+                    ldMax = ld;
+                    clAtLDMax = r.LiftCoefficient;
+                    alphaAtLDMax = a;
+                }
             }
         }
         if (stall && double.IsNaN(firstStallAlpha))
@@ -2523,6 +2534,10 @@ static void WriteViscousPolarMses(
         if (cdMin < double.PositiveInfinity)
         {
             Console.WriteLine($"CD_min: {cdMin:F6} at α={alphaAtCdMin:F2}° (CL={clAtCdMin:F4})");
+        }
+        if (ldMax > double.NegativeInfinity)
+        {
+            Console.WriteLine($"(L/D)_max: {ldMax:F2} at α={alphaAtLDMax:F2}° (CL={clAtLDMax:F4})");
         }
         if (!double.IsNaN(firstStallAlpha))
         {
