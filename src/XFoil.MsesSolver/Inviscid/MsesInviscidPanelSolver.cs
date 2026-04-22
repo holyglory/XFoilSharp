@@ -89,4 +89,120 @@ public static class MsesInviscidPanelSolver
         return new PanelizedGeometry(
             panelCount, nx, ny, mx, my, tx, ty, nmx, nmy, len);
     }
+
+    /// <summary>
+    /// Builds the linear-vortex tangent-velocity influence matrix
+    /// A[i, k] where row i is a collocation point (panel midpoint)
+    /// and column k is a node γ strength. A·γ gives the tangential
+    /// velocity induced at each collocation point by the full
+    /// γ-distribution.
+    ///
+    /// Size: N × (N+1) where N = panel count (N+1 node γ unknowns).
+    /// Each panel j contributes to columns j and j+1 (linear γ
+    /// variation from γ_j to γ_{j+1}).
+    /// </summary>
+    public static double[,] BuildVortexInfluenceMatrix(PanelizedGeometry pg)
+    {
+        int n = pg.PanelCount;
+        var a = new double[n, n + 1];
+        for (int i = 0; i < n; i++)
+        {
+            double px = pg.MidX[i];
+            double py = pg.MidY[i];
+            double tix = pg.TangentX[i];
+            double tiy = pg.TangentY[i];
+            for (int j = 0; j < n; j++)
+            {
+                // Linear-vortex induced velocity at (px, py) from unit-γ
+                // shape functions (1-ξ/L) at node j and (ξ/L) at node j+1
+                // on panel j.
+                var (uA, vA, uB, vB) = LinearVortexPanelContribution(
+                    px, py, pg.NodeX[j], pg.NodeY[j],
+                    pg.NodeX[j + 1], pg.NodeY[j + 1],
+                    pg.TangentX[j], pg.TangentY[j], pg.Length[j],
+                    selfPanel: i == j);
+                // Tangential component on collocation i's tangent.
+                a[i, j]     += uA * tix + vA * tiy;
+                a[i, j + 1] += uB * tix + vB * tiy;
+            }
+        }
+        return a;
+    }
+
+    /// <summary>
+    /// Computes the velocity in GLOBAL coordinates at a collocation
+    /// point (px, py) induced by linear γ on a source panel from
+    /// (ax, ay) to (bx, by) with tangent (tx, ty) and length L.
+    /// Returns the per-unit-γ coefficients for the A endpoint
+    /// (shape function 1-ξ/L) and the B endpoint (shape function
+    /// ξ/L).
+    ///
+    /// Formulas: Katz &amp; Plotkin §11.4. Local panel frame has the
+    /// panel along the ξ-axis from 0 to L, with η the CCW normal.
+    /// </summary>
+    public static (double uA, double vA, double uB, double vB)
+        LinearVortexPanelContribution(
+            double px, double py,
+            double ax, double ay, double bx, double by,
+            double tx, double ty, double L,
+            bool selfPanel)
+    {
+        // Transform P to panel-local: ξ along tangent, η along normal.
+        double dx = px - ax;
+        double dy = py - ay;
+        double xi = dx * tx + dy * ty;
+        // Normal = (-ty, tx)  — 90° CCW rotation.
+        double eta = dx * (-ty) + dy * tx;
+
+        double uLocal_A, vLocal_A, uLocal_B, vLocal_B;
+
+        if (selfPanel)
+        {
+            // Closed-form limit at own midpoint (ξ=L/2, η→0⁺).
+            // Above-sheet branch. The below-sheet branch would flip
+            // v by sign; we use the above-sheet convention which
+            // matches "fluid on the normal-outward side".
+            // Constant-γ self: u_const = 1/2, v_const = 0.
+            // Linear-shape self: u_lin = 1/4, v_lin = -1/(2π).
+            double uConst = 0.5;
+            double vConst = 0.0;
+            double uLin = 0.25;
+            double vLin = -1.0 / (2.0 * System.Math.PI);
+            uLocal_A = uConst - uLin;
+            vLocal_A = vConst - vLin;
+            uLocal_B = uLin;
+            vLocal_B = vLin;
+        }
+        else
+        {
+            double r1sq = xi * xi + eta * eta;
+            double r2sq = (xi - L) * (xi - L) + eta * eta;
+            double r1 = System.Math.Sqrt(r1sq);
+            double r2 = System.Math.Sqrt(r2sq);
+            double beta1 = System.Math.Atan2(eta, xi);
+            double beta2 = System.Math.Atan2(eta, xi - L);
+            double dBeta = beta2 - beta1;  // subtended angle convention
+            double lnR = r1 > 0.0 && r2 > 0.0
+                ? System.Math.Log(r1 / r2) : 0.0;
+
+            double twoPi = 2.0 * System.Math.PI;
+            double uConst = dBeta / twoPi;
+            double vConst = lnR / twoPi;
+            double uLin = (xi * dBeta + eta * lnR) / (twoPi * L);
+            double vLin = (xi * lnR - L - eta * dBeta) / (twoPi * L);
+
+            uLocal_A = uConst - uLin;
+            vLocal_A = vConst - vLin;
+            uLocal_B = uLin;
+            vLocal_B = vLin;
+        }
+
+        // Rotate back to global: local ξ maps to (tx, ty); local η
+        // maps to (-ty, tx).
+        double uA_g = uLocal_A * tx + vLocal_A * (-ty);
+        double vA_g = uLocal_A * ty + vLocal_A * tx;
+        double uB_g = uLocal_B * tx + vLocal_B * (-ty);
+        double vB_g = uLocal_B * ty + vLocal_B * tx;
+        return (uA_g, vA_g, uB_g, vB_g);
+    }
 }
