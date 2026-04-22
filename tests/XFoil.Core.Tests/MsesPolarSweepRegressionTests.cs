@@ -4,10 +4,15 @@ using XFoil.Solver.Models;
 namespace XFoil.Core.Tests;
 
 /// <summary>
-/// Polar-sweep regression pins for the three MSES analysis paths:
-///   (1) Clauser-placeholder at TE  — baseline (uncoupled).
-///   (2) Thesis-exact turbulent at TE — Phase 2e.
-///   (3) Thesis-exact turbulent + wake marcher — Phase 2e + 2f.
+/// Polar-sweep regression pins for MSES analysis paths:
+///   - DefaultPath:   fully-thesis-exact (laminar + turbulent +
+///                    wake) via the post-F1.4 defaults.
+///   - TurbulentOnly: thesis-exact turbulent only (no wake, no
+///                    thesis-exact laminar).
+///   - TurbulentWake: thesis-exact turbulent + wake, no thesis-
+///                    exact laminar.
+///   - LegacyClosure: Thwaites-λ laminar + Clauser-placeholder
+///                    turbulent + TE Squire-Young.
 ///
 /// Pin loosely (±25 %) so intentional refinements don't fail the
 /// test mechanically, but catastrophic regressions (off by 3×) do.
@@ -31,9 +36,12 @@ public class MsesPolarSweepRegressionTests
     [InlineData(0.0, 0.00, 0.02)]    // α=0°, symmetric, CD ~ 0.002-0.015
     [InlineData(4.0, 0.003, 0.02)]   // α=4°, light adverse
     [InlineData(8.0, 0.005, 0.025)]  // α=8°, more adverse
-    public void Naca0012_ClauserTE_RemainsPlausible(
+    public void Naca0012_DefaultPath_RemainsPlausible(
         double alpha, double cdMin, double cdMax)
     {
+        // Post-F1.4: new MsesAnalysisService() uses the fully-
+        // thesis-exact path (implicit-Newton laminar + implicit-
+        // Newton turbulent + wake marcher).
         var svc = new MsesAnalysisService();
         var r = Run(svc, "0012", alpha, 3_000_000);
         Assert.True(r.Converged);
@@ -44,10 +52,15 @@ public class MsesPolarSweepRegressionTests
     [InlineData(0.0, 0.00, 0.02)]
     [InlineData(4.0, 0.003, 0.02)]
     [InlineData(8.0, 0.005, 0.025)]
-    public void Naca0012_ThesisExactTE_RemainsPlausible(
+    public void Naca0012_TurbulentOnly_RemainsPlausible(
         double alpha, double cdMin, double cdMax)
     {
-        var svc = new MsesAnalysisService(useThesisExactTurbulent: true);
+        // Thesis-exact turbulent marcher, Thwaites-λ laminar, TE
+        // Squire-Young (no wake). Intermediate knob configuration.
+        var svc = new MsesAnalysisService(
+            useThesisExactTurbulent: true,
+            useThesisExactLaminar: false,
+            useWakeMarcher: false);
         var r = Run(svc, "0012", alpha, 3_000_000);
         Assert.True(r.Converged);
         Assert.InRange(r.DragDecomposition.CD, cdMin, cdMax);
@@ -57,11 +70,34 @@ public class MsesPolarSweepRegressionTests
     [InlineData(0.0, 0.00, 0.02)]
     [InlineData(4.0, 0.003, 0.02)]
     [InlineData(8.0, 0.005, 0.025)]
-    public void Naca0012_ThesisExactWake_RemainsPlausible(
+    public void Naca0012_TurbulentWake_RemainsPlausible(
         double alpha, double cdMin, double cdMax)
     {
+        // Thesis-exact turbulent + wake marcher, Thwaites-λ laminar.
         var svc = new MsesAnalysisService(
-            useThesisExactTurbulent: true, useWakeMarcher: true);
+            useThesisExactTurbulent: true,
+            useThesisExactLaminar: false,
+            useWakeMarcher: true);
+        var r = Run(svc, "0012", alpha, 3_000_000);
+        Assert.True(r.Converged);
+        Assert.InRange(r.DragDecomposition.CD, cdMin, cdMax);
+    }
+
+    [Theory]
+    [InlineData(0.0, 0.001, 0.025)]
+    [InlineData(4.0, 0.003, 0.025)]
+    [InlineData(8.0, 0.005, 0.03)]
+    public void Naca0012_LegacyClosure_RemainsPlausible(
+        double alpha, double cdMin, double cdMax)
+    {
+        // Full opt-out: Thwaites-λ laminar + Clauser-placeholder
+        // turbulent + TE Squire-Young (matches --legacy-closure
+        // CLI flag). This is the pre-F1 baseline, kept for
+        // comparison studies.
+        var svc = new MsesAnalysisService(
+            useThesisExactTurbulent: false,
+            useWakeMarcher: false,
+            useThesisExactLaminar: false);
         var r = Run(svc, "0012", alpha, 3_000_000);
         Assert.True(r.Converged);
         Assert.InRange(r.DragDecomposition.CD, cdMin, cdMax);
@@ -70,30 +106,43 @@ public class MsesPolarSweepRegressionTests
     [Fact]
     public void PathComparison_OnAttachedCase_WithinOrderOfMagnitude()
     {
-        // NACA 0012 α=4° Re=3e6 — all three paths should give CD
+        // NACA 0012 α=4° Re=3e6 — the four paths should give CD
         // within 5× of each other (they use the same inviscid,
-        // same laminar marcher, same transition — differences are
-        // purely in the turbulent H-ODE and wake Squire-Young
-        // integration point).
-        var rClauser = Run(new MsesAnalysisService(), "0012", 4.0, 3_000_000);
-        var rThesisTE = Run(new MsesAnalysisService(useThesisExactTurbulent: true),
+        // same transition — differences are in which BL marchers
+        // run and where Squire-Young integrates).
+        var rDefault = Run(new MsesAnalysisService(), "0012", 4.0, 3_000_000);
+        var rTurb = Run(new MsesAnalysisService(
+                useThesisExactTurbulent: true,
+                useThesisExactLaminar: false,
+                useWakeMarcher: false),
             "0012", 4.0, 3_000_000);
         var rWake = Run(new MsesAnalysisService(
-                useThesisExactTurbulent: true, useWakeMarcher: true),
+                useThesisExactTurbulent: true,
+                useThesisExactLaminar: false,
+                useWakeMarcher: true),
+            "0012", 4.0, 3_000_000);
+        var rLegacy = Run(new MsesAnalysisService(
+                useThesisExactTurbulent: false,
+                useWakeMarcher: false,
+                useThesisExactLaminar: false),
             "0012", 4.0, 3_000_000);
 
-        double cdMin = System.Math.Min(System.Math.Min(
-            rClauser.DragDecomposition.CD,
-            rThesisTE.DragDecomposition.CD),
-            rWake.DragDecomposition.CD);
-        double cdMax = System.Math.Max(System.Math.Max(
-            rClauser.DragDecomposition.CD,
-            rThesisTE.DragDecomposition.CD),
-            rWake.DragDecomposition.CD);
+        var cds = new[]
+        {
+            rDefault.DragDecomposition.CD, rTurb.DragDecomposition.CD,
+            rWake.DragDecomposition.CD, rLegacy.DragDecomposition.CD,
+        };
+        double cdMin = cds[0], cdMax = cds[0];
+        foreach (var v in cds)
+        {
+            if (v < cdMin) cdMin = v;
+            if (v > cdMax) cdMax = v;
+        }
         Assert.True(cdMax / System.Math.Max(cdMin, 1e-9) < 5.0,
-            $"CD paths diverged too far: Clauser={rClauser.DragDecomposition.CD}, "
-            + $"ThesisTE={rThesisTE.DragDecomposition.CD}, "
-            + $"Wake={rWake.DragDecomposition.CD}");
+            $"CD paths diverged too far: Default={rDefault.DragDecomposition.CD}, "
+            + $"Turb={rTurb.DragDecomposition.CD}, "
+            + $"Wake={rWake.DragDecomposition.CD}, "
+            + $"Legacy={rLegacy.DragDecomposition.CD}");
     }
 
     [Theory]
