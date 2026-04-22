@@ -1587,6 +1587,23 @@ try
                 args.Length >= 7 ? ParseDouble(args[6], "critical amplification factor") : 9d);
             return 0;
 
+        case "compare-mses-modern":
+            // Side-by-side MSES vs Modern XFoil for NACA 4-digit.
+            // Runs both solvers and prints a one-line comparison.
+            if (args.Length < 3)
+            {
+                throw new ArgumentException("The compare-mses-modern command requires a 4-digit designation and alpha (degrees).");
+            }
+            var cmpAirfoil = nacaGenerator.Generate4DigitClassic(args[1], pointCount: 239);
+            WriteCompareMsesVsModern(
+                cmpAirfoil,
+                ParseDouble(args[2], "alpha"),
+                args.Length >= 4 ? ParseInteger(args[3], "panel count") : 160,
+                args.Length >= 5 ? ParseDouble(args[4], "Mach number") : 0d,
+                args.Length >= 6 ? ParseDouble(args[5], "Reynolds number") : 3_000_000d,
+                args.Length >= 7 ? ParseDouble(args[6], "critical amplification factor") : 9d);
+            return 0;
+
         case "viscous-polar-mses":
             // MSES polar sweep. Runs viscous-point-mses at each α in
             // [start, end] with given step.
@@ -2088,6 +2105,7 @@ static void PrintUsage()
     Console.WriteLine("  viscous-polar-naca-modern <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: modern tree, multi-start retry on non-physical results)");
     Console.WriteLine("  viscous-point-modern <####> <alpha> [panels=160] [mach] [reynolds] [transitionReTheta] [criticalN]   (Phase 3: single-alpha modern analysis — A1 multi-start for non-physical results)");
     Console.WriteLine("  viscous-point-mses <####> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES-thesis closure, Phase-5 stub — inviscid CL + Squire-Young CD)");
+    Console.WriteLine("  compare-mses-modern <####> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (side-by-side MSES vs Modern XFoil single-point)");
     Console.WriteLine("  viscous-point-mses-file <path> <alpha> [panels=160] [mach] [reynolds] [criticalN]   (MSES single-point from arbitrary airfoil .dat)");
     Console.WriteLine("  viscous-polar-mses <####> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep)");
     Console.WriteLine("  viscous-polar-mses-file <path> <alphaStart> <alphaEnd> <alphaStep> [panels=160] [mach] [reynolds] [criticalN]   (MSES polar sweep from arbitrary .dat)");
@@ -2548,6 +2566,62 @@ static void WriteViscousPolarMses(
     {
         Console.WriteLine($"Wrote MSES polar to {outputCsvPath}");
     }
+}
+
+static void WriteCompareMsesVsModern(
+    AirfoilGeometry geometry,
+    double alphaDegrees,
+    int panelCount,
+    double machNumber,
+    double reynoldsNumber,
+    double criticalAmplificationFactor)
+{
+    // MSES-thesis pipeline with all opt-ins.
+    var msesSettings = new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        nCritUpper: criticalAmplificationFactor,
+        nCritLower: criticalAmplificationFactor);
+    var mses = new XFoil.MsesSolver.Services.MsesAnalysisService(
+        useThesisExactTurbulent: true,
+        useWakeMarcher: true,
+        useThesisExactLaminar: true);
+    var rMses = mses.AnalyzeViscous(geometry, alphaDegrees, msesSettings);
+
+    // Modern (coupled) XFoil pipeline.
+    var modernSettings = new AnalysisSettings(
+        panelCount,
+        machNumber: machNumber,
+        reynoldsNumber: reynoldsNumber,
+        transitionReynoldsTheta: 250.0,
+        criticalAmplificationFactor: criticalAmplificationFactor,
+        useExtendedWake: true,
+        useLegacyBoundaryLayerInitialization: true,
+        useLegacyPanelingPrecision: true,
+        useLegacyStreamfunctionKernelPrecision: true,
+        useLegacyWakeSourceKernelPrecision: true,
+        useModernTransitionCorrections: false,
+        maxViscousIterations: 200,
+        viscousConvergenceTolerance: 1e-5);
+    var modern = new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
+    var rModern = modern.AnalyzeViscous(geometry, alphaDegrees, modernSettings);
+
+    Console.WriteLine($"Name: {geometry.Name}  Panels: {panelCount}  Mach: {machNumber:F3}  Re: {reynoldsNumber:F0}  nCrit: {criticalAmplificationFactor:F2}  α: {alphaDegrees:F2}°");
+    Console.WriteLine();
+    Console.WriteLine("Solver      CL        CD        CM        Xtr_U    Xtr_L    Conv");
+    Console.WriteLine(
+        $"MSES        {rMses.LiftCoefficient,8:F4}  {rMses.DragDecomposition.CD,8:F6}  "
+        + $"{rMses.MomentCoefficient,8:F4}  {rMses.UpperTransition.XTransition,6:F4}   "
+        + $"{rMses.LowerTransition.XTransition,6:F4}   {(rMses.Converged ? "Y" : "N")}");
+    Console.WriteLine(
+        $"Modern      {rModern.LiftCoefficient,8:F4}  {rModern.DragDecomposition.CD,8:F6}  "
+        + $"{rModern.MomentCoefficient,8:F4}  {rModern.UpperTransition.XTransition,6:F4}   "
+        + $"{rModern.LowerTransition.XTransition,6:F4}   {(rModern.Converged ? "Y" : "N")}");
+    Console.WriteLine();
+    double dCL = rMses.LiftCoefficient - rModern.LiftCoefficient;
+    double dCD = rMses.DragDecomposition.CD - rModern.DragDecomposition.CD;
+    Console.WriteLine($"ΔCL (MSES-Modern): {dCL,+8:F4}  ΔCD: {dCD,+8:F6}");
 }
 
 static void WriteViscousSinglePointMses(
