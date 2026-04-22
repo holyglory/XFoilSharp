@@ -174,6 +174,39 @@ public class MsesPolarSweepRegressionTests
     }
 
     [Fact]
+    public void NCritSweep_XtrMovesAft_CdDecreases()
+    {
+        // Lower nCrit models a dirtier tunnel → earlier transition
+        // → more turbulent-region skin friction → higher CD.
+        // Pins monotonic behavior on NACA 0012 α=4° Re=3e6:
+        //   nCrit=4:  Xtr≈0.08, CD≈0.008
+        //   nCrit=13: Xtr≈0.19, CD≈0.006
+        double[] nCrits = { 4.0, 7.0, 9.0, 11.0, 13.0 };
+        double prevCd = double.PositiveInfinity;
+        double prevXtr = 0.0;
+        foreach (var nc in nCrits)
+        {
+            var geom = new XFoil.Core.Services.NacaAirfoilGenerator()
+                .Generate4DigitClassic("0012", pointCount: 161);
+            var settings = new AnalysisSettings(
+                panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
+                reynoldsNumber: 3_000_000, nCritUpper: nc, nCritLower: nc);
+            var svc = new MsesAnalysisService(
+                useThesisExactTurbulent: true,
+                useWakeMarcher: true,
+                useThesisExactLaminar: true);
+            var r = svc.AnalyzeViscous(geom, 4.0, settings);
+            Assert.True(r.Converged, $"nCrit={nc} failed to converge");
+            Assert.True(r.DragDecomposition.CD <= prevCd + 1e-6,
+                $"CD should decrease with nCrit; got CD({nc})={r.DragDecomposition.CD} > prev {prevCd}");
+            Assert.True(r.UpperTransition.XTransition >= prevXtr - 1e-6,
+                $"Xtr_U should move aft with nCrit; got {r.UpperTransition.XTransition} < prev {prevXtr}");
+            prevCd = r.DragDecomposition.CD;
+            prevXtr = r.UpperTransition.XTransition;
+        }
+    }
+
+    [Fact]
     public void Naca0012_CdDecreasesWithRe()
     {
         // Physical expectation: CD ~ Re^(-0.2) (1/5 power law for
