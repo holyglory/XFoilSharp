@@ -2459,6 +2459,13 @@ static void WriteViscousSinglePointMses(
     Console.WriteLine($"  CDF:     {r.DragDecomposition.CDF.ToString("F6", CultureInfo.InvariantCulture)}  (skin friction)");
     Console.WriteLine($"  CDP:     {r.DragDecomposition.CDP.ToString("F6", CultureInfo.InvariantCulture)}  (pressure / form)");
     Console.WriteLine($"CM:        {r.MomentCoefficient.ToString("F6", CultureInfo.InvariantCulture)}");
+    if (r.UpperProfiles.Length > 0 && r.LowerProfiles.Length > 0)
+    {
+        var uTE = r.UpperProfiles[r.UpperProfiles.Length - 1];
+        var lTE = r.LowerProfiles[r.LowerProfiles.Length - 1];
+        Console.WriteLine($"TE state   δ*_u={uTE.DStar:F6} θ_u={uTE.Theta:F6} H_u={uTE.Hk:F4}");
+        Console.WriteLine($"           δ*_l={lTE.DStar:F6} θ_l={lTE.Theta:F6} H_l={lTE.Hk:F4}");
+    }
     string xtrU = r.UpperTransition.StationIndex > 0
         ? r.UpperTransition.XTransition.ToString("F4", CultureInfo.InvariantCulture)
         : "laminar-at-TE";
