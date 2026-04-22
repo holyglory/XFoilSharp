@@ -43,13 +43,37 @@ No separate lint command — warnings are treated as errors via `Directory.Build
 
 ```
 XFoil.Core          (no dependencies — domain models, geometry, numerics)
-├── XFoil.Solver    (inviscid/viscous solvers, BL coupling, polar sweeps)
+├── XFoil.Solver    (inviscid/viscous solvers, BL coupling, polar sweeps — Fortran-parity)
+├── XFoil.MsesSolver (clean-room MSES-class closure; parallel to XFoil.Solver)
 ├── XFoil.Design    (geometry transforms, inverse design, MAPGEN)
 ├── XFoil.IO        (file exporters/importers, session runner)
 └── XFoil.Cli       (headless CLI — depends on all above)
 ```
 
 Single test project: `tests/XFoil.Core.Tests/` covers all managed projects. Test framework is xUnit.
+
+## MSES path — when to use
+
+`XFoil.MsesSolver` is a parallel viscous analyzer implementing
+`IAirfoilAnalysisService`. It uses Drela's MSES-class closure (1986
+thesis §4–§6), which is robust through stall where XFoil's lag-
+dissipation closure diverges. Default config is fully thesis-exact
+(implicit-Newton laminar + implicit-Newton turbulent + wake marcher
+with Squire-Young far-field CD).
+
+Pick a solver:
+
+| Need                                  | Solver                        |
+|---------------------------------------|-------------------------------|
+| Bit-exact Fortran XFoil 6.97 parity   | `XFoil.Solver` (Double tree)  |
+| Modern-tree viscous, non-parity       | `XFoil.Solver.Modern`         |
+| MSES-class closure, stall-robust      | `XFoil.MsesSolver`            |
+
+See `agents/architecture/MsesSolverReadme.md` for the user guide,
+`MsesValidation.md` for the pinned acceptance numbers, and
+`MsesClosurePlan.md` for the phase plan. Known limitation: CL
+comes from the inviscid path; full two-way viscous-inviscid coupling
+is deferred ("Phase 5 proper").
 
 ## Architecture Notes
 
@@ -106,6 +130,9 @@ The `agents/` directory is a living documentation tree that **must be updated** 
 - `agents/architecture/Overview.md` — system architecture
 - `agents/architecture/ParityAndTodos.md` — parity gap map and prioritized TODOs
 - `agents/architecture/FortranMappingAudit.md` — file-level C#-to-Fortran mapping ledger
+- `agents/architecture/MsesSolverReadme.md` — user guide for the MSES solver
+- `agents/architecture/MsesValidation.md` — MSES validation snapshot
+- `agents/architecture/MsesClosurePlan.md` — MSES phase plan and status
 
 A code change is not complete until relevant `agents/` docs are updated. See `AGENTS.md` for the full documentation policy.
 

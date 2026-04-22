@@ -42,8 +42,15 @@ The doubled tree is exposed via three CLI modes in `tools/fortran-debug/Parallel
   - Clean-room reimplementation of Drela's MSES closure (§4–§6 of the
     1986 MIT thesis). Parallel to `XFoil.Solver`, same
     `IAirfoilAnalysisService` surface. Closure library + BL marchers
-    (Thwaites, closure-laminar/turbulent, thesis-exact-implicit,
-    wake, composite transition). See `MsesClosurePlan.md` for scope.
+    (Thwaites, closure-laminar/turbulent, thesis-exact-implicit
+    laminar + turbulent, wake, composite transition) + source-
+    distribution coupling helpers.
+  - **Production-ready after F1–F3 (2026-04-22).** Default path is
+    fully thesis-exact (laminar + turbulent + wake); opt into the
+    Phase-5 one-way source coupling via
+    `useSourceDistributionCoupling = true`. See
+    `MsesClosurePlan.md`, `MsesSolverReadme.md`,
+    `MsesValidation.md`.
 - `XFoil.Cli`
   - Depends on `XFoil.Core`, `XFoil.Solver`, `XFoil.Design`, `XFoil.IO`,
     and `XFoil.MsesSolver`.
