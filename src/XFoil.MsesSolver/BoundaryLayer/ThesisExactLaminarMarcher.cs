@@ -91,6 +91,22 @@ public static class ThesisExactLaminarMarcher
             double Me2 = machNumberEdge * machNumberEdge;
             double dθ0 = 0.5 * Cf0 - (H[i - 1] + 2.0 - Me2) * theta[i - 1] * dUeDx / ue0;
             double thetaNew = System.Math.Max(theta[i - 1] + dx * dθ0, 1e-18);
+            // Per-step 3× growth clamp (same as ClosureBasedLaminarMarcher):
+            // near stagnation Cf·dx can overshoot.
+            if (thetaNew > theta[i - 1] * 3.0 && theta[i - 1] > 1e-18)
+            {
+                thetaNew = theta[i - 1] * 3.0;
+            }
+            // Absolute cap: attached laminar BL shouldn't have θ
+            // exceed 2 % of streamwise distance (Blasius ≈ 0.00066
+            // at Re_chord=1e6). Prevents runaway on thin-symmetric
+            // airfoils at α ≠ 0 where stagnation-region artifacts
+            // would otherwise cascade.
+            double thetaAbsCap = 0.02 * System.Math.Max(stations[i], 1e-6);
+            if (thetaNew > thetaAbsCap)
+            {
+                thetaNew = thetaAbsCap;
+            }
 
             // Implicit Newton solve: find H such that
             //   θ·(H*(H) − H*ⁿ)/dx = rhs(H, thetaNew, ue1, dUeDx).

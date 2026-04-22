@@ -141,6 +141,17 @@ public static class ClosureBasedLaminarMarcher
             {
                 thetaCandidate = theta0 * 3.0;
             }
+            // Absolute cap: an attached laminar BL shouldn't have θ
+            // exceed ~2 % of the local streamwise distance (Blasius
+            // gives θ ≈ 0.664·√(νx/U), which at Re_chord=1e6 and
+            // x≈chord gives θ/c ≈ 0.00066 — the 2 % cap is a very
+            // loose upper bound that only fires on runaway cases
+            // like NACA 0006 α=4° lower surface).
+            double thetaAbsCap = 0.02 * System.Math.Max(x1, 1e-6);
+            if (thetaCandidate > thetaAbsCap)
+            {
+                thetaCandidate = thetaAbsCap;
+            }
             theta[i] = thetaCandidate;
             // Recompute H at the new θ/Ue via Thwaites λ — this is the
             // canonical laminar-H assignment once θ is known.
