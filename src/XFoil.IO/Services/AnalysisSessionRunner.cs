@@ -244,13 +244,13 @@ public sealed class AnalysisSessionRunner
             sweep.Step,
             settings);
         // Write a simple CSV of the viscous polar points
-        var lines = new List<string> { "alpha,CL,CD,CM,converged" };
+        var lines = new List<string> { "alpha,CL,CD,CM,converged,CDF,CDP" };
         // Legacy block: Managed-only quick CSV projection of the viscous alpha sweep for session artifacts.
         // Difference: The old workflow accumulated polar files interactively instead of writing this reduced session-format CSV.
         // Decision: Keep the managed loop because it serves the automation layer.
         foreach (var r in results)
         {
-            lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged}");
+            lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged},{r.DragDecomposition.CDF:F6},{r.DragDecomposition.CDP:F6}");
         }
         System.IO.File.WriteAllLines(outputPath, lines);
         return CreateArtifact(artifactName, "viscous-alpha", outputPath, results.Count);
@@ -270,13 +270,13 @@ public sealed class AnalysisSessionRunner
             sweep.End,
             sweep.Step,
             settings);
-        var lines = new List<string> { "alpha,CL,CD,CM,converged" };
+        var lines = new List<string> { "alpha,CL,CD,CM,converged,CDF,CDP" };
         // Legacy block: Managed-only quick CSV projection of the viscous CL sweep for session artifacts.
         // Difference: The old workflow accumulated these results through interactive runtime state instead of one explicit session artifact file.
         // Decision: Keep the managed loop because it supports the automation layer.
         foreach (var r in results)
         {
-            lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged}");
+            lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged},{r.DragDecomposition.CDF:F6},{r.DragDecomposition.CDP:F6}");
         }
         System.IO.File.WriteAllLines(outputPath, lines);
         return CreateArtifact(artifactName, "viscous-cl", outputPath, results.Count);

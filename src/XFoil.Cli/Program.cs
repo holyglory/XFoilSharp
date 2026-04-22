@@ -2875,10 +2875,10 @@ static void ExportViscousPolarCsv(
         alphaStepDegrees,
         settings);
 
-    var lines = new List<string> { "alpha,CL,CD,CM,converged" };
+    var lines = new List<string> { "alpha,CL,CD,CM,converged,CDF,CDP" };
     foreach (var r in results)
     {
-        lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged}");
+        lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged},{r.DragDecomposition.CDF:F6},{r.DragDecomposition.CDP:F6}");
     }
     System.IO.File.WriteAllLines(outputPath, lines);
     WriteExportSummary("ViscousAlphaSweep", outputPath, results.Count);
@@ -3055,10 +3055,10 @@ static void ExportViscousLiftSweepCsv(
         liftStep,
         settings);
 
-    var lines = new List<string> { "alpha,CL,CD,CM,converged" };
+    var lines = new List<string> { "alpha,CL,CD,CM,converged,CDF,CDP" };
     foreach (var r in results)
     {
-        lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged}");
+        lines.Add($"{r.AngleOfAttackDegrees:F4},{r.LiftCoefficient:F6},{r.DragDecomposition.CD:F6},{r.MomentCoefficient:F6},{r.Converged},{r.DragDecomposition.CDF:F6},{r.DragDecomposition.CDP:F6}");
     }
     System.IO.File.WriteAllLines(outputPath, lines);
     WriteExportSummary("ViscousLiftSweep", outputPath, results.Count);
