@@ -100,4 +100,50 @@ public class MsesGlobalResidualTests
         Assert.Throws<System.ArgumentException>(
             () => new MsesGlobalResidual(badLayout, pg, 1.0, 0.0));
     }
+
+    [Fact]
+    public void UseRealBLResiduals_ProducesFiniteResiduals()
+    {
+        // P5.3 wire-in smoke: when useRealBLResiduals=true, the σ
+        // and BL rows should compute finite values. Construct with
+        // BL station count = N (one per panel midpoint) and evaluate
+        // at a rough initial guess.
+        var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
+        var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
+        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        int n = pg.PanelCount;
+        var layout = new MsesGlobalState(
+            gammaCount: n + 1, sigmaCount: n + 1, blStationCount: n);
+        var assembler = new MsesGlobalResidual(
+            layout, pg, freestreamSpeed: 1.0, alphaRadians: 0.0,
+            useRealBLResiduals: true);
+        // Initial guess: small θ, H ~ 2.5 (laminar LE-like), σ=0, Cτ=0.01.
+        var state = new double[layout.StateSize];
+        for (int i = 0; i < n; i++)
+        {
+            state[layout.ThetaOffset + i] = 1e-4;
+            state[layout.DstarOffset + i] = 2.5e-4;  // H = 2.5
+            state[layout.CTauOffset + i] = 0.01;
+        }
+        var r = assembler.Compute(state);
+        foreach (var v in r)
+        {
+            Assert.True(double.IsFinite(v),
+                "residual element must be finite under real-BL wiring");
+        }
+    }
+
+    [Fact]
+    public void UseRealBLResiduals_Layout_MustHaveBLStationsEqualN()
+    {
+        var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
+        var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
+        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        int n = pg.PanelCount;
+        // Wrong BL station count — should throw.
+        var badLayout = new MsesGlobalState(n + 1, n + 1, blStationCount: 2);
+        Assert.Throws<System.ArgumentException>(
+            () => new MsesGlobalResidual(
+                badLayout, pg, 1.0, 0.0, useRealBLResiduals: true));
+    }
 }

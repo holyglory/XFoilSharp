@@ -28,14 +28,24 @@ public sealed class MsesGlobalResidual
     private readonly MsesInviscidPanelSolver.PanelizedGeometry _pg;
     private readonly double[,] _aGammaNormal;
     private readonly double[,] _aSigmaNormal;
+    private readonly double[,] _aGammaTangent;
+    private readonly double[,] _aSigmaTangent;
     private readonly double _freestreamSpeed;
     private readonly double _alphaRadians;
+    private readonly double _kinematicViscosity;
+    private readonly double _machEdge;
+    private readonly bool _useRealBLResiduals;
+    private readonly double _initialTheta;
 
     public MsesGlobalResidual(
         MsesGlobalState layout,
         MsesInviscidPanelSolver.PanelizedGeometry pg,
         double freestreamSpeed,
-        double alphaRadians)
+        double alphaRadians,
+        double kinematicViscosity = 1e-6,
+        double machEdge = 0.0,
+        bool useRealBLResiduals = false,
+        double initialTheta = 1e-5)
     {
         int n = pg.PanelCount;
         if (layout.GammaCount != n + 1)
@@ -44,13 +54,22 @@ public sealed class MsesGlobalResidual
         if (layout.SigmaCount != n + 1)
             throw new System.ArgumentException(
                 $"layout.SigmaCount ({layout.SigmaCount}) must match N+1 ({n+1})");
+        if (useRealBLResiduals && layout.BLStationCount != n)
+            throw new System.ArgumentException(
+                $"layout.BLStationCount ({layout.BLStationCount}) must match N ({n}) when useRealBLResiduals=true (one station per panel midpoint)");
 
         _layout = layout;
         _pg = pg;
         _freestreamSpeed = freestreamSpeed;
         _alphaRadians = alphaRadians;
+        _kinematicViscosity = kinematicViscosity;
+        _machEdge = machEdge;
+        _useRealBLResiduals = useRealBLResiduals;
+        _initialTheta = initialTheta;
         _aGammaNormal = MsesInviscidPanelSolver.BuildVortexNormalInfluenceMatrix(pg);
         _aSigmaNormal = MsesInviscidPanelSolver.BuildSourceNormalInfluenceMatrix(pg);
+        _aGammaTangent = MsesInviscidPanelSolver.BuildVortexInfluenceMatrix(pg);
+        _aSigmaTangent = MsesInviscidPanelSolver.BuildSourceTangentInfluenceMatrix(pg);
     }
 
     /// <summary>
@@ -84,18 +103,84 @@ public sealed class MsesGlobalResidual
         // Row N: Kutta.
         r[n] = gamma[0] + gamma[n];
 
-        // σ rows: PLACEHOLDER identity R = σ (P5.2 replaces).
-        for (int k = 0; k < _layout.SigmaCount; k++)
+        if (!_useRealBLResiduals)
         {
-            r[_layout.SigmaOffset + k] = sigma[k];
+            // σ/BL placeholder identity rows — preserve P4.6 gate path.
+            for (int k = 0; k < _layout.SigmaCount; k++)
+                r[_layout.SigmaOffset + k] = sigma[k];
+            for (int k = 0; k < _layout.BLStationCount; k++)
+            {
+                r[_layout.DstarOffset + k] = dStar[k];
+                r[_layout.ThetaOffset + k] = theta[k];
+                r[_layout.CTauOffset + k] = cTau[k];
+            }
+            return r;
         }
-        // BL rows: PLACEHOLDER identity R = (δ*, θ, Cτ) (P5 replaces).
-        for (int k = 0; k < _layout.BLStationCount; k++)
+
+        // P5.3: real BL + σ residuals. BL station i lives on panel
+        // midpoint i (N stations total). Ue at midpoint = freestream
+        // tangent + vortex tangent contribution + source tangent
+        // contribution. March along panel order (TE→upper→LE→lower
+        // →TE); per-station residuals use the previous station's
+        // (δ*, θ, Cτ) and Ue.
+        var ueMid = new double[n];
+        for (int i = 0; i < n; i++)
         {
-            r[_layout.DstarOffset + k] = dStar[k];
-            r[_layout.ThetaOffset + k] = theta[k];
-            r[_layout.CTauOffset + k] = cTau[k];
+            double ue = vx * _pg.TangentX[i] + vy * _pg.TangentY[i];
+            for (int k = 0; k < n + 1; k++)
+            {
+                ue += _aGammaTangent[i, k] * gamma[k]
+                    + _aSigmaTangent[i, k] * sigma[k];
+            }
+            ueMid[i] = System.Math.Abs(ue);
         }
+
+        // Station 0 anchor: (δ*[0], θ[0], Cτ[0], σ[0]) pinned to
+        // laminar initial conditions.
+        r[_layout.SigmaOffset + 0] = sigma[0];
+        r[_layout.DstarOffset + 0] = dStar[0] - _initialTheta * 2.5;  // H ≈ 2.5 at start
+        r[_layout.ThetaOffset + 0] = theta[0] - _initialTheta;
+        r[_layout.CTauOffset + 0] = cTau[0];
+
+        // Marching residuals at i = 1 .. N-1 (if BLStationCount == N).
+        for (int i = 1; i < _layout.BLStationCount; i++)
+        {
+            double thetaPrev = theta[i - 1];
+            double thetaI = theta[i];
+            double dStarPrev = dStar[i - 1];
+            double dStarI = dStar[i];
+            double hPrev = thetaPrev > 1e-18 ? dStarPrev / thetaPrev : 1.4;
+            double hI = thetaI > 1e-18 ? dStarI / thetaI : 1.4;
+            double uePrev = ueMid[i - 1];
+            double ueI = ueMid[i];
+            double dx = System.Math.Max(_pg.Length[i], 1e-12);
+
+            r[_layout.ThetaOffset + i] = MsesBoundaryLayerResidual.MomentumResidual(
+                thetaPrev, thetaI, hPrev, hI, uePrev, ueI, dx,
+                _kinematicViscosity, _machEdge);
+
+            // δ* residual derived from the shape-param equation:
+            // reuse ShapeParamResidual which folds H* in.
+            r[_layout.DstarOffset + i] = MsesBoundaryLayerResidual.ShapeParamResidual(
+                thetaPrev, thetaI, hPrev, hI, cTau[i], uePrev, ueI, dx,
+                _kinematicViscosity, _machEdge);
+
+            r[_layout.CTauOffset + i] = MsesBoundaryLayerResidual.LagResidual(
+                cTau[i - 1], cTau[i], thetaPrev, thetaI, hPrev, hI,
+                uePrev, ueI, dx, _kinematicViscosity, _machEdge);
+
+            r[_layout.SigmaOffset + i] = MsesBoundaryLayerResidual.SourceConstraintResidual(
+                sigma[i], dStarPrev, dStarI, uePrev, ueI, dx);
+        }
+
+        // σ[N] anchor (the extra σ node past the last station): no
+        // BL station exists, pin it to zero.
+        if (_layout.SigmaCount > _layout.BLStationCount)
+        {
+            r[_layout.SigmaOffset + _layout.SigmaCount - 1] =
+                sigma[_layout.SigmaCount - 1];
+        }
+
         return r;
     }
 }
