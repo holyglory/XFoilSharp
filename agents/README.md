@@ -25,6 +25,10 @@ This directory maps the managed C# implementation from system architecture down 
   - Registry-driven micro-rig parity harness, matrix outputs, and coverage backlog.
 - `architecture/MsesClosurePlan.md`
   - Clean-room MSES-class closure reimplementation plan (Drela 1986 thesis basis). Parallel assembly; does not replace the XFoil parity path.
+- `architecture/MsesValidation.md`
+  - F1-finalization validation snapshot: Xtr pins, stall-robustness showcase, attached-flow WT cross-check, known non-convergent cells.
+- `architecture/MsesSolverReadme.md`
+  - User guide for the `XFoil.MsesSolver` assembly: quickstart, CLI flags, ctor knobs, what works, known limitations.
 - `projects/XFoil.Core/00-index.md`
   - Domain model and geometry-service entry point.
 - `projects/XFoil.Solver/00-index.md`
