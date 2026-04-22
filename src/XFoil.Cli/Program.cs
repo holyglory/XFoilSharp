@@ -2389,7 +2389,11 @@ static void WriteMsesProfileDump(
     using var writer = new System.IO.StreamWriter(csvPath);
     writer.WriteLine("# MSES BL profile dump");
     writer.WriteLine($"# airfoil={geometry.Name}, alpha={alphaDegrees}, panels={panelCount}, mach={machNumber}, re={reynoldsNumber}, nCrit={criticalAmplificationFactor}");
-    writer.WriteLine($"# CL={r.LiftCoefficient:F6}, CD={r.DragDecomposition.CD:F6}, CM={r.MomentCoefficient:F6}, converged={r.Converged}");
+    writer.WriteLine("# opt-ins: "
+        + $"thesis_turbulent={UseThesisExactTurbulentFromEnv()}, "
+        + $"thesis_laminar={UseThesisExactLaminarFromEnv()}, "
+        + $"wake_marcher={UseWakeMarcherFromEnv()}");
+    writer.WriteLine($"# CL={r.LiftCoefficient:F6}, CD={r.DragDecomposition.CD:F6}, CDF={r.DragDecomposition.CDF:F6}, CDP={r.DragDecomposition.CDP:F6}, CM={r.MomentCoefficient:F6}, converged={r.Converged}");
     writer.WriteLine($"# Xtr_U={r.UpperTransition.XTransition:F6}, Xtr_L={r.LowerTransition.XTransition:F6}");
     writer.WriteLine("surface,station,s,theta,DStar,H,Cf,Ctau,Ue,Namp");
     for (int i = 0; i < r.UpperProfiles.Length; i++)
