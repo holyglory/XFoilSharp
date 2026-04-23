@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -21,7 +21,7 @@ public class MsesTransitionReferenceTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: Re, nCritUpper: nCrit, nCritLower: nCrit);
-        var r = new MsesAnalysisService().AnalyzeViscous(geom, alphaDeg, settings);
+        var r = new ThesisClosureAnalysisService().AnalyzeViscous(geom, alphaDeg, settings);
         return (r.UpperTransition.XTransition, r.LowerTransition.XTransition);
     }
 

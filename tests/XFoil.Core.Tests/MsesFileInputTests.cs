@@ -1,6 +1,6 @@
 using XFoil.Core.Models;
 using XFoil.Core.Services;
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -51,7 +51,7 @@ public class MsesFileInputTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true,
             useThesisExactLaminar: true);
         var rFile = svc.AnalyzeViscous(fileGeom, 4.0, settings);
@@ -78,7 +78,7 @@ public class MsesFileInputTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true);
         var r = svc.AnalyzeViscous(geom, 2.0, settings);
 

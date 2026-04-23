@@ -4,7 +4,7 @@
     <ProjectReference Include="..\XFoil.Core\XFoil.Core.csproj" />
     <ProjectReference Include="..\XFoil.Design\XFoil.Design.csproj" />
     <ProjectReference Include="..\XFoil.IO\XFoil.IO.csproj" />
-    <ProjectReference Include="..\XFoil.MsesSolver\XFoil.MsesSolver.csproj" />
+    <ProjectReference Include="..\XFoil.ThesisClosureSolver\XFoil.ThesisClosureSolver.csproj" />
     <ProjectReference Include="..\XFoil.Solver\XFoil.Solver.csproj" />
   </ItemGroup>
 

@@ -37,8 +37,8 @@ var conformalMapgenService = new ConformalMapgenService();
 var airfoilDatExporter = new AirfoilDatExporter();
 
 // Extract MSES closure flag (--legacy-closure) into the static
-// MsesCliFlags scope so downstream helpers can see it.
-args = MsesCliFlags.ConsumeFlags(args);
+// ThesisClosureCliFlags scope so downstream helpers can see it.
+args = ThesisClosureCliFlags.ConsumeFlags(args);
 
 if (args.Length == 0)
 {
@@ -2360,13 +2360,13 @@ static void WriteViscousPolarSummaryDouble(
 // finalization path). --legacy-closure forces them OFF for
 // comparative/parity-debug runs.
 static bool UseThesisExactTurbulentFromEnv()
-    => !MsesCliFlags.LegacyClosureFlag;
+    => !ThesisClosureCliFlags.LegacyClosureFlag;
 
 static bool UseWakeMarcherFromEnv()
-    => !MsesCliFlags.LegacyClosureFlag;
+    => !ThesisClosureCliFlags.LegacyClosureFlag;
 
 static bool UseThesisExactLaminarFromEnv()
-    => !MsesCliFlags.LegacyClosureFlag;
+    => !ThesisClosureCliFlags.LegacyClosureFlag;
 
 static void WriteMsesProfileDump(
     AirfoilGeometry geometry,
@@ -2383,7 +2383,7 @@ static void WriteMsesProfileDump(
         reynoldsNumber: reynoldsNumber,
         nCritUpper: criticalAmplificationFactor,
         nCritLower: criticalAmplificationFactor);
-    var mses = new XFoil.MsesSolver.Services.MsesAnalysisService(
+    var mses = new XFoil.ThesisClosureSolver.Services.ThesisClosureAnalysisService(
         useThesisExactTurbulent: UseThesisExactTurbulentFromEnv(),
         useWakeMarcher: UseWakeMarcherFromEnv(),
         useThesisExactLaminar: UseThesisExactLaminarFromEnv());
@@ -2398,7 +2398,7 @@ static void WriteMsesProfileDump(
         + $"wake_marcher={UseWakeMarcherFromEnv()}");
     writer.WriteLine($"# CL={r.LiftCoefficient:F6}, CD={r.DragDecomposition.CD:F6}, CDF={r.DragDecomposition.CDF:F6}, CDP={r.DragDecomposition.CDP:F6}, CM={r.MomentCoefficient:F6}, converged={r.Converged}");
     writer.WriteLine($"# Xtr_U={r.UpperTransition.XTransition:F6}, Xtr_L={r.LowerTransition.XTransition:F6}");
-    writer.WriteLine($"# stall={XFoil.MsesSolver.Services.MsesStallHeuristic.IsLikelyStalled(r.UpperProfiles)}");
+    writer.WriteLine($"# stall={XFoil.ThesisClosureSolver.Services.ThesisClosureStallHeuristic.IsLikelyStalled(r.UpperProfiles)}");
     writer.WriteLine("surface,station,s,theta,DStar,H,Cf,Ctau,Ue,Namp");
     for (int i = 0; i < r.UpperProfiles.Length; i++)
     {
@@ -2437,7 +2437,7 @@ static void WriteViscousPolarMses(
         reynoldsNumber: reynoldsNumber,
         nCritUpper: criticalAmplificationFactor,
         nCritLower: criticalAmplificationFactor);
-    var mses = new XFoil.MsesSolver.Services.MsesAnalysisService(
+    var mses = new XFoil.ThesisClosureSolver.Services.ThesisClosureAnalysisService(
         useThesisExactTurbulent: UseThesisExactTurbulentFromEnv(),
         useWakeMarcher: UseWakeMarcherFromEnv(),
         useThesisExactLaminar: UseThesisExactLaminarFromEnv());
@@ -2477,7 +2477,7 @@ static void WriteViscousPolarMses(
     for (double a = alphaStart; a <= alphaEnd + eps; a += alphaStep)
     {
         var r = mses.AnalyzeViscous(geometry, a, settings);
-        bool stall = XFoil.MsesSolver.Services.MsesStallHeuristic.IsLikelyStalled(r.UpperProfiles);
+        bool stall = XFoil.ThesisClosureSolver.Services.ThesisClosureStallHeuristic.IsLikelyStalled(r.UpperProfiles);
         if (r.Converged && !stall)
         {
             if (r.LiftCoefficient > clMax)
@@ -2568,7 +2568,7 @@ static void WriteCompareMsesVsModern(
         reynoldsNumber: reynoldsNumber,
         nCritUpper: criticalAmplificationFactor,
         nCritLower: criticalAmplificationFactor);
-    var mses = new XFoil.MsesSolver.Services.MsesAnalysisService(
+    var mses = new XFoil.ThesisClosureSolver.Services.ThesisClosureAnalysisService(
         useThesisExactTurbulent: true,
         useWakeMarcher: true,
         useThesisExactLaminar: true);
@@ -2623,7 +2623,7 @@ static void WriteViscousSinglePointMses(
         reynoldsNumber: reynoldsNumber,
         nCritUpper: criticalAmplificationFactor,
         nCritLower: criticalAmplificationFactor);
-    var mses = new XFoil.MsesSolver.Services.MsesAnalysisService(
+    var mses = new XFoil.ThesisClosureSolver.Services.ThesisClosureAnalysisService(
         useThesisExactTurbulent: UseThesisExactTurbulentFromEnv(),
         useWakeMarcher: UseWakeMarcherFromEnv(),
         useThesisExactLaminar: UseThesisExactLaminarFromEnv());
@@ -2665,7 +2665,7 @@ static void WriteViscousSinglePointMses(
             if (r.UpperProfiles[i].Hk > 2.0) nearSep++;
         double sepFrac = total > 0 ? (double)nearSep / total : 0.0;
         Console.WriteLine($"           upper back-half near-sep frac: {sepFrac:F2} ({nearSep}/{total} stations with Hk>2.0)");
-        if (XFoil.MsesSolver.Services.MsesStallHeuristic.IsLikelyStalled(r.UpperProfiles))
+        if (XFoil.ThesisClosureSolver.Services.ThesisClosureStallHeuristic.IsLikelyStalled(r.UpperProfiles))
         {
             Console.WriteLine($"WARNING:   upper surface likely stalled (H_u={uTE.Hk:F2}, "
                 + $"δ*_u={uTE.DStar:F4}). CL overpredicts — no viscous feedback.");
@@ -4008,7 +4008,7 @@ static string EscapeCsv(string value)
 }
 
 // MSES CLI closure flag. Passed anywhere in the arg list.
-static class MsesCliFlags
+static class ThesisClosureCliFlags
 {
     // --legacy-closure opts OUT of the thesis-exact defaults on all
     // three knobs, reverting to Thwaites-λ laminar + Clauser-

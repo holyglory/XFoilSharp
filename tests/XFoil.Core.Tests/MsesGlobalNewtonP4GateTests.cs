@@ -1,5 +1,5 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Newton;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Newton;
 
 namespace XFoil.Core.Tests;
 
@@ -11,30 +11,30 @@ namespace XFoil.Core.Tests;
 /// the Newton plumbing or residual/Jacobian assembly is broken
 /// and P5 would be built on sand.
 /// </summary>
-public class MsesGlobalNewtonP4GateTests
+public class ThesisClosureGlobalNewtonP4GateTests
 {
     [Fact]
     public void P4Gate_GammaOnly_ConvergesToInviscidSolution()
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
         double alpha = 4.0 * System.Math.PI / 180.0;
 
         // Direct inviscid solve (baseline).
-        var invDirect = MsesInviscidPanelSolver.SolveInviscid(
+        var invDirect = ThesisClosurePanelSolver.SolveInviscid(
             pg, 1.0, alpha, 1.0);
 
         // Newton on the global system (γ + σ-placeholder + BL-placeholder).
-        var layout = new MsesGlobalState(
+        var layout = new ThesisClosureGlobalState(
             gammaCount: n + 1, sigmaCount: n + 1, blStationCount: 2);
-        var assembler = new MsesGlobalResidual(layout, pg, 1.0, alpha);
+        var assembler = new ThesisClosureGlobalResidual(layout, pg, 1.0, alpha);
         var initialState = new double[layout.StateSize];
 
-        var result = MsesGlobalNewton.Solve(
+        var result = ThesisClosureGlobalNewton.Solve(
             initialState, assembler.Compute,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 10, resTol: 1e-10, stepTol: 1e-10);
 
         // Gate 1: converged.
@@ -70,18 +70,18 @@ public class MsesGlobalNewtonP4GateTests
         // confirm it agrees with the direct inviscid CL to 1e-8.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("4412", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
         double alpha = 6.0 * System.Math.PI / 180.0;
 
-        var invDirect = MsesInviscidPanelSolver.SolveInviscid(
+        var invDirect = ThesisClosurePanelSolver.SolveInviscid(
             pg, 1.0, alpha, 1.0);
 
-        var layout = new MsesGlobalState(n + 1, n + 1, 2);
-        var assembler = new MsesGlobalResidual(layout, pg, 1.0, alpha);
-        var result = MsesGlobalNewton.Solve(
+        var layout = new ThesisClosureGlobalState(n + 1, n + 1, 2);
+        var assembler = new ThesisClosureGlobalResidual(layout, pg, 1.0, alpha);
+        var result = ThesisClosureGlobalNewton.Solve(
             new double[layout.StateSize], assembler.Compute,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 10, resTol: 1e-10, stepTol: 1e-10);
         Assert.True(result.Converged);
 

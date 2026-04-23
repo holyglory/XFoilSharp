@@ -28,7 +28,7 @@ This directory maps the managed C# implementation from system architecture down 
 - `architecture/MsesValidation.md`
   - F1-finalization validation snapshot: Xtr pins, stall-robustness showcase, attached-flow WT cross-check, known non-convergent cells.
 - `architecture/MsesSolverReadme.md`
-  - User guide for the `XFoil.MsesSolver` assembly: quickstart, CLI flags, ctor knobs, what works, known limitations.
+  - User guide for the `XFoil.ThesisClosureSolver` assembly: quickstart, CLI flags, ctor knobs, what works, known limitations.
 - `projects/XFoil.Core/00-index.md`
   - Domain model and geometry-service entry point.
 - `projects/XFoil.Solver/00-index.md`

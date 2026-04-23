@@ -1,11 +1,11 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// Probe tests for the Phase-5-lite viscous-inviscid coupling
-/// (MsesAnalysisService ctor param viscousCouplingIterations).
+/// (ThesisClosureAnalysisService ctor param viscousCouplingIterations).
 /// Verifies that enabling iteration doesn't regress the un-coupled
 /// baseline — if coupling diverges, the service should fall back
 /// to the last valid result, not propagate NaN.
@@ -24,7 +24,7 @@ public class MsesCouplingProbeTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             viscousCouplingIterations: iterations,
             viscousCouplingRelaxation: 0.3,
             useThesisExactTurbulent: true,
@@ -52,8 +52,8 @@ public class MsesCouplingProbeTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svcBase = new MsesAnalysisService(useThesisExactTurbulent: true);
-        var svcCoup = new MsesAnalysisService(
+        var svcBase = new ThesisClosureAnalysisService(useThesisExactTurbulent: true);
+        var svcCoup = new ThesisClosureAnalysisService(
             viscousCouplingIterations: 2,
             viscousCouplingRelaxation: 0.1,
             useThesisExactTurbulent: true);
@@ -76,9 +76,9 @@ public class MsesCouplingProbeTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svcBase = new MsesAnalysisService(
+        var svcBase = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true);
-        var svcCoup = new MsesAnalysisService(
+        var svcCoup = new ThesisClosureAnalysisService(
             viscousCouplingIterations: 3,
             viscousCouplingRelaxation: 0.0,
             useThesisExactTurbulent: true, useWakeMarcher: true);

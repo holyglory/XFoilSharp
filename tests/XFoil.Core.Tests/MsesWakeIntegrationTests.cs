@@ -1,11 +1,11 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// Validates the Phase-2f wake-marcher opt-in through
-/// <see cref="MsesAnalysisService"/>. With <c>useWakeMarcher=true</c>
+/// <see cref="ThesisClosureAnalysisService"/>. With <c>useWakeMarcher=true</c>
 /// Squire-Young is applied at the wake far-field (half-chord
 /// downstream of the TE) rather than at the TE itself, which tightens
 /// the CD estimate because H_wake has partially relaxed.
@@ -21,7 +21,7 @@ public class MsesWakeIntegrationTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useWakeMarcher: true);
         var r = svc.AnalyzeViscous(geom, 0.0, settings);
@@ -42,8 +42,8 @@ public class MsesWakeIntegrationTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svcTE = new MsesAnalysisService(useThesisExactTurbulent: true);
-        var svcWake = new MsesAnalysisService(
+        var svcTE = new ThesisClosureAnalysisService(useThesisExactTurbulent: true);
+        var svcWake = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true);
 
         var rTE = svcTE.AnalyzeViscous(geom, 2.0, settings);
@@ -64,7 +64,7 @@ public class MsesWakeIntegrationTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true);
         var r = svc.AnalyzeViscous(geom, 2.0, settings);
 
@@ -91,7 +91,7 @@ public class MsesWakeIntegrationTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true);
         var r = svc.AnalyzeViscous(geom, 14.0, settings);
         Assert.True(double.IsFinite(r.DragDecomposition.CD));

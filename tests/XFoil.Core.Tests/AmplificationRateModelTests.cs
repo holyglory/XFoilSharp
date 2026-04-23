@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Closure;
+using XFoil.ThesisClosureSolver.Closure;
 
 namespace XFoil.Core.Tests;
 

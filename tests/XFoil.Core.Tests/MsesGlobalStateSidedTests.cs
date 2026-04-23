@@ -1,18 +1,18 @@
-using XFoil.MsesSolver.Newton;
+using XFoil.ThesisClosureSolver.Newton;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// R5.4 — per-side global state pack/unpack tests.
 /// </summary>
-public class MsesGlobalStateSidedTests
+public class ThesisClosureGlobalStateSidedTests
 {
     [Fact]
     public void Constructor_ComputesLayoutCorrectly()
     {
         // 5 panels (6 γ + 6 σ_airfoil), 10 wake panels (Nw=10),
         // upper=3, lower=2. 6+6+10+3·(3+2+10) = 67.
-        var s = new MsesGlobalStateSided(6, 6, 10, 3, 2, 10);
+        var s = new ThesisClosureGlobalStateSided(6, 6, 10, 3, 2, 10);
         Assert.Equal(0, s.GammaOffset);
         Assert.Equal(6, s.SigmaAirfoilOffset);
         Assert.Equal(12, s.SigmaWakeOffset);
@@ -31,8 +31,8 @@ public class MsesGlobalStateSidedTests
     [Fact]
     public void Pack_Unpack_RoundTrip()
     {
-        var layout = new MsesGlobalStateSided(3, 3, 4, 2, 2, 4);
-        var state = new MsesGlobalStateSided.SidedState(
+        var layout = new ThesisClosureGlobalStateSided(3, 3, 4, 2, 2, 4);
+        var state = new ThesisClosureGlobalStateSided.SidedState(
             Gamma: new[] { 1.0, 2.0, 3.0 },
             SigmaAirfoil: new[] { 4.0, 5.0, 6.0 },
             SigmaWake: new[] { 7.0, 8.0, 9.0, 10.0 },
@@ -66,8 +66,8 @@ public class MsesGlobalStateSidedTests
     [Fact]
     public void Pack_WrongLength_Throws()
     {
-        var layout = new MsesGlobalStateSided(3, 3, 2, 2, 2, 2);
-        var state = new MsesGlobalStateSided.SidedState(
+        var layout = new ThesisClosureGlobalStateSided(3, 3, 2, 2, 2, 2);
+        var state = new ThesisClosureGlobalStateSided.SidedState(
             Gamma: new[] { 1.0 },  // wrong!
             SigmaAirfoil: new[] { 1.0, 2.0, 3.0 },
             SigmaWake: new[] { 1.0, 2.0 },
@@ -86,7 +86,7 @@ public class MsesGlobalStateSidedTests
     [Fact]
     public void Unpack_WrongLength_Throws()
     {
-        var layout = new MsesGlobalStateSided(3, 3, 2, 2, 2, 2);
+        var layout = new ThesisClosureGlobalStateSided(3, 3, 2, 2, 2, 2);
         Assert.Throws<System.ArgumentException>(
             () => layout.Unpack(new double[5]));
     }
@@ -95,9 +95,9 @@ public class MsesGlobalStateSidedTests
     public void Constructor_NonPositive_Throws()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(
-            () => new MsesGlobalStateSided(0, 1, 1, 1, 1, 1));
+            () => new ThesisClosureGlobalStateSided(0, 1, 1, 1, 1, 1));
         Assert.Throws<System.ArgumentOutOfRangeException>(
-            () => new MsesGlobalStateSided(1, 1, 1, 0, 1, 1));
+            () => new ThesisClosureGlobalStateSided(1, 1, 1, 0, 1, 1));
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public class MsesGlobalStateSidedTests
     {
         // Wake can be zero (e.g. if we want to test airfoil-only
         // coupling without the wake). Upper/lower still required.
-        var layout = new MsesGlobalStateSided(2, 2, 0, 1, 1, 0);
+        var layout = new ThesisClosureGlobalStateSided(2, 2, 0, 1, 1, 0);
         Assert.Equal(2 + 2 + 0 + 3 * (1 + 1 + 0), layout.StateSize);
     }
 }

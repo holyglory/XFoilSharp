@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -19,7 +19,7 @@ public class SourceCouplingSmokeTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000, nCritUpper: 9.0, nCritLower: 9.0);
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useWakeMarcher: true,
             useThesisExactLaminar: true,
@@ -42,7 +42,7 @@ public class SourceCouplingSmokeTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000, nCritUpper: 9.0, nCritLower: 9.0);
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useSourceDistributionCoupling: true,
             sourceCouplingIterations: 10);
         var r = svc.AnalyzeViscous(geom, 0.0, settings);

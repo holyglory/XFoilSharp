@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -43,7 +43,7 @@ public class MsesFlatPlateEquivalenceTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: Re);
-        var mses = new MsesAnalysisService();
+        var mses = new ThesisClosureAnalysisService();
         var r = mses.AnalyzeViscous(geom, 0.0, settings);
 
         Assert.True(r.Converged, "Should converge on symmetric α=0 case");
@@ -71,7 +71,7 @@ public class MsesFlatPlateEquivalenceTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0,
             machNumber: 0.0, reynoldsNumber: 1_000_000);
-        var r = new MsesAnalysisService().AnalyzeViscous(geom, 0.0, settings);
+        var r = new ThesisClosureAnalysisService().AnalyzeViscous(geom, 0.0, settings);
         Assert.InRange(r.LiftCoefficient, -0.01, 0.01);
     }
 }

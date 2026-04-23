@@ -44,7 +44,7 @@ No separate lint command — warnings are treated as errors via `Directory.Build
 ```
 XFoil.Core          (no dependencies — domain models, geometry, numerics)
 ├── XFoil.Solver    (inviscid/viscous solvers, BL coupling, polar sweeps — Fortran-parity)
-├── XFoil.MsesSolver (clean-room MSES-class closure; parallel to XFoil.Solver)
+├── XFoil.ThesisClosureSolver (clean-room MSES-class closure; parallel to XFoil.Solver)
 ├── XFoil.Design    (geometry transforms, inverse design, MAPGEN)
 ├── XFoil.IO        (file exporters/importers, session runner)
 └── XFoil.Cli       (headless CLI — depends on all above)
@@ -54,7 +54,7 @@ Single test project: `tests/XFoil.Core.Tests/` covers all managed projects. Test
 
 ## MSES path — when to use
 
-`XFoil.MsesSolver` is a parallel viscous analyzer implementing
+`XFoil.ThesisClosureSolver` is a parallel viscous analyzer implementing
 `IAirfoilAnalysisService`. It uses Drela's MSES-class closure (1986
 thesis §4–§6), which is robust through stall where XFoil's lag-
 dissipation closure diverges. Default config is fully thesis-exact
@@ -67,7 +67,7 @@ Pick a solver:
 |---------------------------------------|-------------------------------|
 | Bit-exact Fortran XFoil 6.97 parity   | `XFoil.Solver` (Double tree)  |
 | Modern-tree viscous, non-parity       | `XFoil.Solver.Modern`         |
-| MSES-class closure, stall-robust      | `XFoil.MsesSolver`            |
+| MSES-class closure, stall-robust      | `XFoil.ThesisClosureSolver`            |
 
 See `agents/architecture/MsesSolverReadme.md` for the user guide,
 `MsesValidation.md` for the pinned acceptance numbers, and

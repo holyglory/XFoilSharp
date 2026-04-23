@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Inviscid;
 
 namespace XFoil.Core.Tests;
 
@@ -14,8 +14,8 @@ public class MsesInviscidSolveTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var r = MsesInviscidPanelSolver.SolveInviscid(
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var r = ThesisClosurePanelSolver.SolveInviscid(
             pg, freestreamSpeed: 1.0, alphaRadians: 0.0, chord: 1.0);
         Assert.True(System.Math.Abs(r.LiftCoefficient) < 1e-6,
             $"Symmetric α=0 should give CL=0; got {r.LiftCoefficient}");
@@ -26,9 +26,9 @@ public class MsesInviscidSolveTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         double a = 4.0 * System.Math.PI / 180.0;
-        var r = MsesInviscidPanelSolver.SolveInviscid(
+        var r = ThesisClosurePanelSolver.SolveInviscid(
             pg, freestreamSpeed: 1.0, alphaRadians: a, chord: 1.0);
         // Thin-airfoil theory: CL = 2π·α ≈ 0.439 at α=4°.
         // NACA 0012 is 12% thick so actual CL is a bit higher (~0.48).
@@ -41,8 +41,8 @@ public class MsesInviscidSolveTests
         // 4% camber NACA 4412: CL at α=0 is approx 0.4.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("4412", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var r = MsesInviscidPanelSolver.SolveInviscid(
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var r = ThesisClosurePanelSolver.SolveInviscid(
             pg, freestreamSpeed: 1.0, alphaRadians: 0.0, chord: 1.0);
         Assert.InRange(r.LiftCoefficient, 0.3, 0.55);
     }
@@ -54,8 +54,8 @@ public class MsesInviscidSolveTests
         // should equal 1. Find the max Cp panel.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var r = MsesInviscidPanelSolver.SolveInviscid(
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var r = ThesisClosurePanelSolver.SolveInviscid(
             pg, freestreamSpeed: 1.0, alphaRadians: 0.0, chord: 1.0);
         double cpMax = double.NegativeInfinity;
         foreach (var c in r.CpMidpoint) if (c > cpMax) cpMax = c;
@@ -69,11 +69,11 @@ public class MsesInviscidSolveTests
         // by comparing CL at α=2° and α=4°.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         double a2 = 2.0 * System.Math.PI / 180.0;
         double a4 = 4.0 * System.Math.PI / 180.0;
-        var r2 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a2, 1.0);
-        var r4 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a4, 1.0);
+        var r2 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a2, 1.0);
+        var r4 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a4, 1.0);
         double ratio = r4.LiftCoefficient / r2.LiftCoefficient;
         Assert.InRange(ratio, 1.95, 2.05);
     }
@@ -90,7 +90,7 @@ public class MsesInviscidSolveTests
             { 8.0, 7.0, 9.0 },
         };
         var b = new double[] { 4.0, 10.0, 26.0 };
-        var x = MsesInviscidPanelSolver.SolveLinearSystem(a, b);
+        var x = ThesisClosurePanelSolver.SolveLinearSystem(a, b);
         // Exact solution: x = (1, 1, 1) produces 4, 10, 24 (not 26).
         // Let's pick b so solution is clean: x=(1,2,3) → 2+2+3=7,
         // 4+6+9=19, 8+14+27=49. Redo with those values:
@@ -101,7 +101,7 @@ public class MsesInviscidSolveTests
             { 8.0, 7.0, 9.0 },
         };
         var b2 = new double[] { 7.0, 19.0, 49.0 };
-        var x2 = MsesInviscidPanelSolver.SolveLinearSystem(a2, b2);
+        var x2 = ThesisClosurePanelSolver.SolveLinearSystem(a2, b2);
         Assert.Equal(1.0, x2[0], 9);
         Assert.Equal(2.0, x2[1], 9);
         Assert.Equal(3.0, x2[2], 9);

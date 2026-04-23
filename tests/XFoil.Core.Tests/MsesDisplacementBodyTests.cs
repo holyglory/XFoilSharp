@@ -1,12 +1,12 @@
 using XFoil.Core.Models;
-using XFoil.MsesSolver.BoundaryLayer;
+using XFoil.ThesisClosureSolver.BoundaryLayer;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// Tests for the Phase-5-lite displacement-body helper infrastructure
-/// (currently dead code in MsesAnalysisService but the logic is
+/// (currently dead code in ThesisClosureAnalysisService but the logic is
 /// reachable through the public CompositeResult.Stations and
 /// BoundaryLayerProfile.DStar fields that these tests poke at).
 ///
@@ -24,7 +24,7 @@ public class MsesDisplacementBodyTests
         var svc = new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
         var inv = svc.AnalyzeInviscid(geom, alphaDeg, settings: null);
 
-        // Use upper-surface extraction similar to MsesAnalysisService.
+        // Use upper-surface extraction similar to ThesisClosureAnalysisService.
         var samples = inv.PressureSamples;
         int iLE = 0;
         double minX = samples[0].Location.X;

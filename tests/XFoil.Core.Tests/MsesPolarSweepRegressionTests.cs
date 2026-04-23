@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -22,7 +22,7 @@ namespace XFoil.Core.Tests;
 public class MsesPolarSweepRegressionTests
 {
     private static ViscousAnalysisResult Run(
-        MsesAnalysisService svc, string naca, double alphaDeg, double Re)
+        ThesisClosureAnalysisService svc, string naca, double alphaDeg, double Re)
     {
         var geom = new XFoil.Core.Services.NacaAirfoilGenerator()
             .Generate4DigitClassic(naca, pointCount: 161);
@@ -39,10 +39,10 @@ public class MsesPolarSweepRegressionTests
     public void Naca0012_DefaultPath_RemainsPlausible(
         double alpha, double cdMin, double cdMax)
     {
-        // Post-F1.4: new MsesAnalysisService() uses the fully-
+        // Post-F1.4: new ThesisClosureAnalysisService() uses the fully-
         // thesis-exact path (implicit-Newton laminar + implicit-
         // Newton turbulent + wake marcher).
-        var svc = new MsesAnalysisService();
+        var svc = new ThesisClosureAnalysisService();
         var r = Run(svc, "0012", alpha, 3_000_000);
         Assert.True(r.Converged);
         Assert.InRange(r.DragDecomposition.CD, cdMin, cdMax);
@@ -57,7 +57,7 @@ public class MsesPolarSweepRegressionTests
     {
         // Thesis-exact turbulent marcher, Thwaites-λ laminar, TE
         // Squire-Young (no wake). Intermediate knob configuration.
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useThesisExactLaminar: false,
             useWakeMarcher: false);
@@ -74,7 +74,7 @@ public class MsesPolarSweepRegressionTests
         double alpha, double cdMin, double cdMax)
     {
         // Thesis-exact turbulent + wake marcher, Thwaites-λ laminar.
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useThesisExactLaminar: false,
             useWakeMarcher: true);
@@ -94,7 +94,7 @@ public class MsesPolarSweepRegressionTests
         // turbulent + TE Squire-Young (matches --legacy-closure
         // CLI flag). This is the pre-F1 baseline, kept for
         // comparison studies.
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: false,
             useWakeMarcher: false,
             useThesisExactLaminar: false);
@@ -110,18 +110,18 @@ public class MsesPolarSweepRegressionTests
         // within 5× of each other (they use the same inviscid,
         // same transition — differences are in which BL marchers
         // run and where Squire-Young integrates).
-        var rDefault = Run(new MsesAnalysisService(), "0012", 4.0, 3_000_000);
-        var rTurb = Run(new MsesAnalysisService(
+        var rDefault = Run(new ThesisClosureAnalysisService(), "0012", 4.0, 3_000_000);
+        var rTurb = Run(new ThesisClosureAnalysisService(
                 useThesisExactTurbulent: true,
                 useThesisExactLaminar: false,
                 useWakeMarcher: false),
             "0012", 4.0, 3_000_000);
-        var rWake = Run(new MsesAnalysisService(
+        var rWake = Run(new ThesisClosureAnalysisService(
                 useThesisExactTurbulent: true,
                 useThesisExactLaminar: false,
                 useWakeMarcher: true),
             "0012", 4.0, 3_000_000);
-        var rLegacy = Run(new MsesAnalysisService(
+        var rLegacy = Run(new ThesisClosureAnalysisService(
                 useThesisExactTurbulent: false,
                 useWakeMarcher: false,
                 useThesisExactLaminar: false),
@@ -155,7 +155,7 @@ public class MsesPolarSweepRegressionTests
         // Most-thesis-exact configuration: implicit-Newton laminar +
         // implicit-Newton turbulent + wake far-field Squire-Young.
         // This is the MSES-class path end-to-end.
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useWakeMarcher: true,
             useThesisExactLaminar: true);
@@ -170,7 +170,7 @@ public class MsesPolarSweepRegressionTests
         // NACA 0012 α=4° Re=3e6 with the fully-thesis-exact path.
         // CDF + CDP must equal CD (the physical decomposition
         // conservation). CDF > 0 (there's friction), CDP >= 0.
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useWakeMarcher: true,
             useThesisExactLaminar: true);
@@ -195,7 +195,7 @@ public class MsesPolarSweepRegressionTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true,
             useThesisExactLaminar: true);
         var r = svc.AnalyzeViscous(geom, 4.0, settings);
@@ -213,7 +213,7 @@ public class MsesPolarSweepRegressionTests
         // Cambered airfoil, fully-thesis-exact path. CDs should be
         // reasonable across the attached regime (WT CD ≈ 0.009-0.013
         // at this Re). Loose bounds leave room for future refinement.
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useWakeMarcher: true,
             useThesisExactLaminar: true);
@@ -240,7 +240,7 @@ public class MsesPolarSweepRegressionTests
             var settings = new AnalysisSettings(
                 panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
                 reynoldsNumber: 3_000_000, nCritUpper: nc, nCritLower: nc);
-            var svc = new MsesAnalysisService(
+            var svc = new ThesisClosureAnalysisService(
                 useThesisExactTurbulent: true,
                 useWakeMarcher: true,
                 useThesisExactLaminar: true);
@@ -263,7 +263,7 @@ public class MsesPolarSweepRegressionTests
         // for NACA 0012 α=4° fully-thesis-exact across Re ∈
         // {1e5, 5e5, 3e6, 1e7}.
         double[] reynolds = { 100_000, 500_000, 3_000_000, 10_000_000 };
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true,
             useThesisExactLaminar: true);
         double prevCd = double.PositiveInfinity;
@@ -284,7 +284,7 @@ public class MsesPolarSweepRegressionTests
         // in the [0, 8°] range (attached flow getting more shear on
         // the upper surface as adverse gradient grows). All three
         // paths should show this shape.
-        var svcWake = new MsesAnalysisService(
+        var svcWake = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true);
         double[] alphas = { 0.0, 2.0, 4.0, 6.0, 8.0 };
         double prevCd = -1.0;

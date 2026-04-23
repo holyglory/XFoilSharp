@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -51,7 +51,7 @@ public static class FourSolverComparisonRunner
                 new XFoil.Solver.Modern.Services.AirfoilAnalysisService()
                     .AnalyzeViscous(geom, c.AlphaDeg, settings));
             var mses = RunSafely(() =>
-                new MsesAnalysisService().AnalyzeViscous(geom, c.AlphaDeg, settings));
+                new ThesisClosureAnalysisService().AnalyzeViscous(geom, c.AlphaDeg, settings));
 
             results.Add(new ComparisonRow(
                 c.Naca, c.AlphaDeg, c.Reynolds, c.Mach,

@@ -1,6 +1,6 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Newton;
-using XFoil.MsesSolver.Topology;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Newton;
+using XFoil.ThesisClosureSolver.Topology;
 
 namespace XFoil.Core.Tests;
 
@@ -17,7 +17,7 @@ public class MsesTEMergeTests
         double thU = 0.002, thL = 0.002;
         double dsU = 0.005, dsL = 0.005;
         double ctU = 0.015, ctL = 0.012;
-        var (rT, rD, rC) = MsesBoundaryLayerResidual.TEMergeResiduals(
+        var (rT, rD, rC) = ThesisClosureBoundaryLayerResidual.TEMergeResiduals(
             thU, thL, dsU, dsL, ctU, ctL,
             thetaWake0: thU + thL,
             dStarWake0: dsU + dsL,
@@ -31,7 +31,7 @@ public class MsesTEMergeTests
     public void TEMergeResiduals_OffValues_ReflectMismatch()
     {
         // Pass θ_wake0 = 0; residual should = −(θ_u+θ_l).
-        var r = MsesBoundaryLayerResidual.TEMergeResiduals(
+        var r = ThesisClosureBoundaryLayerResidual.TEMergeResiduals(
             thetaUpperTE: 0.002, thetaLowerTE: 0.002,
             dStarUpperTE: 0.005, dStarLowerTE: 0.005,
             cTauUpperTE: 0.01, cTauLowerTE: 0.01,
@@ -46,13 +46,13 @@ public class MsesTEMergeTests
     {
         // Compare residual with isWake=true vs isWake=false at the
         // same state. The Cf contribution is the only difference.
-        double rNormal = MsesBoundaryLayerResidual.MomentumResidual(
+        double rNormal = ThesisClosureBoundaryLayerResidual.MomentumResidual(
             thetaPrev: 0.002, theta: 0.002,
             hPrev: 1.4, h: 1.4,
             uePrev: 1.0, ue: 1.0,
             dx: 0.01, nu: 1e-6,
             me: 0.0, isWake: false);
-        double rWake = MsesBoundaryLayerResidual.MomentumResidual(
+        double rWake = ThesisClosureBoundaryLayerResidual.MomentumResidual(
             thetaPrev: 0.002, theta: 0.002,
             hPrev: 1.4, h: 1.4,
             uePrev: 1.0, ue: 1.0,
@@ -70,7 +70,7 @@ public class MsesTEMergeTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
         double alpha = 4.0 * System.Math.PI / 180.0;
         var stag = StagnationDetector.DetectFromGeometry(pg, 1.0, alpha);
@@ -81,11 +81,11 @@ public class MsesTEMergeTests
             panelCount: 10, totalLength: 0.5,
             alphaRadians: alpha);
         int nw = wake.Length.Length;
-        var layout = new MsesGlobalStateSided(
+        var layout = new ThesisClosureGlobalStateSided(
             n + 1, n + 1, nw,
             topo.Upper.PanelIndices.Length,
             topo.Lower.PanelIndices.Length, nw);
-        var assembler = new MsesGlobalResidualSided(
+        var assembler = new ThesisClosureGlobalResidualSided(
             layout, pg, topo, 1.0, alpha,
             kinematicViscosity: 1e-6, machEdge: 0.0,
             initialTheta: 1e-4,

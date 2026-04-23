@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -30,7 +30,7 @@ public class MsesXtrParityTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: Re, nCritUpper: nCrit, nCritLower: nCrit);
-        var mses = new MsesAnalysisService(
+        var mses = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useWakeMarcher: true,
             useThesisExactLaminar: true);

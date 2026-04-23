@@ -1,5 +1,5 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Newton;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Newton;
 
 namespace XFoil.Core.Tests;
 
@@ -17,11 +17,11 @@ public class MsesGlobalResidualTests
         // Placeholder σ/BL rows: 0.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
-        var layout = new MsesGlobalState(
+        var layout = new ThesisClosureGlobalState(
             gammaCount: n + 1, sigmaCount: n + 1, blStationCount: 2);
-        var assembler = new MsesGlobalResidual(
+        var assembler = new ThesisClosureGlobalResidual(
             layout, pg, freestreamSpeed: 1.0,
             alphaRadians: 4.0 * System.Math.PI / 180.0);
         var zero = new double[layout.StateSize];
@@ -48,15 +48,15 @@ public class MsesGlobalResidualTests
         // BC rows + Kutta should be ~0 (the solve converged).
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("4412", pointCount: 81);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
         double a = 4.0 * System.Math.PI / 180.0;
-        var inv = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
-        var layout = new MsesGlobalState(n + 1, n + 1, 2);
+        var inv = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
+        var layout = new ThesisClosureGlobalState(n + 1, n + 1, 2);
         var zeroSigma = new double[n + 1];
         var zeroBl = new double[2];
         var state = layout.Pack(inv.Gamma, zeroSigma, zeroBl, zeroBl, zeroBl);
-        var assembler = new MsesGlobalResidual(layout, pg, 1.0, a);
+        var assembler = new ThesisClosureGlobalResidual(layout, pg, 1.0, a);
         var r = assembler.Compute(state);
 
         // Inviscid rows + Kutta must be near zero.
@@ -74,15 +74,15 @@ public class MsesGlobalResidualTests
         // and verify R_σ equals them.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
-        var layout = new MsesGlobalState(n + 1, n + 1, 2);
+        var layout = new ThesisClosureGlobalState(n + 1, n + 1, 2);
         var gamma = new double[n + 1];
         var sigma = new double[n + 1];
         for (int i = 0; i < n + 1; i++) sigma[i] = 0.01 * i;
         var bl = new double[2];
         var state = layout.Pack(gamma, sigma, bl, bl, bl);
-        var assembler = new MsesGlobalResidual(layout, pg, 1.0, 0.0);
+        var assembler = new ThesisClosureGlobalResidual(layout, pg, 1.0, 0.0);
         var r = assembler.Compute(state);
         for (int k = 0; k < n + 1; k++)
         {
@@ -95,10 +95,10 @@ public class MsesGlobalResidualTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var badLayout = new MsesGlobalState(5, 5, 2);  // should be (N+1, N+1, ...)
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var badLayout = new ThesisClosureGlobalState(5, 5, 2);  // should be (N+1, N+1, ...)
         Assert.Throws<System.ArgumentException>(
-            () => new MsesGlobalResidual(badLayout, pg, 1.0, 0.0));
+            () => new ThesisClosureGlobalResidual(badLayout, pg, 1.0, 0.0));
     }
 
     [Fact]
@@ -110,11 +110,11 @@ public class MsesGlobalResidualTests
         // at a rough initial guess.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
-        var layout = new MsesGlobalState(
+        var layout = new ThesisClosureGlobalState(
             gammaCount: n + 1, sigmaCount: n + 1, blStationCount: n);
-        var assembler = new MsesGlobalResidual(
+        var assembler = new ThesisClosureGlobalResidual(
             layout, pg, freestreamSpeed: 1.0, alphaRadians: 0.0,
             useRealBLResiduals: true);
         // Initial guess: small θ, H ~ 2.5 (laminar LE-like), σ=0, Cτ=0.01.
@@ -138,12 +138,12 @@ public class MsesGlobalResidualTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
         // Wrong BL station count — should throw.
-        var badLayout = new MsesGlobalState(n + 1, n + 1, blStationCount: 2);
+        var badLayout = new ThesisClosureGlobalState(n + 1, n + 1, blStationCount: 2);
         Assert.Throws<System.ArgumentException>(
-            () => new MsesGlobalResidual(
+            () => new ThesisClosureGlobalResidual(
                 badLayout, pg, 1.0, 0.0, useRealBLResiduals: true));
     }
 }

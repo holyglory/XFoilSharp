@@ -1,5 +1,5 @@
-using XFoil.MsesSolver.BoundaryLayer;
-using XFoil.MsesSolver.Closure;
+using XFoil.ThesisClosureSolver.BoundaryLayer;
+using XFoil.ThesisClosureSolver.Closure;
 
 namespace XFoil.Core.Tests;
 
@@ -18,7 +18,7 @@ public class ThesisExactTurbulentMarcherTests
         // Cτ_eq at the IC Hk (≈ 1.4), Reθ ~ moderate. Using a fixed
         // reference evaluation to avoid coupling the IC to station-1 Ue.
         double reTheta = 1000.0;
-        double cTauEq = MsesClosureRelations.ComputeCTauEquilibrium(hInit, reTheta, 0.0);
+        double cTauEq = ThesisClosureRelations.ComputeCTauEquilibrium(hInit, reTheta, 0.0);
         return (theta0, hInit, 0.3 * cTauEq);
     }
 

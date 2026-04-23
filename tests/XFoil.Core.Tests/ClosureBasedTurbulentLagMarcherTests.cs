@@ -1,5 +1,5 @@
-using XFoil.MsesSolver.BoundaryLayer;
-using XFoil.MsesSolver.Closure;
+using XFoil.ThesisClosureSolver.BoundaryLayer;
+using XFoil.ThesisClosureSolver.Closure;
 
 namespace XFoil.Core.Tests;
 
@@ -31,8 +31,8 @@ public class ClosureBasedTurbulentLagMarcherTests
         double theta0 = 0.036 * stations[0] / System.Math.Pow(Re_x0, 0.2);
         double Reθ0 = U0 * theta0 / nu;
         const double H0 = 1.4;
-        double Hk0 = MsesClosureRelations.ComputeHk(H0, 0.0);
-        double cTauEq0 = MsesClosureRelations.ComputeCTauEquilibrium(Hk0, Reθ0, 0.0);
+        double Hk0 = ThesisClosureRelations.ComputeHk(H0, 0.0);
+        double cTauEq0 = ThesisClosureRelations.ComputeCTauEquilibrium(Hk0, Reθ0, 0.0);
         double cTau0 = cTauEq0; // start in equilibrium
 
         var result = ClosureBasedTurbulentLagMarcher.March(
@@ -44,8 +44,8 @@ public class ClosureBasedTurbulentLagMarcherTests
         foreach (int i in checkIdx)
         {
             double Reθi = U0 * result.Theta[i] / nu;
-            double Hki = MsesClosureRelations.ComputeHk(result.H[i], 0.0);
-            double cTauEqi = MsesClosureRelations.ComputeCTauEquilibrium(Hki, Reθi, 0.0);
+            double Hki = ThesisClosureRelations.ComputeHk(result.H[i], 0.0);
+            double cTauEqi = ThesisClosureRelations.ComputeCTauEquilibrium(Hki, Reθi, 0.0);
             double relErr = System.Math.Abs(result.CTau[i] - cTauEqi) / System.Math.Max(cTauEqi, 1e-8);
             // Tolerance 30 % — Cτ_eq itself changes with Reθ on flat
             // plate, and the lag ODE has finite response; this test
@@ -78,8 +78,8 @@ public class ClosureBasedTurbulentLagMarcherTests
         double theta0 = 0.036 * stations[0] / System.Math.Pow(Re_x0, 0.2);
         const double H0 = 1.4;
         double Reθ0 = U0 * theta0 / nu;
-        double Hk0 = MsesClosureRelations.ComputeHk(H0, 0.0);
-        double cTau0 = MsesClosureRelations.ComputeCTauEquilibrium(Hk0, Reθ0, 0.0);
+        double Hk0 = ThesisClosureRelations.ComputeHk(H0, 0.0);
+        double cTau0 = ThesisClosureRelations.ComputeCTauEquilibrium(Hk0, Reθ0, 0.0);
 
         var lag = ClosureBasedTurbulentLagMarcher.March(stations, ue, nu, theta0, H0, cTau0);
         var noLag = ClosureBasedTurbulentMarcher.March(stations, ue, nu, theta0, H0);
@@ -110,8 +110,8 @@ public class ClosureBasedTurbulentLagMarcherTests
 
         const double theta0 = 1e-3;
         const double H0 = 1.4;
-        double Hk0 = MsesClosureRelations.ComputeHk(H0, 0.0);
-        double cTau0 = MsesClosureRelations.ComputeCTauEquilibrium(Hk0, 1000.0, 0.0);
+        double Hk0 = ThesisClosureRelations.ComputeHk(H0, 0.0);
+        double cTau0 = ThesisClosureRelations.ComputeCTauEquilibrium(Hk0, 1000.0, 0.0);
 
         var result = ClosureBasedTurbulentLagMarcher.March(
             stations, ue, 1e-6, theta0, H0, cTau0);
@@ -147,8 +147,8 @@ public class ClosureBasedTurbulentLagMarcherTests
         const double theta0 = 1e-3;
         const double H0 = 1.4;
         const double nu = 1e-6;
-        double Hk0 = MsesClosureRelations.ComputeHk(H0, 0.0);
-        double cTauEq0 = MsesClosureRelations.ComputeCTauEquilibrium(Hk0, 1000.0, 0.0);
+        double Hk0 = ThesisClosureRelations.ComputeHk(H0, 0.0);
+        double cTauEq0 = ThesisClosureRelations.ComputeCTauEquilibrium(Hk0, 1000.0, 0.0);
         double cTau0 = 0.5 * cTauEq0;
 
         var result = ClosureBasedTurbulentLagMarcher.March(
@@ -156,9 +156,9 @@ public class ClosureBasedTurbulentLagMarcherTests
 
         // Cτ at final station should be closer to Cτ_eq than the
         // initial state (relaxation toward equilibrium).
-        double HkFinal = MsesClosureRelations.ComputeHk(result.H[N - 1], 0.0);
+        double HkFinal = ThesisClosureRelations.ComputeHk(result.H[N - 1], 0.0);
         double ReθFinal = result.Theta[N - 1] / nu;
-        double cTauEqFinal = MsesClosureRelations.ComputeCTauEquilibrium(HkFinal, ReθFinal, 0.0);
+        double cTauEqFinal = ThesisClosureRelations.ComputeCTauEquilibrium(HkFinal, ReθFinal, 0.0);
         double gapStart = cTauEq0 - cTau0;
         double gapFinal = System.Math.Abs(cTauEqFinal - result.CTau[N - 1]);
 

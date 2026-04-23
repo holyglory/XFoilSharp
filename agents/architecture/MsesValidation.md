@@ -11,7 +11,7 @@ All numbers here are produced by the **fully-thesis-exact** MSES path:
 implicit-Newton laminar marcher (eq. 6.10 laminar closure) +
 implicit-Newton turbulent marcher (eq. 6.10 with Cτ-lag coupling) +
 wake marcher with Squire-Young far-field CD. As of commit `2eda133`
-this is the default configuration of `MsesAnalysisService`; the
+this is the default configuration of `ThesisClosureAnalysisService`; the
 legacy Clauser-placeholder path is opt-in via `--legacy-closure`.
 
 Geometry: 161-panel NACA airfoils, M=0 unless noted, Re=3e6 unless
@@ -114,7 +114,7 @@ exporter).
 
 The XFoil.Solver legacy path remains `4455/4455 bit-exact` on the
 `ParallelPolarCompare` sweep. F1 work was additive to
-`XFoil.MsesSolver`, plus one CSV-column append in the shared
+`XFoil.ThesisClosureSolver`, plus one CSV-column append in the shared
 `AnalysisSessionRunner` (header prefix unchanged so legacy parsers
 keep working).
 

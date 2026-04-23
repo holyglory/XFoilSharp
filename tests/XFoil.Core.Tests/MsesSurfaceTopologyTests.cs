@@ -1,5 +1,5 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Topology;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Topology;
 
 namespace XFoil.Core.Tests;
 
@@ -13,7 +13,7 @@ public class MsesSurfaceTopologyTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var stag = StagnationDetector.DetectFromGeometry(pg, 1.0, 0.0);
         var t = SurfaceTopology.Build(pg, stag);
         // Symmetric α=0: upper and lower surfaces have equal panel
@@ -31,7 +31,7 @@ public class MsesSurfaceTopologyTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var stag = StagnationDetector.DetectFromGeometry(pg, 1.0, 0.0);
         var t = SurfaceTopology.Build(pg, stag);
         Assert.Equal(pg.PanelCount,
@@ -43,7 +43,7 @@ public class MsesSurfaceTopologyTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("2412", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var stag = StagnationDetector.DetectFromGeometry(
             pg, 1.0, 2.0 * System.Math.PI / 180.0);
         var t = SurfaceTopology.Build(pg, stag);
@@ -61,7 +61,7 @@ public class MsesSurfaceTopologyTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("2412", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var stag = StagnationDetector.DetectFromGeometry(
             pg, 1.0, 2.0 * System.Math.PI / 180.0);
         var t = SurfaceTopology.Build(pg, stag);
@@ -79,7 +79,7 @@ public class MsesSurfaceTopologyTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var stag = StagnationDetector.DetectFromGeometry(pg, 1.0, 0.0);
         var t = SurfaceTopology.Build(pg, stag);
         Assert.True(t.Upper.ArcLength[0] > 0 && t.Upper.ArcLength[0] < 0.02,
@@ -100,7 +100,7 @@ public class MsesSurfaceTopologyTests
         // 0 panels. Verify we handle it — clamp to leave ≥1 on each side.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var fakeStag = new StagnationDetector.StagnationLocation(
             PanelIndex: 0, InterpolationFraction: 0.0);
         var t = SurfaceTopology.Build(pg, fakeStag);

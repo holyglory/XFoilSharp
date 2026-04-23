@@ -1,15 +1,15 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
-/// Regression tests for <see cref="MsesStallHeuristic.IsLikelyStalled"/>.
+/// Regression tests for <see cref="ThesisClosureStallHeuristic.IsLikelyStalled"/>.
 /// Pins the empirical thresholds against NACA 0012 Re=3e6 polar
 /// behavior so threshold drift doesn't silently change user-facing
 /// stall warnings.
 /// </summary>
-public class MsesStallHeuristicTests
+public class ThesisClosureStallHeuristicTests
 {
     private static ViscousAnalysisResult RunPoint(double alphaDeg)
     {
@@ -18,7 +18,7 @@ public class MsesStallHeuristicTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true,
             useWakeMarcher: true,
             useThesisExactLaminar: true);
@@ -34,7 +34,7 @@ public class MsesStallHeuristicTests
     {
         var r = RunPoint(alpha);
         Assert.False(
-            MsesStallHeuristic.IsLikelyStalled(r.UpperProfiles),
+            ThesisClosureStallHeuristic.IsLikelyStalled(r.UpperProfiles),
             $"α={alpha} should not be flagged as stalled. "
             + $"TE: H_u={r.UpperProfiles[r.UpperProfiles.Length - 1].Hk}, "
             + $"δ*_u={r.UpperProfiles[r.UpperProfiles.Length - 1].DStar}");
@@ -48,7 +48,7 @@ public class MsesStallHeuristicTests
     {
         var r = RunPoint(alpha);
         Assert.True(
-            MsesStallHeuristic.IsLikelyStalled(r.UpperProfiles),
+            ThesisClosureStallHeuristic.IsLikelyStalled(r.UpperProfiles),
             $"α={alpha} should be flagged as stalled. "
             + $"TE: H_u={r.UpperProfiles[r.UpperProfiles.Length - 1].Hk}, "
             + $"δ*_u={r.UpperProfiles[r.UpperProfiles.Length - 1].DStar}");
@@ -57,7 +57,7 @@ public class MsesStallHeuristicTests
     [Fact]
     public void EmptyProfiles_ReturnsFalse()
     {
-        Assert.False(MsesStallHeuristic.IsLikelyStalled(
+        Assert.False(ThesisClosureStallHeuristic.IsLikelyStalled(
             System.Array.Empty<BoundaryLayerProfile>()));
     }
 
@@ -65,7 +65,7 @@ public class MsesStallHeuristicTests
     public void SingleProfile_ReturnsFalse()
     {
         var one = new[] { new BoundaryLayerProfile { Hk = 10.0, DStar = 1.0 } };
-        Assert.False(MsesStallHeuristic.IsLikelyStalled(one));
+        Assert.False(ThesisClosureStallHeuristic.IsLikelyStalled(one));
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class MsesStallHeuristicTests
                 DStar = 0.001,
             };
         }
-        Assert.True(MsesStallHeuristic.IsLikelyStalled(profiles));
+        Assert.True(ThesisClosureStallHeuristic.IsLikelyStalled(profiles));
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class MsesStallHeuristicTests
                 DStar = i < 19 ? 0.01 : 0.1,  // TE δ* = 10% chord
             };
         }
-        Assert.True(MsesStallHeuristic.IsLikelyStalled(profiles));
+        Assert.True(ThesisClosureStallHeuristic.IsLikelyStalled(profiles));
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class MsesStallHeuristicTests
                 DStar = 0.005,
             };
         }
-        Assert.True(MsesStallHeuristic.IsLikelyStalled(profiles));
+        Assert.True(ThesisClosureStallHeuristic.IsLikelyStalled(profiles));
     }
 
     [Fact]
@@ -131,6 +131,6 @@ public class MsesStallHeuristicTests
                 DStar = 0.005,
             };
         }
-        Assert.False(MsesStallHeuristic.IsLikelyStalled(profiles));
+        Assert.False(ThesisClosureStallHeuristic.IsLikelyStalled(profiles));
     }
 }

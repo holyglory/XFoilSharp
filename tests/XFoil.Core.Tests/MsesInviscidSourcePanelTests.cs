@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Inviscid;
 
 namespace XFoil.Core.Tests;
 
@@ -18,7 +18,7 @@ public class MsesInviscidSourcePanelTests
         double ax = 0, ay = 0, bx = L, by = 0;
         double tx = 1, ty = 0;
         double midX = 0.5 * L, midY = 0.0;
-        var (uA, vA, uB, vB) = MsesInviscidPanelSolver
+        var (uA, vA, uB, vB) = ThesisClosurePanelSolver
             .LinearSourcePanelContribution(midX, midY, ax, ay, bx, by, tx, ty, L,
                 selfPanel: true);
         // Uniform σ=1 ⇒ sum of shape coefficients on the normal = 1/2.
@@ -37,7 +37,7 @@ public class MsesInviscidSourcePanelTests
         double ax = 0, ay = 0, bx = 1, by = 0;
         double tx = 1, ty = 0, L = 1.0;
         double px = 10.0, py = 0.1;
-        var (uA, vA, uB, vB) = MsesInviscidPanelSolver
+        var (uA, vA, uB, vB) = ThesisClosurePanelSolver
             .LinearSourcePanelContribution(px, py, ax, ay, bx, by, tx, ty, L,
                 selfPanel: false);
         double u = uA + uB;
@@ -57,9 +57,9 @@ public class MsesInviscidSourcePanelTests
         double ax = 0, ay = 0, bx = L, by = 0;
         double tx = 1, ty = 0;
         double px = 0.3, py = 0.5;
-        var vtx = MsesInviscidPanelSolver.LinearVortexPanelContribution(
+        var vtx = ThesisClosurePanelSolver.LinearVortexPanelContribution(
             px, py, ax, ay, bx, by, tx, ty, L, selfPanel: false);
-        var src = MsesInviscidPanelSolver.LinearSourcePanelContribution(
+        var src = ThesisClosurePanelSolver.LinearSourcePanelContribution(
             px, py, ax, ay, bx, by, tx, ty, L, selfPanel: false);
         // Since tx=1, ty=0, local == global, so compare directly:
         //   src.u == vtx.v
@@ -75,8 +75,8 @@ public class MsesInviscidSourcePanelTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var a = MsesInviscidPanelSolver.BuildSourceTangentInfluenceMatrix(pg);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var a = ThesisClosurePanelSolver.BuildSourceTangentInfluenceMatrix(pg);
         Assert.Equal(pg.PanelCount, a.GetLength(0));
         Assert.Equal(pg.PanelCount + 1, a.GetLength(1));
     }
@@ -89,8 +89,8 @@ public class MsesInviscidSourcePanelTests
         // to the direct). Verified by row-sum antisymmetry.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var a = MsesInviscidPanelSolver.BuildSourceNormalInfluenceMatrix(pg);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var a = ThesisClosurePanelSolver.BuildSourceNormalInfluenceMatrix(pg);
         int n = pg.PanelCount;
         // Row i vs row (n-1-i): the magnitudes of the row sums
         // should match. Sign may flip because the mirror flips the

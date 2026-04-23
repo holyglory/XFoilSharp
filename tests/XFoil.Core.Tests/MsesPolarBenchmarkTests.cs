@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -25,7 +25,7 @@ public class MsesPolarBenchmarkTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: Re);
-        var mses = new MsesAnalysisService();
+        var mses = new ThesisClosureAnalysisService();
 
         int count = (int)((aEnd - aStart) / aStep) + 1;
         var clArr = new double[count];
@@ -54,7 +54,7 @@ public class MsesPolarBenchmarkTests
         var geom = gen.Generate4DigitClassic("4412", pointCount: 161);
         var settings = new AnalysisSettings(panelCount: 161,
             freestreamVelocity: 1.0, machNumber: 0.0, reynoldsNumber: 3_000_000);
-        var mses = new MsesAnalysisService();
+        var mses = new ThesisClosureAnalysisService();
         double clPrev = -999;
         for (double a = 0.0; a <= 8.0; a += 2.0)
         {

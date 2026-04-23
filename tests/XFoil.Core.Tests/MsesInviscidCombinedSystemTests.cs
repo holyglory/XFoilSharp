@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Inviscid;
 
 namespace XFoil.Core.Tests;
 
@@ -14,11 +14,11 @@ public class MsesInviscidCombinedSystemTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("4412", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         double a = 4.0 * System.Math.PI / 180.0;
-        var rNull = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
+        var rNull = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
         var zero = new double[pg.PanelCount + 1];
-        var rZero = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, sources: zero);
+        var rZero = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, sources: zero);
         Assert.Equal(rNull.LiftCoefficient, rZero.LiftCoefficient, 12);
         for (int i = 0; i < rNull.CpMidpoint.Length; i++)
         {
@@ -35,12 +35,12 @@ public class MsesInviscidCombinedSystemTests
         // source on upper de-accelerates the local flow).
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         double a = 4.0 * System.Math.PI / 180.0;
-        var rBaseline = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
+        var rBaseline = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
         var sources = new double[pg.PanelCount + 1];
         for (int i = 0; i < sources.Length; i++) sources[i] = 0.01;
-        var rWithSource = MsesInviscidPanelSolver.SolveInviscid(
+        var rWithSource = ThesisClosurePanelSolver.SolveInviscid(
             pg, 1.0, a, 1.0, sources: sources);
         // Uniform σ on a closed body doesn't change CL much
         // (net mass flow is bounded), but it MUST produce some
@@ -60,10 +60,10 @@ public class MsesInviscidCombinedSystemTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var badSources = new double[42];
         Assert.Throws<System.ArgumentException>(
-            () => MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, 0.0, 1.0, sources: badSources));
+            () => ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, 0.0, 1.0, sources: badSources));
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class MsesInviscidCombinedSystemTests
         // breaks symmetry and should produce non-zero CL.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
         var sources = new double[n + 1];
         // Panels 0..n/2-1 are upper (walk from TE to LE).
@@ -83,8 +83,8 @@ public class MsesInviscidCombinedSystemTests
         {
             sources[i] = (i < n / 2) ? 0.01 : -0.01;
         }
-        var r0 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, 0.0, 1.0);
-        var rS = MsesInviscidPanelSolver.SolveInviscid(
+        var r0 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, 0.0, 1.0);
+        var rS = ThesisClosurePanelSolver.SolveInviscid(
             pg, 1.0, 0.0, 1.0, sources: sources);
         // Uncoupled: CL ≈ 0. Coupled: CL ≠ 0.
         Assert.True(System.Math.Abs(r0.LiftCoefficient) < 1e-6);

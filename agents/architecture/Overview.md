@@ -37,7 +37,7 @@ The doubled tree is exposed via three CLI modes in `tools/fortran-debug/Parallel
 - `XFoil.IO`
   - Depends on `XFoil.Core` and `XFoil.Solver`.
   - Owns deterministic export, legacy polar import, and batch session execution.
-- `XFoil.MsesSolver`
+- `XFoil.ThesisClosureSolver`
   - Depends on `XFoil.Core` and `XFoil.Solver`.
   - Clean-room reimplementation of Drela's MSES closure (§4–§6 of the
     1986 MIT thesis). Parallel to `XFoil.Solver`, same
@@ -53,7 +53,7 @@ The doubled tree is exposed via three CLI modes in `tools/fortran-debug/Parallel
     `MsesValidation.md`.
 - `XFoil.Cli`
   - Depends on `XFoil.Core`, `XFoil.Solver`, `XFoil.Design`, `XFoil.IO`,
-    and `XFoil.MsesSolver`.
+    and `XFoil.ThesisClosureSolver`.
   - Owns argument parsing and presentation-only orchestration.
 
 ## Architectural layers

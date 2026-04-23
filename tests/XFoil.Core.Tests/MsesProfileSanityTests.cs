@@ -1,10 +1,10 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
-/// Sanity tests on the per-station BL profiles that MsesAnalysisService
+/// Sanity tests on the per-station BL profiles that ThesisClosureAnalysisService
 /// now populates. Checks physical monotonicity/positivity properties
 /// of the profile arrays the pipeline produces.
 /// </summary>
@@ -17,7 +17,7 @@ public class MsesProfileSanityTests
         var settings = new AnalysisSettings(
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: Re);
-        return new MsesAnalysisService().AnalyzeViscous(geom, alpha, settings);
+        return new ThesisClosureAnalysisService().AnalyzeViscous(geom, alpha, settings);
     }
 
     [Fact]

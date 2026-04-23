@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.BoundaryLayer;
+using XFoil.ThesisClosureSolver.BoundaryLayer;
 
 namespace XFoil.Core.Tests;
 

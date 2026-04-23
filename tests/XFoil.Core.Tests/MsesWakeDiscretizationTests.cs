@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Topology;
+using XFoil.ThesisClosureSolver.Topology;
 
 namespace XFoil.Core.Tests;
 

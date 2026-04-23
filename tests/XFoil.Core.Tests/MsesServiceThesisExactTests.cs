@@ -1,10 +1,10 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
-/// Validates the Phase-2e opt-in through <see cref="MsesAnalysisService"/>.
+/// Validates the Phase-2e opt-in through <see cref="ThesisClosureAnalysisService"/>.
 /// The constructor flag <c>useThesisExactTurbulent</c> is surfaced
 /// to CLI and downstream consumers; these tests confirm it produces
 /// a finite, plausible viscous result end-to-end.
@@ -20,9 +20,9 @@ public class MsesServiceThesisExactTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svcClauser = new MsesAnalysisService(
+        var svcClauser = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: false);
-        var svcThesis = new MsesAnalysisService(
+        var svcThesis = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true);
 
         var rClauser = svcClauser.AnalyzeViscous(geom, 2.0, settings);
@@ -53,7 +53,7 @@ public class MsesServiceThesisExactTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: 0.0,
             reynoldsNumber: 3_000_000);
 
-        var svc = new MsesAnalysisService(useThesisExactTurbulent: true);
+        var svc = new ThesisClosureAnalysisService(useThesisExactTurbulent: true);
         var r = svc.AnalyzeViscous(geom, 12.0, settings);
 
         Assert.True(double.IsFinite(r.DragDecomposition.CD));

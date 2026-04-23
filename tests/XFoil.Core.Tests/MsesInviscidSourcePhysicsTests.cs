@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Inviscid;
 
 namespace XFoil.Core.Tests;
 
@@ -23,7 +23,7 @@ public class MsesInviscidSourcePhysicsTests
         // contribution at each panel's own midpoint just above
         // the sheet should give v_normal = σ/2 per the standard
         // vortex/source-sheet jump result.
-        var pg = new MsesInviscidPanelSolver.PanelizedGeometry(
+        var pg = new ThesisClosurePanelSolver.PanelizedGeometry(
             PanelCount: 2,
             NodeX: new[] { 0.0, 0.5, 1.0 },
             NodeY: new[] { 0.0, 0.0, 0.0 },
@@ -35,7 +35,7 @@ public class MsesInviscidSourcePhysicsTests
             NormalY: new[] { 1.0, 1.0 },
             Length: new[] { 0.5, 0.5 });
         // Compute the normal-influence matrix.
-        var aN = MsesInviscidPanelSolver.BuildSourceNormalInfluenceMatrix(pg);
+        var aN = ThesisClosurePanelSolver.BuildSourceNormalInfluenceMatrix(pg);
         // Uniform σ=1 at all three nodes. The self-panel normal
         // contribution at its midpoint is +1/2. Far-panel contribution
         // is smaller (logarithmic). Sum gives full v_normal at mid.
@@ -56,11 +56,11 @@ public class MsesInviscidSourcePhysicsTests
         // symmetric top/bottom).
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount + 1;
         var uniformSources = new double[n];
         for (int i = 0; i < n; i++) uniformSources[i] = 0.01;
-        var r = MsesInviscidPanelSolver.SolveInviscid(
+        var r = ThesisClosurePanelSolver.SolveInviscid(
             pg, 1.0, 0.0, 1.0, sources: uniformSources);
         Assert.True(System.Math.Abs(r.LiftCoefficient) < 1e-4,
             $"Uniform σ on symmetric α=0° case should keep CL≈0; got {r.LiftCoefficient}");
@@ -74,7 +74,7 @@ public class MsesInviscidSourcePhysicsTests
         // CL should scale linearly with the amplitude c.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
 
         double[] BuildAntisym(double c)
@@ -84,9 +84,9 @@ public class MsesInviscidSourcePhysicsTests
             return s;
         }
 
-        var r1 = MsesInviscidPanelSolver.SolveInviscid(
+        var r1 = ThesisClosurePanelSolver.SolveInviscid(
             pg, 1.0, 0.0, 1.0, sources: BuildAntisym(0.01));
-        var r2 = MsesInviscidPanelSolver.SolveInviscid(
+        var r2 = ThesisClosurePanelSolver.SolveInviscid(
             pg, 1.0, 0.0, 1.0, sources: BuildAntisym(0.02));
         double ratio = r2.LiftCoefficient / r1.LiftCoefficient;
         Assert.InRange(ratio, 1.95, 2.05);
@@ -100,7 +100,7 @@ public class MsesInviscidSourcePhysicsTests
         // produce CL_A + CL_B − CL(0).
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("2412", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
 
         double a = 4.0 * System.Math.PI / 180.0;
@@ -115,10 +115,10 @@ public class MsesInviscidSourcePhysicsTests
             sB[i] = 0.003 * System.Math.Cos(phase);
             sAB[i] = sA[i] + sB[i];
         }
-        var r0 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
-        var rA = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, sources: sA);
-        var rB = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, sources: sB);
-        var rAB = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, sources: sAB);
+        var r0 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
+        var rA = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, sources: sA);
+        var rB = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, sources: sB);
+        var rAB = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, sources: sAB);
         double predictedCL = rA.LiftCoefficient + rB.LiftCoefficient - r0.LiftCoefficient;
         Assert.True(System.Math.Abs(rAB.LiftCoefficient - predictedCL) < 1e-10,
             $"superposition: CL(A+B)={rAB.LiftCoefficient} should equal "
@@ -136,8 +136,8 @@ public class MsesInviscidSourcePhysicsTests
         // configurations.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var aT = MsesInviscidPanelSolver.BuildSourceTangentInfluenceMatrix(pg);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var aT = ThesisClosurePanelSolver.BuildSourceTangentInfluenceMatrix(pg);
         int n = pg.PanelCount;
         // Probe two well-separated panels.
         int i = 5, j = n - 5;

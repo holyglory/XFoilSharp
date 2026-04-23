@@ -1,6 +1,6 @@
-# XFoil.MsesSolver — User Guide
+# XFoil.ThesisClosureSolver — User Guide
 
-The `XFoil.MsesSolver` assembly is a clean-room C# port of the MSES-class
+The `XFoil.ThesisClosureSolver` assembly is a clean-room C# port of the MSES-class
 2nd-order boundary-layer closure from Drela's 1986 MIT thesis. It
 coexists with the parity-validated `XFoil.Solver` assembly (Fortran-
 bit-exact XFoil 6.97 path); both implement `IAirfoilAnalysisService`
@@ -15,7 +15,7 @@ snapshot.
 ```csharp
 // Default: fully-thesis-exact (implicit-Newton laminar + implicit-
 // Newton turbulent + wake marcher with Squire-Young far-field CD).
-IAirfoilAnalysisService svc = new MsesAnalysisService();
+IAirfoilAnalysisService svc = new ThesisClosureAnalysisService();
 var r = svc.AnalyzeViscous(geometry, alphaDegrees: 4.0, settings);
 ```
 
@@ -51,7 +51,7 @@ have no effect (the closures they enabled are the default).
 ## Ctor knobs
 
 ```csharp
-new MsesAnalysisService(
+new ThesisClosureAnalysisService(
     inviscidProvider: null,                      // null → Modern XFoil inviscid
     viscousCouplingIterations: 0,                // Phase-5-lite, experimental
     viscousCouplingRelaxation: 0.3,
@@ -133,4 +133,4 @@ Don't rely on it for cambered-airfoil CL accuracy.
 |------|--------|
 | Bit-exact Fortran XFoil parity | `XFoil.Solver` (Double tree) |
 | Modern-tree viscous without parity concern | `XFoil.Solver.Modern` |
-| MSES-class closure, stall-robust | `XFoil.MsesSolver` |
+| MSES-class closure, stall-robust | `XFoil.ThesisClosureSolver` |

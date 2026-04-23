@@ -1,12 +1,12 @@
-using XFoil.MsesSolver.Newton;
+using XFoil.ThesisClosureSolver.Newton;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// P4.4 — Newton loop + LU solve tests on synthetic residuals.
-/// The MsesGlobalResidual integration gate is P4.6.
+/// The ThesisClosureGlobalResidual integration gate is P4.6.
 /// </summary>
-public class MsesGlobalNewtonTests
+public class ThesisClosureGlobalNewtonTests
 {
     [Fact]
     public void Solve_LinearSystem_ConvergesInOneStep()
@@ -26,9 +26,9 @@ public class MsesGlobalNewtonTests
             a[1, 0] * x[0] + a[1, 1] * x[1] - b[1],
         };
         var initial = new[] { 0.0, 0.0 };
-        var result = MsesGlobalNewton.Solve(
+        var result = ThesisClosureGlobalNewton.Solve(
             initial, R,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 5);
 
         Assert.True(result.Converged);
@@ -45,9 +45,9 @@ public class MsesGlobalNewtonTests
         // converges to +2 in a few iterations.
         double[] R(double[] x) => new[] { x[0] * x[0] - 4.0 };
         var initial = new[] { 3.0 };
-        var result = MsesGlobalNewton.Solve(
+        var result = ThesisClosureGlobalNewton.Solve(
             initial, R,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 20, resTol: 1e-10, stepTol: 1e-10);
 
         Assert.True(result.Converged);
@@ -62,7 +62,7 @@ public class MsesGlobalNewtonTests
         // without throwing.
         double[] R(double[] x) => new[] { 0.0, 0.0 };
         var initial = new[] { 1.0, 2.0 };
-        var result = MsesGlobalNewton.Solve(
+        var result = ThesisClosureGlobalNewton.Solve(
             initial, R,
             (s, f) => new double[,] { { 0.0, 0.0 }, { 0.0, 0.0 } },
             maxIterations: 3);
@@ -81,9 +81,9 @@ public class MsesGlobalNewtonTests
     {
         double[] R(double[] x) => new[] { x[0] - 3.0 };
         var initial = new[] { 0.0 };
-        var result = MsesGlobalNewton.Solve(
+        var result = ThesisClosureGlobalNewton.Solve(
             initial, R,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 10);
 
         Assert.True(result.Converged);

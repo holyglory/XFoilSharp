@@ -15,7 +15,7 @@ reference values from NACA TR-824.
 | Parity | `XFoil.Solver.Services.AirfoilAnalysisService` | Float-precision replay of Fortran XFoil 6.97 |
 | Double | `XFoil.Solver.Double.Services.AirfoilAnalysisService` | Native double precision |
 | Modern | `XFoil.Solver.Modern.Services.AirfoilAnalysisService` | Solution-adaptive paneling on top of Double |
-| MSES | `XFoil.MsesSolver.Services.MsesAnalysisService` | Linear-vortex panel + Drela thesis BL closure |
+| MSES | `XFoil.ThesisClosureSolver.Services.ThesisClosureAnalysisService` | Linear-vortex panel + Drela thesis BL closure |
 
 Airfoils tested: NACA 0012 (symmetric), NACA 2412 (2 % camber),
 NACA 4412 (4 % camber).
@@ -113,7 +113,7 @@ what unblocks it.
 
 ## Next steps
 
-- **A1** Rename `XFoil.MsesSolver` → `XFoil.ThesisClosureSolver` +
+- **A1** Rename `XFoil.ThesisClosureSolver` → `XFoil.ThesisClosureSolver` +
   related type renames.
 - **A2** Update docs to reflect the accurate scope and the known CL
   bias.

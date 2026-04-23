@@ -1,6 +1,6 @@
 using XFoil.Core.Models;
-using XFoil.MsesSolver.BoundaryLayer;
-using XFoil.MsesSolver.Closure;
+using XFoil.ThesisClosureSolver.BoundaryLayer;
+using XFoil.ThesisClosureSolver.Closure;
 using XFoil.Solver.Services;
 
 namespace XFoil.Core.Tests;
@@ -133,13 +133,13 @@ public class MsesMarcherIntegrationTests
         foreach (double re in reGrid)
         foreach (double me in meGrid)
         {
-            double hsl = MsesClosureRelations.ComputeHStarLaminar(hk, re);
-            double hst = MsesClosureRelations.ComputeHStarTurbulent(hk, re, me);
-            double cfl = MsesClosureRelations.ComputeCfLaminar(hk, re);
-            double cft = MsesClosureRelations.ComputeCfTurbulent(hk, re, me);
-            double cdl = MsesClosureRelations.ComputeCDLaminar(hk, re);
-            double cdt = MsesClosureRelations.ComputeCDTurbulent(hk, re, me, cTau: 1e-3);
-            double ceq = MsesClosureRelations.ComputeCTauEquilibrium(hk, re, me);
+            double hsl = ThesisClosureRelations.ComputeHStarLaminar(hk, re);
+            double hst = ThesisClosureRelations.ComputeHStarTurbulent(hk, re, me);
+            double cfl = ThesisClosureRelations.ComputeCfLaminar(hk, re);
+            double cft = ThesisClosureRelations.ComputeCfTurbulent(hk, re, me);
+            double cdl = ThesisClosureRelations.ComputeCDLaminar(hk, re);
+            double cdt = ThesisClosureRelations.ComputeCDTurbulent(hk, re, me, cTau: 1e-3);
+            double ceq = ThesisClosureRelations.ComputeCTauEquilibrium(hk, re, me);
             if (!double.IsFinite(hsl) || !double.IsFinite(hst) ||
                 !double.IsFinite(cfl) || !double.IsFinite(cft) ||
                 !double.IsFinite(cdl) || !double.IsFinite(cdt) ||

@@ -1,6 +1,6 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Newton;
-using XFoil.MsesSolver.Topology;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Newton;
+using XFoil.ThesisClosureSolver.Topology;
 
 namespace XFoil.Core.Tests;
 
@@ -14,12 +14,12 @@ public class MsesWakeSourceInfluenceTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var wake = WakeDiscretization.Build(
             teX: 1.0, teY: 0.0,
             firstPanelLength: pg.Length[0],
             panelCount: 10, totalLength: 0.5);
-        var aT = MsesInviscidPanelSolver.BuildWakeSourceInfluenceMatrix(
+        var aT = ThesisClosurePanelSolver.BuildWakeSourceInfluenceMatrix(
             pg, wake, normal: false);
         Assert.Equal(pg.PanelCount, aT.GetLength(0));
         Assert.Equal(wake.Length.Length, aT.GetLength(1));
@@ -32,12 +32,12 @@ public class MsesWakeSourceInfluenceTests
         // near the TE feel the wake σ more than panels near the LE.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var wake = WakeDiscretization.Build(
             teX: 1.0, teY: 0.0,
             firstPanelLength: pg.Length[0],
             panelCount: 10, totalLength: 0.5);
-        var aT = MsesInviscidPanelSolver.BuildWakeSourceInfluenceMatrix(
+        var aT = ThesisClosurePanelSolver.BuildWakeSourceInfluenceMatrix(
             pg, wake, normal: false);
         // Wake panel 0 (closest to TE). Its tangential influence
         // should be larger at airfoil panel 0 (TE_upper) than at
@@ -50,14 +50,14 @@ public class MsesWakeSourceInfluenceTests
     }
 
     [Fact]
-    public void MsesGlobalResidualSided_WakeSigma_ShiftsInviscidRows()
+    public void ThesisClosureGlobalResidualSided_WakeSigma_ShiftsInviscidRows()
     {
         // With a non-zero σ_wake, the inviscid rows should change
         // compared to σ_wake=0, proving the wake-σ→inviscid coupling
         // is wired.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
         double alpha = 2.0 * System.Math.PI / 180.0;
         var stag = StagnationDetector.DetectFromGeometry(pg, 1.0, alpha);
@@ -68,11 +68,11 @@ public class MsesWakeSourceInfluenceTests
             panelCount: 10, totalLength: 0.5,
             alphaRadians: alpha);
         int nw = wake.Length.Length;
-        var layout = new MsesGlobalStateSided(
+        var layout = new ThesisClosureGlobalStateSided(
             n + 1, n + 1, nw,
             topo.Upper.PanelIndices.Length,
             topo.Lower.PanelIndices.Length, nw);
-        var assembler = new MsesGlobalResidualSided(
+        var assembler = new ThesisClosureGlobalResidualSided(
             layout, pg, topo, 1.0, alpha,
             kinematicViscosity: 1e-6, initialTheta: 1e-4, wake: wake);
         var stateZero = new double[layout.StateSize];

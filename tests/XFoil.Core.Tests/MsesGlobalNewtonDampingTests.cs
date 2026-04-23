@@ -1,11 +1,11 @@
-using XFoil.MsesSolver.Newton;
+using XFoil.ThesisClosureSolver.Newton;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// P4.5 — Newton damping + line-search tests.
 /// </summary>
-public class MsesGlobalNewtonDampingTests
+public class ThesisClosureGlobalNewtonDampingTests
 {
     [Fact]
     public void Solve_MaxStepNorm_DampsLargeSteps()
@@ -14,9 +14,9 @@ public class MsesGlobalNewtonDampingTests
         // Δ=10. With maxStepNorm=1, the step is damped to 1.
         double[] R(double[] x) => new[] { x[0] - 10.0 };
         var initial = new[] { 0.0 };
-        var result = MsesGlobalNewton.Solve(
+        var result = ThesisClosureGlobalNewton.Solve(
             initial, R,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 20, resTol: 1e-8, stepTol: 1e-8,
             maxStepNorm: 1.0, lineSearch: false);
 
@@ -40,9 +40,9 @@ public class MsesGlobalNewtonDampingTests
         double[] R(double[] x) => new[] { x[0] * x[0] * x[0] - x[0] };
         var initial = new[] { 0.1 };
 
-        var withLs = MsesGlobalNewton.Solve(
+        var withLs = ThesisClosureGlobalNewton.Solve(
             initial, R,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 30, resTol: 1e-10,
             lineSearch: true);
         Assert.True(withLs.Converged);
@@ -61,9 +61,9 @@ public class MsesGlobalNewtonDampingTests
             a[0, 0] * x[0] + a[0, 1] * x[1] - b[0],
             a[1, 0] * x[0] + a[1, 1] * x[1] - b[1],
         };
-        var result = MsesGlobalNewton.Solve(
+        var result = ThesisClosureGlobalNewton.Solve(
             new[] { 0.0, 0.0 }, R,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 5);
         Assert.True(result.Converged);
         Assert.Equal(1.0, result.State[0], 6);

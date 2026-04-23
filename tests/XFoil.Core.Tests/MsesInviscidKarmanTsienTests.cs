@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Inviscid;
 
 namespace XFoil.Core.Tests;
 
@@ -14,10 +14,10 @@ public class MsesInviscidKarmanTsienTests
         // result identically — the M=0 branch should short-circuit.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         double a = 4.0 * System.Math.PI / 180.0;
-        var r0 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
-        var r0m = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.0);
+        var r0 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0);
+        var r0m = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.0);
         Assert.Equal(r0.LiftCoefficient, r0m.LiftCoefficient, 14);
         for (int i = 0; i < r0.CpMidpoint.Length; i++)
         {
@@ -32,10 +32,10 @@ public class MsesInviscidKarmanTsienTests
         // CL ratio ≈ 1.049.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         double a = 4.0 * System.Math.PI / 180.0;
-        var r0 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.0);
-        var r3 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.3);
+        var r0 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.0);
+        var r3 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.3);
         double ratio = r3.LiftCoefficient / r0.LiftCoefficient;
         double beta = System.Math.Sqrt(1.0 - 0.3 * 0.3);
         double expected = 1.0 / beta;
@@ -50,10 +50,10 @@ public class MsesInviscidKarmanTsienTests
         // signature of compressibility on the suction peak.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         double a = 4.0 * System.Math.PI / 180.0;
-        var r0 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.0);
-        var r3 = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.3);
+        var r0 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.0);
+        var r3 = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, a, 1.0, machNumber: 0.3);
 
         double minCp0 = double.PositiveInfinity;
         double minCp3 = double.PositiveInfinity;
@@ -70,10 +70,10 @@ public class MsesInviscidKarmanTsienTests
         // Symmetric airfoil at α=0° has CL=0 regardless of Mach.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         foreach (var m in new[] { 0.0, 0.1, 0.2, 0.3, 0.5 })
         {
-            var r = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, 0.0, 1.0, m);
+            var r = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, 0.0, 1.0, m);
             Assert.True(System.Math.Abs(r.LiftCoefficient) < 1e-6,
                 $"M={m}: CL should be 0 for symmetric α=0; got {r.LiftCoefficient}");
         }

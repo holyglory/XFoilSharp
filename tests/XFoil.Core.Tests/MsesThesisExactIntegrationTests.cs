@@ -1,5 +1,5 @@
 using XFoil.Core.Services;
-using XFoil.MsesSolver.BoundaryLayer;
+using XFoil.ThesisClosureSolver.BoundaryLayer;
 using XFoil.Solver.Models;
 using XFoil.Solver.Modern.Services;
 

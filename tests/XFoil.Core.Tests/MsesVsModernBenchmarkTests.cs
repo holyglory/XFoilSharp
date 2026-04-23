@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
 
@@ -38,7 +38,7 @@ public class MsesVsModernBenchmarkTests
         var geom = gen.Generate4DigitClassic(naca, pointCount: 161);
         var settings = BuildSettings(Re);
 
-        var mses = new MsesAnalysisService();
+        var mses = new ThesisClosureAnalysisService();
         var modern = new XFoil.Solver.Modern.Services.AirfoilAnalysisService();
 
         var msesResult = mses.AnalyzeViscous(geom, alphaDeg, settings);

@@ -65,7 +65,7 @@ required.
 
 ## Where it lives
 
-New assembly: `src/XFoil.MsesSolver/`.
+New assembly: `src/XFoil.ThesisClosureSolver/`.
 
 - Does **not** replace `XFoil.Solver`. The XFoil closure is parity-critical
   against Fortran and must stay bit-exact.
@@ -176,7 +176,7 @@ that Phase-5 main can use directly.
 - ✅ Each relation gets a unit test against Drela's Appendix A tabulated values
   or sample curves. No solver wiring yet.
 
-**Landed in `src/XFoil.MsesSolver/Closure/MsesClosureRelations.cs`:**
+**Landed in `src/XFoil.ThesisClosureSolver/Closure/ThesisClosureRelations.cs`:**
 
 | Relation | Status | Thesis ref | Tests |
 |----------|--------|-----------|-------|
@@ -240,7 +240,7 @@ within 1e-6 at a sampled grid of (H, Reθ, Me) points.
   response under favorable/adverse gradients.
 
   **Default after F1.4:** `useThesisExactTurbulent = true`.
-  `MsesAnalysisService` surfaces it as a ctor flag; pass
+  `ThesisClosureAnalysisService` surfaces it as a ctor flag; pass
   `--legacy-closure` on the CLI to opt out.
 
 ### Phase 2f — Wake marcher ✅ LANDED (2026-04-21)
@@ -252,7 +252,7 @@ within 1e-6 at a sampled grid of (H, Reθ, Me) points.
 - ✅ TE-merge via Drela eq. 6.63 sharp-TE form:
   θ_wake = θ_u + θ_l, δ*_wake = H_u·θ_u + H_l·θ_l,
   H_wake = δ*_wake/θ_wake, Cτ_wake = max(Cτ_u, Cτ_l).
-- ✅ MsesAnalysisService `useWakeMarcher` ctor flag marches the
+- ✅ ThesisClosureAnalysisService `useWakeMarcher` ctor flag marches the
   wake half a chord downstream at a linear-recovery Ue profile
   (90% recovery toward U∞), then integrates Squire-Young at the
   wake far-field.
@@ -267,7 +267,7 @@ Quick benchmark NACA 4412 α=12° Re=3e6: CD goes from 0.0138
 (thesis-exact-TE) to 0.0159 (thesis-exact-wake), reflecting the
 wake-state H being closer to BL equilibrium than the airfoil TE.
 
-**Landed in `src/XFoil.MsesSolver/BoundaryLayer/`:**
+**Landed in `src/XFoil.ThesisClosureSolver/BoundaryLayer/`:**
 
 - `ThwaitesLaminarMarcher` — reference laminar marcher (Phase 2a).
 - `ClosureBasedLaminarMarcher` — closure-driven laminar marcher (Phase 2b).
@@ -333,7 +333,7 @@ it doesn't emit transition points on these cases.
   limit — Phase 5 source-distribution coupling would stabilize
   them.
 - θ_TE convergence envelope widened 3 % → 6 % chord in
-  `MsesAnalysisService` (commit 3e0c2a3) to admit physical deep-
+  `ThesisClosureAnalysisService` (commit 3e0c2a3) to admit physical deep-
   stall θ_TE values without triggering blow-up flags.
 
 **Acceptance:** ≥ 80 % native convergence on the showcase set
@@ -347,20 +347,20 @@ scaffolding complete, gate P5.4 BLOCKED on topology.** The
 Phase-5 increments completed so far:
 
 - ✅ P1 — Clean-room linear-vortex inviscid fork
-  (`MsesInviscidPanelSolver`) with Karman-Tsien compressibility.
+  (`ThesisClosurePanelSolver`) with Karman-Tsien compressibility.
   Gate P1.5 passed: fork CL within 5 % of XFoil.Solver.Modern
   across NACA 0012/2412/4412 × α ∈ {0,4,8}° × M ∈ {0,0.2,0.3}.
 - ✅ P2 — Source-panel influence matrices and combined γ+σ
   inviscid solve (opt-in `sources` array).
 - ✅ P3 — Sharp-TE Kutta row + TE-gap detection.
-- ✅ P4 — Global Newton framework: `MsesGlobalState` pack/unpack,
-  `MsesGlobalResidual` assembler, FD Jacobian, Newton loop with
+- ✅ P4 — Global Newton framework: `ThesisClosureGlobalState` pack/unpack,
+  `ThesisClosureGlobalResidual` assembler, FD Jacobian, Newton loop with
   damping + line search. Gate P4.6 passed: γ-only self-
   consistency converges to direct inviscid in ≤5 iterations.
 - ✅ P5.1 — Per-station BL residual functions (momentum, shape-
   param, Cτ-lag) as standalone pure functions.
 - ✅ P5.2 — σ = d(Ue·δ*)/dξ constraint residual.
-- ✅ P5.3 — BL + σ residuals wired into `MsesGlobalResidual`
+- ✅ P5.3 — BL + σ residuals wired into `ThesisClosureGlobalResidual`
   (opt-in `useRealBLResiduals` flag).
 
 **Gate P5.4 BLOCKED:** The full γ+σ+BL Newton does not converge
@@ -402,7 +402,7 @@ experimental):
   σ(s) = d(Ue·δ*)/ds on each surface via finite difference.
 - `SourceDistributionCoupling.IntegrateSourceUeDelta` integrates
   the Hilbert-like kernel ΔUe(s) = (1/π) PV ∫ σ(ξ)/(s−ξ) dξ.
-- `MsesAnalysisService.AnalyzeViscous` runs a Picard iteration:
+- `ThesisClosureAnalysisService.AnalyzeViscous` runs a Picard iteration:
   perturb Ue ← Ue₀ + α·ΔUe, re-march BL, repeat until max δ*
   stops changing by > 0.5 % chord (or 20 iterations).
 
@@ -421,7 +421,7 @@ the σ distribution into the linear-vortex Jacobian of
 `XFoil.Solver`. That file is gated by the 4455/4455 bit-exact
 parity test and cannot be modified without breaking the XFoil
 parity path. A proper two-way coupling would need either (a) a
-separate non-parity linear-vortex solver in `XFoil.MsesSolver`
+separate non-parity linear-vortex solver in `XFoil.ThesisClosureSolver`
 that accepts source contributions, or (b) a facade that injects
 σ-induced velocity into the existing solver's output without
 re-solving — neither of which fits the F2 bounded scope.

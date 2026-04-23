@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Inviscid;
 
 namespace XFoil.Core.Tests;
 
@@ -14,8 +14,8 @@ public class MsesInviscidInfluenceMatrixTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var a = MsesInviscidPanelSolver.BuildVortexInfluenceMatrix(pg);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var a = ThesisClosurePanelSolver.BuildVortexInfluenceMatrix(pg);
         Assert.Equal(pg.PanelCount, a.GetLength(0));
         Assert.Equal(pg.PanelCount + 1, a.GetLength(1));
     }
@@ -30,7 +30,7 @@ public class MsesInviscidInfluenceMatrixTests
         double tx = 1, ty = 0, L = 1.0;
         // Point at (10, 0.1) — roughly 10 chords away, slightly above.
         double px = 10.0, py = 0.1;
-        var (uA, vA, uB, vB) = MsesInviscidPanelSolver
+        var (uA, vA, uB, vB) = ThesisClosurePanelSolver
             .LinearVortexPanelContribution(px, py, ax, ay, bx, by, tx, ty, L,
                 selfPanel: false);
 
@@ -57,7 +57,7 @@ public class MsesInviscidInfluenceMatrixTests
         double ax = 0, ay = 0, bx = L, by = 0;
         double tx = 1, ty = 0;
         double midX = 0.5 * L, midY = 0.0;
-        var (uA, _, uB, _) = MsesInviscidPanelSolver
+        var (uA, _, uB, _) = ThesisClosurePanelSolver
             .LinearVortexPanelContribution(midX, midY, ax, ay, bx, by, tx, ty, L,
                 selfPanel: true);
         // Uniform γ=1 ⇒ coefficients sum to 0.5 on the tangent (u).
@@ -74,8 +74,8 @@ public class MsesInviscidInfluenceMatrixTests
         // on a representative pair.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var a = MsesInviscidPanelSolver.BuildVortexInfluenceMatrix(pg);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var a = ThesisClosurePanelSolver.BuildVortexInfluenceMatrix(pg);
         int n = pg.PanelCount;
         // Compare row i with row (n-1-i). They should have the same
         // column-sum magnitude (within numerical tolerance): a uniform
@@ -105,10 +105,10 @@ public class MsesInviscidInfluenceMatrixTests
         double ax = 0, ay = 0, bx = L, by = 0;
         double tx = 1, ty = 0;
         double xi = 0.5, eta = 0.3;
-        var plus = MsesInviscidPanelSolver
+        var plus = ThesisClosurePanelSolver
             .LinearVortexPanelContribution(xi, eta, ax, ay, bx, by, tx, ty, L,
                 selfPanel: false);
-        var minus = MsesInviscidPanelSolver
+        var minus = ThesisClosurePanelSolver
             .LinearVortexPanelContribution(xi, -eta, ax, ay, bx, by, tx, ty, L,
                 selfPanel: false);
         // In this coordinate setup, tangent=(1,0) so u_global is the

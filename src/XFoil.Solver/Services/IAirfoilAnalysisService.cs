@@ -6,7 +6,7 @@ namespace XFoil.Solver.Services;
 /// <summary>
 /// Airfoil analysis contract shared by the three analysis trees
 /// (Float / Doubled / Modern) and available for future alternative
-/// implementations such as <see cref="XFoil.MsesSolver"/>.
+/// implementations such as <see cref="XFoil.ThesisClosureSolver"/>.
 ///
 /// Extracted as part of the MSES port scaffolding (Phase 0 per
 /// <c>agents/architecture/MsesClosurePlan.md</c>) so that callers

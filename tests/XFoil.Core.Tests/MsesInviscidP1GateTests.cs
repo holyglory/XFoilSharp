@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Inviscid;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -21,8 +21,8 @@ public class MsesInviscidP1GateTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic(naca, pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
-        var rMses = MsesInviscidPanelSolver.SolveInviscid(
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
+        var rMses = ThesisClosurePanelSolver.SolveInviscid(
             pg, 1.0, alphaDeg * System.Math.PI / 180.0, 1.0, mach);
 
         var modernSvc = new XFoil.Solver.Modern.Services.AirfoilAnalysisService();

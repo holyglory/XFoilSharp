@@ -1,19 +1,19 @@
-using XFoil.MsesSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Inviscid;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// P1.1 — panel discretization unit tests for
-/// <see cref="MsesInviscidPanelSolver.DiscretizePanels"/>.
+/// <see cref="ThesisClosurePanelSolver.DiscretizePanels"/>.
 /// </summary>
-public class MsesInviscidPanelSolverDiscretizationTests
+public class ThesisClosurePanelSolverDiscretizationTests
 {
     [Fact]
     public void DiscretizePanels_Naca0012_PanelCountIsNodeCountMinusOne()
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         Assert.Equal(161 - 1, pg.PanelCount);
         Assert.Equal(161, pg.NodeX.Length);
         Assert.Equal(161 - 1, pg.MidX.Length);
@@ -24,7 +24,7 @@ public class MsesInviscidPanelSolverDiscretizationTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         for (int i = 0; i < pg.PanelCount; i++)
         {
             double mag = System.Math.Sqrt(
@@ -40,7 +40,7 @@ public class MsesInviscidPanelSolverDiscretizationTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("2412", pointCount: 101);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         for (int i = 0; i < pg.PanelCount; i++)
         {
             double dot = pg.TangentX[i] * pg.NormalX[i]
@@ -55,7 +55,7 @@ public class MsesInviscidPanelSolverDiscretizationTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("4412", pointCount: 201);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         for (int i = 0; i < pg.PanelCount; i++)
         {
             double dxA = pg.MidX[i] - pg.NodeX[i];
@@ -77,7 +77,7 @@ public class MsesInviscidPanelSolverDiscretizationTests
         // mirror-image panel (walking TE→LE on lower).
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         // With 161 nodes (160 panels), the TE is at index 0 and 160.
         // Upper surface: panels 0..79 (from TE to LE).
         // Lower surface: panels 80..159 (from LE to TE).
@@ -97,7 +97,7 @@ public class MsesInviscidPanelSolverDiscretizationTests
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("4412", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         foreach (var L in pg.Length)
         {
             Assert.True(L > 0.0, $"non-positive panel length {L}");

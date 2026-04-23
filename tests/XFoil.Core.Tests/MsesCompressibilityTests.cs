@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Models;
 
 namespace XFoil.Core.Tests;
@@ -31,7 +31,7 @@ public class MsesCompressibilityTests
             panelCount: 161, freestreamVelocity: 1.0, machNumber: mach,
             reynoldsNumber: 3_000_000);
 
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true);
         var r = svc.AnalyzeViscous(geom, 4.0, settings);
 
@@ -52,7 +52,7 @@ public class MsesCompressibilityTests
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
 
-        var svc = new MsesAnalysisService(
+        var svc = new ThesisClosureAnalysisService(
             useThesisExactTurbulent: true, useWakeMarcher: true);
 
         var settingsM0 = new AnalysisSettings(

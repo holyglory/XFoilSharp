@@ -2,7 +2,7 @@
 
 ## MSES sub-project
 
-`XFoil.MsesSolver` is a separate clean-room port of Drela's 1986
+`XFoil.ThesisClosureSolver` is a separate clean-room port of Drela's 1986
 thesis closure, parallel to (not replacing) `XFoil.Solver`. Its
 parity target is the thesis correlations, not Fortran XFoil.
 Current state: Phase 0–2f complete end-to-end (closure library,

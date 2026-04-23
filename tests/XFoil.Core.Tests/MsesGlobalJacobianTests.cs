@@ -1,13 +1,13 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Newton;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Newton;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// P4.3 — finite-difference Jacobian tests on toy residuals and
-/// on the real MsesGlobalResidual assembler.
+/// on the real ThesisClosureGlobalResidual assembler.
 /// </summary>
-public class MsesGlobalJacobianTests
+public class ThesisClosureGlobalJacobianTests
 {
     [Fact]
     public void FiniteDifference_OnLinearResidual_RecoversCoefficientMatrix()
@@ -27,7 +27,7 @@ public class MsesGlobalJacobianTests
             a[2, 0] * x[0] + a[2, 1] * x[1] + a[2, 2] * x[2] + b[2],
         };
         var state = new[] { 1.0, 2.0, 3.0 };
-        var jac = MsesGlobalJacobian.ComputeFiniteDifference(state, R);
+        var jac = ThesisClosureGlobalJacobian.ComputeFiniteDifference(state, R);
         for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
         {
@@ -47,7 +47,7 @@ public class MsesGlobalJacobianTests
             2.0 * x[0] * x[1],
         };
         var state = new[] { 3.0, 4.0 };
-        var jac = MsesGlobalJacobian.ComputeFiniteDifference(state, R);
+        var jac = ThesisClosureGlobalJacobian.ComputeFiniteDifference(state, R);
         Assert.Equal(6.0, jac[0, 0], 4);
         Assert.Equal(8.0, jac[0, 1], 4);
         Assert.Equal(8.0, jac[1, 0], 4);
@@ -57,24 +57,24 @@ public class MsesGlobalJacobianTests
     [Fact]
     public void FiniteDifference_OnMsesGlobalResidual_AtZero_HasExpectedStructure()
     {
-        // At state=0, MsesGlobalResidual is linear, so FD Jacobian
+        // At state=0, ThesisClosureGlobalResidual is linear, so FD Jacobian
         // should match the analytical influence matrix + Kutta row +
         // identity σ/BL blocks exactly.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 21);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
-        var layout = new MsesGlobalState(n + 1, n + 1, 2);
-        var assembler = new MsesGlobalResidual(
+        var layout = new ThesisClosureGlobalState(n + 1, n + 1, 2);
+        var assembler = new ThesisClosureGlobalResidual(
             layout, pg, freestreamSpeed: 1.0,
             alphaRadians: 2.0 * System.Math.PI / 180.0);
         var zero = new double[layout.StateSize];
-        var jac = MsesGlobalJacobian.ComputeFiniteDifference(
+        var jac = ThesisClosureGlobalJacobian.ComputeFiniteDifference(
             zero, assembler.Compute);
 
         // Inviscid γ-column block (top-left (N × N+1)) should match
         // the precomputed normal-influence matrix.
-        var aN = MsesInviscidPanelSolver.BuildVortexNormalInfluenceMatrix(pg);
+        var aN = ThesisClosurePanelSolver.BuildVortexNormalInfluenceMatrix(pg);
         for (int i = 0; i < n; i++)
         for (int k = 0; k < n + 1; k++)
         {
@@ -100,6 +100,6 @@ public class MsesGlobalJacobianTests
         double[] R(double[] x) => new[] { 1.0, 2.0 };  // returns length 2, state is 3
         var state = new[] { 0.0, 0.0, 0.0 };
         Assert.Throws<System.InvalidOperationException>(
-            () => MsesGlobalJacobian.ComputeFiniteDifference(state, R));
+            () => ThesisClosureGlobalJacobian.ComputeFiniteDifference(state, R));
     }
 }

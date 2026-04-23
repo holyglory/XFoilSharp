@@ -1,6 +1,6 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Newton;
-using XFoil.MsesSolver.Topology;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Newton;
+using XFoil.ThesisClosureSolver.Topology;
 
 namespace XFoil.Core.Tests;
 
@@ -15,21 +15,21 @@ namespace XFoil.Core.Tests;
 /// because of topology. With R5.1–R5.7 the BL marches from the
 /// stagnation point along physical paths and the wake is wired.
 /// </summary>
-public class MsesGlobalNewtonR5GateTests
+public class ThesisClosureGlobalNewtonR5GateTests
 {
     [Fact]
     public void R5Gate_Naca0012_Alpha4_CoupledNewton_DoesNotDiverge()
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 41);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         int n = pg.PanelCount;
         double alpha = 4.0 * System.Math.PI / 180.0;
         double Re = 3_000_000;
         double nu = 1.0 / Re;
 
         // Topology.
-        var invSeed = MsesInviscidPanelSolver.SolveInviscid(pg, 1.0, alpha, 1.0);
+        var invSeed = ThesisClosurePanelSolver.SolveInviscid(pg, 1.0, alpha, 1.0);
         var stag = StagnationDetector.DetectFromGeometry(pg, 1.0, alpha);
         var topo = SurfaceTopology.Build(pg, stag);
         var wake = WakeDiscretization.Build(
@@ -42,14 +42,14 @@ public class MsesGlobalNewtonR5GateTests
         int nl_count = topo.Lower.PanelIndices.Length;
         int nw = wake.Length.Length;
 
-        var layout = new MsesGlobalStateSided(
+        var layout = new ThesisClosureGlobalStateSided(
             gammaCount: n + 1,
             sigmaAirfoilCount: n + 1,
             sigmaWakeCount: nw,
             upperCount: nu_count,
             lowerCount: nl_count,
             wakeCount: nw);
-        var assembler = new MsesGlobalResidualSided(
+        var assembler = new ThesisClosureGlobalResidualSided(
             layout, pg, topo, 1.0, alpha,
             kinematicViscosity: nu, machEdge: 0.0,
             initialTheta: 1e-4,
@@ -57,7 +57,7 @@ public class MsesGlobalNewtonR5GateTests
 
         // Seed state: γ from uncoupled inviscid, σ=0, θ=1e-4, H=2.5
         // so δ*=2.5e-4, Cτ=0.01.
-        var initState = new MsesGlobalStateSided.SidedState(
+        var initState = new ThesisClosureGlobalStateSided.SidedState(
             Gamma: invSeed.Gamma,
             SigmaAirfoil: new double[n + 1],
             SigmaWake: new double[nw],
@@ -75,9 +75,9 @@ public class MsesGlobalNewtonR5GateTests
         double initialResidual =
             InfinityNorm(assembler.Compute(state0));
 
-        var result = MsesGlobalNewton.Solve(
+        var result = ThesisClosureGlobalNewton.Solve(
             state0, assembler.Compute,
-            (s, f) => MsesGlobalJacobian.ComputeFiniteDifference(s, f),
+            (s, f) => ThesisClosureGlobalJacobian.ComputeFiniteDifference(s, f),
             maxIterations: 15,
             resTol: 1e-6, stepTol: 1e-6,
             maxStepNorm: 0.1, lineSearch: true,

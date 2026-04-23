@@ -1,5 +1,5 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Topology;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Topology;
 
 namespace XFoil.Core.Tests;
 
@@ -48,7 +48,7 @@ public class MsesStagnationDetectorTests
         // Panel index near middle of the 160-panel grid (where x=0).
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var s = StagnationDetector.DetectFromGeometry(pg, 1.0, 0.0);
         // LE is at panel index ~80 (160 panels / 2). Allow ±3 for
         // numerical imprecision.
@@ -64,7 +64,7 @@ public class MsesStagnationDetectorTests
         // higher panel index than LE.
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic("0012", pointCount: 161);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var s0 = StagnationDetector.DetectFromGeometry(pg, 1.0, 0.0);
         var s4 = StagnationDetector.DetectFromGeometry(
             pg, 1.0, 4.0 * System.Math.PI / 180.0);

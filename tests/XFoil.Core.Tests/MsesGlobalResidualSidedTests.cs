@@ -1,20 +1,20 @@
-using XFoil.MsesSolver.Inviscid;
-using XFoil.MsesSolver.Newton;
-using XFoil.MsesSolver.Topology;
+using XFoil.ThesisClosureSolver.Inviscid;
+using XFoil.ThesisClosureSolver.Newton;
+using XFoil.ThesisClosureSolver.Topology;
 
 namespace XFoil.Core.Tests;
 
 /// <summary>
 /// R5.5 — per-side residual assembler tests.
 /// </summary>
-public class MsesGlobalResidualSidedTests
+public class ThesisClosureGlobalResidualSidedTests
 {
-    private static (MsesInviscidPanelSolver.PanelizedGeometry pg,
+    private static (ThesisClosurePanelSolver.PanelizedGeometry pg,
         SurfaceTopology.Topology topo) BuildTopo(string naca, double alphaDeg)
     {
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var geom = gen.Generate4DigitClassic(naca, pointCount: 81);
-        var pg = MsesInviscidPanelSolver.DiscretizePanels(geom);
+        var pg = ThesisClosurePanelSolver.DiscretizePanels(geom);
         var stag = StagnationDetector.DetectFromGeometry(
             pg, 1.0, alphaDeg * System.Math.PI / 180.0);
         var topo = SurfaceTopology.Build(pg, stag);
@@ -26,14 +26,14 @@ public class MsesGlobalResidualSidedTests
     {
         var (pg, topo) = BuildTopo("0012", 4.0);
         int n = pg.PanelCount;
-        var layout = new MsesGlobalStateSided(
+        var layout = new ThesisClosureGlobalStateSided(
             gammaCount: n + 1,
             sigmaAirfoilCount: n + 1,
             sigmaWakeCount: 0,
             upperCount: topo.Upper.PanelIndices.Length,
             lowerCount: topo.Lower.PanelIndices.Length,
             wakeCount: 0);
-        var assembler = new MsesGlobalResidualSided(
+        var assembler = new ThesisClosureGlobalResidualSided(
             layout, pg, topo,
             freestreamSpeed: 1.0,
             alphaRadians: 4.0 * System.Math.PI / 180.0);
@@ -52,11 +52,11 @@ public class MsesGlobalResidualSidedTests
     {
         var (pg, topo) = BuildTopo("4412", 2.0);
         int n = pg.PanelCount;
-        var layout = new MsesGlobalStateSided(
+        var layout = new ThesisClosureGlobalStateSided(
             n + 1, n + 1, 0,
             topo.Upper.PanelIndices.Length,
             topo.Lower.PanelIndices.Length, 0);
-        var assembler = new MsesGlobalResidualSided(
+        var assembler = new ThesisClosureGlobalResidualSided(
             layout, pg, topo, 1.0, 2.0 * System.Math.PI / 180.0);
         var state = new double[layout.StateSize];
         var r = assembler.Compute(state);
@@ -72,11 +72,11 @@ public class MsesGlobalResidualSidedTests
         // should equal V∞·n + A_γ·γ*.
         var (pg, topo) = BuildTopo("0012", 2.0);
         int n = pg.PanelCount;
-        var layout = new MsesGlobalStateSided(
+        var layout = new ThesisClosureGlobalStateSided(
             n + 1, n + 1, 0,
             topo.Upper.PanelIndices.Length,
             topo.Lower.PanelIndices.Length, 0);
-        var assembler = new MsesGlobalResidualSided(
+        var assembler = new ThesisClosureGlobalResidualSided(
             layout, pg, topo, 1.0, 2.0 * System.Math.PI / 180.0);
         var stateZero = new double[layout.StateSize];
         var rZero = assembler.Compute(stateZero);
@@ -86,7 +86,7 @@ public class MsesGlobalResidualSidedTests
         stateP[layout.GammaOffset + 5] = 0.01;
         var rP = assembler.Compute(stateP);
         // Inviscid rows (0..n-1) should differ by 0.01·A_γ_normal[i, 5].
-        var aN = MsesInviscidPanelSolver.BuildVortexNormalInfluenceMatrix(pg);
+        var aN = ThesisClosurePanelSolver.BuildVortexNormalInfluenceMatrix(pg);
         for (int i = 0; i < n; i++)
         {
             double diff = rP[i] - rZero[i];
@@ -101,11 +101,11 @@ public class MsesGlobalResidualSidedTests
     {
         var (pg, topo) = BuildTopo("0012", 0.0);
         int n = pg.PanelCount;
-        var layout = new MsesGlobalStateSided(
+        var layout = new ThesisClosureGlobalStateSided(
             n + 1, n + 1, 0,
             topo.Upper.PanelIndices.Length,
             topo.Lower.PanelIndices.Length, 0);
-        var assembler = new MsesGlobalResidualSided(
+        var assembler = new ThesisClosureGlobalResidualSided(
             layout, pg, topo, 1.0, 0.0);
         var state = new double[layout.StateSize];
         state[layout.GammaOffset + 0] = 1.5;

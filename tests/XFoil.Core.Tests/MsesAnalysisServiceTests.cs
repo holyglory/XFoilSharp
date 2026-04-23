@@ -1,4 +1,4 @@
-using XFoil.MsesSolver.Services;
+using XFoil.ThesisClosureSolver.Services;
 using XFoil.Solver.Services;
 
 namespace XFoil.Core.Tests;
@@ -9,12 +9,12 @@ namespace XFoil.Core.Tests;
 /// XFoil.Solver) and the inviscid delegation works end-to-end.
 /// Viscous throws NotImplementedException by design until Phase 5.
 /// </summary>
-public class MsesAnalysisServiceTests
+public class ThesisClosureAnalysisServiceTests
 {
     [Fact]
     public void InviscidDelegatesToInnerProvider()
     {
-        IAirfoilAnalysisService svc = new MsesAnalysisService();
+        IAirfoilAnalysisService svc = new ThesisClosureAnalysisService();
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var naca = gen.Generate4DigitClassic("0012", pointCount: 161);
         var inv = svc.AnalyzeInviscid(naca, angleOfAttackDegrees: 4.0, settings: null);
@@ -30,7 +30,7 @@ public class MsesAnalysisServiceTests
         // CD from Squire-Young far-field formula over the composite
         // laminar→turbulent march. Phase 5 will add Newton coupling
         // that shifts CL too.
-        IAirfoilAnalysisService svc = new MsesAnalysisService();
+        IAirfoilAnalysisService svc = new ThesisClosureAnalysisService();
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var naca = gen.Generate4DigitClassic("0012", pointCount: 161);
         var r = svc.AnalyzeViscous(naca, angleOfAttackDegrees: 2.0, settings: null);
@@ -49,7 +49,7 @@ public class MsesAnalysisServiceTests
         // forwards to it without pinning a particular CL value
         // (Doubled vs Modern may differ by panel-bias effects).
         IAirfoilAnalysisService inner = new XFoil.Solver.Double.Services.AirfoilAnalysisService();
-        IAirfoilAnalysisService svc = new MsesAnalysisService(inner);
+        IAirfoilAnalysisService svc = new ThesisClosureAnalysisService(inner);
         var gen = new XFoil.Core.Services.NacaAirfoilGenerator();
         var naca = gen.Generate4DigitClassic("0012", pointCount: 161);
         var inv = svc.AnalyzeInviscid(naca, angleOfAttackDegrees: 4.0, settings: null);
