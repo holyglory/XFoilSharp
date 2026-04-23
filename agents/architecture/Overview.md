@@ -39,18 +39,21 @@ The doubled tree is exposed via three CLI modes in `tools/fortran-debug/Parallel
   - Owns deterministic export, legacy polar import, and batch session execution.
 - `XFoil.ThesisClosureSolver`
   - Depends on `XFoil.Core` and `XFoil.Solver`.
-  - Clean-room reimplementation of Drela's MSES closure (§4–§6 of the
-    1986 MIT thesis). Parallel to `XFoil.Solver`, same
-    `IAirfoilAnalysisService` surface. Closure library + BL marchers
-    (Thwaites, closure-laminar/turbulent, thesis-exact-implicit
-    laminar + turbulent, wake, composite transition) + source-
-    distribution coupling helpers.
+  - Hybrid viscous solver: clean-room linear-vortex panel inviscid
+    (Katz & Plotkin §11.4) coupled to a clean-room C# port of
+    Drela's 1986 thesis 2nd-order integral BL closure (§4–§6).
+    Not the thesis's streamline-Euler MSES (that is future work —
+    see `OptionB-FutureMsesPlan.md`). Parallel to `XFoil.Solver`,
+    same `IAirfoilAnalysisService` surface. Closure library + BL
+    marchers (Thwaites, closure-laminar/turbulent, thesis-exact-
+    implicit laminar + turbulent, wake, composite transition) +
+    source-distribution coupling helpers.
   - **Production-ready after F1–F3 (2026-04-22).** Default path is
     fully thesis-exact (laminar + turbulent + wake); opt into the
     Phase-5 one-way source coupling via
     `useSourceDistributionCoupling = true`. See
-    `MsesClosurePlan.md`, `MsesSolverReadme.md`,
-    `MsesValidation.md`.
+    `ThesisClosurePlan.md`, `ThesisClosureReadme.md`,
+    `ThesisClosureValidation.md`, `FourSolverValidation.md`.
 - `XFoil.Cli`
   - Depends on `XFoil.Core`, `XFoil.Solver`, `XFoil.Design`, `XFoil.IO`,
     and `XFoil.ThesisClosureSolver`.

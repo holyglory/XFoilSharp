@@ -1,4 +1,11 @@
-# MSES-Class Closure — C# Implementation Plan
+# Thesis-Closure Solver — C# Implementation Plan
+
+> **Historical note:** this plan was originally titled *MSES-Class Closure*
+> and scoped to porting Drela's thesis BL closure on top of the existing
+> linear-vortex panel inviscid. That scope was delivered through Phase F
+> and the result shipped as `XFoil.ThesisClosureSolver`. Plans for a real
+> streamline-Euler MSES (which this plan does *not* cover) live in
+> `OptionB-FutureMsesPlan.md`.
 
 ## Why
 
@@ -308,7 +315,7 @@ closure relations are exercised in their full form.
   was intentionally dropped — the Modern viscous Xtr extractor
   reports TE station (x≈0.99) on these attached cases (separate
   issue, out of scope). Full table:
-  `agents/architecture/MsesValidation.md`.
+  `agents/architecture/ThesisClosureValidation.md`.
 
 **Acceptance:** NACA 0012 xtr(α=0, Re=3e6, nCrit=9) within 1 % of the
 XFoil C# baseline. Shipped: 0.48 from MSES matches ~0.48 from
@@ -338,7 +345,7 @@ it doesn't emit transition points on these cases.
 
 **Acceptance:** ≥ 80 % native convergence on the showcase set
 without facade-level rescue. **Shipped.** Full table:
-`agents/architecture/MsesValidation.md`.
+`agents/architecture/ThesisClosureValidation.md`.
 
 ### Phase 5 — Newton coupling to inviscid
 

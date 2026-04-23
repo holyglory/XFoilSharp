@@ -111,11 +111,22 @@ already better than the parity port on cambered airfoils — if
 Option B's investment matters to the user, the current work is
 what unblocks it.
 
-## Next steps
+## Option A — status
 
-- **A1** Rename `XFoil.ThesisClosureSolver` → `XFoil.ThesisClosureSolver` +
-  related type renames.
-- **A2** Update docs to reflect the accurate scope and the known CL
-  bias.
-- **A3** Ship as the production-quality hybrid solver; write a
-  separate plan document for Option B.
+- **A1** *(done)* Renamed `XFoil.MsesSolver` → `XFoil.ThesisClosureSolver`
+  (assembly + namespace + primary service class). Internal `Mses*` type
+  names remain for now; cosmetic renames deferred.
+- **A2** *(done)* Doc files under `agents/architecture/` renamed
+  (`MsesClosurePlan` → `ThesisClosurePlan`, etc.) and top matter
+  updated to describe the solver as the linear-vortex + thesis-BL
+  hybrid it actually is.
+- **A3** *(done)* Shipped. Option B (real streamline-Euler MSES) is
+  scoped in `OptionB-FutureMsesPlan.md`.
+
+## Open blocker — binary parity
+
+The `XFoil.Solver` (float-parity) path throws on every viscous case in
+the V2–V4 matrix. That is an unrelated pre-existing bug, but the
+user's stated bar for publishing the repo is "binary parity must
+work." Parity-path investigation is tracked as its own work item and
+is **not** a prerequisite for Option A shipping (Option A is additive).

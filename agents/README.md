@@ -23,12 +23,16 @@ This directory maps the managed C# implementation from system architecture down 
   - Repo-local Codex/autonomous-loop hook wiring and validation expectations.
 - `architecture/MicroRigMatrixHarness.md`
   - Registry-driven micro-rig parity harness, matrix outputs, and coverage backlog.
-- `architecture/MsesClosurePlan.md`
-  - Clean-room MSES-class closure reimplementation plan (Drela 1986 thesis basis). Parallel assembly; does not replace the XFoil parity path.
-- `architecture/MsesValidation.md`
+- `architecture/ThesisClosurePlan.md`
+  - Clean-room implementation plan for the thesis-closure hybrid: linear-vortex panel inviscid + Drela 1986 thesis BL closure. Parallel assembly; does not replace the XFoil parity path.
+- `architecture/ThesisClosureValidation.md`
   - F1-finalization validation snapshot: Xtr pins, stall-robustness showcase, attached-flow WT cross-check, known non-convergent cells.
-- `architecture/MsesSolverReadme.md`
+- `architecture/ThesisClosureReadme.md`
   - User guide for the `XFoil.ThesisClosureSolver` assembly: quickstart, CLI flags, ctor knobs, what works, known limitations.
+- `architecture/FourSolverValidation.md`
+  - Consolidated Parity/Double/Modern/ThesisClosure vs Abbott & Von Doenhoff WT comparison across NACA 0012/2412/4412 — the evidence behind shipping ThesisClosure as the production viscous path.
+- `architecture/OptionB-FutureMsesPlan.md`
+  - Future-work plan for a real streamline-Euler MSES inviscid (Drela thesis Chapter 2). Not in scope for the current port.
 - `projects/XFoil.Core/00-index.md`
   - Domain model and geometry-service entry point.
 - `projects/XFoil.Solver/00-index.md`

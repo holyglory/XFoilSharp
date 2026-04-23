@@ -1,13 +1,27 @@
 # XFoil.ThesisClosureSolver — User Guide
 
-The `XFoil.ThesisClosureSolver` assembly is a clean-room C# port of the MSES-class
-2nd-order boundary-layer closure from Drela's 1986 MIT thesis. It
-coexists with the parity-validated `XFoil.Solver` assembly (Fortran-
+The `XFoil.ThesisClosureSolver` assembly is a **hybrid** viscous solver:
+
+- **Inviscid side:** clean-room linear-vortex panel method (Katz &
+  Plotkin §11.4), *not* the streamline-Euler MSES of Drela's thesis.
+- **Viscous side:** clean-room C# port of the 2nd-order integral
+  boundary-layer closure from Drela's 1986 MIT thesis (laminar +
+  turbulent + wake, Cτ-lag coupling, Squire-Young far-field CD).
+
+It coexists with the parity-validated `XFoil.Solver` assembly (Fortran-
 bit-exact XFoil 6.97 path); both implement `IAirfoilAnalysisService`
 so callers pick at construction time.
 
-See `agents/architecture/MsesClosurePlan.md` for the full phase plan
-and `agents/architecture/MsesValidation.md` for the validation
+In four-solver validation (see `FourSolverValidation.md`) this is
+currently the only viscous path in the repo that converges on every
+case across NACA 0012/2412/4412 at Re = 3·10⁶ without catastrophic
+failures. CL is biased ~15–20 % high on cambered airfoils because
+viscous displacement does not feed back into the inviscid solve (no
+two-way coupling — that would require Option B, a real streamline-
+Euler MSES; see the future-work doc).
+
+See `agents/architecture/ThesisClosurePlan.md` for the full phase plan
+and `agents/architecture/ThesisClosureValidation.md` for the validation
 snapshot.
 
 ## Quickstart
@@ -115,7 +129,7 @@ Don't rely on it for cambered-airfoil CL accuracy.
 - **CL has no viscous feedback.** Lift comes from the inviscid
   (linear-vortex) path; cambered-airfoil CL is overpredicted by
   5–15 %. Closing this requires Phase 5 (source-distribution
-  coupling) — see `MsesClosurePlan.md`.
+  coupling) — see `ThesisClosurePlan.md`.
 - **6 NACA-4412 deep-stall cells don't converge** (α ≥ 16° across
   all three Mach numbers). Cause is fully-separated flow that the
   uncoupled marcher can't self-limit. Same Phase-5 fix.

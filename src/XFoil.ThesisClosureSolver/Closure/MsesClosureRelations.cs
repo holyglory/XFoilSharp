@@ -7,7 +7,7 @@ namespace XFoil.ThesisClosureSolver.Closure;
 /// (H, Reθ, Me, ...) to correlation outputs (H*, Cf, CD, Cτ_eq, Hk, ...).
 ///
 /// Phase 1 of the MSES port scope (see
-/// <c>agents/architecture/MsesClosurePlan.md</c>).
+/// <c>agents/architecture/ThesisClosurePlan.md</c>).
 ///
 /// Standalone and unit-test-first: each relation is validated against
 /// Drela's tabulated values or reference curves in Appendix A. No

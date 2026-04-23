@@ -10,7 +10,7 @@ laminar/turbulent BL marchers, wake marcher, Squire-Young drag,
 transition detection, CDF/CDP decomposition, compressibility
 propagation, full CLI surface with opt-in env vars). Phase 5
 Newton coupling is the remaining major piece. Details in
-`MsesClosurePlan.md`.
+`ThesisClosurePlan.md`.
 
 ## Status summary
 

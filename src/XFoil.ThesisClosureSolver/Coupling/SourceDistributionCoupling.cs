@@ -10,7 +10,7 @@ namespace XFoil.ThesisClosureSolver.Coupling;
 /// This is the physically-correct alternative to Phase-5-lite's
 /// geometric displacement-body offset, which injected spurious
 /// camber on cambered airfoils (see agents/architecture/
-/// MsesClosurePlan.md Phase-5-lite known limitation).
+/// ThesisClosurePlan.md Phase-5-lite known limitation).
 ///
 /// References:
 ///   Drela 1986 thesis §6 (source distribution in the Euler couple).

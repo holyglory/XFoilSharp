@@ -6,7 +6,7 @@ namespace XFoil.ThesisClosureSolver.BoundaryLayer;
 /// Turbulent integral-boundary-layer marcher that evaluates Cf via
 /// the MSES turbulent closure (<see cref="ThesisClosureRelations.ComputeCfTurbulent"/>).
 ///
-/// Phase-2c of the MSES port (see <c>MsesClosurePlan.md</c>). Starts
+/// Phase-2c of the MSES port (see <c>ThesisClosurePlan.md</c>). Starts
 /// from a user-provided turbulent IC (θ₀, H₀, x₀) — transition is
 /// Phase-3 scope and not done here. Validated against the 1/5-power-
 /// law empirical reference for fully-developed turbulent flat-plate:

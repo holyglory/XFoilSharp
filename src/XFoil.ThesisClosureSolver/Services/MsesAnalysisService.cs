@@ -21,7 +21,7 @@ namespace XFoil.ThesisClosureSolver.Services;
 /// What's still missing vs full MSES: Newton-coupled viscous-
 /// inviscid system via source distribution (Phase 5). CL currently
 /// comes from the inviscid path with no viscous feedback; see
-/// <c>agents/architecture/MsesClosurePlan.md</c>.
+/// <c>agents/architecture/ThesisClosurePlan.md</c>.
 /// </summary>
 public class ThesisClosureAnalysisService : IAirfoilAnalysisService
 {

@@ -343,7 +343,7 @@ at 240, whereas WT is -1.21. Panel density alone won't close the gap.
 Reverted the probe. Deeper B4 work would need a non-XFoil
 compressibility formulation (Euler inviscid core, or a proper
 geometric Karman-Tsien with a reworked speed field per iter-2) —
-both defer to the MSES-class rebuild in `MsesClosurePlan.md` and
+both defer to the MSES-class rebuild in `ThesisClosurePlan.md` and
 a transonic-Euler follow-up.
 
 ### B3 iter 1+2 (2026-04-20 — Viterna-Corrigan post-stall fallback)
@@ -1577,7 +1577,7 @@ detector + iter-48/49/50's shape-aware CL_max cap. The remaining
 
 Both remaining classes are documented as solver-level (facade tweaks
 can't fix them). Further aggregate gains need the MSES-class
-closure rebuild laid out in `MsesClosurePlan.md`.
+closure rebuild laid out in `ThesisClosurePlan.md`.
 
 **Parity throughout:** NACA 4455/4455 bit-exact preserved at every
 iter (Modern facade changes are additive — the Float/Double parity

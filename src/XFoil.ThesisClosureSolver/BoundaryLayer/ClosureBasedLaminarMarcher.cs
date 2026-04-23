@@ -8,7 +8,7 @@ namespace XFoil.ThesisClosureSolver.BoundaryLayer;
 /// thesis §4, rather than Thwaites' tabulated λ(θ²·dUe/dx/ν) correlation.
 ///
 /// This is the Phase-2b marcher in the MSES port (see
-/// <c>MsesClosurePlan.md</c>). Unlike the classical Thwaites reference
+/// <c>ThesisClosurePlan.md</c>). Unlike the classical Thwaites reference
 /// marcher in <see cref="ThwaitesLaminarMarcher"/>, this one uses the
 /// same closure path that the turbulent marcher (Phase 2c) and the
 /// Newton-coupled marcher (Phase 5) will use — so exercising it is the

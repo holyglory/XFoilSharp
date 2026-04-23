@@ -520,7 +520,7 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
             // Newton finds the same drag-inflated fixed point). Zero
             // aggregate effect on `--b3-score`; probe reverted.
             // Fixing this class requires solver-level work (MSES
-            // closure per MsesClosurePlan.md).
+            // closure per ThesisClosurePlan.md).
             return primary;
         }
 

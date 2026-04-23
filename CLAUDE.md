@@ -69,9 +69,9 @@ Pick a solver:
 | Modern-tree viscous, non-parity       | `XFoil.Solver.Modern`         |
 | MSES-class closure, stall-robust      | `XFoil.ThesisClosureSolver`            |
 
-See `agents/architecture/MsesSolverReadme.md` for the user guide,
-`MsesValidation.md` for the pinned acceptance numbers, and
-`MsesClosurePlan.md` for the phase plan. Known limitation: CL
+See `agents/architecture/ThesisClosureReadme.md` for the user guide,
+`ThesisClosureValidation.md` for the pinned acceptance numbers, and
+`ThesisClosurePlan.md` for the phase plan. Known limitation: CL
 comes from the inviscid path; full two-way viscous-inviscid coupling
 is deferred ("Phase 5 proper").
 
@@ -130,9 +130,11 @@ The `agents/` directory is a living documentation tree that **must be updated** 
 - `agents/architecture/Overview.md` — system architecture
 - `agents/architecture/ParityAndTodos.md` — parity gap map and prioritized TODOs
 - `agents/architecture/FortranMappingAudit.md` — file-level C#-to-Fortran mapping ledger
-- `agents/architecture/MsesSolverReadme.md` — user guide for the MSES solver
-- `agents/architecture/MsesValidation.md` — MSES validation snapshot
-- `agents/architecture/MsesClosurePlan.md` — MSES phase plan and status
+- `agents/architecture/ThesisClosureReadme.md` — user guide for the thesis-closure hybrid solver
+- `agents/architecture/ThesisClosureValidation.md` — thesis-closure validation snapshot
+- `agents/architecture/ThesisClosurePlan.md` — thesis-closure phase plan and status
+- `agents/architecture/FourSolverValidation.md` — Parity/Double/Modern/ThesisClosure vs WT comparison
+- `agents/architecture/OptionB-FutureMsesPlan.md` — future-work plan for a real streamline-Euler MSES
 
 A code change is not complete until relevant `agents/` docs are updated. See `AGENTS.md` for the full documentation policy.
 

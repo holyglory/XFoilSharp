@@ -9,7 +9,7 @@ namespace XFoil.Solver.Services;
 /// implementations such as <see cref="XFoil.ThesisClosureSolver"/>.
 ///
 /// Extracted as part of the MSES port scaffolding (Phase 0 per
-/// <c>agents/architecture/MsesClosurePlan.md</c>) so that callers
+/// <c>agents/architecture/ThesisClosurePlan.md</c>) so that callers
 /// can target this interface rather than the concrete
 /// <see cref="AirfoilAnalysisService"/>. The concrete class still
 /// remains the inheritance root of the parity-critical Float +

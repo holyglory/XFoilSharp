@@ -1,13 +1,22 @@
-# MSES Validation — F1 Finalization Snapshot
+# ThesisClosureSolver Validation — F1 Finalization Snapshot
 
-This document records the pinned validation state of the MSES port at
-the end of F1 finalization (2026-04-22). See
-`agents/architecture/MsesClosurePlan.md` for the full phase plan and
+This document records the pinned validation state of the
+thesis-closure solver (linear-vortex panel inviscid + Drela thesis BL
+closure) at the end of F1 finalization (2026-04-22). See
+`agents/architecture/ThesisClosurePlan.md` for the full phase plan and
 the roadmap beyond F1.
+
+Note on naming: this solver was originally labeled "MSES" while the
+port was scoped to the thesis's BL closure. After the four-solver
+validation landed, it was renamed `XFoil.ThesisClosureSolver` to
+reflect the actual scope — the inviscid side is a linear-vortex panel
+method, not Drela's streamline-Euler grid. The "MSES" prefix on some
+internal type names (`MsesClosureRelations`, `MsesGlobalResidual`, …)
+is retained for now; those renames are cosmetic and deferred.
 
 ## Scope of the pins
 
-All numbers here are produced by the **fully-thesis-exact** MSES path:
+All numbers here are produced by the **fully-thesis-exact** path:
 implicit-Newton laminar marcher (eq. 6.10 laminar closure) +
 implicit-Newton turbulent marcher (eq. 6.10 with Cτ-lag coupling) +
 wake marcher with Squire-Young far-field CD. As of commit `2eda133`
@@ -87,7 +96,7 @@ where proper Phase-5 Newton coupling would stabilize the solve.
 ## Reference benchmarks — cross-check
 
 Attached-flow CD validation vs wind-tunnel (from
-`MsesClosurePlan.md` session summary, carried forward):
+`ThesisClosurePlan.md` session summary, carried forward):
 
 | Case | MSES CD | WT CD |
 |------|---------|-------|
