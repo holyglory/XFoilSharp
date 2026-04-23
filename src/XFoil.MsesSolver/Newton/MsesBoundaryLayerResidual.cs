@@ -27,6 +27,10 @@ public static class MsesBoundaryLayerResidual
     ///   R_θ = (θ_i − θ_{i−1})/dξ
     ///       − [Cf̄/2 − (H̄ + 2 − Me²)·θ̄·(Ue_i − Ue_{i−1})/(dξ·Ue_i)]
     /// where bars denote arithmetic means of endpoint values.
+    ///
+    /// Pass <paramref name="isWake"/> = true for a wake/free-shear
+    /// layer (Cf ≡ 0). Thesis §6.5 uses Cf=0 in the wake momentum
+    /// balance; the rest of the form is identical.
     /// </summary>
     public static double MomentumResidual(
         double thetaPrev, double theta,
@@ -34,7 +38,8 @@ public static class MsesBoundaryLayerResidual
         double uePrev, double ue,
         double dx,
         double nu,
-        double me = 0.0)
+        double me = 0.0,
+        bool isWake = false)
     {
         if (dx <= 0.0) throw new System.ArgumentOutOfRangeException(nameof(dx));
         double thetaAvg = 0.5 * (thetaPrev + theta);
@@ -43,8 +48,9 @@ public static class MsesBoundaryLayerResidual
         double hkAvg = MsesClosureRelations.ComputeHk(hAvg, me);
         double reThetaAvg = 0.5 * (uePrev + ue) * thetaAvg
                           / System.Math.Max(nu, 1e-18);
-        double cfAvg = MsesClosureRelations.ComputeCfTurbulent(
-            hkAvg, reThetaAvg, me);
+        double cfAvg = isWake
+            ? 0.0
+            : MsesClosureRelations.ComputeCfTurbulent(hkAvg, reThetaAvg, me);
         double uDuDx_over_Ue = (ue - uePrev) / (dx * ueSafe);
         double rhs = 0.5 * cfAvg
                    - (hAvg + 2.0 - me * me) * thetaAvg * uDuDx_over_Ue;
@@ -68,7 +74,8 @@ public static class MsesBoundaryLayerResidual
         double uePrev, double ue,
         double dx,
         double nu,
-        double me = 0.0)
+        double me = 0.0,
+        bool isWake = false)
     {
         if (dx <= 0.0) throw new System.ArgumentOutOfRangeException(nameof(dx));
         double ueSafe = System.Math.Max(ue, 1e-12);
@@ -79,7 +86,9 @@ public static class MsesBoundaryLayerResidual
         double hStar = MsesClosureRelations.ComputeHStarTurbulent(hk, reTheta, me);
         double hStarPrev = MsesClosureRelations.ComputeHStarTurbulent(
             hkPrev, reThetaPrev, me);
-        double cf = MsesClosureRelations.ComputeCfTurbulent(hk, reTheta, me);
+        double cf = isWake
+            ? 0.0
+            : MsesClosureRelations.ComputeCfTurbulent(hk, reTheta, me);
         double cd = MsesClosureRelations.ComputeCDTurbulent(hk, reTheta, me, cTau);
         double uDuDx_over_Ue = (ue - uePrev) / (dx * ueSafe);
         // Bracket(H) = 2·H**/H* + (1 − H). At Me=0, H** = 0.
@@ -87,6 +96,33 @@ public static class MsesBoundaryLayerResidual
         double rhs = 2.0 * cd - hStar * cf * 0.5
                    - bracket * theta * uDuDx_over_Ue;
         return theta * (hStar - hStarPrev) / dx - rhs;
+    }
+
+    /// <summary>
+    /// R5.6 — TE-merge residuals (thesis eq. 6.63 sharp-TE).
+    /// At station 0 of the wake, the merged state comes from the
+    /// airfoil's two TE values:
+    ///   θ_wake0  = θ_u_TE + θ_l_TE
+    ///   δ*_wake0 = δ*_u_TE + δ*_l_TE   (equivalently H·θ on each side)
+    ///   Cτ_wake0 = (θ_u·Cτ_u + θ_l·Cτ_l) / (θ_u + θ_l)
+    /// These constraint residuals pin the wake-start state to the
+    /// sum/average of the upper and lower TE values.
+    /// </summary>
+    public static (double RTheta, double RDstar, double RCTau) TEMergeResiduals(
+        double thetaUpperTE, double thetaLowerTE,
+        double dStarUpperTE, double dStarLowerTE,
+        double cTauUpperTE, double cTauLowerTE,
+        double thetaWake0, double dStarWake0, double cTauWake0)
+    {
+        double thetaSum = thetaUpperTE + thetaLowerTE;
+        double dStarSum = dStarUpperTE + dStarLowerTE;
+        double cTauMerged = thetaSum > 1e-18
+            ? (thetaUpperTE * cTauUpperTE + thetaLowerTE * cTauLowerTE) / thetaSum
+            : 0.5 * (cTauUpperTE + cTauLowerTE);
+        return (
+            RTheta: thetaWake0 - thetaSum,
+            RDstar: dStarWake0 - dStarSum,
+            RCTau: cTauWake0 - cTauMerged);
     }
 
     /// <summary>

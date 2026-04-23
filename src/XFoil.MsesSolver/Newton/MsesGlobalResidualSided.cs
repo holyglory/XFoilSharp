@@ -31,6 +31,7 @@ public sealed class MsesGlobalResidualSided
     private readonly MsesGlobalStateSided _layout;
     private readonly MsesInviscidPanelSolver.PanelizedGeometry _pg;
     private readonly SurfaceTopology.Topology _topology;
+    private readonly WakeDiscretization.WakePanels? _wake;
     private readonly double[,] _aGammaNormal;
     private readonly double[,] _aSigmaNormal;
     private readonly double[,] _aGammaTangent;
@@ -49,7 +50,8 @@ public sealed class MsesGlobalResidualSided
         double alphaRadians,
         double kinematicViscosity = 1e-6,
         double machEdge = 0.0,
-        double initialTheta = 1e-5)
+        double initialTheta = 1e-5,
+        WakeDiscretization.WakePanels? wake = null)
     {
         int n = pg.PanelCount;
         if (layout.GammaCount != n + 1) throw new System.ArgumentException(
@@ -60,10 +62,14 @@ public sealed class MsesGlobalResidualSided
             throw new System.ArgumentException("layout upper count ≠ topology upper");
         if (layout.LowerCount != topology.Lower.PanelIndices.Length)
             throw new System.ArgumentException("layout lower count ≠ topology lower");
+        if (wake.HasValue && layout.WakeCount != wake.Value.Length.Length)
+            throw new System.ArgumentException(
+                $"layout.WakeCount ({layout.WakeCount}) must match wake.Length.Length ({wake.Value.Length.Length})");
 
         _layout = layout;
         _pg = pg;
         _topology = topology;
+        _wake = wake;
         _freestreamSpeed = freestreamSpeed;
         _alphaRadians = alphaRadians;
         _kinematicViscosity = kinematicViscosity;
@@ -134,16 +140,83 @@ public sealed class MsesGlobalResidualSided
         //    Stagnation node (k == stagNode): anchor σ = 0.
         ComputeSigmaAirfoilResiduals(u, ueMid, r);
 
-        // 7. Wake σ + wake BL placeholder (R5.6/R5.7 fill these).
+        // 7. Wake σ placeholder (R5.7 fills the real coupling).
         for (int k = 0; k < _layout.SigmaWakeCount; k++)
             r[_layout.SigmaWakeOffset + k] = u.SigmaWake[k];
-        for (int k = 0; k < _layout.WakeCount; k++)
+
+        // 8. Wake BL residuals. If _wake is null, fall back to
+        //    identity placeholder.
+        if (_wake.HasValue && _layout.WakeCount > 0)
         {
-            r[_layout.WakeDstarOffset + k] = u.WakeDstar[k];
-            r[_layout.WakeThetaOffset + k] = u.WakeTheta[k];
-            r[_layout.WakeCTauOffset + k] = u.WakeCTau[k];
+            ComputeWakeBlResiduals(u, r);
+        }
+        else
+        {
+            for (int k = 0; k < _layout.WakeCount; k++)
+            {
+                r[_layout.WakeDstarOffset + k] = u.WakeDstar[k];
+                r[_layout.WakeThetaOffset + k] = u.WakeTheta[k];
+                r[_layout.WakeCTauOffset + k] = u.WakeCTau[k];
+            }
         }
         return r;
+    }
+
+    /// <summary>
+    /// R5.6 — Wake BL residuals. Station 0 is TE-merge (thesis eq.
+    /// 6.63 sharp-TE). Stations 1..Nw-1 march as free-shear BL
+    /// (Cf=0) with wake-panel arc-length from the WakePanels geometry.
+    /// Wake Ue for now is taken as freestream (|V∞|) along the
+    /// wake direction — true wake Ue recovery would come from σ_wake
+    /// contribution in R5.7.
+    /// </summary>
+    private void ComputeWakeBlResiduals(
+        MsesGlobalStateSided.SidedState u, double[] r)
+    {
+        int nw = _layout.WakeCount;
+        int nu = _layout.UpperCount;
+        int nl = _layout.LowerCount;
+        // Upper TE is the last upper station (farthest from stag).
+        double thetaU_TE = u.UpperTheta[nu - 1];
+        double dStarU_TE = u.UpperDstar[nu - 1];
+        double cTauU_TE = u.UpperCTau[nu - 1];
+        double thetaL_TE = u.LowerTheta[nl - 1];
+        double dStarL_TE = u.LowerDstar[nl - 1];
+        double cTauL_TE = u.LowerCTau[nl - 1];
+
+        // Station 0: TE-merge constraint.
+        var te = MsesBoundaryLayerResidual.TEMergeResiduals(
+            thetaU_TE, thetaL_TE, dStarU_TE, dStarL_TE,
+            cTauU_TE, cTauL_TE,
+            u.WakeTheta[0], u.WakeDstar[0], u.WakeCTau[0]);
+        r[_layout.WakeThetaOffset + 0] = te.RTheta;
+        r[_layout.WakeDstarOffset + 0] = te.RDstar;
+        r[_layout.WakeCTauOffset + 0] = te.RCTau;
+
+        // Stations 1..nw-1: free-shear march with Cf=0.
+        var wake = _wake!.Value;
+        for (int k = 1; k < nw; k++)
+        {
+            double thetaPrev = u.WakeTheta[k - 1];
+            double thetaCur = u.WakeTheta[k];
+            double dStarPrev = u.WakeDstar[k - 1];
+            double dStarCur = u.WakeDstar[k];
+            double hPrev = thetaPrev > 1e-18 ? dStarPrev / thetaPrev : 1.4;
+            double hCur = thetaCur > 1e-18 ? dStarCur / thetaCur : 1.4;
+            // Wake Ue ≈ freestream for this first pass (no σ_wake yet).
+            double ueMid = _freestreamSpeed;
+            double dx = System.Math.Max(
+                wake.ArcLengthFromTE[k] - wake.ArcLengthFromTE[k - 1], 1e-12);
+            r[_layout.WakeThetaOffset + k] = MsesBoundaryLayerResidual.MomentumResidual(
+                thetaPrev, thetaCur, hPrev, hCur, ueMid, ueMid, dx,
+                _kinematicViscosity, _machEdge, isWake: true);
+            r[_layout.WakeDstarOffset + k] = MsesBoundaryLayerResidual.ShapeParamResidual(
+                thetaPrev, thetaCur, hPrev, hCur, u.WakeCTau[k], ueMid, ueMid, dx,
+                _kinematicViscosity, _machEdge, isWake: true);
+            r[_layout.WakeCTauOffset + k] = MsesBoundaryLayerResidual.LagResidual(
+                u.WakeCTau[k - 1], u.WakeCTau[k], thetaPrev, thetaCur, hPrev, hCur,
+                ueMid, ueMid, dx, _kinematicViscosity, _machEdge);
+        }
     }
 
     private void MarchBlResiduals(
