@@ -105,6 +105,10 @@ public static class FourSolverComparisonRunner
     /// <summary>
     /// Renders a ComparisonRow[] as a markdown table. Used by V2–V4
     /// to emit validation artifacts.
+    ///
+    /// Non-converged results are emitted as "—" regardless of whether
+    /// the returned value happens to be finite — a non-converged
+    /// Newton's last iterate is not an answer, it's noise.
     /// </summary>
     public static string ToMarkdownTable(
         ComparisonRow[] rows,
@@ -122,7 +126,8 @@ public static class FourSolverComparisonRunner
         {
             var r = rows[i];
             sb.Append($"| {r.Airfoil} | {r.AlphaDeg,5:F1} | {r.Reynolds:0.0e0} | "
-                + $"{F(r.Parity.CL)} | {F(r.Double.CL)} | {F(r.Modern.CL)} | {F(r.Mses.CL)}");
+                + $"{Fmt(r.Parity, r.Parity.CL)} | {Fmt(r.Double, r.Double.CL)} | "
+                + $"{Fmt(r.Modern, r.Modern.CL)} | {Fmt(r.Mses, r.Mses.CL)}");
             if (wt != null)
                 sb.Append($" | {wt[i].CL:F3}");
             sb.AppendLine(" |");
@@ -136,7 +141,8 @@ public static class FourSolverComparisonRunner
         {
             var r = rows[i];
             sb.Append($"| {r.Airfoil} | {r.AlphaDeg,5:F1} | {r.Reynolds:0.0e0} | "
-                + $"{F(r.Parity.CD, 4)} | {F(r.Double.CD, 4)} | {F(r.Modern.CD, 4)} | {F(r.Mses.CD, 4)}");
+                + $"{Fmt(r.Parity, r.Parity.CD, 4)} | {Fmt(r.Double, r.Double.CD, 4)} | "
+                + $"{Fmt(r.Modern, r.Modern.CD, 4)} | {Fmt(r.Mses, r.Mses.CD, 4)}");
             if (wt != null)
                 sb.Append($" | {wt[i].CD:F4}");
             sb.AppendLine(" |");
@@ -144,6 +150,9 @@ public static class FourSolverComparisonRunner
         return sb.ToString();
     }
 
-    private static string F(double x, int digits = 3)
-        => double.IsFinite(x) ? x.ToString($"F{digits}") : "—";
+    private static string Fmt(SolverResult r, double value, int digits = 3)
+    {
+        if (!r.Converged) return "—";
+        return double.IsFinite(value) ? value.ToString($"F{digits}") : "—";
+    }
 }
