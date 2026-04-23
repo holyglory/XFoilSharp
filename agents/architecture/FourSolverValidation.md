@@ -5,20 +5,24 @@
 
 ## What was tested
 
-Four viscous-analysis paths in the repo were run at identical
-conditions (Re = 3×10⁶, M = 0, nCrit = 9, 161 panels, free
-transition) and compared against Abbott & Von Doenhoff wind-tunnel
-reference values from NACA TR-824.
+Four viscous-analysis paths in the repo were run against NACA 0012,
+NACA 2412, and NACA 4412 at Re = 3×10⁶, M = 0, nCrit = 9, free
+transition, and the results compared against Abbott & Von Doenhoff
+wind-tunnel reference values from NACA TR-824.
 
-| Solver | Class | Notes |
-|--------|-------|-------|
-| Parity | `XFoil.Solver.Services.AirfoilAnalysisService` | Float-precision replay of Fortran XFoil 6.97 |
-| Double | `XFoil.Solver.Double.Services.AirfoilAnalysisService` | Native double precision |
-| Modern | `XFoil.Solver.Modern.Services.AirfoilAnalysisService` | Solution-adaptive paneling on top of Double |
-| MSES | `XFoil.ThesisClosureSolver.Services.ThesisClosureAnalysisService` | Linear-vortex panel + Drela thesis BL closure |
+| Solver | Class | Invoked with |
+|--------|-------|--------------|
+| Parity | `XFoil.Solver.Services.AirfoilAnalysisService` | Legacy-mode flags (`useLegacyBoundaryLayerInitialization` + siblings) — same as the 4455-case `ParallelPolarCompare` sweep |
+| Double | `XFoil.Solver.Double.Services.AirfoilAnalysisService` | Modern-defaults AnalysisSettings |
+| Modern | `XFoil.Solver.Modern.Services.AirfoilAnalysisService` | Modern-defaults AnalysisSettings |
+| ThesisClosure | `XFoil.ThesisClosureSolver.Services.ThesisClosureAnalysisService` | Modern-defaults AnalysisSettings |
 
-Airfoils tested: NACA 0012 (symmetric), NACA 2412 (2 % camber),
-NACA 4412 (4 % camber).
+Each solver is called with its **canonical configuration**. The
+float-parity path requires legacy-mode flags to match Fortran REAL*4
+behavior — modern defaults give its Newton an init it cannot
+recover from and it silently returns NaN. (That test-setup bug in the
+original V2/V3/V4 runner was the source of an earlier "parity path
+is broken in this environment" claim. Fixed in this iteration.)
 
 ## Raw results per airfoil
 
@@ -30,86 +34,100 @@ NACA 4412 (4 % camber).
 
 ### NACA 0012 (symmetric baseline)
 
-| α° | WT CL | Parity | Double | Modern | MSES |
-|----|-------|--------|--------|--------|------|
-| 0 | 0.00 | ✗ | ✗ | ✗ | 0.000 ✓ |
-| 2 | 0.22 | ✗ | 0.206 | 0.206 | 0.242 |
-| 4 | 0.44 | ✗ | 0.423 | 0.423 | 0.483 |
-| 6 | 0.65 | ✗ | 0.736 | 0.736 | 0.724 |
-| 8 | 0.84 | ✗ | **-48523** | **-48523** | 0.964 |
-| 10 | 1.02 | ✗ | 1.143 | 1.143 | 1.202 |
+| α° | WT CL | Parity | Double | Modern | ThesisClosure |
+|----|-------|--------|--------|--------|---------------|
+| 0  | 0.00  | −0.000 ✓ | —        | —        | 0.000 ✓ |
+| 2  | 0.22  | 0.242   | 0.206    | 0.206    | 0.242   |
+| 4  | 0.44  | 0.486   | 0.423    | 0.423    | 0.483   |
+| 6  | 0.65  | 0.721   | 0.736    | 0.736    | 0.724   |
+| 8  | 0.84  | 0.964   | **−48523** | **−48523** | 0.964 |
+| 10 | 1.02  | 1.200   | 1.143    | 1.143    | 1.202   |
 
 ### NACA 4412 (cambered)
 
-| α° | WT CL | Parity | Double | Modern | MSES |
-|----|-------|--------|--------|--------|------|
-| -4 | -0.04 | ✗ | 0.165 | 0.165 | 0.026 |
-| 0 | 0.40 | ✗ | **1.609** | **1.609** | 0.510 |
-| 4 | 0.83 | ✗ | 1.651 | 1.651 | 0.992 |
-| 8 | 1.20 | ✗ | **-0.059** | **-0.059** | 1.468 |
-| 12 | 1.48 | ✗ | 1.404 | 1.404 | 1.938 |
+| α° | WT CL | Parity | Double | Modern | ThesisClosure |
+|----|-------|--------|--------|--------|---------------|
+| −4 | −0.04 | 0.027  | 0.165  | 0.165  | 0.026 |
+| 0  | 0.40  | 0.510  | **1.609**  | **1.609**  | 0.510 |
+| 4  | 0.83  | 0.991  | 1.651  | 1.651  | 0.992 |
+| 8  | 1.20  | 1.471  | **−0.059** | **−0.059** | 1.468 |
+| 12 | 1.48  | 1.944  | 1.404  | 1.404  | 1.938 |
 
 ### NACA 2412 (moderate camber)
 
-| α° | WT CL | Parity | Double | Modern | MSES |
-|----|-------|--------|--------|--------|------|
-| -4 | -0.20 | ✗ | **-39491** | **-39491** | -0.228 ✓ |
-| 0 | 0.20 | ✗ | 0.324 | 0.324 | 0.256 |
-| 4 | 0.63 | ✗ | ✗ | ✗ | 0.738 |
-| 8 | 1.00 | ✗ | 1.816 | 1.816 | 1.217 |
-| 12 | 1.30 | ✗ | **-0.990** | **-0.990** | 1.689 |
+| α° | WT CL | Parity | Double | Modern | ThesisClosure |
+|----|-------|--------|--------|--------|---------------|
+| −4 | −0.20 | −0.223 ✓ | **−39491** | **−39491** | −0.228 ✓ |
+| 0  | 0.20  | 0.256    | 0.324      | 0.324      | 0.256   |
+| 4  | 0.63  | 0.739    | —          | —          | 0.738   |
+| 8  | 1.00  | 1.214    | 1.816      | 1.816      | 1.217   |
+| 12 | 1.30  | 1.692    | **−0.990** | **−0.990** | 1.689   |
 
-(✗ = threw / failed / NaN; bold = catastrophic non-physical value.)
+(— = NaN result (Newton failed to converge); bold = catastrophic
+non-physical value.)
 
 ## Findings
 
-1. **Parity path is broken in this environment** — throws on every
-   viscous case across all three airfoils. It likely needs the
-   Fortran reference build or specific setup not available here;
-   whatever the cause, it's not a shippable solver as-is.
+1. **Parity path is production-quality.** Converges on every one of
+   the 16 cases across the three airfoils. CL tracks WT with the
+   same ~15–25 % high bias as ThesisClosure (both share the linear-
+   vortex inviscid, and the bias is the same "no viscous feedback
+   into CL" limitation). CD tracks WT within ~20–30 %. This is the
+   same solver that is 4455/4455 bit-exact against the Fortran
+   reference on the `ParallelPolarCompare` sweep, so the earlier
+   "broken" claim was purely a test-setup error (modern AnalysisSettings
+   defaults vs. legacy-required flags).
 
 2. **Double and Modern paths have severe bugs on cambered airfoils.**
    On NACA 4412 α=0° they report CL = 1.609 vs WT = 0.40 (4× too
-   high). On NACA 4412 α=8° they report CL = −0.059 vs WT = 1.20
-   (wrong sign). Intermixed with catastrophic blow-ups like
-   CL = −48523 (NACA 0012 α=8°) and CL = −39491 (NACA 2412 α=−4°).
-   These are pre-existing failures in the viscous-Newton path that
-   this work did NOT cause (the surrounding XFoil.Solver code is the
-   parity-validated Fortran port).
+   high). On NACA 4412 α=8° CL = −0.059 vs WT = 1.20 (wrong sign).
+   Intermixed with catastrophic blow-ups like CL = −48523 (NACA
+   0012 α=8°) and CL = −39491 (NACA 2412 α=−4°). These are
+   pre-existing failures in the viscous-Newton path of the
+   double-precision tree — not caused by this work (which is
+   additive only).
 
-3. **MSES/thesis-closure is the only consistent path.** Converges on
-   every case tested (15/15) without a single catastrophic failure.
-   CL tracks WT within ~15-30 % (biased ~20 % high on cambered
-   airfoils due to inviscid inflation — no Phase-5 two-way coupling).
-   CD within ~20-30 % of WT across the polar.
+3. **ThesisClosure is close to identical to Parity** across the
+   matrix (CL within ~0.005 on most rows). Both are panel-inviscid
+   + integral-BL hybrids; they share the inviscid CL pathway and
+   diverge only in closure details. Parity's CD runs slightly lower
+   (WT-matching) because it is the Fortran-faithful XFoil 6.97
+   lag-dissipation closure; ThesisClosure's CD runs slightly higher
+   (still within engineering tolerance) because it is the
+   thesis-exact 2nd-order closure calibrated for stall robustness.
 
-4. **CL bias direction is physical.** MSES is biased HIGH on
-   cambered airfoils because viscous displacement-body effects
-   (which reduce effective camber) are only approximated one-way in
-   the current F2 source-distribution coupling. This is the known
-   limitation documented in F2.4 decision. Closing the bias
-   requires full two-way coupling — Option B (real streamline-Euler
-   MSES) or Phase-5 proper on the panel method.
+4. **CL bias direction is physical.** Both Parity and ThesisClosure
+   are biased HIGH on cambered airfoils because viscous displacement-
+   body effects (which reduce effective camber) are not fed back
+   into the inviscid path. Closing the bias would require full
+   two-way coupling (Option B — real streamline-Euler MSES, or
+   Phase-5 proper on the panel method).
 
 ## Implication for Option A vs Option B
 
-The evidence strongly supports **Option A** (rename + ship):
+With the parity fix in place, the repo now has **two** working
+production-quality viscous solvers:
 
-- The "MSES" solver (despite the misleading name) is the only
-  working production-quality viscous solver in the repo.
-- Its accuracy is adequate for the ~90 % of use cases: subsonic
-  airfoil CL/CD within engineering-useful ranges.
-- Renaming to `ThesisClosureSolver` reflects reality: it's not the
-  thesis's streamline-Euler MSES, but it IS Drela's thesis-exact
-  integral BL closure coupled to a linear-vortex panel inviscid.
-  That's a legitimate hybrid.
+- **`XFoil.Solver` (Parity)** — Fortran-bit-exact XFoil 6.97 replay.
+  Shippable. Used for anyone who wants bitwise reproduction of the
+  canonical XFoil behavior. 4455/4455 bit-exact on the NACA sweep.
+- **`XFoil.ThesisClosureSolver`** — linear-vortex panel + thesis BL
+  closure, same accuracy band as Parity at this Re, more robust in
+  deep stall (see `ThesisClosureValidation.md` stall-robustness
+  showcase). Shippable.
 
-Option B (real MSES) is a 6–12 month project, and even if completed,
-would only improve on MSES/thesis-closure in specific areas
-(transonic shocks, cambered-CL accuracy). The current solver is
-already better than the parity port on cambered airfoils — if
-Option B's investment matters to the user, the current work is
-what unblocks it.
+Option A (rename + ship ThesisClosure) therefore still makes sense
+but for a different reason than originally thought: ThesisClosure
+is not the *only* working path, it is the *stall-robust* working
+path. Parity remains the reference behavior.
+
+The Double/Modern tree failures are a separate issue — pre-existing,
+documented, not a publish-blocker for either shipped path.
+
+Option B (real streamline-Euler MSES) is a 6–12 person-month
+project, scoped in `OptionB-FutureMsesPlan.md`. It would improve
+on both current paths in transonic shock capturing and cambered-CL
+accuracy, and remains out of scope for the current release.
 
 ## Option A — status
 
@@ -119,14 +137,6 @@ what unblocks it.
 - **A2** *(done)* Doc files under `agents/architecture/` renamed
   (`MsesClosurePlan` → `ThesisClosurePlan`, etc.) and top matter
   updated to describe the solver as the linear-vortex + thesis-BL
-  hybrid it actually is.
-- **A3** *(done)* Shipped. Option B (real streamline-Euler MSES) is
-  scoped in `OptionB-FutureMsesPlan.md`.
-
-## Open blocker — binary parity
-
-The `XFoil.Solver` (float-parity) path throws on every viscous case in
-the V2–V4 matrix. That is an unrelated pre-existing bug, but the
-user's stated bar for publishing the repo is "binary parity must
-work." Parity-path investigation is tracked as its own work item and
-is **not** a prerequisite for Option A shipping (Option A is additive).
+  hybrid it actually is. Added `OptionB-FutureMsesPlan.md`.
+- **A3** *(done)* Shipped. Parity-path "broken" narrative corrected
+  after discovering it was a test-setup defect, not a solver bug.

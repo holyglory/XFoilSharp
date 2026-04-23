@@ -33,7 +33,31 @@ public static class FourSolverComparisonRunner
         foreach (var c in cases)
         {
             var geom = gen.Generate4DigitClassic(c.Naca, pointCount: pointCount);
-            var settings = new AnalysisSettings(
+
+            // Float-parity path matches Fortran REAL*4 behavior and only
+            // converges when invoked with the legacy-mode flags below —
+            // same configuration used by the 4455-case ParallelPolarCompare
+            // parity sweep. Modern defaults give it a Newton init it can't
+            // recover from → silent NaN.
+            var paritySettings = new AnalysisSettings(
+                panelCount: pointCount - 1,
+                freestreamVelocity: 1.0,
+                machNumber: c.Mach,
+                reynoldsNumber: c.Reynolds,
+                criticalAmplificationFactor: nCrit,
+                useExtendedWake: false,
+                useLegacyBoundaryLayerInitialization: true,
+                useLegacyPanelingPrecision: true,
+                useLegacyStreamfunctionKernelPrecision: true,
+                useLegacyWakeSourceKernelPrecision: true,
+                useModernTransitionCorrections: false,
+                maxViscousIterations: 80,
+                viscousConvergenceTolerance: 1e-4);
+
+            // Double/Modern/ThesisClosure run against their own canonical
+            // configuration (modern defaults + panel count to match the
+            // airfoil generator output).
+            var modernSettings = new AnalysisSettings(
                 panelCount: pointCount,
                 freestreamVelocity: 1.0,
                 machNumber: c.Mach,
@@ -43,15 +67,15 @@ public static class FourSolverComparisonRunner
 
             var parity = RunSafely(() =>
                 new XFoil.Solver.Services.AirfoilAnalysisService()
-                    .AnalyzeViscous(geom, c.AlphaDeg, settings));
+                    .AnalyzeViscous(geom, c.AlphaDeg, paritySettings));
             var doubleTree = RunSafely(() =>
                 new XFoil.Solver.Double.Services.AirfoilAnalysisService()
-                    .AnalyzeViscous(geom, c.AlphaDeg, settings));
+                    .AnalyzeViscous(geom, c.AlphaDeg, modernSettings));
             var modern = RunSafely(() =>
                 new XFoil.Solver.Modern.Services.AirfoilAnalysisService()
-                    .AnalyzeViscous(geom, c.AlphaDeg, settings));
+                    .AnalyzeViscous(geom, c.AlphaDeg, modernSettings));
             var mses = RunSafely(() =>
-                new ThesisClosureAnalysisService().AnalyzeViscous(geom, c.AlphaDeg, settings));
+                new ThesisClosureAnalysisService().AnalyzeViscous(geom, c.AlphaDeg, modernSettings));
 
             results.Add(new ComparisonRow(
                 c.Naca, c.AlphaDeg, c.Reynolds, c.Mach,
