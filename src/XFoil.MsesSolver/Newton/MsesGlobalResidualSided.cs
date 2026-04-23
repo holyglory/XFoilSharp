@@ -36,6 +36,8 @@ public sealed class MsesGlobalResidualSided
     private readonly double[,] _aSigmaNormal;
     private readonly double[,] _aGammaTangent;
     private readonly double[,] _aSigmaTangent;
+    private readonly double[,]? _aWakeSigmaNormal;
+    private readonly double[,]? _aWakeSigmaTangent;
     private readonly double _freestreamSpeed;
     private readonly double _alphaRadians;
     private readonly double _kinematicViscosity;
@@ -79,6 +81,13 @@ public sealed class MsesGlobalResidualSided
         _aSigmaNormal = MsesInviscidPanelSolver.BuildSourceNormalInfluenceMatrix(pg);
         _aGammaTangent = MsesInviscidPanelSolver.BuildVortexInfluenceMatrix(pg);
         _aSigmaTangent = MsesInviscidPanelSolver.BuildSourceTangentInfluenceMatrix(pg);
+        if (wake.HasValue && layout.WakeCount > 0)
+        {
+            _aWakeSigmaNormal = MsesInviscidPanelSolver.BuildWakeSourceInfluenceMatrix(
+                pg, wake.Value, normal: true);
+            _aWakeSigmaTangent = MsesInviscidPanelSolver.BuildWakeSourceInfluenceMatrix(
+                pg, wake.Value, normal: false);
+        }
     }
 
     public double[] Compute(double[] state)
@@ -101,6 +110,11 @@ public sealed class MsesGlobalResidualSided
                 rowSum += _aGammaNormal[i, k] * u.Gamma[k]
                         + _aSigmaNormal[i, k] * u.SigmaAirfoil[k];
             }
+            if (_aWakeSigmaNormal is not null)
+            {
+                for (int j = 0; j < _layout.WakeCount; j++)
+                    rowSum += _aWakeSigmaNormal[i, j] * u.SigmaWake[j];
+            }
             rowSum += vx * _pg.NormalX[i] + vy * _pg.NormalY[i];
             r[i] = rowSum;
         }
@@ -116,6 +130,11 @@ public sealed class MsesGlobalResidualSided
             {
                 ue += _aGammaTangent[i, k] * u.Gamma[k]
                     + _aSigmaTangent[i, k] * u.SigmaAirfoil[k];
+            }
+            if (_aWakeSigmaTangent is not null)
+            {
+                for (int j = 0; j < _layout.WakeCount; j++)
+                    ue += _aWakeSigmaTangent[i, j] * u.SigmaWake[j];
             }
             ueMid[i] = System.Math.Abs(ue);
         }

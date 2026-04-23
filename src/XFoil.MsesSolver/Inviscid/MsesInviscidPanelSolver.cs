@@ -472,6 +472,51 @@ public static class MsesInviscidPanelSolver
         => BuildSourceInfluenceMatrixInternal(pg, normal: false);
 
     /// <summary>
+    /// R5.7 — Wake source-panel contribution to airfoil surface
+    /// velocity. Each wake panel carries a constant σ over its
+    /// length. This builds the (N × Nw) matrix of tangent- or
+    /// normal-velocity contributions at airfoil panel midpoint i
+    /// from unit σ on wake panel j.
+    ///
+    /// Uses <see cref="LinearSourcePanelContribution"/> with
+    /// σ_A = σ_B = 1 (equivalent to constant σ over the panel —
+    /// the two linear shape functions sum to the constant).
+    /// </summary>
+    public static double[,] BuildWakeSourceInfluenceMatrix(
+        PanelizedGeometry airfoilPg,
+        Topology.WakeDiscretization.WakePanels wake,
+        bool normal)
+    {
+        int n = airfoilPg.PanelCount;
+        int nw = wake.Length.Length;
+        var a = new double[n, nw];
+        for (int i = 0; i < n; i++)
+        {
+            double px = airfoilPg.MidX[i];
+            double py = airfoilPg.MidY[i];
+            double projX = normal ? airfoilPg.NormalX[i] : airfoilPg.TangentX[i];
+            double projY = normal ? airfoilPg.NormalY[i] : airfoilPg.TangentY[i];
+            for (int j = 0; j < nw; j++)
+            {
+                // Wake panel j: starts at prev wake node (or TE if j=0),
+                // ends at wake.NodeX[j]/NodeY[j].
+                double ax = j == 0 ? airfoilPg.NodeX[airfoilPg.PanelCount] : wake.NodeX[j - 1];
+                double ay = j == 0 ? airfoilPg.NodeY[airfoilPg.PanelCount] : wake.NodeY[j - 1];
+                double bx = wake.NodeX[j];
+                double by = wake.NodeY[j];
+                var (uA, vA, uB, vB) = LinearSourcePanelContribution(
+                    px, py, ax, ay, bx, by,
+                    wake.TangentX[j], wake.TangentY[j], wake.Length[j],
+                    selfPanel: false);
+                // Constant σ = 1 ⇒ σ_A = σ_B = 1 ⇒ contribution =
+                // (uA + uB, vA + vB) in global.
+                a[i, j] += (uA + uB) * projX + (vA + vB) * projY;
+            }
+        }
+        return a;
+    }
+
+    /// <summary>
     /// Builds the linear-source normal-velocity influence matrix:
     /// A_σ_n[i, k] is the normal velocity at collocation i from unit
     /// σ at node k. Used in the flow-tangency BC when σ is present.
