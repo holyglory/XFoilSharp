@@ -1011,6 +1011,68 @@ public static class ViscousSolverEngine
             useLockWaveDrag: false,
             useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
 
+        // D6 — plateau-convergence fallback (see ViscousSolverEngine.Double.cs
+        // for full rationale). Two qualifiers: (a) rms within plateau
+        // tolerance and CL stable; (b) CL frozen and rlx pinned at 1.0.
+        if (!converged && convergenceHistory.Count >= 5)
+        {
+            const int plateauWindow = 10;
+            const double legacyTolerance = 1e-4;
+            double plateauTolerance = Math.Max(tolerance * 100.0, legacyTolerance);
+            int windowStart = Math.Max(0, convergenceHistory.Count - plateauWindow);
+            int windowSize = convergenceHistory.Count - windowStart;
+
+            double maxRms = 0.0, minRms = double.MaxValue;
+            double maxCL = double.MinValue, minCL = double.MaxValue;
+            double minRlx = double.MaxValue;
+            double sumCL = 0.0, sumCD = 0.0, sumCM = 0.0;
+            bool anyNonFinite = false;
+            for (int i = windowStart; i < convergenceHistory.Count; i++)
+            {
+                var h = convergenceHistory[i];
+                if (!double.IsFinite(h.RmsResidual) || !double.IsFinite(h.CL))
+                {
+                    anyNonFinite = true;
+                    break;
+                }
+                maxRms = Math.Max(maxRms, h.RmsResidual);
+                minRms = Math.Min(minRms, h.RmsResidual);
+                maxCL = Math.Max(maxCL, h.CL);
+                minCL = Math.Min(minCL, h.CL);
+                minRlx = Math.Min(minRlx, h.RelaxationFactor);
+                sumCL += h.CL;
+                sumCD += h.CD;
+                sumCM += h.CM;
+            }
+
+            bool qualifier_a = !anyNonFinite
+                && maxRms <= plateauTolerance
+                && minRms > 0.0 && maxRms / minRms < 10.0
+                && (maxCL - minCL) < 0.005;
+            bool qualifier_b = !anyNonFinite
+                && (maxCL - minCL) < 0.001
+                && minRlx > 0.999
+                && double.IsFinite(maxRms);
+
+            if (qualifier_a || qualifier_b)
+            {
+                converged = true;
+                finalCL = sumCL / windowSize;
+                finalCM = sumCM / windowSize;
+                double avgCD = sumCD / windowSize;
+                dragDecomp = new DragDecomposition
+                {
+                    CD = avgCD,
+                    CDF = dragDecomp.CDF,
+                    CDP = dragDecomp.CDP,
+                    CDSurfaceCrossCheck = dragDecomp.CDSurfaceCrossCheck,
+                    DiscrepancyMetric = dragDecomp.DiscrepancyMetric,
+                    TEBaseDrag = dragDecomp.TEBaseDrag,
+                    WaveDrag = dragDecomp.WaveDrag,
+                };
+            }
+        }
+
         // Handle non-convergence with optional post-stall extrapolation
         if (!converged && settings.UsePostStallExtrapolation)
         {

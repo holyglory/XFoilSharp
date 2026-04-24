@@ -30,4 +30,8 @@
     <ProjectReference Include="..\..\src\XFoil.Solver\XFoil.Solver.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

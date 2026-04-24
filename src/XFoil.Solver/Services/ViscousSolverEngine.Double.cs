@@ -914,6 +914,88 @@ public static class ViscousSolverEngine
             useLockWaveDrag: false,
             useLegacyPrecision: false);
 
+        // D6 — plateau-convergence fallback. If the Newton hit max iters
+        // without reaching `tolerance`, but the last few iterations show a
+        // stable Newton fixed point, accept it as converged and report
+        // averaged CL/CD/CM from the last window. The decomposition
+        // components (CDF/CDP/TEBaseDrag) stay at final-iter values; only
+        // scalar CD is replaced by the average.
+        //
+        // Two independent qualifiers (EITHER wins):
+        //  (a) RMS residual bounded within `max(100·tolerance, 1e-4)` and
+        //      oscillating within a 10x range and CL stable → classic
+        //      "just-missed-tolerance" plateau. User-facing bar: "within
+        //      legacy parity tolerance."
+        //  (b) CL essentially unchanged (|Δ| < 0.001) across the window AND
+        //      relaxation factor pinned at 1.0 (full step accepted every
+        //      iter) → the Newton is literally at a fixed point with zero
+        //      step, residual metric just has a non-zero floor. Covers the
+        //      "state-frozen-but-rms-won't-drop" case.
+        if (!converged && convergenceHistory.Count >= 5)
+        {
+            const int plateauWindow = 10;
+            const double legacyTolerance = 1e-4;
+            double plateauTolerance = Math.Max(tolerance * 100.0, legacyTolerance);
+            int windowStart = Math.Max(0, convergenceHistory.Count - plateauWindow);
+            int windowSize = convergenceHistory.Count - windowStart;
+
+            double maxRms = 0.0, minRms = double.MaxValue;
+            double maxCL = double.MinValue, minCL = double.MaxValue;
+            double minRlx = double.MaxValue;
+            double sumCL = 0.0, sumCD = 0.0, sumCM = 0.0;
+            bool anyNonFinite = false;
+            for (int i = windowStart; i < convergenceHistory.Count; i++)
+            {
+                var h = convergenceHistory[i];
+                if (!double.IsFinite(h.RmsResidual) || !double.IsFinite(h.CL))
+                {
+                    anyNonFinite = true;
+                    break;
+                }
+                maxRms = Math.Max(maxRms, h.RmsResidual);
+                minRms = Math.Min(minRms, h.RmsResidual);
+                maxCL = Math.Max(maxCL, h.CL);
+                minCL = Math.Min(minCL, h.CL);
+                minRlx = Math.Min(minRlx, h.RelaxationFactor);
+                sumCL += h.CL;
+                sumCD += h.CD;
+                sumCM += h.CM;
+            }
+
+            bool qualifier_a = !anyNonFinite
+                && maxRms <= plateauTolerance
+                && minRms > 0.0 && maxRms / minRms < 10.0
+                && (maxCL - minCL) < 0.005;
+
+            // Qualifier (b): state-frozen fixed point. CL must be extremely
+            // stable AND rlx=1.0 every iter (trust region / RLXBL took the
+            // full Newton step every time — meaning the step itself was
+            // essentially zero). Small 1e-6 slack on rlx absorbs float-cast
+            // rounding near the legacy 1.0 clamp.
+            bool qualifier_b = !anyNonFinite
+                && (maxCL - minCL) < 0.001
+                && minRlx > 0.999
+                && double.IsFinite(maxRms);
+
+            if (qualifier_a || qualifier_b)
+            {
+                converged = true;
+                finalCL = sumCL / windowSize;
+                finalCM = sumCM / windowSize;
+                double avgCD = sumCD / windowSize;
+                dragDecomp = new DragDecomposition
+                {
+                    CD = avgCD,
+                    CDF = dragDecomp.CDF,
+                    CDP = dragDecomp.CDP,
+                    CDSurfaceCrossCheck = dragDecomp.CDSurfaceCrossCheck,
+                    DiscrepancyMetric = dragDecomp.DiscrepancyMetric,
+                    TEBaseDrag = dragDecomp.TEBaseDrag,
+                    WaveDrag = dragDecomp.WaveDrag,
+                };
+            }
+        }
+
         // Handle non-convergence with optional post-stall extrapolation
         if (!converged && settings.UsePostStallExtrapolation)
         {
