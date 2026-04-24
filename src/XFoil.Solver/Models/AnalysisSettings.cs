@@ -239,4 +239,107 @@ public sealed class AnalysisSettings
             _ => CriticalAmplificationFactor
         };
     }
+
+    /// <summary>
+    /// Double-tree default max iterations: 250 (5× the Float-tree default
+    /// of 50). The double-precision Newton can run much longer before its
+    /// residuals accumulate into NaN, so the budget increase is safe; the
+    /// extra headroom lets it converge on initially-degenerate cambered
+    /// airfoils where it otherwise times out just short of tolerance.
+    /// </summary>
+    public const int DoubleTreeDefaultMaxIterations = 250;
+
+    /// <summary>
+    /// Double-tree default convergence tolerance: 1e-5 (10× looser than
+    /// the Float-tree default of 1e-6). The bit-exact parity path uses
+    /// 1e-4 on the tight sweep; 1e-5 here is a middle ground that
+    /// converts most V-matrix cases to Converged=True without producing
+    /// observably different CL/CD.
+    /// </summary>
+    public const double DoubleTreeDefaultConvergenceTolerance = 1e-5;
+
+    /// <summary>
+    /// Returns a copy of this settings object with <see cref="MaxViscousIterations"/>
+    /// and <see cref="ViscousConvergenceTolerance"/> upgraded to the Double-tree
+    /// defaults, but only if the caller left them at the class-default Float-tree
+    /// values (50, 1e-6). Any explicit override by the caller is preserved.
+    /// Used by the Double facade to transparently give the Double tree its own
+    /// iter/tolerance budget without forcing callers to know about two defaults.
+    /// </summary>
+    /// <summary>
+    /// Returns a copy of this settings object with
+    /// <see cref="UseLegacyBoundaryLayerInitialization"/> forced to true.
+    /// Used by the Double facade to force the BL-init algorithm onto the
+    /// full Fortran-ported chain, which produces a physically correct seed
+    /// on all airfoils. The non-legacy branch is a historical shortcut that
+    /// doesn't converge past α ≥ 4° cambered (D5 finding).
+    /// Other settings (including precision knobs like
+    /// UseLegacyPanelingPrecision) are preserved as-is so the caller can
+    /// still select between REAL*4 parity arithmetic and double arithmetic.
+    /// </summary>
+    public AnalysisSettings WithLegacyBlInitAlgorithm()
+    {
+        if (UseLegacyBoundaryLayerInitialization) return this;
+
+        return new AnalysisSettings(
+            panelCount: PanelCount,
+            freestreamVelocity: FreestreamVelocity,
+            machNumber: MachNumber,
+            reynoldsNumber: ReynoldsNumber,
+            paneling: Paneling,
+            transitionReynoldsTheta: TransitionReynoldsTheta,
+            criticalAmplificationFactor: CriticalAmplificationFactor,
+            viscousSolverMode: ViscousSolverMode,
+            forcedTransitionUpper: ForcedTransitionUpper,
+            forcedTransitionLower: ForcedTransitionLower,
+            useExtendedWake: UseExtendedWake,
+            useModernTransitionCorrections: UseModernTransitionCorrections,
+            maxViscousIterations: MaxViscousIterations,
+            viscousConvergenceTolerance: ViscousConvergenceTolerance,
+            nCritUpper: NCritUpper,
+            nCritLower: NCritLower,
+            usePostStallExtrapolation: UsePostStallExtrapolation,
+            useLegacyBoundaryLayerInitialization: true,
+            useLegacyWakeSourceKernelPrecision: UseLegacyWakeSourceKernelPrecision,
+            useLegacyStreamfunctionKernelPrecision: UseLegacyStreamfunctionKernelPrecision,
+            useLegacyPanelingPrecision: UseLegacyPanelingPrecision,
+            wakeStationMultiplier: WakeStationMultiplier);
+    }
+
+    public AnalysisSettings WithDoubleTreeDefaultsIfUnset()
+    {
+        // Only upgrade when all three Newton knobs look like untouched
+        // class defaults — "caller used new AnalysisSettings() and never
+        // customized Newton parameters." Any deliberate setting (even one
+        // that happens to equal the class default) is respected as-is
+        // to avoid surprising callers that pass explicit settings.
+        bool iterIsDefault = MaxViscousIterations == 50;
+        bool tolIsDefault = ViscousConvergenceTolerance == 1e-6;
+        bool modeIsDefault = ViscousSolverMode == ViscousSolverMode.TrustRegion;
+        if (!iterIsDefault || !tolIsDefault || !modeIsDefault) return this;
+
+        return new AnalysisSettings(
+            panelCount: PanelCount,
+            freestreamVelocity: FreestreamVelocity,
+            machNumber: MachNumber,
+            reynoldsNumber: ReynoldsNumber,
+            paneling: Paneling,
+            transitionReynoldsTheta: TransitionReynoldsTheta,
+            criticalAmplificationFactor: CriticalAmplificationFactor,
+            viscousSolverMode: ViscousSolverMode.XFoilRelaxation,
+            forcedTransitionUpper: ForcedTransitionUpper,
+            forcedTransitionLower: ForcedTransitionLower,
+            useExtendedWake: UseExtendedWake,
+            useModernTransitionCorrections: UseModernTransitionCorrections,
+            maxViscousIterations: DoubleTreeDefaultMaxIterations,
+            viscousConvergenceTolerance: DoubleTreeDefaultConvergenceTolerance,
+            nCritUpper: NCritUpper,
+            nCritLower: NCritLower,
+            usePostStallExtrapolation: UsePostStallExtrapolation,
+            useLegacyBoundaryLayerInitialization: UseLegacyBoundaryLayerInitialization,
+            useLegacyWakeSourceKernelPrecision: UseLegacyWakeSourceKernelPrecision,
+            useLegacyStreamfunctionKernelPrecision: UseLegacyStreamfunctionKernelPrecision,
+            useLegacyPanelingPrecision: UseLegacyPanelingPrecision,
+            wakeStationMultiplier: WakeStationMultiplier);
+    }
 }

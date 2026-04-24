@@ -587,10 +587,15 @@ public static class ViscousSolverEngine
             // To match Fortran, loop iH = 1..NBL-1 reading THET[iH..NBL-1] which is NBL values.
             
 
-            if (settings.UseLegacyBoundaryLayerInitialization && iter > 0)
+            // D3 fix continuation: the per-iter Remarch stabilizes the BL
+            // state between Newton steps. Without it, transition/wake
+            // indices ITRAN/IBLTE can drift away from the updated (θ,δ*,Cτ)
+            // field, and the trust-region Newton pinches rlx to zero while
+            // residuals stay at ~1e-2. Running Remarch every iter (same as
+            // the parity path) removes that decoupling. Legacy path still
+            // exercises the same code; only modern mode gains this step.
+            if (iter > 0)
             {
-                // Pre-MRCHDU BL state dump (post-UPDATE)
-                
                 RemarchBoundaryLayerLegacyDirect(
                     blState,
                     settings,
@@ -668,7 +673,7 @@ public static class ViscousSolverEngine
             BlockTridiagonalSolver.Solve(
                 newtonSystem,
                 vaccel: 0.01,
-                useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                useLegacyPrecision: false);
 
             // Post-BLSOLV additive checksum
             
@@ -750,7 +755,7 @@ public static class ViscousSolverEngine
                 currentSpeeds,
                 panel,
                 n,
-                useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization
+                useLegacyPrecision: false
                     || inviscidState.UseLegacyKernelPrecision
                     || inviscidState.UseLegacyPanelingPrecision);
             int rawNewIsp = newIsp;
@@ -780,7 +785,7 @@ public static class ViscousSolverEngine
                     n,
                     nWake,
                     wakeSeed,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization || inviscidState.UseLegacyPanelingPrecision,
+                    useLegacyPrecision: false || inviscidState.UseLegacyPanelingPrecision,
                     initializeUedg: false);
 
                 StagnationPointTracker.MoveStagnationPoint(
@@ -812,7 +817,7 @@ public static class ViscousSolverEngine
                     n,
                     nWake,
                     wakeSeed,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization || inviscidState.UseLegacyPanelingPrecision,
+                    useLegacyPrecision: false || inviscidState.UseLegacyPanelingPrecision,
                     initializeUedg: false);
                 sst = newSst;
             }
@@ -849,7 +854,7 @@ public static class ViscousSolverEngine
             // Pass pre-STMOVE qvis in legacy mode so CLCALC matches Fortran ordering
             // (QVFUE→GAMQV→STMOVE→CLCALC uses pre-STMOVE QVIS).
             double cl = ComputeViscousCL(blState, panel, inviscidState, alphaRadians, qinf, isp, n,
-                useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                useLegacyPrecision: false,
                 overrideQvis: preStmoveQvis);
             if (settings.UseLegacyBoundaryLayerInitialization)
             {
@@ -898,7 +903,7 @@ public static class ViscousSolverEngine
         double finalCL = settings.UseLegacyBoundaryLayerInitialization
             ? legacyIncrementalCl
             : ComputeViscousCL(blState, panel, inviscidState, alphaRadians, qinf, isp, n,
-                useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                useLegacyPrecision: false);
         double finalCM = ComputeViscousCM(blState, panel, inviscidState, alphaRadians, qinf, isp, n);
 
         // Use DragCalculator for proper drag decomposition
@@ -907,7 +912,7 @@ public static class ViscousSolverEngine
             settings.MachNumber, teGap,
             settings.UseExtendedWake,
             useLockWaveDrag: false,
-            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+            useLegacyPrecision: false);
 
         // Handle non-convergence with optional post-stall extrapolation
         if (!converged && settings.UsePostStallExtrapolation)
@@ -1665,7 +1670,7 @@ public static class ViscousSolverEngine
             qinv,
             panel,
             n,
-            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization
+            useLegacyPrecision: false
                 || inviscidState.UseLegacyKernelPrecision
                 || inviscidState.UseLegacyPanelingPrecision);
         isp = Math.Max(1, Math.Min(n - 2, isp));
@@ -1697,7 +1702,7 @@ public static class ViscousSolverEngine
             n,
             nWake,
             wakeSeed,
-            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization || inviscidState.UseLegacyPanelingPrecision);
+            useLegacyPrecision: false || inviscidState.UseLegacyPanelingPrecision);
 
         // Fortran XICALC computes WGAP from the BL arc-length (XSSI) arrays
         // using a cubic decay: WGAP(IW) = ANTE*(AA+BB*ZN)*ZN^2 where
@@ -1737,10 +1742,11 @@ public static class ViscousSolverEngine
             out double reybl, out double reybl_re, out double reybl_ms,
             settings.UseLegacyBoundaryLayerInitialization);
 
-        if (settings.UseLegacyBoundaryLayerInitialization)
+        // D3 fix (see ViscousSolverEngine.cs for rationale): run MRCHUE/
+        // MRCHDU unconditionally so the modern-init path starts with a
+        // physical transition point instead of ITRAN = IBLTE. Parity
+        // (legacy flag = true) behavior is unchanged.
         {
-            // Dump post-MRCHUE state (before MRCHDU, which runs at each Newton iter)
-            
             // Fortran SETBL (xbl.f line 116): MRCHDU re-solves ALL stations
             // after MRCHUE, producing the definitive initialization state.
             RemarchBoundaryLayerLegacyDirect(
@@ -2916,18 +2922,8 @@ public static class ViscousSolverEngine
                 if (blState.ITRAN[side] < 2) blState.ITRAN[side] = 2;
             }
 
-            if (!settings.UseLegacyBoundaryLayerInitialization)
-            {
-                // The default managed seed keeps the older constant-Ctau
-                // post-transition initialization. The legacy parity path leaves
-                // the downstream region to the single MRCHDU-style remarch so
-                // we do not stack a second competing turbulent seed pass on top
-                // of the classic sequence.
-                for (int ibl = blState.ITRAN[side]; ibl <= blState.IBLTE[side]; ibl++)
-                {
-                    blState.CTAU[ibl, side] = 0.03;
-                }
-            }
+            // D5 — removed: constant-Cτ post-transition shortcut. See
+            // ViscousSolverEngine.cs for rationale.
 
         }
     }
@@ -3157,13 +3153,15 @@ public static class ViscousSolverEngine
             // carried state from the previous station did not need clamping.
             // Removed for parity mode; ApplySeedDslim below runs inside the
             // Newton loop at line 4402 which is correct.
+            // D5 — removed: modern-only pre-Newton DSLIM clamp.
+            //   dstar = Math.Max(dstar - wakeGap, hklim * theta) + wakeGap
+            // The clamp was applied before the Newton iteration began on the
+            // non-legacy path, but the real DSLIM runs inside the loop (after
+            // delta application, matching Fortran xbl.f:1975). Pre-clamping
+            // introduced a round-trip numerical inconsistency on wake stations
+            // and had no stabilization benefit on attached stations.
             double hklim = wake ? 1.00005 : 1.02;
-            if (!settings.UseLegacyBoundaryLayerInitialization)
-            {
-                // Keep the pre-entry clamp only on the modern (non-parity) path
-                // where DSLIM precision is not critical.
-                dstar = Math.Max(dstar - wakeGap, hklim * theta) + wakeGap;
-            }
+            _ = hklim;  // retained for future in-loop use; remove if we drop DSLIM entirely
             // Track pre-update state for MRCHUE COM carry
             double mrchuePrevT = theta;
             double mrchuePrevD = dstar;
@@ -3241,7 +3239,7 @@ public static class ViscousSolverEngine
                         // alongside DW2, not the stored total wake DSI.
                         d2: wakeStrippedDstar,
                         dw2: wakeGap,
-                        useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                        useLegacyPrecision: false);
                     residual = teResult.Residual;
                     vs2 = teResult.VS2;
 
@@ -3250,7 +3248,7 @@ public static class ViscousSolverEngine
                         tkbl,
                         qinfbl,
                         tkbl_ms,
-                        useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                        useLegacyPrecision: false);
                     u2Uei = currentU2Uei;
                     var currentKinematic = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                         currentU2,
@@ -3349,7 +3347,7 @@ public static class ViscousSolverEngine
                         reybl,
                         reybl_re,
                         reybl_ms,
-                        useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                        useLegacyPrecision: false,
                         station1KinematicOverride: settings.UseLegacyBoundaryLayerInitialization
                             ? blState.LegacyKinematic[ibm, side]
                             : null,
@@ -3659,8 +3657,10 @@ public static class ViscousSolverEngine
             // iter's PRE-delta state inside the loop, but T/D/U stored were
             // POST-delta — causing a mismatch that propagates as wrong COM1
             // at next station's Newton.
+            // D5 — un-gated: MRCHUE failed-Newton extrapolation salvage runs
+            // in both paths. See ViscousSolverEngine.cs for rationale.
             bool convergedFinalNewton = (double)lastDmaxForExtrapolation <= (double)seedTolerance;
-            if (settings.UseLegacyBoundaryLayerInitialization && !convergedFinalNewton)
+            if (!convergedFinalNewton)
             {
                 
                 
@@ -3931,13 +3931,13 @@ public static class ViscousSolverEngine
                     tkbl,
                     qinfbl,
                     tkbl_ms,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                    useLegacyPrecision: false);
                 var (u2, _, _) = BoundaryLayerSystemAssembler.ConvertToCompressible(
                     uei2,
                     tkbl,
                     qinfbl,
                     tkbl_ms,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                    useLegacyPrecision: false);
                 
                 // Fortran TRCHEK uses COM1.T1/D1 from the LAST Newton iterate at
                 // the upstream station, NOT the extrapolated values stored in THET/DSTR.
@@ -4059,7 +4059,7 @@ public static class ViscousSolverEngine
                     reybl,
                     reybl_re,
                     reybl_ms,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                    useLegacyPrecision: false,
                     station1KinematicOverride: settings.UseLegacyBoundaryLayerInitialization
                         ? blState.LegacyKinematic[ibl - 1, side]
                         : null,
@@ -4118,7 +4118,7 @@ public static class ViscousSolverEngine
                     reybl,
                     reybl_re,
                     reybl_ms,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                    useLegacyPrecision: false,
                     station1KinematicOverride: settings.UseLegacyBoundaryLayerInitialization
                         ? blState.LegacyKinematic[ibl - 1, side]
                         : null,
@@ -4355,7 +4355,7 @@ public static class ViscousSolverEngine
                         tkbl,
                         qinfbl,
                         tkbl_ms,
-                        useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                        useLegacyPrecision: false);
                     double hk1 = blState.LegacyKinematic[ibl - 1, side]?.HK2
                         ?? BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                             u1ForHk1,
@@ -4371,7 +4371,7 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            useLegacyPrecision: false,
                             destination: GetEngineKinematicScratchC()).HK2;
                     double inverseTargetHkRaw = LegacyPrecisionMath.Add(hk1, inverseTargetHkDelta, useLegacySeedPrecision);
                     inverseTargetHk = LegacyPrecisionMath.Max(inverseTargetHkRaw, hmax, useLegacySeedPrecision);
@@ -4937,7 +4937,7 @@ public static class ViscousSolverEngine
                     solver,
                     matrix,
                     rhs,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                    useLegacyPrecision: false);
             }
             catch (InvalidOperationException)
             {
@@ -5142,7 +5142,7 @@ public static class ViscousSolverEngine
                 gm1, rstbl, rstbl_ms,
                 GetHvRat(settings.UseLegacyBoundaryLayerInitialization),
                 reybl, reybl_re, reybl_ms,
-                useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                useLegacyPrecision: false,
                 station1KinematicOverride: settings.UseLegacyBoundaryLayerInitialization
                     ? blState.LegacyKinematic[ibm, side]
                     : null,
@@ -5176,7 +5176,7 @@ public static class ViscousSolverEngine
             try
             {
                 delta = SolveSeedLinearSystem(solver, matrix, rhs,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                    useLegacyPrecision: false);
             }
             catch (InvalidOperationException)
             {
@@ -5483,7 +5483,7 @@ public static class ViscousSolverEngine
                     solver,
                     matrix,
                     rhs,
-                    useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                    useLegacyPrecision: false);
             }
             catch (InvalidOperationException)
             {
@@ -5826,7 +5826,7 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            useLegacyPrecision: false,
                             destination: GetEngineKinematicScratchA());
                         double rt1 = transitionKinematic1.RT2;
                         double hk1 = Math.Max(transitionKinematic1.HK2, 1.05);
@@ -5845,7 +5845,7 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            useLegacyPrecision: false,
                             destination: GetEngineKinematicScratchB());
                         double rt2 = transitionKinematic2.RT2;
                         double hk2 = Math.Max(transitionKinematic2.HK2, 1.05);
@@ -5941,7 +5941,7 @@ public static class ViscousSolverEngine
                             // displacement without WGAP and supply DW2 separately.
                             d2: wakeStrippedDstar,
                             dw2: wakeGap,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                            useLegacyPrecision: false);
                         residual = teResult.Residual;
                         vs2 = teResult.VS2;
 
@@ -5950,7 +5950,7 @@ public static class ViscousSolverEngine
                             tkbl,
                             qinfbl,
                             tkbl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                            useLegacyPrecision: false);
                         var currentKinematic = BoundaryLayerSystemAssembler.ComputeKinematicParameters(
                             currentU2,
                             theta,
@@ -6041,7 +6041,7 @@ public static class ViscousSolverEngine
                             hstinv, hstinv_ms,
                             gm1, rstbl, rstbl_ms,
                             GetHvRat(settings.UseLegacyBoundaryLayerInitialization), reybl, reybl_re, reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            useLegacyPrecision: false,
                             station1KinematicOverride: settings.UseLegacyBoundaryLayerInitialization
                                 ? blState.LegacyKinematic[ibm, side]
                                 : null,
@@ -6586,7 +6586,7 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            useLegacyPrecision: false,
                             destination: GetEngineKinematicScratchA());
                         double rt1 = transitionKinematic1.RT2;
                         double hk1 = Math.Max(transitionKinematic1.HK2, 1.05);
@@ -6605,7 +6605,7 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            useLegacyPrecision: false,
                             destination: GetEngineKinematicScratchB());
                         double rt2 = transitionKinematic2.RT2;
                         double hk2 = Math.Max(transitionKinematic2.HK2, 1.05);
@@ -6932,7 +6932,7 @@ public static class ViscousSolverEngine
                         // portion travels in DW2 just like the Fortran BLPRV path.
                         d2: wakeStrippedDstar,
                         dw2: wakeGap,
-                        useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                        useLegacyPrecision: false);
                     residual = teResult.Residual;
                     vs2 = teResult.VS2;
                 }
@@ -6962,7 +6962,7 @@ public static class ViscousSolverEngine
                         hstinv, hstinv_ms,
                         gm1, rstbl, rstbl_ms,
                         GetHvRat(settings.UseLegacyBoundaryLayerInitialization), reybl, reybl_re, reybl_ms,
-                        useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                        useLegacyPrecision: false,
                         station1KinematicOverride: settings.UseLegacyBoundaryLayerInitialization
                             ? blState.LegacyKinematic[ibm, side]
                             : null,
@@ -7068,7 +7068,7 @@ public static class ViscousSolverEngine
                             tkbl,
                             qinfbl,
                             tkbl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
+                            useLegacyPrecision: false);
                         // BLKIN expects the wake displacement without the WGAP
                         // contribution; the total DSTR is carried separately in
                         // the seed march state.
@@ -7086,7 +7086,7 @@ public static class ViscousSolverEngine
                             reybl,
                             reybl_re,
                             reybl_ms,
-                            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+                            useLegacyPrecision: false,
                             destination: GetEngineKinematicScratchA());
 
                         double konst = 0.03 * (xsi - xPrev) / Math.Max(prevTheta, 1e-30);
@@ -7224,7 +7224,7 @@ public static class ViscousSolverEngine
             hstinv, hstinv_ms,
             gm1, rstbl, rstbl_ms,
             GetHvRat(settings.UseLegacyBoundaryLayerInitialization), reybl, reybl_re, reybl_ms,
-            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+            useLegacyPrecision: false,
             traceSide: traceSide,
             traceStation: traceStation,
             traceIteration: traceIteration,
@@ -7294,7 +7294,7 @@ public static class ViscousSolverEngine
             hstinv, hstinv_ms,
             gm1, rstbl, rstbl_ms,
             GetHvRat(settings.UseLegacyBoundaryLayerInitialization), reybl, reybl_re, reybl_ms,
-            useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization,
+            useLegacyPrecision: false,
             // Parity mode must thread the carried COM1 BLKIN/BLVAR snapshot
             // through helper wrappers too; otherwise the wrapper silently
             // reintroduces the same input drift the direct call sites avoided.

@@ -4,10 +4,13 @@ using XFoil.Solver.Models;
 namespace XFoil.Core.Tests;
 
 /// <summary>
-/// V1 — Four-solver comparison runner. Given a common airfoil/α/Re
-/// grid, runs all four viscous paths (Parity, Double, Modern, MSES/
-/// thesis-closure) and returns CL/CD/CM for each on every row.
-///
+/// V1 — Multi-branch comparison runner. Given a common airfoil/α/Re
+/// grid, runs five configurations and returns CL/CD/CM for each:
+///   Parity          = Float assembly + legacy flags (canonical bit-exact)
+///   Double          = Double assembly + legacy flags (honest precision twin of Parity)
+///   ModernDouble    = Double assembly + modern flags (simplified init pipeline)
+///   ModernAssembly  = Modern assembly + modern flags (Double + multi-start rescue)
+///   ThesisClosure   = ThesisClosureSolver assembly (linear-vortex + thesis BL)
 /// Used by V2/V3/V4 to produce the WT-comparison markdown tables.
 /// </summary>
 public static class FourSolverComparisonRunner
@@ -17,8 +20,11 @@ public static class FourSolverComparisonRunner
 
     public readonly record struct ComparisonRow(
         string Airfoil, double AlphaDeg, double Reynolds, double Mach,
-        SolverResult Parity, SolverResult Double, SolverResult Modern,
-        SolverResult Mses);
+        SolverResult Parity,
+        SolverResult Double,
+        SolverResult ModernDouble,
+        SolverResult ModernAssembly,
+        SolverResult ThesisClosure);
 
     public readonly record struct Case(
         string Naca, double AlphaDeg, double Reynolds, double Mach = 0.0);
@@ -34,17 +40,17 @@ public static class FourSolverComparisonRunner
         {
             var geom = gen.Generate4DigitClassic(c.Naca, pointCount: pointCount);
 
-            // Float-parity path matches Fortran REAL*4 behavior and only
-            // converges when invoked with the legacy-mode flags below —
-            // same configuration used by the 4455-case ParallelPolarCompare
-            // parity sweep. Modern defaults give it a Newton init it can't
-            // recover from → silent NaN.
-            var paritySettings = new AnalysisSettings(
+            // Legacy-flags configuration — matches the 4455-case
+            // ParallelPolarCompare parity sweep. Parity and Double
+            // (the honest precision twin) use this; only accumulator
+            // precision (REAL*4 vs double) differs between them.
+            var legacySettings = new AnalysisSettings(
                 panelCount: pointCount - 1,
                 freestreamVelocity: 1.0,
                 machNumber: c.Mach,
                 reynoldsNumber: c.Reynolds,
                 criticalAmplificationFactor: nCrit,
+                viscousSolverMode: ViscousSolverMode.TrustRegion,
                 useExtendedWake: false,
                 useLegacyBoundaryLayerInitialization: true,
                 useLegacyPanelingPrecision: true,
@@ -54,9 +60,10 @@ public static class FourSolverComparisonRunner
                 maxViscousIterations: 80,
                 viscousConvergenceTolerance: 1e-4);
 
-            // Double/Modern/ThesisClosure run against their own canonical
-            // configuration (modern defaults + panel count to match the
-            // airfoil generator output).
+            // Modern-flags configuration — activates the simplified
+            // init pipeline (constant-Cτ post-transition, skipped MRCHUE
+            // extrapolation, pre-entry DSLIM clamp). Used for
+            // ModernDouble, ModernAssembly, and ThesisClosure.
             var modernSettings = new AnalysisSettings(
                 panelCount: pointCount,
                 freestreamVelocity: 1.0,
@@ -67,19 +74,22 @@ public static class FourSolverComparisonRunner
 
             var parity = RunSafely(() =>
                 new XFoil.Solver.Services.AirfoilAnalysisService()
-                    .AnalyzeViscous(geom, c.AlphaDeg, paritySettings));
-            var doubleTree = RunSafely(() =>
+                    .AnalyzeViscous(geom, c.AlphaDeg, legacySettings));
+            var doubleLegacy = RunSafely(() =>
+                new XFoil.Solver.Double.Services.AirfoilAnalysisService()
+                    .AnalyzeViscous(geom, c.AlphaDeg, legacySettings));
+            var modernDouble = RunSafely(() =>
                 new XFoil.Solver.Double.Services.AirfoilAnalysisService()
                     .AnalyzeViscous(geom, c.AlphaDeg, modernSettings));
-            var modern = RunSafely(() =>
+            var modernAssembly = RunSafely(() =>
                 new XFoil.Solver.Modern.Services.AirfoilAnalysisService()
                     .AnalyzeViscous(geom, c.AlphaDeg, modernSettings));
-            var mses = RunSafely(() =>
+            var thesisClosure = RunSafely(() =>
                 new ThesisClosureAnalysisService().AnalyzeViscous(geom, c.AlphaDeg, modernSettings));
 
             results.Add(new ComparisonRow(
                 c.Naca, c.AlphaDeg, c.Reynolds, c.Mach,
-                parity, doubleTree, modern, mses));
+                parity, doubleLegacy, modernDouble, modernAssembly, thesisClosure));
         }
         return results.ToArray();
     }
@@ -118,31 +128,33 @@ public static class FourSolverComparisonRunner
         if (wt != null && wt.Length != rows.Length)
             throw new System.ArgumentException("WT length mismatch");
 
-        sb.AppendLine("| Airfoil | α° | Re | Parity CL | Double CL | Modern CL | Mses CL"
+        sb.AppendLine("| Airfoil | α° | Re | Float parity CL | Double CL | Modern Double CL | Modern asm CL | ThesisClosure CL"
             + (wt != null ? " | WT CL" : "") + " |");
-        sb.AppendLine("|---------|-----|-----|-----------|-----------|-----------|---------"
+        sb.AppendLine("|---------|-----|-----|-----------------|-----------|------------------|---------------|-----------------"
             + (wt != null ? "|--------" : "") + "|");
         for (int i = 0; i < rows.Length; i++)
         {
             var r = rows[i];
             sb.Append($"| {r.Airfoil} | {r.AlphaDeg,5:F1} | {r.Reynolds:0.0e0} | "
                 + $"{Fmt(r.Parity, r.Parity.CL)} | {Fmt(r.Double, r.Double.CL)} | "
-                + $"{Fmt(r.Modern, r.Modern.CL)} | {Fmt(r.Mses, r.Mses.CL)}");
+                + $"{Fmt(r.ModernDouble, r.ModernDouble.CL)} | {Fmt(r.ModernAssembly, r.ModernAssembly.CL)} | "
+                + $"{Fmt(r.ThesisClosure, r.ThesisClosure.CL)}");
             if (wt != null)
                 sb.Append($" | {wt[i].CL:F3}");
             sb.AppendLine(" |");
         }
         sb.AppendLine();
-        sb.AppendLine("| Airfoil | α° | Re | Parity CD | Double CD | Modern CD | Mses CD"
+        sb.AppendLine("| Airfoil | α° | Re | Float parity CD | Double CD | Modern Double CD | Modern asm CD | ThesisClosure CD"
             + (wt != null ? " | WT CD" : "") + " |");
-        sb.AppendLine("|---------|-----|-----|-----------|-----------|-----------|---------"
+        sb.AppendLine("|---------|-----|-----|-----------------|-----------|------------------|---------------|-----------------"
             + (wt != null ? "|--------" : "") + "|");
         for (int i = 0; i < rows.Length; i++)
         {
             var r = rows[i];
             sb.Append($"| {r.Airfoil} | {r.AlphaDeg,5:F1} | {r.Reynolds:0.0e0} | "
                 + $"{Fmt(r.Parity, r.Parity.CD, 4)} | {Fmt(r.Double, r.Double.CD, 4)} | "
-                + $"{Fmt(r.Modern, r.Modern.CD, 4)} | {Fmt(r.Mses, r.Mses.CD, 4)}");
+                + $"{Fmt(r.ModernDouble, r.ModernDouble.CD, 4)} | {Fmt(r.ModernAssembly, r.ModernAssembly.CD, 4)} | "
+                + $"{Fmt(r.ThesisClosure, r.ThesisClosure.CD, 4)}");
             if (wt != null)
                 sb.Append($" | {wt[i].CD:F4}");
             sb.AppendLine(" |");

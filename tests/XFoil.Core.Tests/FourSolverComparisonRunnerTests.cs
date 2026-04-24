@@ -21,7 +21,7 @@ public class FourSolverComparisonRunnerTests
         // must give ~0 CL. Solvers that throw/NaN are captured as
         // NaN — which is still valuable data for the validation
         // table (tells us the solver failed on this case).
-        foreach (var s in new[] { r.Parity, r.Double, r.Modern, r.Mses })
+        foreach (var s in new[] { r.Parity, r.Double, r.ModernDouble, r.ModernAssembly, r.ThesisClosure })
         {
             if (double.IsFinite(s.CL))
                 Assert.InRange(s.CL, -0.05, 0.05);
@@ -52,6 +52,7 @@ public class FourSolverComparisonRunnerTests
                 new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true),
                 new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true),
                 new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true),
+                new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true),
                 new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true)),
         };
         var md = FourSolverComparisonRunner.ToMarkdownTable(rows);
@@ -67,6 +68,7 @@ public class FourSolverComparisonRunnerTests
         {
             new FourSolverComparisonRunner.ComparisonRow(
                 "0012", 4.0, 3_000_000, 0.0,
+                new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true),
                 new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true),
                 new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true),
                 new FourSolverComparisonRunner.SolverResult(0.48, 0.007, -0.01, true),
@@ -91,7 +93,7 @@ public class FourSolverComparisonRunnerTests
         };
         var rows = FourSolverComparisonRunner.Run(cases);
         var r = rows[0];
-        Assert.True(r.Mses.Converged, "MSES/thesis-closure should converge");
-        Assert.InRange(r.Mses.CL, 0.3, 0.6);
+        Assert.True(r.ThesisClosure.Converged, "ThesisClosure should converge");
+        Assert.InRange(r.ThesisClosure.CL, 0.3, 0.6);
     }
 }

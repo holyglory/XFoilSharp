@@ -58,7 +58,7 @@ public class V3Naca4412WtValidationTests
         // At least MSES should converge at α=4° (easy cambered case).
         var r4 = rows[2];
         Assert.True(
-            double.IsFinite(r4.Mses.CL),
+            double.IsFinite(r4.ThesisClosure.CL),
             "MSES should produce a finite CL on NACA 4412 α=4°");
     }
 

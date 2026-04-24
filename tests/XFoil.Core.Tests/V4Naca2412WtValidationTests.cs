@@ -56,7 +56,7 @@ public class V4Naca2412WtValidationTests
         System.IO.File.WriteAllText(outPath, header.ToString() + md);
 
         var r4 = rows[2];
-        Assert.True(double.IsFinite(r4.Mses.CL),
+        Assert.True(double.IsFinite(r4.ThesisClosure.CL),
             "MSES should converge on NACA 2412 α=4°");
     }
 

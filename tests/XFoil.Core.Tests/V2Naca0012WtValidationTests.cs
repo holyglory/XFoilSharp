@@ -66,8 +66,8 @@ public class V2Naca0012WtValidationTests
         Assert.True(
             double.IsFinite(r4.Parity.CL)
             || double.IsFinite(r4.Double.CL)
-            || double.IsFinite(r4.Modern.CL)
-            || double.IsFinite(r4.Mses.CL),
+            || double.IsFinite(r4.ModernAssembly.CL)
+            || double.IsFinite(r4.ThesisClosure.CL),
             "At least one solver should produce a finite CL on NACA 0012 α=4°");
     }
 

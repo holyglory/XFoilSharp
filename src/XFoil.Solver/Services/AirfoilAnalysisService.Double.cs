@@ -74,6 +74,21 @@ public class AirfoilAnalysisService : XFoil.Solver.Services.IAirfoilAnalysisServ
 
         settings ??= new AnalysisSettings();
 
+        // D2: Double tree gets its own Newton budget — 250 iters / 1e-5 tol
+        // (vs Float's 50 / 1e-6) — to converge cambered cases where the
+        // double-precision Newton is making progress but times out just
+        // below tolerance. Only upgrades if the caller left the Float-tree
+        // defaults in place; explicit overrides are respected.
+        settings = settings.WithDoubleTreeDefaultsIfUnset();
+
+        // D5: Double tree always uses the full Fortran-ported BL init
+        // pipeline (MRCHUE + MRCHDU with extrapolation salvage). The
+        // non-legacy shortcut branch was a historical simplification that
+        // stranded the Newton on cambered airfoils. Precision routing
+        // inside the Double engine is hard-coded to double regardless of
+        // this flag (see D5 sed pass in ViscousSolverEngine.Double.cs).
+        settings = settings.WithLegacyBlInitAlgorithm();
+
         var coords = ExtractCoordinates(geometry);
         double alphaRadians;
         if (settings.UseLegacyBoundaryLayerInitialization)

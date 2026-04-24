@@ -684,10 +684,15 @@ public static class ViscousSolverEngine
             // To match Fortran, loop iH = 1..NBL-1 reading THET[iH..NBL-1] which is NBL values.
             
 
-            if (settings.UseLegacyBoundaryLayerInitialization && iter > 0)
+            // D3 fix continuation: per-iter Remarch runs in both paths for
+            // the same reason it runs in the parity path — keeps ITRAN/
+            // IBLTE consistent with the Newton-updated (θ, δ*, Cτ) field.
+            // Removing the legacy-flag gate here lets modern-mode Newton
+            // stabilize between iterations the same way parity-mode does.
+            // The parity path (useLegacy=true) already called this and
+            // continues to do so — unchanged for that path.
+            if (iter > 0)
             {
-                // Pre-MRCHDU BL state dump (post-UPDATE)
-                
                 RemarchBoundaryLayerLegacyDirect(
                     blState,
                     settings,
@@ -1836,10 +1841,19 @@ public static class ViscousSolverEngine
             out double reybl, out double reybl_re, out double reybl_ms,
             settings.UseLegacyBoundaryLayerInitialization);
 
-        if (settings.UseLegacyBoundaryLayerInitialization)
+        // D3 fix: run MRCHUE/MRCHDU unconditionally to place transition.
+        // Before this change, the modern-init path skipped the BL re-march,
+        // which left ITRAN[side] pinned at IBLTE (Thwaites init default,
+        // transition at TE). The Newton-internal transition search cannot
+        // recover from a TE-pinned start on cambered airfoils → Xtr → 1.0
+        // → BL fully laminar → inviscid/viscous residuals explode to
+        // infinity. Running the Fortran-style Remarch once here gives the
+        // modern path a physical transition point, same as parity mode.
+        //
+        // Parity path (settings.UseLegacyBoundaryLayerInitialization=true)
+        // is untouched: it already ran Remarch and still does. Only the
+        // modern branch changes behavior.
         {
-            // Dump post-MRCHUE state (before MRCHDU, which runs at each Newton iter)
-            
             // Fortran SETBL (xbl.f line 116): MRCHDU re-solves ALL stations
             // after MRCHUE, producing the definitive initialization state.
             RemarchBoundaryLayerLegacyDirect(
@@ -3109,18 +3123,12 @@ public static class ViscousSolverEngine
                 if (blState.ITRAN[side] < 2) blState.ITRAN[side] = 2;
             }
 
-            if (!settings.UseLegacyBoundaryLayerInitialization)
-            {
-                // The default managed seed keeps the older constant-Ctau
-                // post-transition initialization. The legacy parity path leaves
-                // the downstream region to the single MRCHDU-style remarch so
-                // we do not stack a second competing turbulent seed pass on top
-                // of the classic sequence.
-                for (int ibl = blState.ITRAN[side]; ibl <= blState.IBLTE[side]; ibl++)
-                {
-                    blState.CTAU[ibl, side] = 0.03;
-                }
-            }
+            // D5 — removed: constant-Cτ post-transition shortcut. The managed
+            // path used to overwrite CTAU[ibl, side] = 0.03 for all post-
+            // transition stations when flag=false. That shortcut stacked a
+            // second competing turbulent seed pass on top of MRCHDU's output
+            // and corrupted the shear-lag profile. MRCHDU now sets CTAU
+            // physically in both paths.
 
         }
     }
@@ -3351,13 +3359,10 @@ public static class ViscousSolverEngine
             // carried state from the previous station did not need clamping.
             // Removed for parity mode; ApplySeedDslim below runs inside the
             // Newton loop at line 4402 which is correct.
+            // D5 — removed: modern-only pre-Newton DSLIM clamp. See
+            // ViscousSolverEngine.Double.cs for rationale.
             double hklim = wake ? 1.00005 : 1.02;
-            if (!settings.UseLegacyBoundaryLayerInitialization)
-            {
-                // Keep the pre-entry clamp only on the modern (non-parity) path
-                // where DSLIM precision is not critical.
-                dstar = Math.Max(dstar - wakeGap, hklim * theta) + wakeGap;
-            }
+            _ = hklim;
             // Track pre-update state for MRCHUE COM carry
             double mrchuePrevT = theta;
             double mrchuePrevD = dstar;
@@ -3853,8 +3858,13 @@ public static class ViscousSolverEngine
             // iter's PRE-delta state inside the loop, but T/D/U stored were
             // POST-delta — causing a mismatch that propagates as wrong COM1
             // at next station's Newton.
+            // D5 — un-gated: MRCHUE failed-Newton extrapolation salvage runs
+            // in both paths. The Fortran-ported salvage is load-bearing for
+            // Newton stability near separation; without it, one bad station
+            // corrupts the entire downstream march. No parity risk: legacy
+            // path already ran this and continues to.
             bool convergedFinalNewton = (float)lastDmaxForExtrapolation <= (float)seedTolerance;
-            if (settings.UseLegacyBoundaryLayerInitialization && !convergedFinalNewton)
+            if (!convergedFinalNewton)
             {
                 
                 
