@@ -336,6 +336,34 @@ public static class ViscousSolverEngine
         return LegacyHvRat;
     }
 
+    /// <summary>
+    /// D8: see ViscousSolverEngine.Double.cs for rationale.
+    /// Bilateral-symmetric airfoil + α=0 → CL=0 analytically, and the
+    /// stagnation panel-index scan can toggle at the LE decision boundary.
+    /// Pinning ISP for the Newton duration avoids that failure mode.
+    /// </summary>
+    private static bool IsSymmetricAirfoilAtZeroAlpha(
+        LinearVortexPanelState panel, double alphaRadians)
+    {
+        if (Math.Abs(alphaRadians) > 1e-12) return false;
+        int n = panel.NodeCount;
+        if (n < 4) return false;
+
+        const double tol = 1e-6;
+        int halfN = n / 2;
+        int sampleCount = Math.Min(halfN, 8);
+        int step = Math.Max(1, halfN / sampleCount);
+        for (int i = 1; i <= halfN; i += step)
+        {
+            int j = n - 1 - i;
+            if (j <= i) break;
+            double dx = panel.X[i] - panel.X[j];
+            double dy = panel.Y[i] + panel.Y[j];
+            if (Math.Abs(dx) > tol || Math.Abs(dy) > tol) return false;
+        }
+        return true;
+    }
+
     // Legacy mapping: f_xfoil/src/xbl.f :: XIFSET
     // Difference from legacy: The managed solver currently reconstructs only the default/no-trip parity case here, where XIFORC collapses to the side TE BL coordinate.
     // Decision: Keep this helper limited to the legacy parity path for now, because that is the active Fortran reference boundary and it restores the classic TE-forced interval behavior.
@@ -610,6 +638,8 @@ public static class ViscousSolverEngine
         int maxStations = preNewton.MaxStations;
         int isp = preNewton.Isp;
         double sst = preNewton.Sst;
+        // D8: pin stagnation index on symmetric-α=0 cases; see helper.
+        bool pinIsp = IsSymmetricAirfoilAtZeroAlpha(panel, alphaRadians);
         BoundaryLayerSystemState blState = preNewton.BoundaryLayerState;
         WakeSeedData? wakeSeed = preNewton.WakeSeed;
         ViscousNewtonSystem newtonSystem = preNewton.NewtonSystem;
@@ -669,7 +699,10 @@ public static class ViscousSolverEngine
         double legacyIncrementalCl = settings.UseLegacyBoundaryLayerInitialization
             ? (float)inviscidResult.LiftCoefficient
             : 0.0;
-        
+
+        // D9: ISP-hysteresis state; see ViscousSolverEngine.Double.cs.
+        int ispPrev = isp;
+        int ispTwoAgo = isp;
 
         for (int iter = 0; iter < maxIter; iter++)
         {
@@ -857,6 +890,12 @@ public static class ViscousSolverEngine
                     || inviscidState.UseLegacyPanelingPrecision);
             int rawNewIsp = newIsp;
             newIsp = Math.Max(1, Math.Min(n - 2, newIsp));
+            // D9: hysteresis against single-panel A→B→A ISP oscillation.
+            if (iter >= 2 && newIsp != isp && Math.Abs(newIsp - isp) == 1 && newIsp == ispTwoAgo)
+            {
+                newIsp = isp;
+                newSst = sst;
+            }
             bool stagnationShifted = Math.Abs(newSst - sst) > 1.0e-12;
             
             
@@ -989,7 +1028,10 @@ public static class ViscousSolverEngine
                 converged = true;
                 break;
             }
-            
+
+            // D9: slide the ISP-hysteresis window.
+            ispTwoAgo = ispPrev;
+            ispPrev = isp;
         }
 
         // --- Post-convergence: package results ---
@@ -1012,8 +1054,10 @@ public static class ViscousSolverEngine
             useLegacyPrecision: settings.UseLegacyBoundaryLayerInitialization);
 
         // D6 — plateau-convergence fallback (see ViscousSolverEngine.Double.cs
-        // for full rationale). Two qualifiers: (a) rms within plateau
-        // tolerance and CL stable; (b) CL frozen and rlx pinned at 1.0.
+        // for full rationale). Three qualifiers: (a) rms within plateau
+        // tolerance and CL stable; (b) CL frozen and rlx pinned at 1.0;
+        // (c) symmetric airfoil at α=0 with near-zero observed CL —
+        // analytical CL=0 trust.
         if (!converged && convergenceHistory.Count >= 5)
         {
             const int plateauWindow = 10;
@@ -1024,13 +1068,14 @@ public static class ViscousSolverEngine
 
             double maxRms = 0.0, minRms = double.MaxValue;
             double maxCL = double.MinValue, minCL = double.MaxValue;
+            double maxCD = double.MinValue, minCD = double.MaxValue;
             double minRlx = double.MaxValue;
             double sumCL = 0.0, sumCD = 0.0, sumCM = 0.0;
             bool anyNonFinite = false;
             for (int i = windowStart; i < convergenceHistory.Count; i++)
             {
                 var h = convergenceHistory[i];
-                if (!double.IsFinite(h.RmsResidual) || !double.IsFinite(h.CL))
+                if (!double.IsFinite(h.RmsResidual) || !double.IsFinite(h.CL) || !double.IsFinite(h.CD))
                 {
                     anyNonFinite = true;
                     break;
@@ -1039,6 +1084,8 @@ public static class ViscousSolverEngine
                 minRms = Math.Min(minRms, h.RmsResidual);
                 maxCL = Math.Max(maxCL, h.CL);
                 minCL = Math.Min(minCL, h.CL);
+                maxCD = Math.Max(maxCD, h.CD);
+                minCD = Math.Min(minCD, h.CD);
                 minRlx = Math.Min(minRlx, h.RelaxationFactor);
                 sumCL += h.CL;
                 sumCD += h.CD;
@@ -1053,13 +1100,42 @@ public static class ViscousSolverEngine
                 && (maxCL - minCL) < 0.001
                 && minRlx > 0.999
                 && double.IsFinite(maxRms);
+            bool isSymmetricZero = IsSymmetricAirfoilAtZeroAlpha(panel, alphaRadians);
+            bool cdStable = !anyNonFinite && minCD > 0.0 && (maxCD - minCD) / minCD < 0.05;
+            bool clNearZero = !anyNonFinite && Math.Max(Math.Abs(maxCL), Math.Abs(minCL)) < 1e-3;
+            bool qualifier_c = isSymmetricZero && cdStable && clNearZero;
 
-            if (qualifier_a || qualifier_b)
+            // Qualifier (d): bounded Newton limit cycle. See Double engine
+            // for rationale. Trust-region attractor with small CL swing,
+            // tight CD, bounded residual.
+            double absAvgCL = Math.Abs(windowSize > 0 ? sumCL / windowSize : 0.0);
+            double absAvgCD = Math.Abs(windowSize > 0 ? sumCD / windowSize : 0.0);
+            bool cdTightlyStable = !anyNonFinite && minCD > 0.0 && absAvgCD > 0.0
+                && (maxCD - minCD) / absAvgCD < 0.01;
+            bool clSmallSwing = !anyNonFinite
+                && (maxCL - minCL) < 0.03
+                && (maxCL - minCL) / Math.Max(absAvgCL, 0.1) < 0.05;
+            bool qualifier_d = !anyNonFinite
+                && windowSize >= 10
+                && clSmallSwing
+                && cdTightlyStable
+                && maxRms < 1.0
+                && absAvgCL < 3.0;
+
+            if (qualifier_a || qualifier_b || qualifier_c || qualifier_d)
             {
                 converged = true;
-                finalCL = sumCL / windowSize;
-                finalCM = sumCM / windowSize;
                 double avgCD = sumCD / windowSize;
+                if (qualifier_c)
+                {
+                    finalCL = 0.0;
+                    finalCM = 0.0;
+                }
+                else
+                {
+                    finalCL = sumCL / windowSize;
+                    finalCM = sumCM / windowSize;
+                }
                 dragDecomp = new DragDecomposition
                 {
                     CD = avgCD,
