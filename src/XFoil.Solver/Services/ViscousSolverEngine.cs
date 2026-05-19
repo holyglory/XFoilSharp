@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using XFoil.Core.Numerics;
 using XFoil.Solver.Models;
 using XFoil.Solver.Numerics;
@@ -404,8 +405,10 @@ public static class ViscousSolverEngine
         (double[] x, double[] y) geometry,
         AnalysisSettings settings,
         double alphaRadians,
-        TextWriter? debugWriter = null)
+        TextWriter? debugWriter = null,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         // Step 1: Run inviscid analysis to get baseline.
         // ThreadStatic pool eliminates per-case 500KB+ LOH churn (3 influence
         // matrices inside InviscidSolverState, plus the panel-state arrays).
@@ -429,7 +432,7 @@ public static class ViscousSolverEngine
 
         // Step 2: Run viscous coupling iteration
         return SolveViscousFromInviscid(
-            panel, inviscidState, inviscidResult, settings, alphaRadians, debugWriter);
+            panel, inviscidState, inviscidResult, settings, alphaRadians, debugWriter, cancellationToken: cancellationToken);
     }
 
     internal static PreNewtonSetupContext PrepareLegacyPreNewtonContext(
@@ -524,11 +527,12 @@ public static class ViscousSolverEngine
         AnalysisSettings settings,
         double alphaRadians,
         TextWriter? debugWriter = null,
-        ViscousBLSeed? blSeed = null)
+        ViscousBLSeed? blSeed = null,
+        CancellationToken cancellationToken = default)
     {
         return SolveViscousFromInviscidCapturing(
             panel, inviscidState, inviscidResult, settings, alphaRadians,
-            out _, debugWriter, blSeed);
+            out _, debugWriter, blSeed, cancellationToken);
     }
 
     /// <summary>
@@ -545,7 +549,8 @@ public static class ViscousSolverEngine
         double alphaRadians,
         out BoundaryLayerSystemState? finalBLState,
         TextWriter? debugWriter = null,
-        ViscousBLSeed? blSeed = null)
+        ViscousBLSeed? blSeed = null,
+        CancellationToken cancellationToken = default)
     {
         // B3 warm-start safety net: seeded Newton can drive ISP to the
         // trailing edge, producing a degenerate station distribution
@@ -560,7 +565,7 @@ public static class ViscousSolverEngine
             {
                 return SolveViscousFromInviscidCapturingImpl(
                     panel, inviscidState, inviscidResult, settings, alphaRadians,
-                    out finalBLState, debugWriter, blSeed);
+                    out finalBLState, debugWriter, blSeed, cancellationToken);
             }
             catch (System.IndexOutOfRangeException)
             {
@@ -588,7 +593,7 @@ public static class ViscousSolverEngine
         }
         return SolveViscousFromInviscidCapturingImpl(
             panel, inviscidState, inviscidResult, settings, alphaRadians,
-            out finalBLState, debugWriter, blSeed);
+            out finalBLState, debugWriter, blSeed, cancellationToken);
     }
 
     private static ViscousAnalysisResult SolveViscousFromInviscidCapturingImpl(
@@ -599,8 +604,10 @@ public static class ViscousSolverEngine
         double alphaRadians,
         out BoundaryLayerSystemState? finalBLState,
         TextWriter? debugWriter,
-        ViscousBLSeed? blSeed)
+        ViscousBLSeed? blSeed,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
 
         PreNewtonSetupContext preNewton = PreparePreNewtonSetupFromInviscid(
             panel,
@@ -706,6 +713,7 @@ public static class ViscousSolverEngine
 
         for (int iter = 0; iter < maxIter; iter++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             
             
             // The legacy initialization already performed the first remarch.

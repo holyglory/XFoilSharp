@@ -6,6 +6,8 @@
 // Adding overrides:
 //   public override TResult MethodName(args...) { /* algorithmic improvement */ }
 using System.Collections.Generic;
+using System;
+using System.Threading;
 using XFoil.Core.Models;
 using XFoil.Solver.Models;
 using XFoil.Solver.Services;
@@ -296,11 +298,35 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
         double alphaEndDegrees,
         double alphaStepDegrees,
         AnalysisSettings? settings = null)
+        => SweepViscousAlpha(
+            geometry,
+            alphaStartDegrees,
+            alphaEndDegrees,
+            alphaStepDegrees,
+            settings,
+            pointCompleted: null,
+            cancellationToken: default);
+
+    public override List<ViscousAnalysisResult> SweepViscousAlpha(
+        AirfoilGeometry geometry,
+        double alphaStartDegrees,
+        double alphaEndDegrees,
+        double alphaStepDegrees,
+        AnalysisSettings? settings,
+        Action<ViscousAnalysisResult>? pointCompleted,
+        CancellationToken cancellationToken)
     {
         var results = base.SweepViscousAlpha(
-            geometry, alphaStartDegrees, alphaEndDegrees, alphaStepDegrees, settings);
+            geometry,
+            alphaStartDegrees,
+            alphaEndDegrees,
+            alphaStepDegrees,
+            settings,
+            pointCompleted,
+            cancellationToken);
         for (int i = 0; i < results.Count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var r = results[i];
             double alpha = r.AngleOfAttackDegrees;
             bool isPhysical = PhysicalEnvelope.IsAirfoilResultPhysical(r);
@@ -340,6 +366,7 @@ public class AirfoilAnalysisService : XFoil.Solver.Double.Services.AirfoilAnalys
                         LowerTransition = rescued.LowerTransition,
                         AngleOfAttackDegrees = alpha,
                     };
+                    pointCompleted?.Invoke(results[i]);
                 }
                 catch { }
             }

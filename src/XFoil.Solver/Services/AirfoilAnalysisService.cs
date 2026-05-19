@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System;
+using System.Threading;
 using XFoil.Core.Models;
 using XFoil.Solver.Models;
 
@@ -114,6 +116,33 @@ public class AirfoilAnalysisService : IAirfoilAnalysisService
         var coords = ExtractCoordinates(geometry);
         return PolarSweepRunner.SweepAlpha(
             coords, settings, alphaStartDegrees, alphaEndDegrees, alphaStepDegrees);
+    }
+
+    public virtual List<ViscousAnalysisResult> SweepViscousAlpha(
+        AirfoilGeometry geometry,
+        double alphaStartDegrees,
+        double alphaEndDegrees,
+        double alphaStepDegrees,
+        AnalysisSettings? settings,
+        Action<ViscousAnalysisResult>? pointCompleted,
+        CancellationToken cancellationToken)
+    {
+        if (geometry is null)
+        {
+            throw new ArgumentNullException(nameof(geometry));
+        }
+
+        settings ??= new AnalysisSettings();
+
+        var coords = ExtractCoordinates(geometry);
+        return PolarSweepRunner.SweepAlpha(
+            coords,
+            settings,
+            alphaStartDegrees,
+            alphaEndDegrees,
+            alphaStepDegrees,
+            pointCompleted,
+            cancellationToken);
     }
 
     /// <summary>

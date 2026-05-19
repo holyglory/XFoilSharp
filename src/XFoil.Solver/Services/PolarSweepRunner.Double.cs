@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using XFoil.Solver.Models;
 
 // Legacy audit:
@@ -41,7 +42,25 @@ public static class PolarSweepRunner
         double alphaStartDeg,
         double alphaEndDeg,
         double alphaStepDeg)
+        => SweepAlpha(
+            geometry,
+            settings,
+            alphaStartDeg,
+            alphaEndDeg,
+            alphaStepDeg,
+            pointCompleted: null,
+            cancellationToken: default);
+
+    public static List<ViscousAnalysisResult> SweepAlpha(
+        (double[] x, double[] y) geometry,
+        AnalysisSettings settings,
+        double alphaStartDeg,
+        double alphaEndDeg,
+        double alphaStepDeg,
+        Action<ViscousAnalysisResult>? pointCompleted,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (Math.Abs(alphaStepDeg) < 1e-12)
             throw new ArgumentException("Alpha step must be non-zero.", nameof(alphaStepDeg));
 
@@ -82,6 +101,7 @@ public static class PolarSweepRunner
         int lastConvergedIndex = -1;
         for (double alpha = alphaStartDeg; ShouldContinue(alpha, alphaEndDeg, step); alpha += step)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             double alphaRad = settings.UseLegacyBoundaryLayerInitialization
                 ? (double)((double)alpha * dtorF)
                 : alpha * Math.PI / 180.0;
@@ -97,7 +117,7 @@ public static class PolarSweepRunner
 
             var result = SolveViscousWithWarmStart(
                 panel, inviscidState, inviscidResult,
-                settings, alphaRad, warmStart);
+                settings, alphaRad, warmStart, cancellationToken);
 
             // Add angle of attack info
             result = WithAngleOfAttack(result, alpha);
@@ -110,6 +130,7 @@ public static class PolarSweepRunner
             }
 
             results.Add(result);
+            pointCompleted?.Invoke(result);
         }
 
         return results;
@@ -440,7 +461,8 @@ public static class PolarSweepRunner
         LinearVortexInviscidResult inviscidResult,
         AnalysisSettings settings,
         double alphaRadians,
-        BLSnapshot? warmStart)
+        BLSnapshot? warmStart,
+        CancellationToken cancellationToken = default)
     {
         // The ViscousSolverEngine initializes BL from the inviscid solution.
         // For warm-start, we pass the inviscid result at the current alpha.
@@ -448,7 +470,7 @@ public static class PolarSweepRunner
         // operating point (the inviscid solution is close to the previous one).
         var result = ViscousSolverEngine.SolveViscousFromInviscid(
             panel, inviscidState, inviscidResult,
-            settings, alphaRadians);
+            settings, alphaRadians, cancellationToken: cancellationToken);
 
         // If primary attempt fails and we have warm-start data,
         // try with a cold-start (re-initialize from inviscid).
