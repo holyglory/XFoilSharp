@@ -927,7 +927,7 @@ public static class ViscousSolverEngine
             if (double.IsNaN(rmsbl) || double.IsInfinity(rmsbl))
                 rmsbl = double.MaxValue;
 
-            convergenceHistory.Add(new ViscousConvergenceInfo
+            var convergenceInfo = new ViscousConvergenceInfo
             {
                 Iteration = iter,
                 RmsResidual = rmsbl,
@@ -939,6 +939,18 @@ public static class ViscousSolverEngine
                 CL = cl,
                 CD = cd,
                 CM = cm
+            };
+            convergenceHistory.Add(convergenceInfo);
+            settings.IterationProgress?.Invoke(new ViscousIterationProgress
+            {
+                Iteration = iter,
+                MaxIterations = maxIter,
+                AlphaRadians = alphaRadians,
+                RmsResidual = convergenceInfo.RmsResidual,
+                RelaxationFactor = convergenceInfo.RelaxationFactor,
+                CL = convergenceInfo.CL,
+                CD = convergenceInfo.CD,
+                CM = convergenceInfo.CM
             });
 
             // Convergence check uses rmsbl (Newton RMS from BuildNewtonSystem)

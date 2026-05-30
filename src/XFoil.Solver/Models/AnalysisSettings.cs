@@ -35,7 +35,8 @@ public sealed class AnalysisSettings
         bool useLegacyWakeSourceKernelPrecision = false,
         bool useLegacyStreamfunctionKernelPrecision = false,
         bool useLegacyPanelingPrecision = false,
-        double wakeStationMultiplier = 1.0d)
+        double wakeStationMultiplier = 1.0d,
+        System.Action<ViscousIterationProgress>? iterationProgress = null)
     {
         if (panelCount < MinimumSupportedPanelCount)
         {
@@ -105,6 +106,7 @@ public sealed class AnalysisSettings
             throw new ArgumentOutOfRangeException(nameof(wakeStationMultiplier), "Wake station multiplier must be >= 1.0.");
         }
         WakeStationMultiplier = wakeStationMultiplier;
+        IterationProgress = iterationProgress;
     }
 
     public int PanelCount { get; }
@@ -222,6 +224,13 @@ public sealed class AnalysisSettings
     public double WakeStationMultiplier { get; }
 
     /// <summary>
+    /// Optional diagnostics callback invoked after each viscous Newton
+    /// iteration advances. This is intended for watchdog/status plumbing and
+    /// must not affect solver numerics or persisted results.
+    /// </summary>
+    public System.Action<ViscousIterationProgress>? IterationProgress { get; }
+
+    /// <summary>
     /// Returns the effective NCrit for the given side.
     /// Uses per-surface override if set, otherwise falls back to the global CriticalAmplificationFactor.
     /// </summary>
@@ -303,7 +312,8 @@ public sealed class AnalysisSettings
             useLegacyWakeSourceKernelPrecision: UseLegacyWakeSourceKernelPrecision,
             useLegacyStreamfunctionKernelPrecision: UseLegacyStreamfunctionKernelPrecision,
             useLegacyPanelingPrecision: UseLegacyPanelingPrecision,
-            wakeStationMultiplier: WakeStationMultiplier);
+            wakeStationMultiplier: WakeStationMultiplier,
+            iterationProgress: IterationProgress);
     }
 
     public AnalysisSettings WithDoubleTreeDefaultsIfUnset()
@@ -340,6 +350,7 @@ public sealed class AnalysisSettings
             useLegacyWakeSourceKernelPrecision: UseLegacyWakeSourceKernelPrecision,
             useLegacyStreamfunctionKernelPrecision: UseLegacyStreamfunctionKernelPrecision,
             useLegacyPanelingPrecision: UseLegacyPanelingPrecision,
-            wakeStationMultiplier: WakeStationMultiplier);
+            wakeStationMultiplier: WakeStationMultiplier,
+            iterationProgress: IterationProgress);
     }
 }
